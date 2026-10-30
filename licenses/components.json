@@ -1,0 +1,119 @@
+[
+  {
+    "name": "Visual Studio Code Workbench",
+    "version": "1.100.0",
+    "author": "Microsoft Corporation",
+    "license": "MIT",
+    "licenseUrl": "https://opensource.org/license/mit",
+    "source": "https://github.com/microsoft/vscode/tree/1.100.0",
+    "files": [
+      "WORKBENCH-NOTICES.txt"
+    ],
+    "description": {
+      "de": "Ausgewählte Benachrichtigungs-, Statusleisten- und Fortschrittskomponenten wurden nach JavaScript übertragen und für die Webview angepasst.",
+      "en": "Selected notification, status bar and progress components were translated to JavaScript and adapted for the webview."
+    }
+  },
+  {
+    "name": "Visual Studio Code Codicons",
+    "version": "5a6ad49557af022f97987cb3cfc3412b5d03f554",
+    "author": "Microsoft Corporation and contributors",
+    "license": "CC BY 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+    "source": "https://github.com/microsoft/vscode-codicons/tree/5a6ad49557af022f97987cb3cfc3412b5d03f554",
+    "files": [
+      "licenses/CODICONS-CC-BY-4.0.txt"
+    ],
+    "description": {
+      "de": "14 SVG-Symbole: bell, bell-dot, eye, edit, copy, move, new-folder, trash, close, clear-all, info, error, warning und loading. Die SVG-Hüllen wurden für die Webview angepasst; die Pfadgeometrien sind unverändert. Es besteht keine Verbindung oder Empfehlung durch die ursprünglichen Urheber.",
+      "en": "14 SVG icons: bell, bell-dot, eye, edit, copy, move, new-folder, trash, close, clear-all, info, error, warning and loading. SVG wrappers were adapted for the webview; path geometries are unchanged. No affiliation or endorsement by the original authors is implied."
+    }
+  },
+  {
+    "name": "@zip.js/zip.js",
+    "version": "2.24.0",
+    "author": "Gildas Lormeau",
+    "license": "BSD-3-Clause",
+    "licenseUrl": "https://github.com/gildas-lormeau/zip.js/blob/v2.24.0/LICENSE",
+    "source": "https://github.com/gildas-lormeau/zip.js/tree/v2.24.0",
+    "files": [
+      "licenses/ZIP-BSD-3-Clause.txt"
+    ],
+    "description": {
+      "de": "Bibliothek zum Lesen und Entpacken von ZIP-Archiven. Das Bibliothekspaket wird unverändert mitgeliefert.",
+      "en": "Library for reading and extracting ZIP archives. The library package is included without modifications."
+    }
+  },
+  {
+    "name": "zlib-streams",
+    "author": "Gildas Lormeau; Jean-loup Gailly; Mark Adler; The Chromium Authors; ARM, Inc.",
+    "license": "BSD-3-Clause AND Zlib",
+    "licenseUrl": "https://github.com/gildas-lormeau/zlib-streams/blob/ff804b00e19b92715b86951c6847dc4ae65f6f87/LICENSE",
+    "source": "https://github.com/gildas-lormeau/zlib-streams/tree/ff804b00e19b92715b86951c6847dc4ae65f6f87",
+    "files": [
+      "licenses/ZLIB-STREAMS.txt"
+    ],
+    "description": {
+      "de": "In zip.js enthaltene WebAssembly-Kompressionskomponente mit angepasstem zlib-Code und Bestandteilen aus dem Chromium-zlib-Projekt. Die eingebettete Binärdatei wurde nicht verändert.",
+      "en": "WebAssembly compression component included in zip.js, with modified zlib code and components from the Chromium zlib project. The embedded binary was not modified."
+    }
+  },
+  {
+    "name": "zlib-streams-ts",
+    "author": "Gildas Lormeau; Jean-loup Gailly; Mark Adler",
+    "license": "BSD-3-Clause AND Zlib",
+    "licenseUrl": "https://github.com/gildas-lormeau/zlib-streams-ts/blob/688fdc5541a7f696de1fe90253b5b3efc452bae8/LICENSE.md",
+    "source": "https://github.com/gildas-lormeau/zlib-streams-ts/tree/688fdc5541a7f696de1fe90253b5b3efc452bae8",
+    "files": [
+      "licenses/ZLIB-STREAMS-TS.txt"
+    ],
+    "description": {
+      "de": "In zip.js enthaltene JavaScript-Kompressionskomponente auf Grundlage von zlib. Die mitgelieferte Fassung wurde nicht verändert.",
+      "en": "JavaScript compression component based on zlib and included in zip.js. The included version was not modified."
+    }
+  },
+  {
+    "name": "Emscripten / musl",
+    "author": "Emscripten authors; Rich Felker et al.; musl contributors",
+    "license": "MIT / NCSA",
+    "licenseUrl": "https://emscripten.org/docs/introducing_emscripten/emscripten_license.html",
+    "source": "https://github.com/emscripten-core/emscripten",
+    "files": [
+      "licenses/EMSCRIPTEN.txt",
+      "licenses/MUSL.txt"
+    ],
+    "description": {
+      "de": "Laufzeitunterstützung für die mit zip.js gelieferte WebAssembly-Komponente. Emscripten bietet MIT oder NCSA als alternative Lizenzen an; für musl gilt der beigefügte Copyright- und Lizenztext.",
+      "en": "Runtime support for the WebAssembly component supplied with zip.js. Emscripten offers MIT or NCSA as alternative licenses; musl is covered by the included copyright and license notice."
+    }
+  },
+  {
+    "name": "JZlib",
+    "author": "ymnk, JCraft, Inc.; Jean-loup Gailly; Mark Adler",
+    "license": "BSD-3-Clause",
+    "licenseUrl": "https://www.jcraft.com/jzlib/LICENSE.txt",
+    "source": "https://www.jcraft.com/jzlib/",
+    "files": [
+      "licenses/JZLIB.txt"
+    ],
+    "description": {
+      "de": "Die Codec-Quelltexte von zip.js nennen JZlib 1.0.2 sowie dessen zlib-Grundlage als Herkunft. Diese ursprünglichen Hinweise bleiben erhalten.",
+      "en": "The zip.js codec sources acknowledge JZlib 1.0.2 and its zlib foundation. These original notices are retained."
+    }
+  },
+  {
+    "name": "isomorphic-git",
+    "version": "1.44.8",
+    "author": "The isomorphic-git authors and dependency contributors",
+    "license": "MIT; transitive dependencies retain their individual licenses",
+    "licenseUrl": "https://github.com/isomorphic-git/isomorphic-git/blob/main/LICENSE.md",
+    "source": "https://github.com/isomorphic-git/isomorphic-git",
+    "files": [
+      "licenses/GIT-DEPENDENCIES.txt"
+    ],
+    "description": {
+      "de": "Lokale Git-Status- und Branchabfragen ohne Git-Installation. Die Lizenztexte und Hinweise der mitgelieferten Laufzeitabhängigkeiten sind nachstehend enthalten.",
+      "en": "Local Git status and branch queries without a Git installation. License texts and notices for the included runtime dependencies are provided below."
+    }
+  }
+]

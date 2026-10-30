@@ -1,0 +1,9 @@
+node_modules/
+coverage/
+.nyc_output/
+/Install-Local.ps1
+AGENTS.md
+/Docs/
+/design/
+/TODO*
+/TOTAL-*

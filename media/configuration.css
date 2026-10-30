@@ -1,0 +1,43 @@
+:root { color-scheme: light dark; font-family: var(--vscode-font-family, sans-serif); font-size: var(--vscode-font-size, 13px); color: var(--vscode-foreground); background: var(--vscode-editor-background); }
+* { box-sizing: border-box; }
+body { margin: 0; padding: 20px; max-width: 1400px; }
+header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; }
+h1 { font-size: 1.5em; font-weight: 500; }
+button, input, select { font: inherit; }
+input, select { color: var(--vscode-input-foreground); background: var(--vscode-input-background); border: 1px solid var(--vscode-input-border, var(--vscode-contrastBorder, transparent)); padding: 5px 7px; min-width: 0; }
+select { color: var(--vscode-dropdown-foreground); background: var(--vscode-dropdown-background); }
+button { cursor: pointer; color: var(--vscode-button-secondaryForeground); background: var(--vscode-button-secondaryBackground); border: 1px solid var(--vscode-contrastBorder, transparent); padding: 5px 10px; }
+button:hover { background: var(--vscode-button-secondaryHoverBackground); }
+button:disabled { opacity: .5; cursor: default; }
+:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 2px; }
+.primary { color: var(--vscode-button-foreground); background: var(--vscode-button-background); }
+.primary:hover { background: var(--vscode-button-hoverBackground); }
+nav { display: flex; gap: 12px; border-bottom: 1px solid var(--vscode-panel-border); margin: 12px 0 18px; }
+nav button { padding: 8px 4px; background: transparent; color: var(--vscode-foreground); border: 0; border-bottom: 2px solid transparent; }
+nav [aria-selected="true"] { border-bottom-color: var(--vscode-focusBorder); }
+.toolbar { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.favorites-layout { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(260px, 2fr); gap: 24px; min-height: 320px; }
+.tree-container { border: 1px solid var(--vscode-panel-border); padding: 6px; overflow: auto; }
+ul { list-style: none; padding: 0; margin: 0; }
+ul ul { padding-left: 20px; }
+.tree-row { padding: 5px 8px; display: block; overflow-wrap: anywhere; cursor: pointer; }
+[aria-selected="true"] > .tree-row { background: var(--vscode-list-activeSelectionBackground); color: var(--vscode-list-activeSelectionForeground); }
+[data-drag-over] > .tree-row { outline: 1px solid var(--vscode-focusBorder); }
+form { display: flex; flex-direction: column; gap: 14px; }
+form label { display: flex; flex-direction: column; gap: 5px; }
+[data-directory-fields] { display: flex; flex-direction: column; gap: 14px; }
+.path-field { display: flex; gap: 6px; }
+.path-field input { flex: 1; }
+.table-container { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; text-align: left; }
+th, td { padding: 8px; border-bottom: 1px solid var(--vscode-panel-border); }
+th { font-weight: 500; }
+td input[type="text"] { width: 100%; min-width: 120px; }
+td input[type="checkbox"] { accent-color: var(--vscode-focusBorder); }
+td:last-child { white-space: nowrap; }
+footer { border-top: 1px solid var(--vscode-panel-border); margin-top: 24px; padding-top: 10px; }
+footer > div { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
+[role="alert"] { color: var(--vscode-errorForeground); white-space: pre-wrap; }
+[role="status"] { color: var(--vscode-descriptionForeground); }
+[hidden] { display: none !important; }
+@media (max-width: 650px) { body { padding: 12px; } .favorites-layout { grid-template-columns: 1fr; } .tree-container { max-height: 260px; } }

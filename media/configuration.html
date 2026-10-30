@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="de">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><!--POLICY--><title>Konfiguration</title><link rel="stylesheet" href="configuration.css"></head>
+<body>
+  <header><h1 data-text="Dateiverwaltung konfigurieren"></h1><label><span data-text="Speicherort"></span> <select id="scope"><option value="user" data-text="Benutzer"></option><option value="workspace" data-text="Arbeitsbereich"></option></select></label></header>
+  <nav role="tablist" aria-label="Konfiguration"><button type="button" role="tab" data-section="favorites" aria-controls="favorites-section" data-text="Favoriten"></button><button type="button" role="tab" data-section="columns" aria-controls="columns-section" data-text="Spalten"></button></nav>
+  <main>
+    <section id="favorites-section" role="tabpanel">
+      <div class="toolbar"><button type="button" data-add-favorite data-text="Favorit hinzufügen"></button><button type="button" data-add-group data-text="Gruppe hinzufügen"></button><button type="button" data-remove data-text="Entfernen"></button><button type="button" data-move="-1" data-text="Nach oben"></button><button type="button" data-move="1" data-text="Nach unten"></button></div>
+      <div class="favorites-layout"><div class="tree-container"><ul id="favorite-tree" role="tree" aria-label="Favoriten"></ul><p id="empty-favorites" data-text="Noch keine Favoriten vorhanden."></p></div>
+        <form id="favorite-details" autocomplete="off"><label><span data-text="Name"></span><input id="favorite-name" required></label><label><span data-text="Übergeordnete Gruppe"></span><select id="favorite-parent"></select></label>
+          <div data-directory-fields><label><span data-text="Verzeichnis"></span><span class="path-field"><input id="favorite-path" required spellcheck="false"><button type="button" data-browse="path" data-text="Auswählen…"></button></span></label>
+          <label><span data-text="Verzeichnis im Gegenpanel (optional)"></span><span class="path-field"><input id="favorite-target" spellcheck="false"><button type="button" data-browse="target" data-text="Auswählen…"></button></span></label></div>
+        </form>
+      </div>
+    </section>
+    <section id="columns-section" role="tabpanel" hidden><div class="table-container"><table><thead><tr><th data-text="Sichtbar"></th><th data-text="Spalte"></th><th data-text="Überschrift"></th><th data-text="Breite (Pixel)"></th><th data-text="Ausrichtung"></th><th data-text="Reihenfolge"></th></tr></thead><tbody id="column-rows"></tbody></table></div></section>
+  </main>
+  <footer><p role="alert" id="configuration-error"></p><p role="status" id="configuration-status"></p><span data-text="Änderungen werden erst mit Speichern übernommen."></span><div><button type="button" data-discard data-text="Verwerfen"></button><button type="button" data-save class="primary" data-text="Speichern"></button></div></footer>
+  <script src="commander-i18n.js"></script><script src="commander-column-settings.js"></script><script src="configuration-model.js"></script><script src="configuration-view.js"></script>
+</body></html>

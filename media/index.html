@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!--POLICY-->
+  <title>Bitfroest.fs · Prototyp</title>
+  <link rel="stylesheet" href="workbench-vendor.css">
+  <link rel="stylesheet" href="app.css">
+  <link rel="stylesheet" href="file-search.css">
+</head>
+<body>
+  <nav class="main-menu" data-main-menu role="menubar" aria-label="Hauptmenü">
+    <button type="button" role="menuitem" aria-haspopup="true" aria-expanded="false" aria-controls="main-menu-popup">Dateien</button>
+    <button type="button" role="menuitem" aria-haspopup="true" aria-expanded="false" aria-controls="main-menu-popup">Markieren</button>
+    <button type="button" role="menuitem" aria-haspopup="true" aria-expanded="false" aria-controls="main-menu-popup">Befehle</button>
+    <button type="button" role="menuitem" aria-haspopup="true" aria-expanded="false" aria-controls="main-menu-popup">Netz</button>
+    <button type="button" role="menuitem" aria-haspopup="true" aria-expanded="false" aria-controls="main-menu-popup">Ansicht</button>
+    <button type="button" role="menuitem" aria-haspopup="true" aria-expanded="false" aria-controls="main-menu-popup">Konfigurieren</button>
+    <button type="button" role="menuitem" aria-haspopup="true" aria-expanded="false" aria-controls="main-menu-popup">Start</button>
+    <button type="button" role="menuitem" aria-haspopup="true" aria-expanded="false" aria-controls="main-menu-popup">Hilfe</button>
+    <div id="main-menu-popup" role="menu" aria-label="Mockmenü" hidden>
+      <button type="button" role="menuitem" aria-disabled="true" data-group="Dateien">Öffnen <span>Mock</span></button>
+      <button type="button" role="menuitem" aria-disabled="true" data-group="Dateien">Kopieren <span>Mock</span></button>
+      <button type="button" role="menuitem" aria-disabled="true" data-group="Dateien">Löschen <span>Mock</span></button>
+      <button type="button" role="menuitem" aria-disabled="true" data-group="Markieren">Alle markieren <span>Mock</span></button>
+      <button type="button" role="menuitem" aria-disabled="true" data-group="Befehle">Suchen <span>Mock</span></button>
+      <button type="button" role="menuitem" aria-disabled="true" data-group="Netz">Netzlaufwerk verbinden <span>Mock</span></button>
+      <button type="button" role="menuitem" aria-disabled="true" data-group="Ansicht">Kurzansicht <span>Mock</span></button>
+      <button type="button" role="menuitem" aria-disabled="true" data-group="Konfigurieren">Einstellungen <span>Mock</span></button>
+      <button type="button" role="menuitem" aria-disabled="true" data-group="Start">Startmenüeintrag <span>Mock</span></button>
+      <button type="button" role="menuitem" aria-disabled="true" data-group="Hilfe">Über <span>Mock</span></button>
+      <button type="button" role="menuitem" data-group="Hilfe" data-menu-action="licenses">Lizenzen und Danksagungen</button>
+      <p role="status">Menüeinträge sind Platzhalter. Es wird keine Aktion ausgeführt.</p>
+    </div>
+  </nav>
+  <main>
+    <div id="panes" class="panes"><p id="startup-message" role="status">Loading file manager…</p></div>
+  </main>
+  <footer id="statusbar" class="statusbar"></footer>
+  <aside id="notifications-center" class="notifications-center" role="region" hidden></aside>
+  <div id="toast" role="status" aria-live="polite"></div>
+  <dialog id="modal" aria-labelledby="modal-title"><form id="modal-form" method="dialog"><div class="modal-heading"><div><div class="eyebrow" id="modal-eyebrow">DATEIAKTION</div><h2 id="modal-title"></h2></div><button type="button" id="modal-close" aria-label="Dialog schließen">×</button></div><div id="modal-body"></div><div class="modal-actions"><button type="button" id="modal-cancel">Abbrechen</button><button type="submit" id="modal-confirm" class="primary">Übernehmen</button></div></form></dialog>
+  <script src="webview-bootstrap.js"></script>
+  <script src="commander-i18n.js"></script>
+  <script src="commander-column-settings.js"></script>
+  <script src="commander-tabs.js"></script>
+  <script src="commander-columns.js"></script>
+  <script src="commander-search.js"></script>
+  <script src="file-search-view.js"></script>
+  <script src="commander-contrast.js"></script>
+  <script src="commander-file-names.js"></script>
+  <script src="commander-transfer.js"></script>
+  <script src="search-duplicates.js"></script>
+  <script src="commander-clipboard.js"></script>
+  <script src="commander-lister.js"></script>
+  <script src="lister-view.js"></script>
+  <script src="workbench-vendor.js"></script>
+  <script src="workbench-icons.js"></script>
+  <script src="commander-statusbar.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

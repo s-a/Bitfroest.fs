@@ -1,0 +1,3316 @@
+{
+  "name": "bitfroest-fs-prototype",
+  "displayName": "Bitfroest.fs Prototype",
+  "description": "%extension.description%",
+  "version": "0.0.24",
+  "publisher": "bitfroest",
+  "author": "Stephan Ahlf",
+  "license": "Apache-2.0",
+  "icon": "media/icons/bitfroest-app.png",
+  "engines": {
+    "vscode": "^1.100.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./extension.js",
+  "activationEvents": [
+    "onStartupFinished",
+    "onWebviewPanel:bitfroestPrototype"
+  ],
+  "contributes": {
+    "keybindings": [
+      {
+        "command": "bitfroest.path-clipboard",
+        "key": "ctrl+shift+l",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput"
+      },
+      {
+        "command": "bitfroest.shell-context-menu",
+        "key": "shift+f10",
+        "when": "isWindows && bitfroest.ready && activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput"
+      },
+      {
+        "command": "bitfroest.rename-one",
+        "key": "shift+f6",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.inlineRenameInput && bitfroest.textInput"
+      },
+      {
+        "command": "bitfroest.ignore-dialog-function-key",
+        "key": "f5",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.fileDialog && !bitfroest.transferNameInput"
+      },
+      {
+        "command": "bitfroest.ignore-dialog-function-key",
+        "key": "f6",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.fileDialog && !bitfroest.transferNameInput"
+      },
+      {
+        "command": "bitfroest.toggle-selection-next",
+        "key": "insert",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput"
+      },
+      {
+        "command": "bitfroest.transfer-name-start",
+        "key": "ctrl+home",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.transferNameInput && bitfroest.textInput"
+      },
+      {
+        "command": "bitfroest.transfer-name-parts",
+        "key": "f5",
+        "args": "F5",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.transferNameInput && bitfroest.textInput"
+      },
+      {
+        "command": "bitfroest.transfer-name-parts",
+        "key": "f6",
+        "args": "F6",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.transferNameInput && bitfroest.textInput"
+      },
+      {
+        "command": "bitfroest.openPrototype",
+        "key": "ctrl+alt+shift+f12",
+        "mac": "cmd+alt+shift+f12"
+      },
+      {
+        "command": "bitfroest.new-tab",
+        "key": "ctrl+t",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput",
+        "mac": "cmd+t"
+      },
+      {
+        "command": "bitfroest.close-tab",
+        "key": "ctrl+w",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput",
+        "mac": "cmd+w"
+      },
+      {
+        "command": "bitfroest.next-tab",
+        "key": "ctrl+tab",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput"
+      },
+      {
+        "command": "bitfroest.previous-tab",
+        "key": "ctrl+shift+tab",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput"
+      },
+      {
+        "command": "bitfroest.refresh",
+        "key": "ctrl+r",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput",
+        "mac": "cmd+r"
+      },
+      {
+        "command": "bitfroest.filter",
+        "key": "ctrl+f",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput",
+        "mac": "cmd+f"
+      },
+      {
+        "command": "bitfroest.path",
+        "key": "ctrl+l",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput",
+        "mac": "cmd+l"
+      },
+      {
+        "command": "bitfroest.select-all",
+        "key": "ctrl+a",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput",
+        "mac": "cmd+a"
+      },
+      {
+        "command": "bitfroest.rename",
+        "key": "ctrl+m",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput",
+        "mac": "cmd+m"
+      },
+      {
+        "command": "bitfroest.view",
+        "key": "f3",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput"
+      },
+      {
+        "command": "bitfroest.edit",
+        "key": "f4",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput"
+      },
+      {
+        "command": "bitfroest.copy",
+        "key": "f5",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput"
+      },
+      {
+        "command": "bitfroest.move",
+        "key": "f6",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput"
+      },
+      {
+        "command": "bitfroest.mkdir",
+        "key": "f7",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput"
+      },
+      {
+        "command": "bitfroest.delete",
+        "key": "f8",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput"
+      },
+      {
+        "command": "bitfroest.delete",
+        "key": "delete",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput"
+      },
+      {
+        "command": "bitfroest.pack",
+        "key": "alt+f5",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput"
+      },
+      {
+        "command": "bitfroest.unpack",
+        "key": "alt+f9",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput"
+      },
+      {
+        "command": "bitfroest.background-tab",
+        "key": "ctrl+shift+t",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput",
+        "mac": "cmd+shift+t"
+      },
+      {
+        "command": "bitfroest.open-dir-tab",
+        "key": "ctrl+up",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput",
+        "mac": "cmd+up"
+      },
+      {
+        "command": "bitfroest.open-dir-other-tab",
+        "key": "ctrl+shift+up",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput",
+        "mac": "cmd+shift+up"
+      },
+      {
+        "command": "bitfroest.rename-one",
+        "key": "shift+f6",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput"
+      },
+      {
+        "command": "bitfroest.refresh",
+        "key": "f2",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput"
+      },
+      {
+        "command": "bitfroest.unpack",
+        "key": "alt+f6",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput"
+      },
+      {
+        "command": "bitfroest.back",
+        "key": "alt+left",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput"
+      },
+      {
+        "command": "bitfroest.forward",
+        "key": "alt+right",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput"
+      },
+      {
+        "command": "bitfroest.swap-paths",
+        "key": "ctrl+u",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput",
+        "mac": "cmd+u"
+      },
+      {
+        "command": "bitfroest.swap",
+        "key": "ctrl+shift+u",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput",
+        "mac": "cmd+shift+u"
+      },
+      {
+        "command": "bitfroest.copy-same",
+        "key": "shift+f5",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput"
+      },
+      {
+        "command": "bitfroest.mkdir-other",
+        "key": "shift+f7",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput"
+      },
+      {
+        "command": "bitfroest.new-file",
+        "key": "shift+f4",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput"
+      },
+      {
+        "command": "bitfroest.delete-alternate",
+        "key": "shift+f8",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput"
+      },
+      {
+        "command": "bitfroest.delete-alternate",
+        "key": "shift+delete",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput"
+      },
+      {
+        "command": "bitfroest.conflict-target",
+        "key": "f3",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.conflictDialog"
+      },
+      {
+        "command": "bitfroest.conflict-source",
+        "key": "shift+f3",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.conflictDialog"
+      },
+      {
+        "command": "bitfroest.conflict-target-plain",
+        "key": "alt+f3",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.conflictDialog"
+      },
+      {
+        "command": "bitfroest.conflict-source-plain",
+        "key": "alt+shift+f3",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.conflictDialog"
+      },
+      {
+        "command": "bitfroest.conflict-compare",
+        "key": "ctrl+f3",
+        "mac": "cmd+f3",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.conflictDialog"
+      },
+      {
+        "command": "bitfroest.conflict-compare-internal",
+        "key": "ctrl+shift+f3",
+        "mac": "cmd+shift+f3",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.conflictDialog"
+      },
+      {
+        "command": "bitfroest.clipboard-copy",
+        "key": "ctrl+c",
+        "mac": "cmd+c",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput"
+      },
+      {
+        "command": "bitfroest.clipboard-cut",
+        "key": "ctrl+x",
+        "mac": "cmd+x",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput"
+      },
+      {
+        "command": "bitfroest.clipboard-paste",
+        "key": "ctrl+v",
+        "mac": "cmd+v",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput"
+      },
+      {
+        "key": "escape",
+        "command": "bitfroest.lister-action",
+        "args": "escape",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.listerFocus && !bitfroest.textInput"
+      },
+      {
+        "key": "f2",
+        "command": "bitfroest.lister-action",
+        "args": "reload",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.listerFocus && !bitfroest.textInput"
+      },
+      {
+        "key": "f3",
+        "command": "bitfroest.lister-action",
+        "args": "next",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.listerFocus && !bitfroest.textInput"
+      },
+      {
+        "key": "f4",
+        "command": "bitfroest.lister-action",
+        "args": "edit",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.listerFocus && !bitfroest.textInput"
+      },
+      {
+        "key": "f5",
+        "command": "bitfroest.lister-action",
+        "args": "next",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.listerFocus && !bitfroest.textInput"
+      },
+      {
+        "key": "f6",
+        "command": "bitfroest.lister-action",
+        "args": "cursor",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.listerFocus && !bitfroest.textInput"
+      },
+      {
+        "key": "f7",
+        "command": "bitfroest.lister-action",
+        "args": "find",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.listerFocus && !bitfroest.textInput"
+      },
+      {
+        "key": "shift+f3",
+        "command": "bitfroest.lister-action",
+        "args": "previous",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.listerFocus && !bitfroest.textInput"
+      },
+      {
+        "key": "shift+f5",
+        "command": "bitfroest.lister-action",
+        "args": "previous",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.listerFocus && !bitfroest.textInput"
+      },
+      {
+        "key": "shift+f7",
+        "command": "bitfroest.lister-action",
+        "args": "next",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.listerFocus && !bitfroest.textInput"
+      },
+      {
+        "key": "ctrl+f3",
+        "command": "bitfroest.lister-action",
+        "args": "inverse",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.listerFocus && !bitfroest.textInput"
+      },
+      {
+        "key": "ctrl+f5",
+        "command": "bitfroest.lister-action",
+        "args": "inverse",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.listerFocus && !bitfroest.textInput"
+      },
+      {
+        "key": "ctrl+f",
+        "command": "bitfroest.lister-action",
+        "args": "find",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.listerFocus && !bitfroest.textInput"
+      },
+      {
+        "key": "ctrl+a",
+        "command": "bitfroest.lister-action",
+        "args": "select-all",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.listerFocus && !bitfroest.textInput"
+      },
+      {
+        "key": "ctrl+c",
+        "command": "bitfroest.lister-action",
+        "args": "copy",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.listerFocus && !bitfroest.textInput"
+      },
+      {
+        "key": "ctrl+shift+c",
+        "command": "bitfroest.lister-action",
+        "args": "copy-hex",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.listerFocus && !bitfroest.textInput"
+      },
+      {
+        "key": "ctrl+home",
+        "command": "bitfroest.lister-action",
+        "args": "first",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.listerFocus && !bitfroest.textInput"
+      },
+      {
+        "key": "ctrl+end",
+        "command": "bitfroest.lister-action",
+        "args": "last",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.listerFocus && !bitfroest.textInput"
+      },
+      {
+        "key": "ctrl+shift+home",
+        "command": "bitfroest.lister-action",
+        "args": "extend-first",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.listerFocus && !bitfroest.textInput"
+      },
+      {
+        "key": "ctrl+shift+end",
+        "command": "bitfroest.lister-action",
+        "args": "extend-last",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.listerFocus && !bitfroest.textInput"
+      },
+      {
+        "key": "alt+f7",
+        "command": "bitfroest.search",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.listFocus && !bitfroest.textInput"
+      },
+      {
+        "key": "alt+shift+f7",
+        "command": "bitfroest.search-separate",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.listFocus && !bitfroest.textInput"
+      },
+      {
+        "key": "alt+a",
+        "command": "bitfroest.search-key",
+        "args": "alt+a",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+      },
+      {
+        "key": "alt+d",
+        "command": "bitfroest.search-key",
+        "args": "alt+d",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+      },
+      {
+        "key": "alt+e",
+        "command": "bitfroest.search-key",
+        "args": "alt+e",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+      },
+      {
+        "key": "alt+f",
+        "command": "bitfroest.search-key",
+        "args": "alt+f",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+      },
+      {
+        "key": "alt+g",
+        "command": "bitfroest.search-key",
+        "args": "alt+g",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+      },
+      {
+        "key": "alt+h",
+        "command": "bitfroest.search-key",
+        "args": "alt+h",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+      },
+      {
+        "key": "alt+i",
+        "command": "bitfroest.search-key",
+        "args": "alt+i",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+      },
+      {
+        "key": "alt+k",
+        "command": "bitfroest.search-key",
+        "args": "alt+k",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+      },
+      {
+        "key": "alt+l",
+        "command": "bitfroest.search-key",
+        "args": "alt+l",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+      },
+      {
+        "key": "alt+m",
+        "command": "bitfroest.search-key",
+        "args": "alt+m",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+      },
+      {
+        "key": "alt+n",
+        "command": "bitfroest.search-key",
+        "args": "alt+n",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+      },
+      {
+        "key": "alt+o",
+        "command": "bitfroest.search-key",
+        "args": "alt+o",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+      },
+      {
+        "key": "alt+p",
+        "command": "bitfroest.search-key",
+        "args": "alt+p",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+      },
+      {
+        "key": "alt+r",
+        "command": "bitfroest.search-key",
+        "args": "alt+r",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+      },
+      {
+        "key": "alt+s",
+        "command": "bitfroest.search-key",
+        "args": "alt+s",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+      },
+      {
+        "key": "alt+t",
+        "command": "bitfroest.search-key",
+        "args": "alt+t",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+      },
+      {
+        "key": "alt+u",
+        "command": "bitfroest.search-key",
+        "args": "alt+u",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+      },
+      {
+        "key": "alt+v",
+        "command": "bitfroest.search-key",
+        "args": "alt+v",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+      },
+      {
+        "key": "alt+w",
+        "command": "bitfroest.search-key",
+        "args": "alt+w",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+      },
+      {
+        "key": "alt+x",
+        "command": "bitfroest.search-key",
+        "args": "alt+x",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+      },
+      {
+        "key": "alt+y",
+        "command": "bitfroest.search-key",
+        "args": "alt+y",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+      },
+      {
+        "key": "alt+z",
+        "command": "bitfroest.search-key",
+        "args": "alt+z",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+      },
+      {
+        "key": "alt+1",
+        "command": "bitfroest.search-key",
+        "args": "alt+1",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+      },
+      {
+        "key": "alt+2",
+        "command": "bitfroest.search-key",
+        "args": "alt+2",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+      },
+      {
+        "key": "alt+8",
+        "command": "bitfroest.search-key",
+        "args": "alt+8",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+      },
+      {
+        "key": "alt+[Semicolon]",
+        "command": "bitfroest.search-key",
+        "args": "alt+ö",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+      },
+      {
+        "key": "alt+[Quote]",
+        "command": "bitfroest.search-key",
+        "args": "alt+ä",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+      },
+      {
+        "key": "alt+left",
+        "command": "bitfroest.search-key",
+        "args": "alt+left",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+      },
+      {
+        "key": "alt+right",
+        "command": "bitfroest.search-key",
+        "args": "alt+right",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+      },
+      {
+        "key": "f2",
+        "command": "bitfroest.search-key",
+        "args": "f2",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+      },
+      {
+        "key": "f3",
+        "command": "bitfroest.search-key",
+        "args": "f3",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+      },
+      {
+        "key": "f4",
+        "command": "bitfroest.search-key",
+        "args": "f4",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+      },
+      {
+        "key": "escape",
+        "command": "bitfroest.search-key",
+        "args": "escape",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+      },
+      {
+        "key": "ctrl+tab",
+        "command": "bitfroest.search-key",
+        "args": "ctrl+tab",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+      },
+      {
+        "key": "ctrl+shift+tab",
+        "command": "bitfroest.search-key",
+        "args": "ctrl+shift+tab",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+      },
+      {
+        "key": "ctrl+pageup",
+        "command": "bitfroest.search-key",
+        "args": "ctrl+pageup",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+      },
+      {
+        "key": "ctrl+pagedown",
+        "command": "bitfroest.search-key",
+        "args": "ctrl+pagedown",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+      },
+      {
+        "key": "ctrl+up",
+        "command": "bitfroest.search-key",
+        "args": "ctrl+up",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+      },
+      {
+        "key": "ctrl+down",
+        "command": "bitfroest.search-key",
+        "args": "ctrl+down",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+      },
+      {
+        "key": "f2",
+        "command": "bitfroest.search-normal",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchResults && bitfroest.listFocus && !bitfroest.textInput"
+      },
+      {
+        "key": "shift+delete",
+        "command": "bitfroest.search-key",
+        "args": "shift+delete",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+      },
+      {
+        "key": "ctrl+c",
+        "command": "bitfroest.search-key",
+        "args": "ctrl+c",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchResultsFocus"
+      },
+      {
+        "key": "numpad_add",
+        "command": "bitfroest.search-duplicates",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchResults && bitfroest.listFocus && !bitfroest.textInput"
+      },
+      {
+        "command": "bitfroest.pack-move",
+        "key": "alt+shift+f5",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput"
+      },
+      {
+        "command": "bitfroest.test-archives",
+        "key": "alt+shift+f9",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput"
+      }
+    ],
+    "commands": [
+      {
+        "command": "bitfroest.inspect-folder-locks",
+        "title": "%command.bitfroest.inspect-folder-locks.title%",
+        "category": "Bitfroest.fs",
+        "enablement": "isWindows && bitfroest.ready && activeWebviewPanelId == bitfroestPrototype && bitfroest.listFocus && !bitfroest.textInput"
+      },
+      {
+        "command": "bitfroest.chooseLanguage",
+        "title": "%command.bitfroest.chooseLanguage.title%",
+        "category": "Bitfroest.fs"
+      },
+      {
+        "command": "bitfroest.openPrototype",
+        "title": "%command.bitfroest.openPrototype.title%"
+      },
+      {
+        "command": "bitfroest.view",
+        "title": "%command.bitfroest.view.title%",
+        "category": "Bitfroest.fs",
+        "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype"
+      },
+      {
+        "command": "bitfroest.edit",
+        "title": "%command.bitfroest.edit.title%",
+        "category": "Bitfroest.fs",
+        "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype"
+      },
+      {
+        "command": "bitfroest.copy",
+        "title": "%command.bitfroest.copy.title%",
+        "category": "Bitfroest.fs",
+        "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype"
+      },
+      {
+        "command": "bitfroest.move",
+        "title": "%command.bitfroest.move.title%",
+        "category": "Bitfroest.fs",
+        "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype"
+      },
+      {
+        "command": "bitfroest.mkdir",
+        "title": "%command.bitfroest.mkdir.title%",
+        "category": "Bitfroest.fs",
+        "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype"
+      },
+      {
+        "command": "bitfroest.delete",
+        "title": "%command.bitfroest.delete.title%",
+        "category": "Bitfroest.fs",
+        "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype"
+      },
+      {
+        "command": "bitfroest.pack",
+        "title": "%command.bitfroest.pack.title%",
+        "category": "Bitfroest.fs",
+        "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype"
+      },
+      {
+        "command": "bitfroest.unpack",
+        "title": "%command.bitfroest.unpack.title%",
+        "category": "Bitfroest.fs",
+        "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype"
+      },
+      {
+        "command": "bitfroest.rename",
+        "title": "%command.bitfroest.rename.title%",
+        "category": "Bitfroest.fs",
+        "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype"
+      },
+      {
+        "command": "bitfroest.select-all",
+        "title": "%command.bitfroest.select-all.title%",
+        "category": "Bitfroest.fs",
+        "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype"
+      },
+      {
+        "command": "bitfroest.invert",
+        "title": "%command.bitfroest.invert.title%",
+        "category": "Bitfroest.fs",
+        "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype"
+      },
+      {
+        "command": "bitfroest.clear",
+        "title": "%command.bitfroest.clear.title%",
+        "category": "Bitfroest.fs",
+        "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype"
+      },
+      {
+        "command": "bitfroest.swap",
+        "title": "%command.bitfroest.swap.title%",
+        "category": "Bitfroest.fs",
+        "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype",
+        "icon": "$(arrow-swap)"
+      },
+      {
+        "command": "bitfroest.reset",
+        "title": "%command.bitfroest.reset.title%",
+        "category": "Bitfroest.fs",
+        "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype"
+      },
+      {
+        "command": "bitfroest.help",
+        "title": "%command.bitfroest.help.title%",
+        "category": "Bitfroest.fs",
+        "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype"
+      },
+      {
+        "command": "bitfroest.licenses",
+        "title": "%command.bitfroest.licenses.title%",
+        "category": "Bitfroest.fs"
+      },
+      {
+        "command": "bitfroest.chooseTabMode",
+        "title": "%command.bitfroest.chooseTabMode.title%",
+        "category": "Bitfroest.fs",
+        "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype"
+      },
+      {
+        "command": "bitfroest.new-tab",
+        "title": "%command.bitfroest.new-tab.title%",
+        "category": "Bitfroest.fs",
+        "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype"
+      },
+      {
+        "command": "bitfroest.close-tab",
+        "title": "%command.bitfroest.close-tab.title%",
+        "category": "Bitfroest.fs",
+        "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype"
+      },
+      {
+        "command": "bitfroest.next-tab",
+        "title": "%command.bitfroest.next-tab.title%",
+        "category": "Bitfroest.fs",
+        "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype"
+      },
+      {
+        "command": "bitfroest.previous-tab",
+        "title": "%command.bitfroest.previous-tab.title%",
+        "category": "Bitfroest.fs",
+        "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype"
+      },
+      {
+        "command": "bitfroest.refresh",
+        "title": "%command.bitfroest.refresh.title%",
+        "category": "Bitfroest.fs",
+        "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype"
+      },
+      {
+        "command": "bitfroest.filter",
+        "title": "%command.bitfroest.filter.title%",
+        "category": "Bitfroest.fs",
+        "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype"
+      },
+      {
+        "command": "bitfroest.path-clipboard",
+        "title": "%command.bitfroest.path-clipboard.title%",
+        "category": "Bitfroest.fs",
+        "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype"
+      },
+      {
+        "command": "bitfroest.path",
+        "title": "%command.bitfroest.path.title%",
+        "category": "Bitfroest.fs",
+        "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype"
+      },
+      {
+        "command": "bitfroest.background-tab",
+        "title": "%command.bitfroest.background-tab.title%",
+        "category": "Bitfroest.fs",
+        "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype"
+      },
+      {
+        "command": "bitfroest.open-dir-tab",
+        "title": "%command.bitfroest.open-dir-tab.title%",
+        "category": "Bitfroest.fs",
+        "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype"
+      },
+      {
+        "command": "bitfroest.open-dir-other-tab",
+        "title": "%command.bitfroest.open-dir-other-tab.title%",
+        "category": "Bitfroest.fs",
+        "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype"
+      },
+      {
+        "command": "bitfroest.rename-one",
+        "title": "%command.bitfroest.rename-one.title%",
+        "category": "Bitfroest.fs",
+        "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype"
+      },
+      {
+        "command": "bitfroest.back",
+        "title": "%command.bitfroest.back.title%",
+        "category": "Bitfroest.fs",
+        "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype"
+      },
+      {
+        "command": "bitfroest.forward",
+        "title": "%command.bitfroest.forward.title%",
+        "category": "Bitfroest.fs",
+        "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype"
+      },
+      {
+        "command": "bitfroest.swap-paths",
+        "title": "%command.bitfroest.swap-paths.title%",
+        "category": "Bitfroest.fs",
+        "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype"
+      },
+      {
+        "command": "bitfroest.copy-same",
+        "title": "%command.bitfroest.copy-same.title%",
+        "category": "Bitfroest.fs",
+        "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype"
+      },
+      {
+        "command": "bitfroest.mkdir-other",
+        "title": "%command.bitfroest.mkdir-other.title%",
+        "category": "Bitfroest.fs",
+        "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype"
+      },
+      {
+        "command": "bitfroest.configureColumns",
+        "title": "%command.bitfroest.configureColumns.title%",
+        "category": "Bitfroest.fs"
+      },
+      {
+        "command": "bitfroest.new-file",
+        "title": "%commands.newFile%",
+        "category": "Bitfroest.fs",
+        "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype"
+      },
+      {
+        "command": "bitfroest.delete-alternate",
+        "title": "%commands.deleteAlternate%",
+        "category": "Bitfroest.fs",
+        "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype"
+      },
+      {
+        "command": "bitfroest.delete-permanently",
+        "title": "%commands.deletePermanently%",
+        "category": "Bitfroest.fs",
+        "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype"
+      },
+      {
+        "command": "bitfroest.conflict-target",
+        "title": "%command.bitfroest.conflict-target.title%",
+        "category": "Bitfroest.fs",
+        "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype && bitfroest.conflictDialog"
+      },
+      {
+        "command": "bitfroest.conflict-source",
+        "title": "%command.bitfroest.conflict-source.title%",
+        "category": "Bitfroest.fs",
+        "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype && bitfroest.conflictDialog"
+      },
+      {
+        "command": "bitfroest.conflict-target-plain",
+        "title": "%command.bitfroest.conflict-target-plain.title%",
+        "category": "Bitfroest.fs",
+        "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype && bitfroest.conflictDialog"
+      },
+      {
+        "command": "bitfroest.conflict-source-plain",
+        "title": "%command.bitfroest.conflict-source-plain.title%",
+        "category": "Bitfroest.fs",
+        "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype && bitfroest.conflictDialog"
+      },
+      {
+        "command": "bitfroest.conflict-compare",
+        "title": "%command.bitfroest.conflict-compare.title%",
+        "category": "Bitfroest.fs",
+        "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype && bitfroest.conflictDialog"
+      },
+      {
+        "command": "bitfroest.conflict-compare-internal",
+        "title": "%command.bitfroest.conflict-compare-internal.title%",
+        "category": "Bitfroest.fs",
+        "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype && bitfroest.conflictDialog"
+      },
+      {
+        "command": "bitfroest.clipboard-copy",
+        "title": "%commands.clipboard-copy.title%",
+        "category": "Bitfroest.fs",
+        "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype"
+      },
+      {
+        "command": "bitfroest.clipboard-cut",
+        "title": "%commands.clipboard-cut.title%",
+        "category": "Bitfroest.fs",
+        "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype"
+      },
+      {
+        "command": "bitfroest.clipboard-paste",
+        "title": "%commands.clipboard-paste.title%",
+        "category": "Bitfroest.fs",
+        "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype"
+      },
+      {
+        "command": "bitfroest.shell-context-menu",
+        "title": "%command.bitfroest.shell-context-menu.title%",
+        "category": "Bitfroest.fs",
+        "enablement": "isWindows && bitfroest.ready && activeWebviewPanelId == bitfroestPrototype"
+      },
+      {
+        "command": "bitfroest.lister-action",
+        "title": "%lister.command.title%",
+        "category": "Bitfroest.fs"
+      },
+      {
+        "command": "bitfroest.configureFavorites",
+        "title": "%favorites.command%"
+      },
+      {
+        "command": "bitfroest.search",
+        "title": "%command.bitfroest.search.title%"
+      },
+      {
+        "command": "bitfroest.search-separate",
+        "title": "%command.bitfroest.searchSeparate.title%"
+      },
+      {
+        "command": "bitfroest.pack-move",
+        "title": "%command.bitfroest.pack-move.title%",
+        "category": "Bitfroest.fs",
+        "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype"
+      },
+      {
+        "command": "bitfroest.test-archives",
+        "title": "%command.bitfroest.test-archives.title%",
+        "category": "Bitfroest.fs",
+        "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype"
+      },
+      {
+        "command": "bitfroest.showLocalBranches",
+        "title": "%command.bitfroest.showLocalBranches.title%",
+        "category": "Bitfroest.fs",
+        "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype"
+      }
+    ],
+    "submenus": [
+      {
+        "id": "bitfroest.menu",
+        "label": "Bitfroest.fs",
+        "icon": "$(menu)"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "bitfroest.swap",
+          "when": "activeWebviewPanelId == bitfroestPrototype",
+          "group": "navigation@1"
+        },
+        {
+          "submenu": "bitfroest.menu",
+          "when": "activeWebviewPanelId == bitfroestPrototype",
+          "group": "navigation@2"
+        }
+      ],
+      "bitfroest.menu": [
+        {
+          "command": "bitfroest.view",
+          "group": "1_files@1"
+        },
+        {
+          "command": "bitfroest.edit",
+          "group": "1_files@2"
+        },
+        {
+          "command": "bitfroest.copy",
+          "group": "1_files@3"
+        },
+        {
+          "command": "bitfroest.move",
+          "group": "1_files@4"
+        },
+        {
+          "command": "bitfroest.mkdir",
+          "group": "1_files@5"
+        },
+        {
+          "command": "bitfroest.delete",
+          "group": "1_files@6"
+        },
+        {
+          "command": "bitfroest.pack",
+          "group": "2_archives@1"
+        },
+        {
+          "command": "bitfroest.unpack",
+          "group": "2_archives@2"
+        },
+        {
+          "command": "bitfroest.rename",
+          "group": "3_tools@1"
+        },
+        {
+          "command": "bitfroest.select-all",
+          "group": "4_selection@1"
+        },
+        {
+          "command": "bitfroest.invert",
+          "group": "4_selection@2"
+        },
+        {
+          "command": "bitfroest.clear",
+          "group": "4_selection@3"
+        },
+        {
+          "command": "bitfroest.swap",
+          "group": "5_layout@1"
+        },
+        {
+          "command": "bitfroest.reset",
+          "group": "6_demo@1"
+        },
+        {
+          "command": "bitfroest.help",
+          "group": "6_demo@2"
+        },
+        {
+          "command": "bitfroest.licenses",
+          "group": "7_help@1"
+        },
+        {
+          "command": "bitfroest.chooseTabMode",
+          "group": "5_layout@3"
+        },
+        {
+          "command": "bitfroest.new-tab",
+          "group": "5_tabs@16"
+        },
+        {
+          "command": "bitfroest.close-tab",
+          "group": "5_tabs@17"
+        },
+        {
+          "command": "bitfroest.next-tab",
+          "group": "5_tabs@18"
+        },
+        {
+          "command": "bitfroest.previous-tab",
+          "group": "5_tabs@19"
+        },
+        {
+          "command": "bitfroest.refresh",
+          "group": "5_tabs@20"
+        },
+        {
+          "command": "bitfroest.filter",
+          "group": "5_tabs@21"
+        },
+        {
+          "command": "bitfroest.path",
+          "group": "5_tabs@22"
+        },
+        {
+          "command": "bitfroest.background-tab",
+          "group": "5_tabs@23"
+        },
+        {
+          "command": "bitfroest.open-dir-tab",
+          "group": "5_tabs@24"
+        },
+        {
+          "command": "bitfroest.open-dir-other-tab",
+          "group": "5_tabs@25"
+        },
+        {
+          "command": "bitfroest.rename-one",
+          "group": "5_tabs@26"
+        },
+        {
+          "command": "bitfroest.back",
+          "group": "5_tabs@27"
+        },
+        {
+          "command": "bitfroest.forward",
+          "group": "5_tabs@28"
+        },
+        {
+          "command": "bitfroest.swap-paths",
+          "group": "5_tabs@29"
+        }
+      ],
+      "webview/context": [
+        {
+          "submenu": "bitfroest.menu",
+          "when": "bitfroest.ready && webviewId == bitfroestPrototype",
+          "group": "navigation@1"
+        },
+        {
+          "command": "bitfroest.configureColumns",
+          "when": "webviewId == bitfroestPrototype && webviewSection == columns",
+          "group": "1_columns"
+        },
+        {
+          "command": "bitfroest.clipboard-copy",
+          "when": "bitfroest.ready && webviewId == bitfroestPrototype && webviewSection != columns",
+          "group": "1_fileclipboard"
+        },
+        {
+          "command": "bitfroest.clipboard-cut",
+          "when": "bitfroest.ready && webviewId == bitfroestPrototype && webviewSection != columns",
+          "group": "1_fileclipboard"
+        },
+        {
+          "command": "bitfroest.clipboard-paste",
+          "when": "bitfroest.ready && webviewId == bitfroestPrototype && webviewSection != columns",
+          "group": "1_fileclipboard"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "bitfroest.view",
+          "when": "activeWebviewPanelId == bitfroestPrototype"
+        },
+        {
+          "command": "bitfroest.edit",
+          "when": "activeWebviewPanelId == bitfroestPrototype"
+        },
+        {
+          "command": "bitfroest.copy",
+          "when": "activeWebviewPanelId == bitfroestPrototype"
+        },
+        {
+          "command": "bitfroest.move",
+          "when": "activeWebviewPanelId == bitfroestPrototype"
+        },
+        {
+          "command": "bitfroest.mkdir",
+          "when": "activeWebviewPanelId == bitfroestPrototype"
+        },
+        {
+          "command": "bitfroest.delete",
+          "when": "activeWebviewPanelId == bitfroestPrototype"
+        },
+        {
+          "command": "bitfroest.pack",
+          "when": "activeWebviewPanelId == bitfroestPrototype"
+        },
+        {
+          "command": "bitfroest.unpack",
+          "when": "activeWebviewPanelId == bitfroestPrototype"
+        },
+        {
+          "command": "bitfroest.rename",
+          "when": "activeWebviewPanelId == bitfroestPrototype"
+        },
+        {
+          "command": "bitfroest.select-all",
+          "when": "activeWebviewPanelId == bitfroestPrototype"
+        },
+        {
+          "command": "bitfroest.invert",
+          "when": "activeWebviewPanelId == bitfroestPrototype"
+        },
+        {
+          "command": "bitfroest.clear",
+          "when": "activeWebviewPanelId == bitfroestPrototype"
+        },
+        {
+          "command": "bitfroest.swap",
+          "when": "activeWebviewPanelId == bitfroestPrototype"
+        },
+        {
+          "command": "bitfroest.reset",
+          "when": "activeWebviewPanelId == bitfroestPrototype"
+        },
+        {
+          "command": "bitfroest.help",
+          "when": "activeWebviewPanelId == bitfroestPrototype"
+        },
+        {
+          "command": "bitfroest.chooseTabMode",
+          "when": "activeWebviewPanelId == bitfroestPrototype"
+        },
+        {
+          "command": "bitfroest.new-tab",
+          "when": "activeWebviewPanelId == bitfroestPrototype"
+        },
+        {
+          "command": "bitfroest.close-tab",
+          "when": "activeWebviewPanelId == bitfroestPrototype"
+        },
+        {
+          "command": "bitfroest.next-tab",
+          "when": "activeWebviewPanelId == bitfroestPrototype"
+        },
+        {
+          "command": "bitfroest.previous-tab",
+          "when": "activeWebviewPanelId == bitfroestPrototype"
+        },
+        {
+          "command": "bitfroest.refresh",
+          "when": "activeWebviewPanelId == bitfroestPrototype"
+        },
+        {
+          "command": "bitfroest.filter",
+          "when": "activeWebviewPanelId == bitfroestPrototype"
+        },
+        {
+          "command": "bitfroest.path",
+          "when": "activeWebviewPanelId == bitfroestPrototype"
+        },
+        {
+          "command": "bitfroest.background-tab",
+          "when": "activeWebviewPanelId == bitfroestPrototype"
+        },
+        {
+          "command": "bitfroest.open-dir-tab",
+          "when": "activeWebviewPanelId == bitfroestPrototype"
+        },
+        {
+          "command": "bitfroest.open-dir-other-tab",
+          "when": "activeWebviewPanelId == bitfroestPrototype"
+        },
+        {
+          "command": "bitfroest.rename-one",
+          "when": "activeWebviewPanelId == bitfroestPrototype"
+        },
+        {
+          "command": "bitfroest.back",
+          "when": "activeWebviewPanelId == bitfroestPrototype"
+        },
+        {
+          "command": "bitfroest.forward",
+          "when": "activeWebviewPanelId == bitfroestPrototype"
+        },
+        {
+          "command": "bitfroest.swap-paths",
+          "when": "activeWebviewPanelId == bitfroestPrototype"
+        },
+        {
+          "command": "bitfroest.conflict-target",
+          "when": "activeWebviewPanelId == bitfroestPrototype && bitfroest.conflictDialog"
+        },
+        {
+          "command": "bitfroest.conflict-source",
+          "when": "activeWebviewPanelId == bitfroestPrototype && bitfroest.conflictDialog"
+        },
+        {
+          "command": "bitfroest.conflict-target-plain",
+          "when": "activeWebviewPanelId == bitfroestPrototype && bitfroest.conflictDialog"
+        },
+        {
+          "command": "bitfroest.conflict-source-plain",
+          "when": "activeWebviewPanelId == bitfroestPrototype && bitfroest.conflictDialog"
+        },
+        {
+          "command": "bitfroest.conflict-compare",
+          "when": "activeWebviewPanelId == bitfroestPrototype && bitfroest.conflictDialog"
+        },
+        {
+          "command": "bitfroest.conflict-compare-internal",
+          "when": "activeWebviewPanelId == bitfroestPrototype && bitfroest.conflictDialog"
+        },
+        {
+          "command": "bitfroest.showLocalBranches",
+          "when": "activeWebviewPanelId == bitfroestPrototype"
+        }
+      ]
+    },
+    "configuration": [
+      {
+        "title": "Bitfroest.fs",
+        "properties": {
+          "bitfroest.language": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "de",
+              "en"
+            ],
+            "default": "auto",
+            "scope": "application",
+            "description": "%language.description%",
+            "enumDescriptions": [
+              "%language.auto%",
+              "Deutsch",
+              "English"
+            ]
+          },
+          "bitfroest.files.countFolderSizeOnSpace": {
+            "type": "boolean",
+            "scope": "resource",
+            "default": true,
+            "description": "%files.countFolderSizeOnSpace.description%"
+          },
+          "bitfroest.files.deleteToTrash": {
+            "type": "boolean",
+            "scope": "resource",
+            "default": true,
+            "description": "%files.deleteToTrash.description%"
+          },
+          "bitfroest.lister.codepages": {
+            "type": "object",
+            "scope": "window",
+            "default": {},
+            "description": "%lister.codepages.description%",
+            "additionalProperties": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 65535
+            },
+            "propertyNames": {
+              "minLength": 1,
+              "maxLength": 80
+            }
+          }
+        }
+      },
+      {
+        "title": "%columns.configuration.title%",
+        "order": 1,
+        "properties": {
+          "bitfroest.columns.activeSet": {
+            "type": "string",
+            "default": "standard",
+            "scope": "window",
+            "description": "%configuration.properties.bitfroest.columns.activeSet.description%",
+            "tags": [
+              "columnSettings"
+            ],
+            "order": 10,
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.sets": {
+            "type": "array",
+            "scope": "resource",
+            "description": "%configuration.properties.bitfroest.columns.sets.description%",
+            "default": [
+              {
+                "id": "standard",
+                "name": "Standard",
+                "columns": [
+                  {
+                    "id": "name",
+                    "title": "%columns.standard.name%",
+                    "field": "[=file.name]",
+                    "width": 260,
+                    "align": "left",
+                    "visible": true
+                  },
+                  {
+                    "id": "type",
+                    "title": "%columns.standard.type%",
+                    "field": "[=file.ext]",
+                    "width": 88,
+                    "align": "left",
+                    "visible": true
+                  },
+                  {
+                    "id": "size",
+                    "title": "%columns.standard.size%",
+                    "field": "[=file.size.auto]",
+                    "width": 96,
+                    "align": "right",
+                    "visible": true
+                  },
+                  {
+                    "id": "date",
+                    "title": "%columns.standard.date%",
+                    "field": "[=file.writedate]",
+                    "width": 154,
+                    "align": "left",
+                    "visible": true
+                  },
+                  {
+                    "id": "attributes",
+                    "title": "%columns.standard.attributes%",
+                    "field": "[=file.attributes]",
+                    "width": 72,
+                    "align": "left",
+                    "visible": true
+                  }
+                ]
+              }
+            ],
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "name",
+                "columns"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "%columns.option.id%"
+                },
+                "name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "%columns.option.name%"
+                },
+                "columns": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 34,
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "id",
+                      "title",
+                      "field"
+                    ],
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "%columns.option.column.id%"
+                      },
+                      "title": {
+                        "type": "string",
+                        "description": "%columns.option.column.title%"
+                      },
+                      "field": {
+                        "type": "string",
+                        "description": "%configuration.properties.bitfroest.columns.sets.items.properties.columns.items.properties.field.description%"
+                      },
+                      "width": {
+                        "type": "number",
+                        "minimum": 32,
+                        "maximum": 1600,
+                        "default": 120,
+                        "description": "%columns.option.column.width%"
+                      },
+                      "align": {
+                        "type": "string",
+                        "enum": [
+                          "left",
+                          "right",
+                          "center"
+                        ],
+                        "default": "left",
+                        "description": "%columns.option.column.align%",
+                        "enumDescriptions": [
+                          "%columns.option.left%",
+                          "%columns.option.right%",
+                          "%columns.option.center%"
+                        ],
+                        "enumItemLabels": [
+                          "%columns.option.left%",
+                          "%columns.option.right%",
+                          "%columns.option.center%"
+                        ]
+                      },
+                      "visible": {
+                        "type": "boolean",
+                        "default": true,
+                        "description": "%columns.option.column.visible%"
+                      }
+                    }
+                  },
+                  "description": "%columns.option.columns%"
+                }
+              }
+            },
+            "maxItems": 30,
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.names": {
+            "type": "object",
+            "scope": "window",
+            "default": {
+              "standard": "Standard"
+            },
+            "order": 11,
+            "tags": [
+              "columnSettings"
+            ],
+            "markdownDescription": "%columns.tables.names.description%",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "pattern": "^[A-Za-z0-9_-]+$"
+            },
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.fields": {
+            "type": "object",
+            "scope": "window",
+            "default": {
+              "standard.name": "[=file.name]",
+              "standard.type": "[=file.ext]",
+              "standard.size": "[=file.size.auto]",
+              "standard.date": "[=file.writedate]",
+              "standard.attributes": "[=file.attributes]"
+            },
+            "order": 12,
+            "tags": [
+              "columnSettings"
+            ],
+            "markdownDescription": "%columns.tables.fields.description%",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "pattern": "^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$"
+            },
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.order": {
+            "type": "array",
+            "scope": "window",
+            "default": [
+              "standard.name",
+              "standard.type",
+              "standard.size",
+              "standard.date",
+              "standard.attributes"
+            ],
+            "order": 13,
+            "tags": [
+              "columnSettings"
+            ],
+            "markdownDescription": "%columns.tables.order.description%",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$"
+            },
+            "uniqueItems": true,
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.titles": {
+            "type": "object",
+            "scope": "window",
+            "default": {
+              "standard.name": "%columns.standard.name%",
+              "standard.type": "%columns.standard.type%",
+              "standard.size": "%columns.standard.size%",
+              "standard.date": "%columns.standard.date%",
+              "standard.attributes": "%columns.standard.attributes%"
+            },
+            "order": 14,
+            "tags": [
+              "columnSettings"
+            ],
+            "markdownDescription": "%columns.tables.titles.description%",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "pattern": "^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$"
+            },
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.widths": {
+            "type": "object",
+            "scope": "window",
+            "default": {
+              "standard.name": 260,
+              "standard.type": 88,
+              "standard.size": 96,
+              "standard.date": 154,
+              "standard.attributes": 72
+            },
+            "order": 15,
+            "tags": [
+              "columnSettings"
+            ],
+            "markdownDescription": "%columns.tables.widths.description%",
+            "additionalProperties": {
+              "type": "number",
+              "minimum": 32,
+              "maximum": 1600
+            },
+            "propertyNames": {
+              "pattern": "^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$"
+            },
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.alignments": {
+            "type": "object",
+            "scope": "window",
+            "default": {
+              "standard.name": "left",
+              "standard.type": "left",
+              "standard.size": "right",
+              "standard.date": "left",
+              "standard.attributes": "left"
+            },
+            "order": 16,
+            "tags": [
+              "columnSettings"
+            ],
+            "markdownDescription": "%columns.tables.alignments.description%",
+            "additionalProperties": {
+              "type": "string",
+              "enum": [
+                "left",
+                "right",
+                "center"
+              ],
+              "enumDescriptions": [
+                "%columns.option.left%",
+                "%columns.option.right%",
+                "%columns.option.center%"
+              ],
+              "enumItemLabels": [
+                "%columns.option.left%",
+                "%columns.option.right%",
+                "%columns.option.center%"
+              ]
+            },
+            "propertyNames": {
+              "pattern": "^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$"
+            },
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.visibility": {
+            "type": "object",
+            "scope": "window",
+            "default": {
+              "standard.name": true,
+              "standard.type": true,
+              "standard.size": true,
+              "standard.date": true,
+              "standard.attributes": true
+            },
+            "order": 17,
+            "tags": [
+              "columnSettings"
+            ],
+            "markdownDescription": "%columns.tables.visibility.description%",
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "propertyNames": {
+              "pattern": "^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$"
+            },
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.visible.name": {
+            "type": "boolean",
+            "default": true,
+            "scope": "window",
+            "order": 10,
+            "tags": [
+              "columnSettings"
+            ],
+            "description": "%columns.fixed.visible.name%",
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.width.name": {
+            "type": "number",
+            "default": 260,
+            "scope": "window",
+            "order": 100,
+            "tags": [
+              "columnSettings"
+            ],
+            "description": "%columns.fixed.width.name%",
+            "enum": [
+              64,
+              72,
+              80,
+              88,
+              96,
+              120,
+              154,
+              160,
+              200,
+              260,
+              320,
+              400,
+              600,
+              800,
+              1200,
+              1600
+            ],
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.alignment.name": {
+            "type": "string",
+            "default": "left",
+            "scope": "window",
+            "order": 200,
+            "tags": [
+              "columnSettings"
+            ],
+            "description": "%columns.fixed.alignment.name%",
+            "enum": [
+              "left",
+              "right",
+              "center"
+            ],
+            "enumItemLabels": [
+              "%columns.option.left%",
+              "%columns.option.right%",
+              "%columns.option.center%"
+            ],
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.position.name": {
+            "type": "number",
+            "default": 1,
+            "scope": "window",
+            "order": 300,
+            "tags": [
+              "columnSettings"
+            ],
+            "description": "%columns.fixed.position.name%",
+            "enum": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9,
+              10,
+              11,
+              12,
+              13
+            ],
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.title.name": {
+            "type": "string",
+            "default": "",
+            "scope": "window",
+            "order": 400,
+            "tags": [
+              "columnSettings"
+            ],
+            "description": "%columns.fixed.title.name%",
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.visible.type": {
+            "type": "boolean",
+            "default": true,
+            "scope": "window",
+            "order": 11,
+            "tags": [
+              "columnSettings"
+            ],
+            "description": "%columns.fixed.visible.type%",
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.width.type": {
+            "type": "number",
+            "default": 88,
+            "scope": "window",
+            "order": 101,
+            "tags": [
+              "columnSettings"
+            ],
+            "description": "%columns.fixed.width.type%",
+            "enum": [
+              64,
+              72,
+              80,
+              88,
+              96,
+              120,
+              154,
+              160,
+              200,
+              260,
+              320,
+              400,
+              600,
+              800,
+              1200,
+              1600
+            ],
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.alignment.type": {
+            "type": "string",
+            "default": "left",
+            "scope": "window",
+            "order": 201,
+            "tags": [
+              "columnSettings"
+            ],
+            "description": "%columns.fixed.alignment.type%",
+            "enum": [
+              "left",
+              "right",
+              "center"
+            ],
+            "enumItemLabels": [
+              "%columns.option.left%",
+              "%columns.option.right%",
+              "%columns.option.center%"
+            ],
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.position.type": {
+            "type": "number",
+            "default": 2,
+            "scope": "window",
+            "order": 301,
+            "tags": [
+              "columnSettings"
+            ],
+            "description": "%columns.fixed.position.type%",
+            "enum": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9,
+              10,
+              11,
+              12,
+              13
+            ],
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.title.type": {
+            "type": "string",
+            "default": "",
+            "scope": "window",
+            "order": 401,
+            "tags": [
+              "columnSettings"
+            ],
+            "description": "%columns.fixed.title.type%",
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.visible.size": {
+            "type": "boolean",
+            "default": true,
+            "scope": "window",
+            "order": 12,
+            "tags": [
+              "columnSettings"
+            ],
+            "description": "%columns.fixed.visible.size%",
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.width.size": {
+            "type": "number",
+            "default": 96,
+            "scope": "window",
+            "order": 102,
+            "tags": [
+              "columnSettings"
+            ],
+            "description": "%columns.fixed.width.size%",
+            "enum": [
+              64,
+              72,
+              80,
+              88,
+              96,
+              120,
+              154,
+              160,
+              200,
+              260,
+              320,
+              400,
+              600,
+              800,
+              1200,
+              1600
+            ],
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.alignment.size": {
+            "type": "string",
+            "default": "right",
+            "scope": "window",
+            "order": 202,
+            "tags": [
+              "columnSettings"
+            ],
+            "description": "%columns.fixed.alignment.size%",
+            "enum": [
+              "left",
+              "right",
+              "center"
+            ],
+            "enumItemLabels": [
+              "%columns.option.left%",
+              "%columns.option.right%",
+              "%columns.option.center%"
+            ],
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.position.size": {
+            "type": "number",
+            "default": 3,
+            "scope": "window",
+            "order": 302,
+            "tags": [
+              "columnSettings"
+            ],
+            "description": "%columns.fixed.position.size%",
+            "enum": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9,
+              10,
+              11,
+              12,
+              13
+            ],
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.title.size": {
+            "type": "string",
+            "default": "",
+            "scope": "window",
+            "order": 402,
+            "tags": [
+              "columnSettings"
+            ],
+            "description": "%columns.fixed.title.size%",
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.visible.date": {
+            "type": "boolean",
+            "default": true,
+            "scope": "window",
+            "order": 13,
+            "tags": [
+              "columnSettings"
+            ],
+            "description": "%columns.fixed.visible.date%",
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.width.date": {
+            "type": "number",
+            "default": 154,
+            "scope": "window",
+            "order": 103,
+            "tags": [
+              "columnSettings"
+            ],
+            "description": "%columns.fixed.width.date%",
+            "enum": [
+              64,
+              72,
+              80,
+              88,
+              96,
+              120,
+              154,
+              160,
+              200,
+              260,
+              320,
+              400,
+              600,
+              800,
+              1200,
+              1600
+            ],
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.alignment.date": {
+            "type": "string",
+            "default": "left",
+            "scope": "window",
+            "order": 203,
+            "tags": [
+              "columnSettings"
+            ],
+            "description": "%columns.fixed.alignment.date%",
+            "enum": [
+              "left",
+              "right",
+              "center"
+            ],
+            "enumItemLabels": [
+              "%columns.option.left%",
+              "%columns.option.right%",
+              "%columns.option.center%"
+            ],
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.position.date": {
+            "type": "number",
+            "default": 4,
+            "scope": "window",
+            "order": 303,
+            "tags": [
+              "columnSettings"
+            ],
+            "description": "%columns.fixed.position.date%",
+            "enum": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9,
+              10,
+              11,
+              12,
+              13
+            ],
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.title.date": {
+            "type": "string",
+            "default": "",
+            "scope": "window",
+            "order": 403,
+            "tags": [
+              "columnSettings"
+            ],
+            "description": "%columns.fixed.title.date%",
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.visible.attributes": {
+            "type": "boolean",
+            "default": true,
+            "scope": "window",
+            "order": 14,
+            "tags": [
+              "columnSettings"
+            ],
+            "description": "%columns.fixed.visible.attributes%",
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.width.attributes": {
+            "type": "number",
+            "default": 72,
+            "scope": "window",
+            "order": 104,
+            "tags": [
+              "columnSettings"
+            ],
+            "description": "%columns.fixed.width.attributes%",
+            "enum": [
+              64,
+              72,
+              80,
+              88,
+              96,
+              120,
+              154,
+              160,
+              200,
+              260,
+              320,
+              400,
+              600,
+              800,
+              1200,
+              1600
+            ],
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.alignment.attributes": {
+            "type": "string",
+            "default": "left",
+            "scope": "window",
+            "order": 204,
+            "tags": [
+              "columnSettings"
+            ],
+            "description": "%columns.fixed.alignment.attributes%",
+            "enum": [
+              "left",
+              "right",
+              "center"
+            ],
+            "enumItemLabels": [
+              "%columns.option.left%",
+              "%columns.option.right%",
+              "%columns.option.center%"
+            ],
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.position.attributes": {
+            "type": "number",
+            "default": 5,
+            "scope": "window",
+            "order": 304,
+            "tags": [
+              "columnSettings"
+            ],
+            "description": "%columns.fixed.position.attributes%",
+            "enum": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9,
+              10,
+              11,
+              12,
+              13
+            ],
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.title.attributes": {
+            "type": "string",
+            "default": "",
+            "scope": "window",
+            "order": 404,
+            "tags": [
+              "columnSettings"
+            ],
+            "description": "%columns.fixed.title.attributes%",
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.visible.fullName": {
+            "type": "boolean",
+            "default": false,
+            "scope": "window",
+            "order": 15,
+            "tags": [
+              "columnSettings"
+            ],
+            "description": "%columns.fixed.visible.fullName%",
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.width.fullName": {
+            "type": "number",
+            "default": 260,
+            "scope": "window",
+            "order": 105,
+            "tags": [
+              "columnSettings"
+            ],
+            "description": "%columns.fixed.width.fullName%",
+            "enum": [
+              64,
+              72,
+              80,
+              88,
+              96,
+              120,
+              154,
+              160,
+              200,
+              260,
+              320,
+              400,
+              600,
+              800,
+              1200,
+              1600
+            ],
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.alignment.fullName": {
+            "type": "string",
+            "default": "left",
+            "scope": "window",
+            "order": 205,
+            "tags": [
+              "columnSettings"
+            ],
+            "description": "%columns.fixed.alignment.fullName%",
+            "enum": [
+              "left",
+              "right",
+              "center"
+            ],
+            "enumItemLabels": [
+              "%columns.option.left%",
+              "%columns.option.right%",
+              "%columns.option.center%"
+            ],
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.position.fullName": {
+            "type": "number",
+            "default": 6,
+            "scope": "window",
+            "order": 305,
+            "tags": [
+              "columnSettings"
+            ],
+            "description": "%columns.fixed.position.fullName%",
+            "enum": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9,
+              10,
+              11,
+              12,
+              13
+            ],
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.title.fullName": {
+            "type": "string",
+            "default": "",
+            "scope": "window",
+            "order": 405,
+            "tags": [
+              "columnSettings"
+            ],
+            "description": "%columns.fixed.title.fullName%",
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.visible.path": {
+            "type": "boolean",
+            "default": false,
+            "scope": "window",
+            "order": 16,
+            "tags": [
+              "columnSettings"
+            ],
+            "description": "%columns.fixed.visible.path%",
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.width.path": {
+            "type": "number",
+            "default": 320,
+            "scope": "window",
+            "order": 106,
+            "tags": [
+              "columnSettings"
+            ],
+            "description": "%columns.fixed.width.path%",
+            "enum": [
+              64,
+              72,
+              80,
+              88,
+              96,
+              120,
+              154,
+              160,
+              200,
+              260,
+              320,
+              400,
+              600,
+              800,
+              1200,
+              1600
+            ],
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.alignment.path": {
+            "type": "string",
+            "default": "left",
+            "scope": "window",
+            "order": 206,
+            "tags": [
+              "columnSettings"
+            ],
+            "description": "%columns.fixed.alignment.path%",
+            "enum": [
+              "left",
+              "right",
+              "center"
+            ],
+            "enumItemLabels": [
+              "%columns.option.left%",
+              "%columns.option.right%",
+              "%columns.option.center%"
+            ],
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.position.path": {
+            "type": "number",
+            "default": 7,
+            "scope": "window",
+            "order": 306,
+            "tags": [
+              "columnSettings"
+            ],
+            "description": "%columns.fixed.position.path%",
+            "enum": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9,
+              10,
+              11,
+              12,
+              13
+            ],
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.title.path": {
+            "type": "string",
+            "default": "",
+            "scope": "window",
+            "order": 406,
+            "tags": [
+              "columnSettings"
+            ],
+            "description": "%columns.fixed.title.path%",
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.visible.fullPath": {
+            "type": "boolean",
+            "default": false,
+            "scope": "window",
+            "order": 17,
+            "tags": [
+              "columnSettings"
+            ],
+            "description": "%columns.fixed.visible.fullPath%",
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.width.fullPath": {
+            "type": "number",
+            "default": 400,
+            "scope": "window",
+            "order": 107,
+            "tags": [
+              "columnSettings"
+            ],
+            "description": "%columns.fixed.width.fullPath%",
+            "enum": [
+              64,
+              72,
+              80,
+              88,
+              96,
+              120,
+              154,
+              160,
+              200,
+              260,
+              320,
+              400,
+              600,
+              800,
+              1200,
+              1600
+            ],
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.alignment.fullPath": {
+            "type": "string",
+            "default": "left",
+            "scope": "window",
+            "order": 207,
+            "tags": [
+              "columnSettings"
+            ],
+            "description": "%columns.fixed.alignment.fullPath%",
+            "enum": [
+              "left",
+              "right",
+              "center"
+            ],
+            "enumItemLabels": [
+              "%columns.option.left%",
+              "%columns.option.right%",
+              "%columns.option.center%"
+            ],
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.position.fullPath": {
+            "type": "number",
+            "default": 8,
+            "scope": "window",
+            "order": 307,
+            "tags": [
+              "columnSettings"
+            ],
+            "description": "%columns.fixed.position.fullPath%",
+            "enum": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9,
+              10,
+              11,
+              12,
+              13
+            ],
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.title.fullPath": {
+            "type": "string",
+            "default": "",
+            "scope": "window",
+            "order": 407,
+            "tags": [
+              "columnSettings"
+            ],
+            "description": "%columns.fixed.title.fullPath%",
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.visible.writeTime": {
+            "type": "boolean",
+            "default": false,
+            "scope": "window",
+            "order": 18,
+            "tags": [
+              "columnSettings"
+            ],
+            "description": "%columns.fixed.visible.writeTime%",
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.width.writeTime": {
+            "type": "number",
+            "default": 120,
+            "scope": "window",
+            "order": 108,
+            "tags": [
+              "columnSettings"
+            ],
+            "description": "%columns.fixed.width.writeTime%",
+            "enum": [
+              64,
+              72,
+              80,
+              88,
+              96,
+              120,
+              154,
+              160,
+              200,
+              260,
+              320,
+              400,
+              600,
+              800,
+              1200,
+              1600
+            ],
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.alignment.writeTime": {
+            "type": "string",
+            "default": "left",
+            "scope": "window",
+            "order": 208,
+            "tags": [
+              "columnSettings"
+            ],
+            "description": "%columns.fixed.alignment.writeTime%",
+            "enum": [
+              "left",
+              "right",
+              "center"
+            ],
+            "enumItemLabels": [
+              "%columns.option.left%",
+              "%columns.option.right%",
+              "%columns.option.center%"
+            ],
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.position.writeTime": {
+            "type": "number",
+            "default": 9,
+            "scope": "window",
+            "order": 308,
+            "tags": [
+              "columnSettings"
+            ],
+            "description": "%columns.fixed.position.writeTime%",
+            "enum": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9,
+              10,
+              11,
+              12,
+              13
+            ],
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.title.writeTime": {
+            "type": "string",
+            "default": "",
+            "scope": "window",
+            "order": 408,
+            "tags": [
+              "columnSettings"
+            ],
+            "description": "%columns.fixed.title.writeTime%",
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.visible.creationDate": {
+            "type": "boolean",
+            "default": false,
+            "scope": "window",
+            "order": 19,
+            "tags": [
+              "columnSettings"
+            ],
+            "description": "%columns.fixed.visible.creationDate%",
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.width.creationDate": {
+            "type": "number",
+            "default": 154,
+            "scope": "window",
+            "order": 109,
+            "tags": [
+              "columnSettings"
+            ],
+            "description": "%columns.fixed.width.creationDate%",
+            "enum": [
+              64,
+              72,
+              80,
+              88,
+              96,
+              120,
+              154,
+              160,
+              200,
+              260,
+              320,
+              400,
+              600,
+              800,
+              1200,
+              1600
+            ],
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.alignment.creationDate": {
+            "type": "string",
+            "default": "left",
+            "scope": "window",
+            "order": 209,
+            "tags": [
+              "columnSettings"
+            ],
+            "description": "%columns.fixed.alignment.creationDate%",
+            "enum": [
+              "left",
+              "right",
+              "center"
+            ],
+            "enumItemLabels": [
+              "%columns.option.left%",
+              "%columns.option.right%",
+              "%columns.option.center%"
+            ],
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.position.creationDate": {
+            "type": "number",
+            "default": 10,
+            "scope": "window",
+            "order": 309,
+            "tags": [
+              "columnSettings"
+            ],
+            "description": "%columns.fixed.position.creationDate%",
+            "enum": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9,
+              10,
+              11,
+              12,
+              13
+            ],
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.title.creationDate": {
+            "type": "string",
+            "default": "",
+            "scope": "window",
+            "order": 409,
+            "tags": [
+              "columnSettings"
+            ],
+            "description": "%columns.fixed.title.creationDate%",
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.visible.creationTime": {
+            "type": "boolean",
+            "default": false,
+            "scope": "window",
+            "order": 20,
+            "tags": [
+              "columnSettings"
+            ],
+            "description": "%columns.fixed.visible.creationTime%",
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.width.creationTime": {
+            "type": "number",
+            "default": 120,
+            "scope": "window",
+            "order": 110,
+            "tags": [
+              "columnSettings"
+            ],
+            "description": "%columns.fixed.width.creationTime%",
+            "enum": [
+              64,
+              72,
+              80,
+              88,
+              96,
+              120,
+              154,
+              160,
+              200,
+              260,
+              320,
+              400,
+              600,
+              800,
+              1200,
+              1600
+            ],
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.alignment.creationTime": {
+            "type": "string",
+            "default": "left",
+            "scope": "window",
+            "order": 210,
+            "tags": [
+              "columnSettings"
+            ],
+            "description": "%columns.fixed.alignment.creationTime%",
+            "enum": [
+              "left",
+              "right",
+              "center"
+            ],
+            "enumItemLabels": [
+              "%columns.option.left%",
+              "%columns.option.right%",
+              "%columns.option.center%"
+            ],
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.position.creationTime": {
+            "type": "number",
+            "default": 11,
+            "scope": "window",
+            "order": 310,
+            "tags": [
+              "columnSettings"
+            ],
+            "description": "%columns.fixed.position.creationTime%",
+            "enum": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9,
+              10,
+              11,
+              12,
+              13
+            ],
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.title.creationTime": {
+            "type": "string",
+            "default": "",
+            "scope": "window",
+            "order": 410,
+            "tags": [
+              "columnSettings"
+            ],
+            "description": "%columns.fixed.title.creationTime%",
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.visible.accessDate": {
+            "type": "boolean",
+            "default": false,
+            "scope": "window",
+            "order": 21,
+            "tags": [
+              "columnSettings"
+            ],
+            "description": "%columns.fixed.visible.accessDate%",
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.width.accessDate": {
+            "type": "number",
+            "default": 154,
+            "scope": "window",
+            "order": 111,
+            "tags": [
+              "columnSettings"
+            ],
+            "description": "%columns.fixed.width.accessDate%",
+            "enum": [
+              64,
+              72,
+              80,
+              88,
+              96,
+              120,
+              154,
+              160,
+              200,
+              260,
+              320,
+              400,
+              600,
+              800,
+              1200,
+              1600
+            ],
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.alignment.accessDate": {
+            "type": "string",
+            "default": "left",
+            "scope": "window",
+            "order": 211,
+            "tags": [
+              "columnSettings"
+            ],
+            "description": "%columns.fixed.alignment.accessDate%",
+            "enum": [
+              "left",
+              "right",
+              "center"
+            ],
+            "enumItemLabels": [
+              "%columns.option.left%",
+              "%columns.option.right%",
+              "%columns.option.center%"
+            ],
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.position.accessDate": {
+            "type": "number",
+            "default": 12,
+            "scope": "window",
+            "order": 311,
+            "tags": [
+              "columnSettings"
+            ],
+            "description": "%columns.fixed.position.accessDate%",
+            "enum": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9,
+              10,
+              11,
+              12,
+              13
+            ],
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.title.accessDate": {
+            "type": "string",
+            "default": "",
+            "scope": "window",
+            "order": 411,
+            "tags": [
+              "columnSettings"
+            ],
+            "description": "%columns.fixed.title.accessDate%",
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.visible.accessTime": {
+            "type": "boolean",
+            "default": false,
+            "scope": "window",
+            "order": 22,
+            "tags": [
+              "columnSettings"
+            ],
+            "description": "%columns.fixed.visible.accessTime%",
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.width.accessTime": {
+            "type": "number",
+            "default": 120,
+            "scope": "window",
+            "order": 112,
+            "tags": [
+              "columnSettings"
+            ],
+            "description": "%columns.fixed.width.accessTime%",
+            "enum": [
+              64,
+              72,
+              80,
+              88,
+              96,
+              120,
+              154,
+              160,
+              200,
+              260,
+              320,
+              400,
+              600,
+              800,
+              1200,
+              1600
+            ],
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.alignment.accessTime": {
+            "type": "string",
+            "default": "left",
+            "scope": "window",
+            "order": 212,
+            "tags": [
+              "columnSettings"
+            ],
+            "description": "%columns.fixed.alignment.accessTime%",
+            "enum": [
+              "left",
+              "right",
+              "center"
+            ],
+            "enumItemLabels": [
+              "%columns.option.left%",
+              "%columns.option.right%",
+              "%columns.option.center%"
+            ],
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.position.accessTime": {
+            "type": "number",
+            "default": 13,
+            "scope": "window",
+            "order": 312,
+            "tags": [
+              "columnSettings"
+            ],
+            "description": "%columns.fixed.position.accessTime%",
+            "enum": [
+              1,
+              2,
+              3,
+              4,
+              5,
+              6,
+              7,
+              8,
+              9,
+              10,
+              11,
+              12,
+              13
+            ],
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.title.accessTime": {
+            "type": "string",
+            "default": "",
+            "scope": "window",
+            "order": 412,
+            "tags": [
+              "columnSettings"
+            ],
+            "description": "%columns.fixed.title.accessTime%",
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.columns.layout": {
+            "type": "array",
+            "default": [],
+            "scope": "window",
+            "description": "%configuration.columnLayout%",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "title",
+                "width",
+                "align",
+                "visible"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "width": {
+                  "type": "integer",
+                  "minimum": 32,
+                  "maximum": 1600
+                },
+                "align": {
+                  "type": "string",
+                  "enum": [
+                    "left",
+                    "right",
+                    "center"
+                  ]
+                },
+                "visible": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "title": "%favorites.category%",
+        "order": 2,
+        "properties": {
+          "bitfroest.favorites.entries": {
+            "type": "object",
+            "default": {},
+            "scope": "window",
+            "order": 0,
+            "tags": [
+              "favoriteSettings"
+            ],
+            "additionalProperties": {
+              "type": "string"
+            },
+            "markdownDescription": "%favorites.entries%",
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.favorites.groups": {
+            "type": "object",
+            "default": {},
+            "scope": "window",
+            "order": 1,
+            "tags": [
+              "favoriteSettings"
+            ],
+            "additionalProperties": {
+              "type": "string"
+            },
+            "markdownDescription": "%favorites.groups%",
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.favorites.targets": {
+            "type": "object",
+            "default": {},
+            "scope": "window",
+            "order": 2,
+            "tags": [
+              "favoriteSettings"
+            ],
+            "additionalProperties": {
+              "type": "string"
+            },
+            "markdownDescription": "%favorites.targets%",
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.favorites.order": {
+            "type": "array",
+            "default": [],
+            "scope": "window",
+            "order": 4,
+            "tags": [
+              "favoriteSettings"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "uniqueItems": true,
+            "description": "%favorites.order%",
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.favorites.storage": {
+            "type": "string",
+            "default": "user",
+            "enum": [
+              "user",
+              "workspace"
+            ],
+            "enumItemLabels": [
+              "%favorites.storage.user%",
+              "%favorites.storage.workspace%"
+            ],
+            "scope": "window",
+            "order": 5,
+            "tags": [
+              "favoriteSettings"
+            ],
+            "description": "%favorites.storage%",
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.favorites.labels": {
+            "type": "object",
+            "default": {},
+            "scope": "window",
+            "order": 1,
+            "tags": [
+              "favoriteSettings"
+            ],
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "%favorites.labels%",
+            "deprecationMessage": "%configuration.managedByEditor%"
+          },
+          "bitfroest.favorites.items": {
+            "type": "array",
+            "default": [],
+            "scope": "window",
+            "description": "%configuration.favoriteTree%",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "type",
+                "name",
+                "parent"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "favorite",
+                    "group"
+                  ]
+                },
+                "name": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "parent": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "path": {
+                  "type": "string"
+                },
+                "target": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "title": "%zip.configuration.title%",
+        "properties": {
+          "bitfroest.zip.compressionLevel": {
+            "type": "integer",
+            "default": 6,
+            "scope": "window",
+            "description": "%zip.compressionLevel.description%",
+            "minimum": 0,
+            "maximum": 9
+          },
+          "bitfroest.zip.storePaths": {
+            "type": "boolean",
+            "default": true,
+            "scope": "window",
+            "description": "%zip.storePaths.description%"
+          },
+          "bitfroest.zip.recursive": {
+            "type": "boolean",
+            "default": true,
+            "scope": "window",
+            "description": "%zip.recursive.description%"
+          },
+          "bitfroest.zip.verifyAfterWrite": {
+            "type": "boolean",
+            "default": true,
+            "scope": "window",
+            "description": "%zip.verifyAfterWrite.description%"
+          }
+        }
+      },
+      {
+        "title": "%gitStatus.configuration.title%",
+        "properties": {
+          "bitfroest.gitStatus.enabled": {
+            "type": "boolean",
+            "default": true,
+            "scope": "window",
+            "description": "%gitStatus.enabled.description%"
+          },
+          "bitfroest.gitStatus.showClean": {
+            "type": "boolean",
+            "default": true,
+            "scope": "window",
+            "description": "%gitStatus.showClean.description%"
+          },
+          "bitfroest.gitStatus.showUntracked": {
+            "type": "boolean",
+            "default": true,
+            "scope": "window",
+            "description": "%gitStatus.showUntracked.description%"
+          },
+          "bitfroest.gitStatus.showIgnored": {
+            "type": "boolean",
+            "default": false,
+            "scope": "window",
+            "description": "%gitStatus.showIgnored.description%"
+          },
+          "bitfroest.gitStatus.recursive": {
+            "type": "boolean",
+            "default": true,
+            "scope": "window",
+            "description": "%gitStatus.recursive.description%"
+          },
+          "bitfroest.gitStatus.untrackedAsModified": {
+            "type": "boolean",
+            "default": false,
+            "scope": "window",
+            "description": "%gitStatus.untrackedAsModified.description%"
+          },
+          "bitfroest.gitStatus.allowNetwork": {
+            "type": "boolean",
+            "default": false,
+            "scope": "window",
+            "description": "%gitStatus.allowNetwork.description%"
+          },
+          "bitfroest.gitStatus.includePaths": {
+            "type": "array",
+            "default": [],
+            "scope": "window",
+            "description": "%gitStatus.includePaths.description%",
+            "items": {
+              "type": "string"
+            },
+            "uniqueItems": true
+          },
+          "bitfroest.gitStatus.excludePaths": {
+            "type": "array",
+            "default": [],
+            "scope": "window",
+            "description": "%gitStatus.excludePaths.description%",
+            "items": {
+              "type": "string"
+            },
+            "uniqueItems": true
+          }
+        }
+      }
+    ]
+  },
+  "scripts": {
+    "preview": "node scripts/preview.cjs",
+    "check": "npm run check:zip && node --check license-information.js && node --check extension.js && node --check icon-theme.js && node --check filesystem-icons.js && node --check media/app.js && node --check media/webview-bootstrap.js && node --check media/commander-file-names.js && node --check media/commander-tabs.js && node --check media/commander-columns.js && node --check media/commander-search.js && node --check scripts/preview.cjs && node --check filesystem-provider.js && node --check zip-provider.js && node --check zip-filesystem.js && node --check pe-file-version.js && node --check readonly-files.js && node --check clipboard-provider.js && node --check media/commander-clipboard.js && node --check native/file-clipboard-macos.js && node --check native-copy.js && node --check native-rename.js && node --check operation-errors.js && node --check open-trash.js && node --check native-shell-menu.js && node --check media/commander-statusbar.js && node --check media/workbench-vendor.js && node --check media/workbench-icons.js && node --check lister-provider.js && node --check lister-codepages.js && node --check lister-search-worker.js && node --check media/commander-lister.js && node --check media/lister-view.js && node --check configuration-editor.js && node --check configuration-settings.js && node --check media/configuration-model.js && node --check media/configuration-view.js && node --check file-search.js && node --check file-search-worker.js && node --check search-provider.js && node --check search-metadata.js && node --check search-archives.js && node --check media/file-search-view.js && node --check media/search-duplicates.js && node --check git-status-engine.js && node --check git-status-paths.js && node --check git-status-provider.js && node --check git-status-worker.js && node --check folder-locks.js && node --check lock-inspector.js && node --check media/lock-inspector.js",
+    "test": "node --test",
+    "coverage": "c8 --check-coverage --lines=95 --statements=95 --functions=95 --branches=90 --all --include=zip-*.js --include=search-archives.js --include=search-metadata.js --include=search-provider.js --include=file-search-worker.js --include=file-search.js --include=lister-provider.js --include=lister-codepages.js --include=lister-search-worker.js --include=git-status-engine.js --include=git-status-paths.js --include=git-status-provider.js --include=git-status-worker.js --include=extension.js --include=operation-errors.js --include=open-trash.js --include=native-copy.js --include=native-shell-menu.js --include=folder-locks.js --include=lock-inspector.js --include=native-rename.js --include=clipboard-provider.js --include=icon-theme.js --include=filesystem-icons.js --include=filesystem-provider.js --include=pe-file-version.js --include=readonly-files.js --include=media/*.js --reporter=text --reporter=html --reporter=lcov --reporter=json-summary --reports-dir=coverage npm test",
+    "lint": "eslint . --max-warnings=0",
+    "check:zip": "node --check zip-codecs.js && node --check zip-editor.js && node --check zip-filter.js && node --check zip-io.js && node --check zip-operations.js && node --check zip-password.js && node --check zip-provider.js && node --check zip-filesystem.js"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "c8": "^12.0.0",
+    "eslint": "^10.13.0",
+    "globals": "^17.13.0",
+    "jsdom": "^30.1.3"
+  },
+  "extensionKind": [
+    "ui"
+  ],
+  "dependencies": {
+    "@zip.js/zip.js": "2.24.0",
+    "isomorphic-git": "1.44.8"
+  }
+}

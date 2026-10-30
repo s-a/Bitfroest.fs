@@ -1,0 +1,20 @@
+:root { color-scheme: light dark; }
+* { box-sizing: border-box; }
+body { margin: 0; padding: 20px; font-family: var(--vscode-font-family); font-size: var(--vscode-font-size); color: var(--vscode-foreground); background: var(--vscode-editor-background); display: flex; flex-direction: column; min-height: 100vh; gap: 16px; }
+h1 { margin: 0; font-size: 1.35em; font-weight: 600; } h2 { margin: 0; font-size: 1em; font-weight: 600; }
+#target { margin-bottom: 0; overflow-wrap: anywhere; color: var(--vscode-descriptionForeground); }
+main { flex: 1; display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+.list-tools, footer { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.list-tools h2 { flex: 1; }.list-tools label { display: flex; align-items: center; gap: 6px; }
+#processes { flex: 1; min-height: 200px; border: 1px solid var(--vscode-panel-border); overflow: auto; }
+.process { border-bottom: 1px solid var(--vscode-panel-border); padding: 8px 12px; }
+.process:last-child { border-bottom: 0; }.process:focus-within { background: var(--vscode-list-inactiveSelectionBackground); }
+.process > label { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.files { list-style: none; margin: 8px 0 0 22px; padding: 0; }.files li { padding: 3px 0; overflow-wrap: anywhere; }
+.kind, .detail { color: var(--vscode-descriptionForeground); }.detail { margin: 6px 0 0 22px; overflow-wrap: anywhere; }body:not(.details) .detail { display: none; }
+button { font: inherit; color: var(--vscode-button-foreground); background: var(--vscode-button-background); border: 1px solid var(--vscode-contrastBorder, transparent); padding: 5px 12px; cursor: pointer; }
+button:hover { background: var(--vscode-button-hoverBackground); }button:disabled { opacity: .5; cursor: default; }
+input { accent-color: var(--vscode-checkbox-foreground); }button:focus-visible, input:focus-visible, #processes:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 2px; }
+#status, #error, #notice { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }#status { color: var(--vscode-descriptionForeground); }#error { color: var(--vscode-errorForeground); padding: 8px; border: 1px solid var(--vscode-inputValidation-errorBorder); background: var(--vscode-inputValidation-errorBackground); }
+footer { padding-top: 8px; }footer [data-action="close"] { margin-left: auto; background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground); }
+@media (max-width: 480px) { body { padding: 12px; } footer { gap: 8px; } }
