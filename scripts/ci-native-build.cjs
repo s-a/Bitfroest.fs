@@ -33,7 +33,8 @@ async function main() {
   run('git', ['-C', dependency, 'checkout', '--detach', '49e408b3208bc3093757a1c2db938d3590f3f412']);
   const archive = path.join(root, 'headers.tar.gz');
   await download('https://nodejs.org/dist/v24.18.0/node-v24.18.0-headers.tar.gz', archive, '6c7d41d83c3481d2301115b8ce4a44b7d4fbfa52859b1aac14f445d460137887');
-  run('tar', ['-xzf', archive, '-C', root]);
+  const tar = process.platform === 'win32' ? path.join(process.env.SystemRoot, 'System32', 'tar.exe') : 'tar';
+  run(tar, ['-xzf', archive, '-C', root]);
   const build = path.join(root, 'build');
   const args = ['-S', 'native', '-B', build, '-DCMAKE_BUILD_TYPE=Release', `-DNODE_INCLUDE_DIR=${path.join(root, 'node-v24.18.0/include/node')}`, `-DLIBGIT2_SOURCE_DIR=${dependency}`];
   if (process.platform === 'win32') {

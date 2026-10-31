@@ -36,6 +36,11 @@ jobs:
           package-manager-cache: false
       - name: Install locked development dependencies
         run: npm ci
+      - name: Install the Linux desktop development SDK
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends libglib2.0-dev
       - name: Build the native module from pinned sources
         run: node scripts/ci-native-build.cjs
       - name: Check syntax and lint

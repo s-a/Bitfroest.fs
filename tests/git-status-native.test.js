@@ -74,7 +74,8 @@ test('native Git status rejects malformed repository-relative include and exclud
       { includeScopes: 'nested' },
       { includeScopes: [1] },
       { includeScopes: ['../outside'] },
-      { excludeScopes: ['C:/outside'] },
+      { excludeScopes: ['/outside'] },
+      ...(process.platform === 'win32' ? [{ excludeScopes: ['C:/outside'] }] : []),
       { excludeScopes: ['nested\\outside'] },
       { includeScopes: ['nested\0outside'] }
     ]) {
@@ -120,9 +121,10 @@ test('native Git status prunes excluded and out-of-scope trees before diff callb
   const session = require(binary).openSession();
   const visited = [];
   try {
+    const scope = value => process.platform === 'win32' ? value.toUpperCase() : value;
     const result = await session.invoke('git.status', {
       directory, scope: '.', recursive: true,
-      includeScopes: ['NESTED'], excludeScopes: ['NESTED/EXCLUDED', 'NESTED/REMOVEDDIR', 'NESTED/REMOVEDEXCLUDED']
+      includeScopes: [scope('nested')], excludeScopes: ['nested/excluded', 'nested/RemovedDir', 'nested/RemovedExcluded'].map(scope)
     }, event => visited.push(event.path.replaceAll('\\', '/')));
     const paths = result.entries.map(entry => entry.path.replaceAll('\\', '/'));
     assert.ok(paths.includes('nested/keep.txt'));
