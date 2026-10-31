@@ -1,0 +1,33 @@
+const versionPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+
+function releaseContext(ref, manifest, lock) {
+  if (!versionPattern.test(manifest.version)) throw new Error('Package version must use major.minor.patch.');
+  if (lock.version !== manifest.version || lock.packages?.['']?.version !== manifest.version) throw new Error('Package and lock versions must match.');
+  const release = ref.startsWith('refs/tags/');
+  if (release && !new RegExp(`^refs/tags/v${versionPattern.source.slice(1, -1)}$`).test(ref)) throw new Error('Invalid version tag.');
+  if (release && ref !== `refs/tags/v${manifest.version}`) throw new Error('The version tag must match the package version.');
+  return { version: manifest.version, release, prerelease: manifest.preview === true };
+}
+
+function targetFor(platform, arch, experimental = false) {
+  const target = `${platform}-${arch}`;
+  if (['win32-x64', 'linux-x64'].includes(target)) return { target, release: true };
+  if (target === 'darwin-arm64') {
+    if (!experimental) throw new Error('macOS requires an explicit experimental build.');
+    return { target, release: false };
+  }
+  throw new Error(`Target ${target} is not configured.`);
+}
+
+function validatePackageEntries(names) {
+  for (const name of names) {
+    if (name.startsWith('/') || name.includes('\\') || name.split('/').includes('..') || name.includes('\0')) throw new Error(`Unsafe archive path: ${name}`);
+    if (!['extension.vsixmanifest', '[Content_Types].xml'].includes(name) && !name.startsWith('extension/')) throw new Error(`Unexpected archive root: ${name}`);
+    if (/^extension\/(?:Docs|design|scripts|tests|coverage|\.github|\.git|\.vscode)\//i.test(name) || /^extension\/native\/src\//i.test(name) || /\.(?:exe|com|bat|cmd|ps1|py|obj|o|pdb|lib|exp)$/i.test(name) || /(?:^|\/)CMakeLists\.txt$/i.test(name)) throw new Error(`Unexpected development or executable file: ${name}`);
+  }
+  if (!names.includes('extension/native/binding.node')) throw new Error('Native binding is missing from the package.');
+  if (!names.includes('extension/node_modules/@zip.js/zip.js/package.json')) throw new Error('ZIP runtime dependency is missing from the package.');
+  if (!names.includes('extension/package.json') || !names.includes('extension/extension.js')) throw new Error('Extension entry point or manifest is missing.');
+}
+
+module.exports = { releaseContext, targetFor, validatePackageEntries };

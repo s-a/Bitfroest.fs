@@ -104,6 +104,14 @@ npm run package:beta -- --out /absolute/path/bitfroest-fs.vsix
 
 The output file belongs outside the source directory. `npm run publish:beta` publishes through the configured Marketplace account and requires valid publisher credentials. Packaging and publishing require access to the packaging tool or an existing npm cache.
 
+## GitHub builds and releases
+
+GitHub Actions builds the native module and packages the extension for Windows x64 and Linux x64. Linux builds target Ubuntu 24.04 or a compatible newer runtime and retain the limited Linux feature scope described above. The workflow checks syntax, lint, native API behavior, Electron compatibility and isolated package loading. Each VSIX includes its compiled module and runtime dependencies; no compiler is required on the user's computer.
+
+An experimental macOS ARM64 build is also attempted. Successful experimental packages are available as Actions artifacts only. They do not establish official macOS support and are excluded from regular release downloads.
+
+Branch builds retain their VSIX packages, SHA-256 checksums and build metadata as Actions artifacts for 14 days. Pushing a numeric version tag such as `v0.0.28` creates a GitHub Release after all supported target builds succeed. The tag must match the versions in `package.json` and `package-lock.json`. Beta packages are published as GitHub pre-releases. Existing releases are not overwritten; an interrupted upload may leave a draft for inspection. Marketplace publication is separate.
+
 ## License
 
 The project is licensed under the [Apache License 2.0](LICENSE). Project attribution is recorded in [NOTICE](NOTICE). Third-party components retain their own licenses; the component list and complete license texts are included under `licenses`.

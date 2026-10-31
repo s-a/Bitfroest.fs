@@ -1,0 +1,72 @@
+name: Build platform VSIX
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        type: string
+        required: true
+      target:
+        type: string
+        required: true
+      experimental:
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    env:
+      BUILD_TARGET: ${{ inputs.target }}
+      EXPERIMENTAL_BUILD: ${{ inputs.experimental }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 24.22.2
+          package-manager-cache: false
+      - name: Install locked development dependencies
+        run: npm ci
+      - name: Build the native module from pinned sources
+        run: node scripts/ci-native-build.cjs
+      - name: Check syntax and lint
+        run: |
+          npm run check
+          npm run lint
+      - name: Check architecture and release policy
+        run: |
+          npm run test:architecture
+          node --test tests/repository-privacy.test.js tests/beta-release.test.js tests/release-policy.test.js
+      - name: Run platform tests
+        run: |
+          case "$BUILD_TARGET" in
+            win32-x64) npm run test:native ;;
+            linux-x64) npm run test:native:linux ;;
+            darwin-arm64) node --test tests/native-api.test.js tests/git-status-native.test.js ;;
+            *) exit 1 ;;
+          esac
+      - name: Verify the native module in the Electron runtime
+        env:
+          ELECTRON_RUN_AS_NODE: '1'
+        run: npm exec --yes --package electron@43.8.3 -- electron --test-isolation=none --test tests/native-api.test.js tests/git-status-native.test.js
+      - name: Package the pre-release extension
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          npm exec --yes --package @vscode/vsce@4.1.0 -- vsce package --pre-release --target "$BUILD_TARGET" --baseContentUrl "https://github.com/s-a/Bitfroest.fs/blob/$GITHUB_SHA/" --baseImagesUrl "https://raw.githubusercontent.com/s-a/Bitfroest.fs/$GITHUB_SHA/" --out "$RUNNER_TEMP/bitfroest-fs-$VERSION-$BUILD_TARGET.vsix"
+      - name: Verify the isolated package and create checksums
+        run: node scripts/verify-vsix.cjs
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: ${{ inputs.experimental && 'experimental-vsix' || 'vsix' }}-${{ inputs.target }}
+          path: ${{ runner.temp }}/bitfroest-fs-*.vsix*
+          if-no-files-found: error
+          retention-days: 14
