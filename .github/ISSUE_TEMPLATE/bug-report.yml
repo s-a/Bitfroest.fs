@@ -1,0 +1,94 @@
+name: Bug report
+description: Report a reproducible problem with Bitfroest.fs.
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Check existing issues and the README's platform limitations before reporting.
+        Remove passwords, tokens, personal paths and confidential file contents from logs and screenshots.
+        For file-operation problems, describe the original incident first. Reproduce only with disposable copies; do not repeat an operation that could damage important data.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem and impact
+      description: What went wrong? Mention data loss, incorrect results, a freeze or a crash if applicable.
+    validations:
+      required: true
+  - type: input
+    id: extension-version
+    attributes:
+      label: Bitfroest.fs version and installation source
+      description: Copy the version from the Extensions view. Include pre-release or stable, and Marketplace or VSIX.
+      placeholder: "Version; channel; installation source"
+    validations:
+      required: true
+  - type: input
+    id: vscode-version
+    attributes:
+      label: VS Code version
+      description: Copy the version from Help > About. Include Stable or Insiders, or name another editor if applicable.
+    validations:
+      required: true
+  - type: input
+    id: operating-system
+    attributes:
+      label: Operating system and architecture
+      description: Include the OS version or Linux distribution and the processor architecture. Windows is the primary platform; Linux has limited support and macOS is unsupported.
+      placeholder: "Windows 11 24H2, x64; or Ubuntu 24.04, arm64"
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Operation and environment
+      description: Name the command, shortcut or mouse action. For file operations, describe source and destination storage, filesystem, approximate file count and total size, and whether archives, links or permissions are involved. Mention Remote SSH, WSL or containers if used. Use anonymized paths.
+      placeholder: "Operation; local/network/removable storage; relevant filesystem or archive format; scale; remote environment if any"
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Give the shortest sequence, including panel selection, file selection, conflict decisions and cancellation if relevant. State if reproduction has not been attempted for safety reasons.
+      placeholder: |
+        1. Open ...
+        2. Select ...
+        3. Run ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected-actual
+    attributes:
+      label: Expected and actual results
+      placeholder: |
+        Expected:
+        Actual:
+    validations:
+      required: true
+  - type: dropdown
+    id: frequency
+    attributes:
+      label: How often does it happen?
+      options:
+        - Every time
+        - Sometimes
+        - Once so far
+        - Not safe to reproduce
+        - Not yet known
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Error messages, logs or screenshots
+      description: Paste the exact status-bar or error message, including any error code. Add a relevant extension-host log excerpt or screenshot if available. Redact private information. Do not attach production files, complete user settings or a full workspace.
+    validations:
+      required: false
+  - type: textarea
+    id: changes
+    attributes:
+      label: Relevant settings, regression or workaround
+      description: Include only relevant bitfroest.* settings. For display issues, include the theme and display scaling; for keyboard issues, include custom bindings and keyboard layout. Mention the last working version, recent changes or a workaround if known.
+    validations:
+      required: false

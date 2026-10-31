@@ -1,0 +1,36 @@
+name: Feature request
+description: Suggest a change to a file-management workflow.
+title: "[Feature] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Check existing issues before suggesting a feature. Use anonymized examples and omit confidential files or system details.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or workflow
+      description: Describe the task, what is currently difficult and who is affected.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe the expected interaction and result. Include an example that would demonstrate the feature working.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives and workarounds
+      description: Describe any existing commands, settings or other approaches considered.
+    validations:
+      required: false
+  - type: textarea
+    id: scope
+    attributes:
+      label: Platforms and constraints
+      description: Identify the relevant operating systems, storage types or keyboard/accessibility needs. If comparing another application, include its version and the exact behavior being requested.
+    validations:
+      required: false
