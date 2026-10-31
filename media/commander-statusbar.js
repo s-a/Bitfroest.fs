@@ -30,7 +30,7 @@
     const cancelButton = bar.querySelector('#status-cancel');
     cancelButton.textContent = t('Abbrechen'); cancelButton.title = t('Abbrechen'); cancelButton.setAttribute('aria-label', t('Abbrechen')); cancelButton.onclick = () => onCancel?.();
     const overallMeter = bar.querySelector('#status-progress-overall'), currentMeter = bar.querySelector('#status-progress-file'), progressTrack = bar.querySelector('#status-progress-track');
-    let operation = null, disposed = false;
+    let operation = null, disposed = false, statusVersion = 0;
     const running = item => item.hasProgress && !item.progress.state.done;
     function updateProgressTrack(overall, file) {
       const overlap = Math.min(overall, file), extent = Math.max(overall, file);
@@ -108,7 +108,21 @@
       const stale = model.notifications.slice(100); for (const item of stale) if (!running(item)) item.close();
       return handle;
     }
-    function setStatus(message) { statusMessage.textContent = message || ''; if (message) statusMessage.title = message; else statusMessage.removeAttribute('title'); }
+    function setStatus(message, outcome = 'info') {
+      statusVersion++;
+      statusMessage.dataset.outcome = outcome;
+      statusMessage.replaceChildren();
+      if (message && ['success', 'error'].includes(outcome)) {
+        const icon = document.createElement('span'); icon.dataset.statusIcon = ''; icon.setAttribute('aria-hidden', 'true');
+        icon.innerHTML = (outcome === 'success' ? root.CommanderStatusIcons.clean : icons.error).replace(/>\s+</g, '><');
+        statusMessage.append(icon);
+      }
+      const text = document.createElement('span'); text.dataset.statusText = ''; text.textContent = message || ''; statusMessage.append(text);
+      if (message) {
+        statusMessage.title = message;
+        statusMessage.setAttribute('aria-label', outcome === 'success' ? t('Erfolgreich: {message}', { message }) : outcome === 'error' ? t('Fehler: {message}', { message }) : message);
+      } else { statusMessage.removeAttribute('title'); statusMessage.removeAttribute('aria-label'); }
+    }
     function setProgress({ id, title, statusPath, overallValueText, fileValueText, total, completed, fileTotal, fileCompleted, element, modal, cancelRequested, cancelAvailable = true }) {
       if (!operation || operation.id !== id) {
         if (!operation) {
@@ -139,11 +153,11 @@
       const row = rows.get(operation.item);
       if (!modal && element) { row.querySelector('.notification-details').append(element); row.classList.add('has-transfer'); }
     }
-    function finishProgress({ message, severity = Severity.Info } = {}) {
+    function finishProgress({ message, severity = Severity.Info, outcome = 'info' } = {}) {
       if (!operation) return;
       const current = operation; operation = null;
       current.handle.progress.done(); current.handle.updateSeverity(severity); current.handle.updateMessage(message || t('Dateioperation beendet'));
-      setStatus(message || t('Dateioperation beendet'));
+      setStatus(message || t('Dateioperation beendet'), severity === Severity.Error ? 'error' : outcome);
       rows.get(current.item)?.classList.remove('has-transfer');
       progressArea.classList.add('is-idle');
       cancelButton.hidden = true; cancelButton.disabled = false;
@@ -159,8 +173,10 @@
     }
     const onPageHide = () => { dispose(); root.removeEventListener('pagehide', onPageHide); };
     root.addEventListener('pagehide', onPageHide, { once: true });
-    refresh();
-    return { notify, setProgress, setStatus, finishProgress, reset, dispose, error: message => notify(message, Severity.Error) };
+    setStatus(''); refresh();
+    return { notify, setProgress, setStatus, finishProgress, reset, dispose, get version() { return statusVersion; },
+      success: message => setStatus(message, 'success'),
+      error: message => { setStatus(message, 'error'); return notify(message, Severity.Error); } };
   }
   root.CommanderStatusbar = { create };
 })(window);

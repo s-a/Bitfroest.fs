@@ -66,7 +66,7 @@ test('formats write dates and times without guessing unavailable creation or acc
   assert.equal(settings.evaluateColumnTemplate({creationdate:'2025-01-02T03:04:05Z'},'[=tc.creationdate.D.M.Y]').text,'02.01.2025');
 });
 test('evaluates paths and attributes only from real supplied metadata', () => {
-  assert.equal(settings.evaluateColumnTemplate(file,'[=tc.path]|[=tc.fullpath]|[=tc.attributes]').text,'C:/tmp|C:/tmp/report.final.md|-a--');
+  assert.equal(settings.evaluateColumnTemplate(file,'[=tc.path]|[=tc.fullpath]|[=tc.attributes]').text,'C:\\tmp|C:\\tmp\\report.final.md|-a--');
   assert.deepEqual(settings.evaluateColumnTemplate({name:'x'},'[=tc.path] [=tc.attributes]').missingFields,['tc.path','tc.attributes']);
 });
 test('reports unsupported fields and malformed expressions visibly rather than silently succeeding', () => {
@@ -185,4 +185,14 @@ test('custom columns have a localized native settings category', () => {
   assert.ok(Array.isArray(categories));
   const category = categories.find(item => item.properties['bitfroest.columns.fields']);
   for (const file of ['package.nls.json', 'package.nls.de.json']) assert.ok(require(`../${file}`)[category.title.slice(1, -1)]);
+});
+
+test('path columns use shared native formatting and preserve drive, UNC and POSIX roots', () => {
+  const render = file => settings.evaluateColumnTemplate(file, '[=file.path]|[=file.fullpath]').text;
+  assert.equal(render({ fsSource: 'c:/git/project/one.txt' }), 'C:\\git\\project|C:\\git\\project\\one.txt');
+  assert.equal(render({ fsSource: 'c:/one.txt' }), 'C:\\|C:\\one.txt');
+  assert.equal(render({ fsSource: '//server/share/one.txt' }), '\\\\server\\share|\\\\server\\share\\one.txt');
+  assert.equal(render({ path: 'c:/explicit', fullpath: 'c:/other/one.txt' }), 'C:\\explicit|C:\\other\\one.txt');
+  assert.equal(render({ fsSource: '/home/back\\slash/one.txt' }), '/home/back\\slash|/home/back\\slash/one.txt');
+  assert.equal(settings.evaluateColumnTemplate({}, '[=file.path]|[=file.fullpath]').text, '—|—');
 });

@@ -1,8 +1,9 @@
 (function (root, factory) {
-  const api = factory();
+  const paths = typeof module === 'object' && module.exports ? require('./commander-paths') : root.CommanderPaths;
+  const api = factory(paths);
   if (typeof module === 'object' && module.exports) module.exports = api;
   if (root) root.CommanderColumnSettings = api;
-})(typeof globalThis === 'object' ? globalThis : this, function () {
+})(typeof globalThis === 'object' ? globalThis : this, function (paths) {
   'use strict';
   const units = { bytes: 1, kbytes: 1024, mbytes: 1048576, gbytes: 1073741824, tbytes: 1099511627776 };
   const fields = new Set(['name','ext','fullname','size','writedate','writetime','creationdate','creationtime','accessdate','accesstime','attributes','path','fullpath']);
@@ -81,8 +82,9 @@
       } else if (field === 'attributes') value = file.attributes ?? file.attr;
       else if (field === 'path' || field === 'fullpath') {
         const full = file.fsSource ?? file.fullpath;
-        if (field === 'path') value = file.path ?? (typeof full === 'string' ? full.replace(/\\/g,'/').replace(/\/[^/]*$/,'') : undefined);
+        if (field === 'path') value = file.path ?? (typeof full === 'string' ? paths.parentPath(full) : undefined);
         else value = full;
+        if (value !== undefined && value !== null) value = paths.displayPath(value);
       } else if (isDate) {
         const family = dateFields.exec(field)[1], time = field.endsWith('time');
         const raw = file[field] ?? file[`${family}date`] ?? (family === 'write' ? file.date ?? file.mtime : undefined);

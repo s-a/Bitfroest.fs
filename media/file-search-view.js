@@ -1,7 +1,9 @@
 (function (root) {
   'use strict';
   root.CommanderFileSearch = { create };
-  function create({ host, context, apply, navigate, preview, restoreFocus, t, escape }) {
+  function create({ host, context, apply, navigate, preview, restoreFocus, t, escape, report = () => {} }) {
+    const paths = root.CommanderPaths;
+    const displaySearchPaths = value => String(value).split(';').map(item => item.trim().startsWith('@') ? '@' + paths.displayPath(item.trim().slice(1)) : paths.displayPath(item.trim())).join('; ');
     const sessions = new Set(), filtering = new Map(), presetWaiters = []; let sequence = 0, generation = 0;
     const instance = [...crypto.getRandomValues(new Uint8Array(8))].map(value => value.toString(16).padStart(2, '0')).join('');
     const defaults = { name: '*', depth: -1, encodings: ['ansi', 'utf-8'], size: 1, sizeUnit: 1, sizeOperator: '=', younger: 1, older: 1, youngerUnit: 'days', olderUnit: 'days', sameName: true, sameSize: true, attributes: {} };
@@ -50,6 +52,12 @@
       s.settings = () => {
         const result = {};
         for (const el of controls()) if (!el.name.startsWith('encoding-') && !el.name.startsWith('attr-') && !el.closest('[data-search-rules]') && !['preset', 'presetName', 'depthCustom'].includes(el.name)) result[el.name] = el.type === 'checkbox' ? el.checked : el.value;
+        result.searchIn = result.searchIn.split(';').map(item => {
+          const value = item.trim();
+          if (!value || value === '>') return value;
+          const list = value.startsWith('@');
+          return (list ? '@' : '') + paths.normalizePath(list ? value.slice(1) : value, { base: source.path, input: true, platform: document.body.dataset.platform });
+        }).join('; ');
         result.encodings = ['ansi', 'dos', 'utf-16le', 'utf-8'].filter(key => $(`[name="encoding-${key}"]`).checked);
         result.attributes = Object.fromEntries([...dialog.querySelectorAll('[data-tristate]')].map(el => [el.name.slice(5), el.dataset.tristate]));
         result.pluginsEnabled = false; result.rules = []; result.sameFields = [];
@@ -63,6 +71,7 @@
           else if (el.dataset.tristate) { el.dataset.tristate = settings.attributes?.[el.name.slice(5)] || 'any'; el.indeterminate = el.dataset.tristate === 'any'; el.checked = el.dataset.tristate === 'yes'; }
           else if (!['preset', 'presetName', 'depthCustom'].includes(el.name) && settings[el.name] !== undefined) { if (el.type === 'checkbox') el.checked = Boolean(settings[el.name]); else el.value = Array.isArray(settings[el.name]) ? settings[el.name].join(', ') : settings[el.name]; }
         }
+        $('[name=searchIn]').value = displaySearchPaths($('[name=searchIn]').value);
         const depth = Number(settings.depth ?? -1), choice = $('[name=depth]');
         choice.value = [...choice.options].some(option => option.value === String(depth)) ? String(depth) : 'custom';
         $('[name=depthCustom]').value = depth > 0 ? depth : 1;
@@ -71,7 +80,7 @@
       s.renderResults = () => {
         $('[data-search-output]').hidden = false;
         const list = $('[data-search-results]'), selected = list.selectedIndex;
-        list.replaceChildren(...s.results.map((row, index) => { const option = document.createElement('option'); option.dataset.searchResult = ''; option.value = index; option.textContent = `${row.group !== undefined ? `[${row.group + 1}] ` : ''}${row.fsSource}`; return option; }));
+        list.replaceChildren(...s.results.map((row, index) => { const option = document.createElement('option'); option.dataset.searchResult = ''; option.value = index; option.textContent = `${row.group !== undefined ? `[${row.group + 1}] ` : ''}${paths.displayPath(row.fsSource)}`; return option; }));
         list.selectedIndex = Math.max(0, Math.min(selected, s.results.length - 1));
         detail();
         for (const key of ['apply', 'view', 'edit', 'goto']) $(`[data-search-${key}]`).disabled = s.running || s.applying || !s.results.length;
@@ -85,6 +94,7 @@
         if (!host) { $('[data-search-status]').textContent = t('Die Dateisuche benötigt den Erweiterungshost.'); return; }
         const settings = s.settings(); s.currentSettings = structuredClone(settings); lastSettings = structuredClone(settings);
         s.id = `search-${instance}-${++sequence}`; s.results = []; s.errors = []; s.cancelled = false; s.setBusy(true); s.renderResults();
+        s.statusVersion = report(t('Suche wird ausgeführt…'), 'info');
         $('[data-search-status]').textContent = t('Suche läuft…'); $('[data-search-errors]').hidden = true;
         send({ type: 'search-start', searchId: s.id, settings });
       };
@@ -144,20 +154,21 @@
     }
     window.addEventListener('message', event => {
       const m = event.data; if (!m?.type?.startsWith('search-')) return;
-      if (m.type === 'search-presets') { presets = m.values || {}; for (const waiter of presetWaiters.splice(0)) waiter.resolve(); for (const s of sessions) { const select = s.$('[name=preset]'); select.replaceChildren(...Object.keys(presets).sort().map(name => { const option = document.createElement('option'); option.textContent = name; option.value = name; return option; })); for (const field of ['name', 'searchIn', 'text']) s.$(`[data-search-history="${field}"]`).replaceChildren(...(m.histories?.[field] || []).map(value => { const option = document.createElement('option'); option.value = value; return option; })); } return; }
+      if (m.type === 'search-presets') { presets = m.values || {}; for (const waiter of presetWaiters.splice(0)) waiter.resolve(); for (const s of sessions) { const select = s.$('[name=preset]'); select.replaceChildren(...Object.keys(presets).sort().map(name => { const option = document.createElement('option'); option.textContent = name; option.value = name; return option; })); for (const field of ['name', 'searchIn', 'text']) s.$(`[data-search-history="${field}"]`).replaceChildren(...(m.histories?.[field] || []).map(value => { const option = document.createElement('option'); option.value = field === 'searchIn' ? displaySearchPaths(value) : value; return option; })); } return; }
       if (m.type === 'search-complete' && filtering.has(m.searchId)) { const request = filtering.get(m.searchId); filtering.delete(m.searchId); send({ type: 'search-release', ids: [m.searchId] }); if (m.error) request.reject(new Error(m.error)); else request.resolve(m.results); return; }
       for (const s of sessions) {
-        if (m.type === 'search-browsed' && m.dialogId === s.prefix) { if (m.paths?.length) s.$('[name=searchIn]').value = m.paths.join(';'); s.$('[name=searchIn]').focus(); continue; }
+        if (m.type === 'search-browsed' && m.dialogId === s.prefix) { if (m.paths?.length) s.$('[name=searchIn]').value = m.paths.map(value => paths.displayPath(value)).join('; '); s.$('[name=searchIn]').focus(); continue; }
         if (m.searchId !== s.id) continue;
-        if (m.type === 'search-error') s.$('[data-search-status]').textContent = m.error;
-        if (m.type === 'search-progress' && s.running) { s.currentPath = m.path; s.$('[data-search-status]').textContent = `${m.path || ''} · ${m.count || 0}`; }
+        if (m.type === 'search-error') { s.$('[data-search-status]').textContent = m.error; report(m.error, 'error', s.statusVersion); }
+        if (m.type === 'search-progress' && s.running) { s.currentPath = m.path; s.$('[data-search-status]').textContent = `${paths.displayPath(m.path || '')} · ${m.count || 0}`; }
         if (m.type === 'search-complete' && s.running) {
           s.setBusy(false); s.results = m.results || []; const removed = s.history.splice(s.historyIndex + 1); if (removed.length) send({ type: 'search-release', ids: removed.map(item => item.id) }); s.history.push({ id: s.id, results: s.results, settings: s.currentSettings }); s.historyIndex = s.history.length - 1; s.renderResults();
           s.$('[data-search-status]').textContent = m.error || `${t(m.cancelled ? 'Suche abgebrochen' : 'Suche abgeschlossen')} · ${s.results.length}`;
-          s.$('[data-search-errors]').hidden = !m.errors?.length; s.$('[data-search-errors] pre').textContent = (m.errors || []).map(item => `${item.path}: ${item.error}`).join('\n');
+          s.$('[data-search-errors]').hidden = !m.errors?.length; s.$('[data-search-errors] pre').textContent = (m.errors || []).map(item => `${paths.displayPath(item.path)}: ${item.error}`).join('\n');
+          report(m.error || m.errors?.[0]?.error || `${t(m.cancelled ? 'Suche abgebrochen' : 'Suche abgeschlossen')} · ${s.results.length}`, m.error || m.errors?.length ? 'error' : m.cancelled ? 'cancelled' : 'success', s.statusVersion);
         }
         if (m.type === 'search-applied' || m.type === 'search-navigated') {
-          s.applying = false; if (!m.ok) { s.$('[data-search-status]').textContent = m.error; s.renderResults(); continue; }
+          s.applying = false; if (!m.ok) { s.$('[data-search-status]').textContent = m.error; s.renderResults(); report(m.error, 'error'); continue; }
           if (m.type === 'search-applied') apply(m.state, m.results, s.source, s.id, s.currentSettings?.name || '*'); else navigate(m, s.source);
           s.close();
         }
@@ -168,14 +179,14 @@
       for (const s of sessions) if (s.suspended) { s.suspended = false; if (s.separate && s.dialog.show) s.dialog.show(); else s.dialog.showModal(); s.$('[data-search-results]').focus(); }
     }));
     return { open, get isOpen() { return sessions.size > 0; }, contains: element => [...sessions].some(s => s.dialog.contains(element)), key: key => { const parts = key.split('+'), last = parts.pop(); const names = { escape: 'Escape', tab: 'Tab', left: 'ArrowLeft', right: 'ArrowRight', up: 'ArrowUp', down: 'ArrowDown', pageup: 'PageUp', pagedown: 'PageDown' }; active()?.key({ key: names[last] || last, altKey: parts.includes('alt'), ctrlKey: parts.includes('ctrl'), shiftKey: parts.includes('shift'), target: document.activeElement }); },
-      async evaluatePreset(name, rows) {
+      async evaluatePreset(name, rows, preserveRules = false) {
         if (!host) throw new Error(t('Die Dateisuche benötigt den Erweiterungshost.'));
         const version = generation;
         await new Promise((resolve, reject) => { presetWaiters.push({ resolve, reject }); send({ type: 'search-presets-load' }); });
         if (version !== generation) throw new Error(t('Suche abgebrochen'));
         const preset = presets[name]; if (!preset) throw new Error(t('Gespeicherte Suche nicht gefunden.'));
         const searchId = `search-${instance}-${++sequence}`;
-        const results = await new Promise((resolve, reject) => { filtering.set(searchId, { resolve, reject }); send({ type: 'search-start', searchId, settings: { ...preset, pluginsEnabled: false, rules: [], sameFields: [], sameFieldsEnabled: false, name: preset.name === '>' ? '*' : preset.name, searchIn: context().path, inResults: rows.map(row => row.archive ? { archive: row.archive, archiveEntry: row.archiveEntry || row.entry, revision: row.revision, fsSource: row.fsSource } : row.fsSource), selectedOnly: false } }); });
+        const results = await new Promise((resolve, reject) => { filtering.set(searchId, { resolve, reject }); send({ type: 'search-start', searchId, settings: { ...preset, ...(preserveRules ? {} : { pluginsEnabled: false, rules: [], sameFields: [], sameFieldsEnabled: false }), name: preset.name === '>' ? '*' : preset.name, searchIn: context().path, inResults: rows.map(row => row.archive ? { archive: row.archive, archiveEntry: row.archiveEntry || row.entry, revision: row.revision, fsSource: row.fsSource } : row.fsSource), selectedOnly: false } }); });
         if (version !== generation) throw new Error(t('Suche abgebrochen'));
         return rows.filter(row => results.some(found => found.fsSource === row.fsSource)).map(row => row.id);
       },

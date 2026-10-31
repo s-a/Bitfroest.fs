@@ -7,6 +7,91 @@ function fixture() {
 }
 function focus(app) { app.window.dispatchEvent(new app.window.Event('focus')); }
 function refreshes(app) { return app.messages.filter(message => message.type === 'filesystem-refresh'); }
+
+function result(app, state, ok = true) {
+  app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-result', ok, state } }));
+}
+
+test('returning from an unconfirmed favorite keeps unchanged lists, rows, icons and scroll position', t => {
+  const app = createApp(t, fixture());
+  const lists = [...app.document.querySelectorAll('.list')];
+  const row = app.row('keep.txt');
+  const request = app.messages.find(message => message.type === 'icons');
+  const key = request.requests[0].key;
+  app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'icons', icons: { [key]: 'data:image/png;base64,AAAA' } } }));
+  const icon = row.querySelector('img.native-icon');
+  assert.ok(icon);
+  const iconRequests = app.messages.filter(message => message.type === 'icons').length;
+  lists[0].scrollTop = 135;
+  app.click(app.document.querySelector('[data-favorites]'));
+  app.click(app.document.querySelector('[data-favorite-toggle]'));
+  app.window.dispatchEvent(new app.window.Event('blur'));
+  app.click(row);
+  focus(app);
+  const next = structuredClone(refreshes(app).at(-1).state);
+  next.snapshotId = 'two';
+  result(app, next);
+  lists.forEach((list, side) => assert.equal(app.document.querySelectorAll('.list')[side], list));
+  assert.equal(app.row('keep.txt'), row);
+  assert.equal(row.querySelector('img.native-icon'), icon);
+  assert.equal(lists[0].scrollTop, 135);
+  assert.equal(app.document.activeElement, lists[0]);
+  assert.equal(app.messages.filter(message => message.type === 'icons').length, iconRequests);
+  assert.equal(app.document.querySelector('#panes').inert, false);
+  assert.equal(app.state().snapshotId, 'two');
+});
+
+test('focus refresh updates a changed directory while preserving the opposite list', t => {
+  const app = createApp(t, fixture());
+  const lists = [...app.document.querySelectorAll('.list')];
+  focus(app);
+  const next = structuredClone(refreshes(app).at(-1).state);
+  next.folders['C:/tmp'].push({ id: 'new', name: 'new.txt', type: 'text', size: 9 });
+  next.snapshotId = 'two';
+  result(app, next);
+  assert.ok(app.row('new.txt'));
+  assert.notEqual(app.document.querySelectorAll('.list')[0], lists[0]);
+  assert.equal(app.document.querySelectorAll('.list')[1], lists[1]);
+  assert.equal(app.row('keep.txt').getAttribute('aria-selected'), 'true');
+});
+
+test('explicit refresh renews native icons even when directory contents are unchanged', t => {
+  const app = createApp(t, fixture());
+  const iconRequests = app.messages.filter(message => message.type === 'icons').length;
+  app.action('refresh');
+  result(app, structuredClone(refreshes(app).at(-1).state));
+  assert.equal(app.messages.filter(message => message.type === 'icons').length, iconRequests + 1);
+});
+
+test('focus refresh renews the icon of a changed file without clearing unchanged file icons', t => {
+  const saved = fixture();
+  saved.folders['C:/tmp'].push({ id: 'other', name: 'other.txt', fsSource: 'C:/tmp/other.txt', type: 'text', size: 1 });
+  const app = createApp(t, saved);
+  const count = app.messages.filter(message => message.type === 'icons').length;
+  focus(app);
+  const next = structuredClone(refreshes(app).at(-1).state);
+  next.folders['C:/tmp'][0].size++;
+  result(app, next);
+  const requests = app.messages.filter(message => message.type === 'icons');
+  assert.equal(requests.length, count + 1);
+  assert.deepEqual(Array.from(requests.at(-1).requests, item => item.path), ['C:/tmp/keep.txt']);
+});
+
+test('refresh with a lister on the opposite side preserves the visible list scroll and viewer', t => {
+  const app = createApp(t, fixture());
+  app.action('view');
+  const viewer = app.document.querySelector('.pane [data-lister]');
+  assert.ok(viewer);
+  const list = app.document.querySelector('[data-pane="1"] .list');
+  app.click(list);
+  list.scrollTop = 73;
+  focus(app);
+  result(app, structuredClone(refreshes(app).at(-1).state));
+  assert.equal(app.document.querySelector('.pane [data-lister]'), viewer);
+  assert.equal(app.document.querySelector('[data-pane="1"] .list'), list);
+  assert.equal(list.scrollTop, 73);
+  assert.equal(app.document.activeElement, list);
+});
 test('returning focus refreshes real directories with current tabs, selection and sort', t => {
   const app = createApp(t, fixture());
   focus(app);

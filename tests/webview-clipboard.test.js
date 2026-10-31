@@ -57,12 +57,12 @@ test('native multi-directory cut preserves uncompleted groups when the next conf
   const app = createApp(t, saved); app.key('Tab'); app.key('v', { ctrlKey: true });
   const selection = { paths: ['C:/tmp/nested/b.txt', 'C:/tmp/a.txt'], mode: 'move', token: 'multiple', source: 'system' };
   respond(app, app.messages.find(message => message.type === 'clipboard-read'), { selection });
-  assert.equal(app.document.querySelector('[data-transfer-source]').textContent, 'C:/tmp/nested');
+  assert.equal(app.document.querySelector('[data-transfer-source]').textContent, 'C:\\tmp\\nested');
   submit(app); await tick();
   const applied = app.messages.find(message => message.type === 'filesystem-apply');
   const confirmed = structuredClone(applied.state); confirmed.snapshotId = 'multi-two'; confirmed.folders['C:/temp'][0].fsSource = 'C:/temp/b.txt';
   app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-result', ok: true, state: confirmed } })); await tick();
-  assert.equal(app.document.querySelector('[data-transfer-source]').textContent, 'C:/tmp');
+  assert.equal(app.document.querySelector('[data-transfer-source]').textContent, 'C:\\tmp');
   assert.equal(app.state().panes[1].tabs[0], 'C:/temp');
   app.click(app.document.querySelector('#modal-cancel')); await tick();
   const ack = app.messages.find(message => message.type === 'clipboard-ack'); assert.ok(ack);
@@ -79,7 +79,7 @@ test('failed preparation of a later cut group still acknowledges only earlier co
   respond(app, app.messages.find(message => message.type === 'clipboard-read'), { selection }); submit(app); await tick();
   const applied = app.messages.find(message => message.type === 'filesystem-apply'), confirmed = structuredClone(applied.state); confirmed.snapshotId = 'confirmed-first';
   app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-result', ok: true, state: confirmed } })); await tick();
-  assert.equal(app.document.querySelector('[data-transfer-source]').textContent, 'C:/tmp');
+  assert.equal(app.document.querySelector('[data-transfer-source]').textContent, 'C:\\tmp');
   submit(app); await tick();
   assert.ok(app.messages.some(message => message.type === 'filesystem-prepare'));
   app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-result', ok: false, state: confirmed } })); await tick();

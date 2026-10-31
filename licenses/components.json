@@ -1,5 +1,95 @@
 [
   {
+    "name": "libgit2",
+    "version": "1.9.7",
+    "author": "The libgit2 contributors",
+    "license": "GPL-2.0-only WITH libgit2 linking exception",
+    "licenseUrl": "https://github.com/libgit2/libgit2/blob/v1.9.7/COPYING",
+    "source": "https://github.com/libgit2/libgit2/tree/v1.9.7",
+    "files": [
+      "licenses/LIBGIT2-COPYING.txt"
+    ],
+    "description": {
+      "de": "Statisch gelinkte Git-Bibliothek für Status- und Branchabfragen. Die mitgelieferte Buildkonfiguration deaktiviert SSH und HTTPS und verwendet die integrierte SHA-256-Unterstützung.",
+      "en": "Statically linked Git library for status and branch queries. The included build configuration disables SSH and HTTPS and uses the built-in SHA-256 support."
+    }
+  },
+  {
+    "name": "sha1dc",
+    "version": "bundled with libgit2 1.9.7",
+    "author": "Marc Stevens; Dan Shumow",
+    "license": "MIT",
+    "licenseUrl": "https://github.com/libgit2/libgit2/blob/v1.9.7/COPYING",
+    "source": "https://github.com/libgit2/libgit2/tree/v1.9.7/src/util/hash/sha1dc",
+    "files": [
+      "licenses/LIBGIT2-COPYING.txt"
+    ],
+    "description": {
+      "de": "SHA-1-Kollisionsprüfung, die für Git-Objekthashes verwendet wird. Der vollständige MIT-Lizenztext ist im libgit2-Lizenzdokument enthalten.",
+      "en": "SHA-1 collision detection used for Git object hashes. The full MIT license text is included in the libgit2 license document."
+    }
+  },
+  {
+    "name": "llhttp",
+    "version": "9.2.1",
+    "author": "Fedor Indutny",
+    "license": "MIT",
+    "licenseUrl": "https://github.com/libgit2/libgit2/blob/v1.9.7/deps/llhttp/LICENSE-MIT",
+    "source": "https://github.com/libgit2/libgit2/tree/v1.9.7/deps/llhttp",
+    "files": [
+      "licenses/LIBGIT2-LLHTTP-MIT.txt"
+    ],
+    "description": {
+      "de": "HTTP-Parser, statisch in die Git-Bibliothek gelinkt.",
+      "en": "HTTP parser statically linked into the Git library."
+    }
+  },
+  {
+    "name": "LibXDiff",
+    "version": "bundled with libgit2 1.9.7",
+    "author": "Davide Libenzi",
+    "license": "LGPL-2.1-only",
+    "licenseUrl": "https://github.com/libgit2/libgit2/blob/v1.9.7/deps/xdiff/xdiffi.c",
+    "source": "https://github.com/libgit2/libgit2/tree/v1.9.7/deps/xdiff",
+    "files": [
+      "licenses/LIBGIT2-COPYING.txt"
+    ],
+    "description": {
+      "de": "Dateidifferenzbibliothek, die beim Git-Statusvergleich verwendet wird. Der vollständige LGPL-2.1-Lizenztext ist im libgit2-Lizenzdokument enthalten.",
+      "en": "File difference library used for Git status comparisons. The full LGPL-2.1 license text is included in the libgit2 license document."
+    }
+  },
+  {
+    "name": "PCRE2",
+    "version": "10.47",
+    "author": "The PCRE2 contributors",
+    "license": "BSD-3-Clause WITH PCRE2-exception",
+    "licenseUrl": "https://github.com/libgit2/libgit2/blob/v1.9.7/deps/pcre2/LICENCE.md",
+    "source": "https://github.com/libgit2/libgit2/tree/v1.9.7/deps/pcre2",
+    "files": [
+      "licenses/LIBGIT2-PCRE2.txt"
+    ],
+    "description": {
+      "de": "Gebündelte reguläre Ausdrücke, statisch in die Git-Bibliothek gelinkt.",
+      "en": "Bundled regular expression implementation statically linked into the Git library."
+    }
+  },
+  {
+    "name": "zlib",
+    "version": "1.3.1",
+    "author": "Jean-loup Gailly; Mark Adler",
+    "license": "Zlib",
+    "licenseUrl": "https://github.com/libgit2/libgit2/blob/v1.9.7/deps/zlib/LICENSE",
+    "source": "https://github.com/libgit2/libgit2/tree/v1.9.7/deps/zlib",
+    "files": [
+      "licenses/LIBGIT2-ZLIB.txt"
+    ],
+    "description": {
+      "de": "Gebündelte Kompressionsbibliothek, statisch in die Git-Bibliothek gelinkt.",
+      "en": "Bundled compression library statically linked into the Git library."
+    }
+  },
+  {
     "name": "Visual Studio Code Workbench",
     "version": "1.100.0",
     "author": "Microsoft Corporation",
@@ -102,18 +192,30 @@
     }
   },
   {
-    "name": "isomorphic-git",
-    "version": "1.44.8",
-    "author": "The isomorphic-git authors and dependency contributors",
-    "license": "MIT; transitive dependencies retain their individual licenses",
-    "licenseUrl": "https://github.com/isomorphic-git/isomorphic-git/blob/main/LICENSE.md",
-    "source": "https://github.com/isomorphic-git/isomorphic-git",
+    "name": "Bootstrap Icons",
+    "version": "1.13.2",
+    "author": "The Bootstrap Authors",
+    "license": "MIT",
+    "licenseUrl": "https://github.com/twbs/icons/blob/v1.13.2/LICENSE",
+    "source": "https://github.com/twbs/icons/tree/v1.13.2",
     "files": [
-      "licenses/GIT-DEPENDENCIES.txt"
+      "licenses/BOOTSTRAP-ICONS-MIT.txt"
     ],
     "description": {
-      "de": "Lokale Git-Status- und Branchabfragen ohne Git-Installation. Die Lizenztexte und Hinweise der mitgelieferten Laufzeitabhängigkeiten sind nachstehend enthalten.",
-      "en": "Local Git status and branch queries without a Git installation. License texts and notices for the included runtime dependencies are provided below."
+      "de": "Neun lokal eingebundene SVG-Symbole: check-circle-fill, exclamation-circle-fill, plus-circle-fill, dash-circle-fill, question-circle-fill, slash-circle-fill, exclamation-triangle-fill, folder-fill und git. SVG-Hüllen sind für Zugänglichkeit angepasst; Pfadgeometrien und currentColor-Füllung bleiben unverändert.",
+      "en": "Nine locally embedded SVG icons: check-circle-fill, exclamation-circle-fill, plus-circle-fill, dash-circle-fill, question-circle-fill, slash-circle-fill, exclamation-triangle-fill, folder-fill and git. SVG wrappers are adapted for accessibility; path geometries and currentColor fill remain unchanged."
+    }
+  },
+  {
+    "name": "Phosphor Icons",
+    "author": "Phosphor Icons",
+    "license": "MIT",
+    "licenseUrl": "https://github.com/phosphor-icons/core/blob/main/LICENSE",
+    "source": "https://github.com/phosphor-icons/core",
+    "files": ["licenses/PHOSPHOR-ICONS-MIT.txt"],
+    "description": {
+      "de": "Lokal eingebundenes SVG-Symbol file-zip im Stil light. SVG-Hülle für Zugänglichkeit, Größe und Theme-Farbe angepasst; Pfadgeometrie unverändert.",
+      "en": "Locally embedded file-zip SVG icon in the light style. SVG wrapper adapted for accessibility, size and theme color; path geometry unchanged."
     }
   }
 ]

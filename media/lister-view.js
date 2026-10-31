@@ -1,7 +1,7 @@
 (function (root) {
   'use strict';
   root.CommanderListerView = { create };
-  function create({ host, state, t, escape, modal, restore, edit, notify, remember }) {
+  function create({ host, state, t, escape, modal, restore, edit, notify, remember, report = () => {} }) {
     const core = root.CommanderLister, sessions = [null, null], requests = new Map();
     const menu = document.querySelector('[data-main-menu]'), originalMenu = [...menu.childNodes];
     const labels = { text: '1 Nur Text', binary: '2 Binär', hex: '3 Hexadezimal', html: '5 HTML-Text', unicode: '6 Unicode', utf8: '7 UTF-8' };
@@ -11,7 +11,8 @@
     const active = () => sessions[state().active];
     function request(session, type, message, callback) {
       const requestId = `lister-${instance}-${++sequence}`;
-      requests.set(requestId, { session, type, callback });
+      const statusVersion = report(t(type === 'lister-copy' ? 'Auswahl wird kopiert…' : 'Dateiansicht wird aktualisiert…'), 'info');
+      requests.set(requestId, { session, type, callback, statusVersion });
       host.postMessage({ type, requestId, ...message });
       return requestId;
     }
@@ -63,7 +64,7 @@
             request(session, 'lister-link', { id: session.id, href: link.href }, result => {
             if (navigation !== session.navigation) return;
             if (!result.ok) { setStatus(session, t(result.error)); return; }
-            if (result.id) { session.id = result.id; session.file = { ...session.file, fsSource: result.path, name: result.path.split('/').at(-1) }; session.root.querySelector('.lister-heading span').textContent = result.path; session.selection = null; session.hit = null; if (version !== session.version) { session.view = result.view; load(session, 0); } else paint(session, result.view); }
+            if (result.id) { session.id = result.id; session.file = { ...session.file, fsSource: result.path, name: root.CommanderPaths.baseName(result.path) }; session.root.querySelector('.lister-heading span').textContent = root.CommanderPaths.displayPath(result.path); session.selection = null; session.hit = null; if (version !== session.version) { session.view = result.view; load(session, 0); } else paint(session, result.view); }
           });
           }
           else if (/^https?:\/\//i.test(link.href)) window.open(link.href, '_blank', 'noopener');
@@ -269,7 +270,7 @@
       remember();
       const element = document.createElement('div'); element.dataset.lister = ''; element.className = 'lister';
       element.innerHTML = `<div class="lister-heading"><span></span><button type="button" data-lister-close aria-label="${escape(t('Zur Dateiliste'))}" title="Escape">×</button></div><div class="lister-content"><textarea readonly wrap="off" spellcheck="false" aria-label="${escape(t('Dateiinhalt'))}" data-cursor="false"></textarea></div><nav data-lister-links class="lister-links" hidden aria-label="${escape(t('Links'))}"></nav><label class="lister-position">${escape(t('Dateiposition'))}<input type="range" min="0" max="100000" value="0" data-lister-position aria-label="${escape(t('Dateiposition'))}"></label><div class="lister-status" data-lister-status role="status"></div>`;
-      element.querySelector('.lister-heading span').textContent = file.fsSource || file.name;
+      element.querySelector('.lister-heading span').textContent = root.CommanderPaths.displayPath(file.fsSource || file.name);
       const session = { side, file, root: element, area: element.querySelector('textarea'), mode: 'text', encoding: 'utf-8', selectedEncoding: 'font', fontEncoding: '0', wrap: true, width: 80, version: 0, navigation: 0, searchVersion: 0, cursor: false, variable: false, size: file.size || 0, custom: [] };
       sessions[side] = session;
       element.querySelector('[data-lister-close]').onclick = () => close(session);
@@ -355,6 +356,8 @@
       requests.delete(result.requestId);
       if (item.session.closed) { if (['lister-open', 'lister-link'].includes(item.type) && result.id) host?.postMessage({ type: 'lister-close', id: result.id }); return; }
       item.callback(result);
+      if (!result.ok) report(result.error || t('Dateiaktion fehlgeschlagen.'), result.cancelled ? 'cancelled' : 'error', item.statusVersion);
+      else if (['lister-copy', 'lister-open', 'lister-link', 'lister-read', 'lister-edit', 'lister-search'].includes(item.type)) report(t(item.type === 'lister-copy' ? 'Auswahl kopiert.' : item.type === 'lister-edit' ? 'Datei zum Bearbeiten geöffnet.' : item.type === 'lister-search' ? 'Suchlauf beendet.' : 'Datei angezeigt.'), 'success', item.statusVersion);
     });
     return { open, mount, updateMenu, has: side => Boolean(sessions[side]), focus: () => active()?.area.focus(),
       run(value) { const session = active(); if (!session || document.querySelector('#modal').open) return false; command(session, value.startsWith('lister:') ? value.slice(7) : ({ view: 'next', edit: 'edit', copy: 'next', move: 'cursor', mkdir: 'find', 'select-all': 'select-all', 'clipboard-copy': 'copy', filter: 'find', refresh: 'reload' })[value] || ''); return true; },

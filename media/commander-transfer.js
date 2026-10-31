@@ -1,14 +1,15 @@
 (function (root, factory) {
   const fileNames = typeof module === 'object' && module.exports ? require('./commander-file-names') : root.CommanderFileNames;
-  const api = factory(fileNames);
+  const paths = typeof module === 'object' && module.exports ? require('./commander-paths') : root.CommanderPaths;
+  const api = factory(fileNames, paths);
   if (typeof module === 'object' && module.exports) module.exports = api;
   if (root) root.CommanderTransfer = api;
-})(typeof globalThis === 'object' ? globalThis : this, function (fileNames) {
+})(typeof globalThis === 'object' ? globalThis : this, function (fileNames, paths) {
   'use strict';
   const clone = value => JSON.parse(JSON.stringify(value));
-  const join = (base, name) => `${base === '/' ? '' : base}/${name}`;
-  const parent = value => value.slice(0, value.lastIndexOf('/')) || '/';
-  const base = value => value.slice(value.lastIndexOf('/') + 1);
+  const join = paths.joinPath;
+  const parent = paths.parentPath;
+  const base = paths.baseName;
   const validName = name => typeof name === 'string' && Boolean(name.trim()) && !/[\\/:*?"<>|]/.test(name) && !['.', '..'].includes(name) && !/[. ]$/.test(name);
   const sameName = (a, b) => a.toLocaleLowerCase() === b.toLocaleLowerCase();
   const inTree = (key, value, archive) => {
@@ -19,17 +20,7 @@
   let sequence = 0;
 
   function normalizePath(value, source) {
-    const path = String(value || '').trim().replace(/^"(.*)"$/, '$1').replaceAll('\\', '/');
-    const absolute = path.startsWith('/') || /^[a-z]:\//i.test(path);
-    const full = path.startsWith('/') && !path.startsWith('//') && /^[a-z]:\//i.test(source) ? source.slice(0, 2) + path : absolute ? path : join(source, path);
-    const parts = full.split('/');
-    const result = [];
-    for (const item of parts) {
-      if (!item || item === '.') continue;
-      if (item === '..') result.pop();
-      else result.push(item);
-    }
-    return (/^[a-z]:\//i.test(full) ? '' : '/') + result.join('/');
+    return paths.normalizePath(value, { base: source, input: true });
   }
 
   function uniqueName(items, name) {

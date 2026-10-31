@@ -1,12 +1,25 @@
 const fs = require('node:fs');
 const fsp = require('node:fs/promises');
 const path = require('node:path');
-const defaultGit = require('isomorphic-git');
-const { GitIndexManager } = require('isomorphic-git/managers');
-const { FileSystem } = require('isomorphic-git/models');
+const { loadNativeApi } = require('./native-api');
 const { allowedGitPath } = require('./git-status-paths');
 
 const priority = { untracked: 1, ignored: 0, clean: 2, added: 3, deleted: 4, modified: 5, conflict: 6 };
+function relativeScopes(root, values, includes) {
+  const scopes = [];
+  for (const value of Array.isArray(values) ? values : []) {
+    if (typeof value !== 'string' || !value) continue;
+    const target = path.resolve(value), relative = path.relative(root, target);
+    const targetIsWithinRoot = !path.isAbsolute(relative) && relative !== '..' && !relative.startsWith(`..${path.sep}`);
+    if (includes) {
+      const rootWithinTarget = path.relative(target, root);
+      const targetContainsRoot = !path.isAbsolute(rootWithinTarget) && rootWithinTarget !== '..' && !rootWithinTarget.startsWith(`..${path.sep}`);
+      if (targetContainsRoot) return [];
+      if (targetIsWithinRoot && relative) scopes.push(relative.replaceAll('\\', '/'));
+    } else if (targetIsWithinRoot && relative) scopes.push(relative.replaceAll('\\', '/'));
+  }
+  return [...new Set(scopes)];
+}
 function statusOf([, head, workdir, stage]) {
   if (head === 1 && workdir === 1 && stage === 1) return 'clean';
   if (!head && !stage) return 'untracked';
@@ -16,7 +29,10 @@ function statusOf([, head, workdir, stage]) {
 }
 
 function createGitStatusEngine(services = {}) {
-  const git = services.git || defaultGit;
+  const nativeApi = services.nativeApi || loadNativeApi();
+  const session = services.session || nativeApi.openSession();
+  const runInfo = services.info || (request => session.invoke('git.info', request));
+  const runStatus = services.status || ((request, options) => session.invoke('git.status', request, options));
   const caches = new Map(), inspections = new Map();
   let revision = 0;
   function cacheFor(root) {
@@ -45,13 +61,31 @@ function createGitStatusEngine(services = {}) {
     return { dir, gitdir, fs, cache: cacheFor(dir) };
   }
   async function identity(options) {
-    const branch = await git.currentBranch({ ...options, fullname: false }) || null;
-    let head = null;
-    try { head = await git.resolveRef({ ...options, ref: 'HEAD' }); }
-    catch (error) { if (error.code !== 'NotFoundError') throw error; }
-    return { branch, head, detached: !branch && Boolean(head), unborn: Boolean(branch && !head) };
+    const result = await runInfo({ directory: options.dir });
+    if (!result.repository) throw Object.assign(new Error('No repository'), { code: 'NotFoundError' });
+    return { branch: result.branch || null, head: result.head || null, detached: Boolean(result.detached), unborn: Boolean(result.unborn) };
   }
-  async function inspect(directory, settings = {}) {
+  async function repositories(directory, settings = {}) {
+    const roots = [];
+    for (const entry of await fsp.readdir(directory, { withFileTypes: true })) {
+      if (!entry.isDirectory() || entry.name === '.git') continue;
+      const child = path.join(directory, entry.name);
+      if (!allowedGitPath(child, settings)) continue;
+      try { await fsp.stat(path.join(child, '.git')); roots.push(child); }
+      catch (error) { if (error.code !== 'ENOENT' && error.code !== 'ENOTDIR') throw error; }
+    }
+    return roots;
+  }
+  async function describe(directory, settings = {}) {
+    if (!allowedGitPath(directory, settings)) return { ok: true, repository: false, statuses: {} };
+    try {
+      const options = await locate(directory);
+      return { ok: true, repository: true, root: options.dir, gitdir: options.gitdir, ...await identity(options), statuses: {} };
+    } catch (error) {
+      return { ok: error.code === 'NotFoundError', repository: false, statuses: {}, ...(error.code !== 'NotFoundError' ? { error: error.message } : {}) };
+    }
+  }
+  async function inspect(directory, settings = {}, onProgress) {
     if (!allowedGitPath(directory, settings)) return { ok: true, repository: false, statuses: {} };
     const started = revision;
     let repositoryFound = false;
@@ -65,68 +99,95 @@ function createGitStatusEngine(services = {}) {
         const prefix = relative ? relative + '/' : '';
         return { ...saved.result, statuses: Object.fromEntries(Object.entries(saved.result.statuses).filter(([name]) => name.startsWith(prefix)).map(([name, status]) => [name.slice(prefix.length), status])) };
       }
-      const info = await identity(options);
-      const index = await GitIndexManager.acquire({ ...options, fs: new FileSystem(fs) }, index => ({ conflicts: new Set(index.unmergedPaths), entries: new Map(index.entriesMap) }));
-      const sparse = await git.getConfig({ ...options, path: 'core.sparseCheckout' });
-      if (sparse != null && sparse !== false && !/^(false|no|off|0)$/i.test(String(sparse).trim()) || [...index.entries.values()].some(entry => entry.flags.skipWorktree)) throw new Error('Sparse checkout is not supported');
-      const indexTime = await fsp.stat(path.join(options.gitdir, 'index')).then(stat => Math.floor(stat.mtimeMs / 1000), error => { if (error.code === 'ENOENT') return Infinity; throw error; });
-      const autocrlf = await git.getConfig({ ...options, path: 'core.autocrlf' });
       const relative = path.relative(options.dir, directory).replaceAll('\\', '/');
       const prefix = relative ? relative + '/' : '';
       const scope = relative || '.';
       const statuses = Object.create(null);
-      const rows = await git.statusMatrix({ ...options, filepaths: [scope], refresh: false,
-        filter: name => {
-          if (name === '.' || name === relative || prefix.startsWith(name + '/')) return true;
-          if (!allowedGitPath(path.join(options.dir, name), settings)) return false;
-          return settings.recursive !== false || !name.startsWith(prefix) || !name.slice(prefix.length).includes('/');
-        } });
+      let pendingStatuses = Object.create(null), batchTime = Date.now();
+      async function flushStatuses() {
+        if (!onProgress || !Object.keys(pendingStatuses).length) return;
+        onProgress({ ok: true, repository: true, ...info, loading: true, incremental: true, statuses: pendingStatuses });
+        pendingStatuses = Object.create(null); batchTime = Date.now();
+        await new Promise(resolve => setImmediate(resolve));
+      }
+      async function reportStatus(name, status) {
+        if (!onProgress || name.includes('/')) return;
+        pendingStatuses[name] = status;
+        if (Object.keys(pendingStatuses).length >= 64 || Date.now() - batchTime >= 40) await flushStatuses();
+      }
+      const nativeResult = await runStatus({
+        directory: options.dir,
+        scope,
+        recursive: settings.recursive !== false,
+        showIgnored: settings.showIgnored === true,
+        includeScopes: relativeScopes(options.dir, settings.includePaths, true),
+        excludeScopes: relativeScopes(options.dir, settings.excludePaths, false)
+      }, { signal: services.signal });
+      if (!nativeResult.repository) throw Object.assign(new Error('No repository'), { code: 'NotFoundError' });
+      if (nativeResult.sparseCheckout || nativeResult.skipWorktree) throw new Error('Sparse checkout is not supported');
+      if (![2, 3].includes(nativeResult.indexVersion)) throw new Error('Git index version is not supported');
+      const info = { branch: nativeResult.branch || null, head: nativeResult.head || null, detached: Boolean(nativeResult.detached), unborn: Boolean(nativeResult.unborn) };
+      const rows = nativeResult.entries.map(entry => [entry.path, entry.head, entry.workdir, entry.stage, entry.conflicted, entry.ignored]);
       function add(name, status) {
         if (priority[status] >= (priority[statuses[name]] ?? -1)) statuses[name] = status;
       }
       for (const row of rows) {
-        if (!row[0].startsWith(prefix)) continue;
-        const name = row[0].slice(prefix.length);
-        let status = index.conflicts.has(row[0]) ? 'conflict' : statusOf(row);
-        const staged = index.entries.get(row[0]);
-        if (status === 'clean' && staged?.mtimeSeconds >= indexTime) {
-          const filename = path.join(options.dir, row[0]);
-          const content = (staged.mode & 0o170000) === 0o120000 ? Buffer.from(await fsp.readlink(filename)) : await new FileSystem(fs).read(filename, { autocrlf });
-          if ((await git.hashBlob({ object: content })).oid !== staged.oid) status = 'modified';
+        if (row[5]) {
+          if (!settings.showIgnored) continue;
+          const name = row[0].slice(prefix.length).replace(/\/$/, '');
+          if (!row[0].startsWith(prefix) || name.includes('/') || !allowedGitPath(path.join(directory, name), settings)) continue;
+          if (!statuses[name]) statuses[name] = 'ignored';
+          await reportStatus(name, 'ignored');
+          continue;
         }
+        if (!row[0].startsWith(prefix)) continue;
+        if (!allowedGitPath(path.join(options.dir, row[0]), settings)) continue;
+        if (settings.recursive === false && row[0].slice(prefix.length).includes('/')) continue;
+        const name = row[0].slice(prefix.length);
+        let status = row[4] ? 'conflict' : statusOf(row);
         add(name, status);
+        if (onProgress && !name.includes('/')) await reportStatus(name, status);
         const segments = name.split('/'); segments.pop();
         while (segments.length) {
           const aggregate = ['added', 'deleted'].includes(status) || status === 'untracked' && settings.untrackedAsModified ? 'modified' : status;
           add(segments.join('/'), aggregate); segments.pop();
         }
       }
-      if (settings.showIgnored) {
-        for (const entry of await fsp.readdir(directory, { withFileTypes: true })) {
-          const name = entry.name;
-          if (name === '.git' || statuses[name]) continue;
-          if (!allowedGitPath(path.join(directory, name), settings)) continue;
-          if (await git.isIgnored({ ...options, filepath: prefix + name + (entry.isDirectory() ? '/' : '') })) statuses[name] = 'ignored';
-        }
-      }
+      await flushStatuses();
       const result = { ok: true, repository: true, root: options.dir, gitdir: options.gitdir, ...info, statuses };
       if (started === revision) inspections.set(JSON.stringify([absolute, settingsKey]), { directory: absolute, settingsKey, time: Date.now(), result });
       while (inspections.size > 16) inspections.delete(inspections.keys().next().value);
       return result;
     } catch (error) {
       const missing = !repositoryFound && error.code === 'NotFoundError';
+      if (missing) {
+        const statuses = {};
+        try {
+          for (const child of await repositories(directory, settings)) {
+            const result = await inspect(child, settings);
+            if (!result.ok) continue;
+            let status = 'clean';
+            for (const value of Object.values(result.statuses)) {
+              const aggregate = ['added', 'deleted'].includes(value) || value === 'untracked' && settings.untrackedAsModified ? 'modified' : value;
+              if (priority[aggregate] > priority[status]) status = aggregate;
+            }
+            statuses[path.basename(child)] = status;
+          }
+          return { ok: true, repository: false, statuses };
+        } catch (failure) { return { ok: false, repository: false, statuses: {}, error: failure.message }; }
+      }
       return { ok: missing, repository: false, statuses: {}, ...(!missing ? { error: error.message } : {}) };
     }
   }
   async function branches(directory, settings = {}) {
     if (!allowedGitPath(directory, settings)) return { ok: false, error: 'Excluded repository' };
     try {
-      const options = await locate(directory), info = await identity(options);
-      const names = await git.listBranches(options);
-      return { ok: true, ...info, names, count: names.length, otherCount: names.length - (names.includes(info.branch) ? 1 : 0) };
+      const options = await locate(directory), result = await runInfo({ directory: options.dir });
+      if (!result.repository) throw Object.assign(new Error('No repository'), { code: 'NotFoundError' });
+      return { ok: true, branch: result.branch || null, head: result.head || null, detached: Boolean(result.detached), unborn: Boolean(result.unborn), names: result.names, remoteNames: result.remoteNames, count: result.count, otherCount: result.otherCount };
     } catch (error) { return { ok: false, error: error.message }; }
   }
-  return { inspect, branches, locate, invalidate() { revision++; caches.clear(); inspections.clear(); } };
+  return { inspect, describe, branches, locate, repositories, close() { session.close(); if (services.nativeApi !== nativeApi) nativeApi.shutdown(); }, invalidate() { revision++; caches.clear(); inspections.clear(); } };
 }
 
 module.exports = { createGitStatusEngine };

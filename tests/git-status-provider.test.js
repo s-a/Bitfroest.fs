@@ -7,7 +7,12 @@ const { createGitStatusProvider } = require('../git-status-provider');
 test('real worker reports status and branches with an empty executable search path', async t => {
   const { dir } = await changedRepository(t);
   const provider = createGitStatusProvider({ workerEnv: { ...process.env, PATH: '', Path: '' } }); t.after(() => provider.dispose());
-  const result = await provider.inspect([dir]);
+  const progress = [];
+  const result = await provider.inspect([dir], {}, update => progress.push(update));
+  assert.equal(progress[0][dir].branch, 'main');
+  assert.equal(progress[0][dir].loading, true);
+  assert.equal(Object.keys(progress[0][dir].statuses).length, 0);
+  assert.ok(progress.some(update => update[dir].incremental && update[dir].statuses['modified.txt'] === 'modified'));
   assert.equal(result[dir].branch, 'main'); assert.equal(result[dir].statuses['modified.txt'], 'modified');
   assert.equal((await provider.branches(dir)).count, 3);
 });
@@ -51,4 +56,37 @@ test('returning to an unwatched repository revalidates changes made while anothe
   assert.equal((await provider.inspect([first.dir]))[first.dir].statuses['clean.txt'], 'clean');
   await provider.inspect([second.dir]); await first.write('clean.txt', 'external change while repository was not watched\n');
   assert.equal((await provider.inspect([first.dir]))[first.dir].statuses['clean.txt'], 'modified');
+});
+
+test('parent view watches repository contents and updates root decoration', async t => {
+  const fsp = require('node:fs/promises'), os = require('node:os'), path = require('node:path');
+  const container = await fsp.mkdtemp(path.join(os.tmpdir(), 'git-root-watch-'));
+  t.after(() => fsp.rm(container, { recursive: true, force: true }));
+  const fixture = await changedRepository(t), dir = path.join(container, 'repo');
+  await fsp.rename(fixture.dir, dir);
+  let notify;
+  const changed = new Promise(resolve => { notify = resolve; });
+  const provider = createGitStatusProvider({ onChange: notify }); t.after(() => provider.dispose());
+  const initial = await provider.inspect([container]);
+  assert.equal(initial[container].statuses.repo, 'modified');
+  await fsp.writeFile(path.join(dir, 'nested/deep.txt'), 'changed from parent view\n');
+  const timeout = setTimeout(() => notify('timeout'), 5000); t.after(() => clearTimeout(timeout));
+  assert.notEqual(await changed, 'timeout');
+  assert.equal((await provider.inspect([container]))[container].statuses.repo, 'modified');
+});
+
+test('progress reaches all shared subscribers without completing the pending request', async t => {
+  const worker = new EventEmitter(), messages = [];
+  worker.postMessage = message => messages.push(message); worker.terminate = async () => 0;
+  const provider = createGitStatusProvider({ createWorker: () => worker }); t.after(() => provider.dispose());
+  const seen = [], secondSeen = []; let done = false;
+  const first = provider.inspect(['/repo'], {}, value => seen.push(value));
+  const second = provider.inspect(['/repo'], {}, value => secondSeen.push(value));
+  first.then(() => { done = true; }, () => {}); second.catch(() => {});
+  const early = { '/repo': { branch: 'main', loading: true } };
+  worker.emit('message', { id: messages[0].id, type: 'progress', result: early });
+  await Promise.resolve();
+  assert.equal(done, false); assert.deepEqual(seen, [early]); assert.deepEqual(secondSeen, [early]);
+  worker.emit('message', { id: messages[0].id, result: { '/repo': { branch: 'main', statuses: {} } } });
+  await Promise.all([first, second]);
 });

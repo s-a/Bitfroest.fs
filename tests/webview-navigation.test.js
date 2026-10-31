@@ -179,3 +179,16 @@ test('path entry accepts known folders and leaves the source unchanged for inval
   input = pane(app).querySelector('.path-input'); input.focus(); input.value = '/discard'; app.key('Escape', {}, input);
   assert.equal(pane(app).querySelector('.path-input').value, '/workspace/bitfroest/docs');
 });
+
+test('real filesystem navigation loads an unknown parent instead of rejecting example data', t => {
+  const pane = () => ({ tabs: ['C:/git/zwork/gb-src-mirror/node-rpt'], tab: 0, selected: [], cursor: null, filter: '', sort: 'name' });
+  const app = createApp(t, { version: 1, realFilesystem: true, snapshotId: 'parent', active: 0, panes: [pane(), pane()], folders: { 'C:/git/zwork/gb-src-mirror/node-rpt': [] } });
+  app.document.querySelector('.pane.active [data-parent]').dispatchEvent(new app.window.MouseEvent('dblclick', { bubbles: true, button: 0 }));
+  const request = app.messages.find(message => message.type === 'filesystem-navigate');
+  assert.ok(request); assert.equal(request.path, 'C:/git/zwork/gb-src-mirror');
+  assert.equal(app.state().panes[0].tabs[0], 'C:/git/zwork/gb-src-mirror/node-rpt');
+  const fresh = app.state(); fresh.snapshotId = 'parent-loaded'; fresh.folders[request.path] = [];
+  app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-result', ok: true, state: fresh, resumeNavigation: { path: request.path, side: 0 } } }));
+  assert.equal(app.state().panes[0].tabs[0], request.path);
+  assert.equal(app.document.querySelector('.pane.active .path-input').value, 'C:\\git\\zwork\\gb-src-mirror');
+});

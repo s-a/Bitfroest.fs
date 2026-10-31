@@ -10,38 +10,80 @@ test.beforeEach(() => clearFilesystemIconCache());
 test('unsupported platforms leave native icons available for theme fallback', async () => {
   let called = false;
   const icons = await getFilesystemIcons([{ key: 'folder', name: 'docs', type: 'folder' }], {
-    platform: 'freebsd', runHelper: async () => { called = true; return '[]'; }
+    platform: 'freebsd', testLookup: async () => { called = true; return '[]'; }
   });
   assert.equal(icons.folder, null);
   assert.equal(called, false);
 });
 
-test('batches requests and reuses icon cache without invoking a shell', async () => {
+test('batches injected icon lookups and reuses icon cache', async () => {
   const calls = [];
   const icon = 'data:image/png;base64,iVBORw0KGgo=';
-  const runHelper = async (command, args, rows) => {
+  const testLookup = async (command, args, rows) => {
     calls.push({ command, args, rows });
     return JSON.stringify(rows.map(row => ({ key: row.key, icon })));
   };
   const requests = Array.from({ length: 30 }, (_, index) => ({ key: `file-${index}`, name: `sample-${index}.ps1` }));
-  const first = await getFilesystemIcons(requests, { platform: 'win32', runHelper });
-  const second = await getFilesystemIcons(requests, { platform: 'win32', runHelper });
+  const first = await getFilesystemIcons(requests, { platform: 'win32', testLookup });
+  const second = await getFilesystemIcons(requests, { platform: 'win32', testLookup });
   assert.equal(calls.length, 2);
   assert.equal(calls[0].rows.length, 24);
   assert.equal(calls[1].rows.length, 6);
-  assert.equal(calls[0].command, 'powershell.exe');
-  assert.ok(calls[0].args.includes('-File'));
+  assert.equal(calls[0].command, null);
+  assert.deepEqual(calls[0].args, []);
   assert.equal(first['file-0'], icon);
   assert.equal(second['file-0'], icon);
 });
 
+test('Windows uses the native API in bounded batches and returns only valid PNG buffers', async () => {
+  const calls = [], lifecycle = { opened: 0, closed: 0 };
+  const png = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 1, 2]);
+  const nativeApi = { openSession() {
+    lifecycle.opened++;
+    return {
+      async invoke(operation, request) {
+        calls.push({ operation, request });
+        return { icons: [...request.requests].reverse().map(item => ({ key: item.key, png: item.key === 'missing' ? null : item.key === 'invalid' ? Buffer.from('bad') : png })) };
+      },
+      close() { lifecycle.closed++; }
+    };
+  } };
+  const requests = Array.from({ length: 25 }, (_, index) => ({ key: `native-${index}`, path: `C:\\icons\\${index}.txt`, name: `${index}.txt`, type: 'file' }));
+  requests[0].key = 'missing'; requests[1].key = 'invalid';
+  const result = await getFilesystemIcons(requests, { platform: 'win32', nativeApi, testLookup: () => assert.fail('Windows must use the native API') });
+  assert.equal(calls.length, 2);
+  assert.deepEqual(calls.map(call => call.request.requests.length), [24, 1]);
+  assert.ok(calls.every(call => call.operation === 'icons.resolve'));
+  assert.deepEqual(lifecycle, { opened: 2, closed: 2 });
+  assert.equal(result['native-2'], `data:image/png;base64,${png.toString('base64')}`);
+  assert.equal(result.missing, null);
+  assert.equal(result.invalid, null);
+});
+
+test('Windows native icon failures close each batch session and cache null results briefly', async context => {
+  let clock = 1000, opened = 0, closed = 0, calls = 0;
+  context.mock.method(Date, 'now', () => clock);
+  const nativeApi = { openSession() {
+    opened++;
+    return { invoke: async () => { calls++; throw new Error('broker unavailable'); }, close() { closed++; } };
+  } };
+  const request = [{ key: 'native-failure', name: 'missing.txt' }];
+  const options = { platform: 'win32', nativeApi, testLookup: () => assert.fail('Windows must use the native API') };
+  assert.equal((await getFilesystemIcons(request, options))['native-failure'], null);
+  await getFilesystemIcons(request, options);
+  assert.deepEqual({ opened, closed, calls }, { opened: 1, closed: 1, calls: 1 });
+  clock += 5001;
+  await getFilesystemIcons(request, options);
+  assert.deepEqual({ opened, closed, calls }, { opened: 2, closed: 2, calls: 2 });
+});
+
 test('rejects oversized or non-PNG responses and tolerates helper failure', async () => {
   const invalid = await getFilesystemIcons([{ key: 'bad', name: 'a.txt' }], {
-    platform: 'win32', runHelper: async () => JSON.stringify([{ key: 'bad', icon: 'data:image/svg+xml;base64,PHN2Zz4=' }])
+    platform: 'win32', testLookup: async () => JSON.stringify([{ key: 'bad', icon: 'data:image/svg+xml;base64,PHN2Zz4=' }])
   });
   assert.equal(invalid.bad, null);
   const failed = await getFilesystemIcons([{ key: 'failed', name: 'b.txt' }], {
-    platform: 'darwin', runHelper: async () => { throw new Error('unavailable'); }
+    platform: 'win32', testLookup: async () => { throw new Error('unavailable'); }
   });
   assert.equal(failed.failed, null);
 });
@@ -120,7 +162,7 @@ test('Linux handles missing icon files, default paths and unsupported metadata',
 
 test('normalization bounds requests and removes unsupported payload fields', async () => {
   let payload;
-  const options = { platform: 'win32', runHelper: async (_, __, rows) => { payload = rows; return '[]'; } };
+  const options = { platform: 'win32', testLookup: async (_, __, rows) => { payload = rows; return '[]'; } };
   const empty = await getFilesystemIcons(null, options);
   assert.deepEqual(Object.keys(empty), []);
   await getFilesystemIcons([null, { key: 42 }, { key: 'x'.repeat(301) }, { key: 'ok', path: 'x\0bad', name: 'folder/one.ps1', iconResource: 'x\0bad', type: 'other' }], options);
@@ -131,16 +173,16 @@ test('normalization bounds requests and removes unsupported payload fields', asy
 
 test('native response bounds reject malformed JSON, shapes and huge data', async () => {
   for (const [index, output] of ['invalid JSON', '{}', JSON.stringify([{ key: 'huge', icon: 'data:image/png;base64,' + 'A'.repeat(131073) }])].entries()) {
-    const result = await getFilesystemIcons([{ key: index === 2 ? 'huge' : String(index), name: `invalid-${index}.txt` }], { platform: 'win32', runHelper: async () => output });
+    const result = await getFilesystemIcons([{ key: index === 2 ? 'huge' : String(index), name: `invalid-${index}.txt` }], { platform: 'win32', testLookup: async () => output });
     assert.equal(Object.values(result)[0], null);
   }
 });
 
-test('cache expires and clears without retaining a stale native icon', async context => {
+test('injected lookup cache expires and clears without retaining a stale icon', async context => {
   let clock = 1000, calls = 0;
   context.mock.method(Date, 'now', () => clock);
-  const options = { platform: 'darwin', runHelper: async (_, args, rows) => {
-    assert.equal(args[0], '-l'); calls++;
+  const options = { platform: 'win32', testLookup: async (_, args, rows) => {
+    assert.deepEqual(args, []); calls++;
     return JSON.stringify(rows.map(row => ({ key: row.key, icon: 'data:image/png;base64,iVBORw0KGgo=' })));
   } };
   const requests = [{ key: 'clock', name: 'clock.txt' }];
@@ -190,7 +232,7 @@ test('Windows does not follow parent junctions for folder icon metadata', { skip
 test('bounded native cache evicts old entries and retries after transient failure', async context => {
   let clock = 1000, calls = 0;
   context.mock.method(Date, 'now', () => clock);
-  const options = { platform: 'win32', runHelper: async (_, __, rows) => {
+  const options = { platform: 'win32', testLookup: async (_, __, rows) => {
     calls++;
     return JSON.stringify(rows.map(row => ({ key: row.key, icon: null })));
   } };
@@ -205,7 +247,16 @@ test('bounded native cache evicts old entries and retries after transient failur
   assert.equal(calls, before + 2);
 });
 
-test('unavailable native executable falls back without rejecting the caller', { skip: process.platform !== 'win32' }, async () => {
-  const result = await getFilesystemIcons([{ key: 'missing-runner', name: 'anything.txt' }], { platform: 'darwin' });
+test('unavailable injected lookup falls back without rejecting the caller', async () => {
+  const result = await getFilesystemIcons([{ key: 'missing-runner', name: 'anything.txt' }], { platform: 'win32', testLookup: async () => { throw new Error('unavailable'); } });
   assert.equal(result['missing-runner'], null);
+});
+test('macOS uses the native theme fallback without starting an icon helper', async () => {
+  let started = false;
+  const icons = await getFilesystemIcons([{ key: 'finder', name: 'folder', type: 'folder' }], {
+    platform: 'darwin',
+    testLookup: async () => { started = true; throw new Error('must not start'); }
+  });
+  assert.equal(icons.finder, null);
+  assert.equal(started, false);
 });

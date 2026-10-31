@@ -1,6 +1,6 @@
 (() => {
   'use strict';
-  const host = acquireVsCodeApi(), model = window.ConfigurationModel;
+  const host = acquireVsCodeApi(), model = window.ConfigurationModel, paths = window.CommanderPaths;
   const $ = selector => document.querySelector(selector);
   let t = window.CommanderI18n.create('de').t;
   let data = null, scope = 'user', revision, section = 'favorites', selected = null, dirty = false, saving = false, pendingBrowse = null;
@@ -9,18 +9,39 @@
   const error = value => { $('#configuration-error').textContent = value ? t(value) : ''; };
   const status = value => { $('#configuration-status').textContent = value ? t(value) : ''; };
   const current = () => data?.favorites.find(item => item.id === selected);
+  let shortcutConflict = false, settings = [];
+  const shortcuts = window.createShortcutConfiguration({ t: value => t(value), changed: modified, blocked(value) { shortcutConflict = value; $('[data-save]').disabled = saving || value; } });
   function setSaving(value) {
     saving = value; $('main').inert = value; $('#scope').disabled = value;
-    $('[data-save]').disabled = value; $('[data-discard]').disabled = value;
+    $('[data-save]').disabled = value || shortcutConflict; $('[data-discard]').disabled = value;
   }
   setSaving(true);
   for (const type of ['click', 'input', 'change', 'dragstart', 'drop', 'keydown']) document.addEventListener(type, event => { if ((saving || !data) && event.target.closest('main')) { event.preventDefault(); event.stopImmediatePropagation(); } }, true);
   function modified() { dirty = true; status('Ungespeicherte Änderungen'); error(''); }
   function setSection(value) {
-    section = value === 'columns' ? 'columns' : 'favorites';
+    shortcuts.close();
+    section = ['columns', 'shortcuts', 'settings'].includes(value) ? value : 'favorites';
     for (const button of document.querySelectorAll('[data-section]')) { button.setAttribute('aria-selected', String(button.dataset.section === section)); button.tabIndex = button.dataset.section === section ? 0 : -1; }
     $('#favorites-section').hidden = section !== 'favorites'; $('#columns-section').hidden = section !== 'columns';
+    $('#settings-section').hidden = section !== 'settings'; $('#shortcuts-section').hidden = section !== 'shortcuts';
   }
+  function renderSettings() {
+    const query = $('#settings-search').value.toLocaleLowerCase().trim(), results = $('#settings-results'); results.replaceChildren();
+    const entries = [
+      { title: t('Tastenkürzel'), description: t('Tastenkombinationen erfassen und Konflikte auflösen.'), keywords: 'keyboard shortcuts shortcut hotkey tastatur tastenkürzel', open: () => setSection('shortcuts') },
+      { title: t('Favoriten'), description: '', open: () => setSection('favorites') }, { title: t('Spalten'), description: '', open: () => setSection('columns') },
+      ...settings.map(setting => ({ ...setting, open: () => host.postMessage({ type: 'configuration-open-setting', key: setting.key }) }))
+    ];
+    for (const entry of entries.filter(entry => `${entry.title} ${entry.description} ${entry.keywords || ''} ${entry.key || ''}`.toLocaleLowerCase().includes(query))) {
+      const card = document.createElement('article'); card.className = 'setting-card';
+      const heading = document.createElement('h3'); heading.textContent = entry.title;
+      const description = document.createElement('p'); description.textContent = entry.description;
+      const open = document.createElement('button'); open.type = 'button'; open.textContent = t('Öffnen…'); open.setAttribute('aria-label', `${t('Öffnen…')} ${entry.title}`); open.onclick = entry.open;
+      card.append(heading, description, open); results.append(card);
+    }
+    if (!results.children.length) results.textContent = t('Keine passenden Einstellungen gefunden.');
+  }
+  $('#settings-search').oninput = () => { setSection('settings'); renderSettings(); };
   function isDescendant(id, parent) {
     let node = data.favorites.find(item => item.id === id);
     while (node) { if (node.id === parent) return true; node = data.favorites.find(item => item.id === node.parent); }
@@ -48,7 +69,7 @@
     $('#favorite-name').value = node.name;
     $('[data-directory-fields]').hidden = node.type === 'group';
     $('#favorite-path').required = node.type === 'favorite';
-    $('#favorite-path').value = node.path || ''; $('#favorite-target').value = node.target || '';
+    $('#favorite-path').value = paths.displayPath(node.path || ''); $('#favorite-target').value = paths.displayPath(node.target || '');
     const select = $('#favorite-parent'); select.replaceChildren(new Option(t('Hauptebene'), ''));
     function append(parent, depth) {
       for (const group of data.favorites.filter(item => item.type === 'group' && item.parent === parent)) {
@@ -92,7 +113,7 @@
   $('[data-add-group]').onclick = () => add('group'); $('[data-add-favorite]').onclick = () => add('favorite');
   $('[data-remove]').onclick = () => { const node = current(); if (!node) return; data.favorites = data.favorites.filter(item => !isDescendant(item.id, node.id)); selected = data.favorites[0]?.id || null; modified(); renderTree(); renderDetails(); };
   $('#favorite-name').oninput = event => { if (current()) { current().name = event.target.value; modified(); renderTree(); } };
-  for (const field of ['path', 'target']) $(`#favorite-${field}`).oninput = event => { if (current()) { current()[field] = event.target.value; modified(); } };
+  for (const field of ['path', 'target']) $(`#favorite-${field}`).oninput = event => { if (current()) { current()[field] = paths.normalizePath(event.target.value, { input: true }); modified(); } };
   $('#favorite-parent').onchange = event => {
     try { data.favorites = model.moveFavorite(data.favorites, selected, event.target.value); if (event.target.value) expanded.add(event.target.value); modified(); renderTree(); } catch (failure) { error(failure.message); renderDetails(); }
   };
@@ -123,34 +144,36 @@
   };
   for (const button of document.querySelectorAll('[data-section]')) {
     button.onclick = () => setSection(button.dataset.section);
-    button.onkeydown = event => { if (['ArrowLeft', 'ArrowRight'].includes(event.key)) { event.preventDefault(); setSection(section === 'favorites' ? 'columns' : 'favorites'); $(`[data-section="${section}"]`).focus(); } };
+    button.onkeydown = event => { if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) { event.preventDefault(); const buttons = [...document.querySelectorAll('[data-section]')], next = buttons[(buttons.indexOf(button) + (['ArrowLeft', 'ArrowUp'].includes(event.key) ? -1 : 1) + buttons.length) % buttons.length]; setSection(next.dataset.section); next.focus(); } };
   }
   $('#scope').onchange = event => { if (dirty || saving) { event.target.value = scope; error('Änderungen zuerst speichern oder verwerfen.'); return; } host.postMessage({ type: 'configuration-scope', scope: event.target.value }); };
   $('#favorite-details').onsubmit = event => event.preventDefault();
   $('[data-discard]').onclick = () => { if (!saving) host.postMessage({ type: 'configuration-reload' }); };
   $('[data-save]').onclick = () => {
     if (!data || saving) return;
-    try { model.validateFavorites(data.favorites); model.validateColumns(data.columns); } catch (failure) { error(failure.message); return; }
+    try { model.validateFavorites(data.favorites); model.validateColumns(data.columns); shortcuts.validate(); } catch (failure) { error(failure.message); return; }
     setSaving(true); pendingBrowse = null; error(''); status('Speichern…');
     host.postMessage({ type: 'configuration-save', scope, revision, data: clone(data) });
   };
   document.addEventListener('keydown', event => { event.stopPropagation(); if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); $('[data-save]').click(); } });
+  document.addEventListener('keyup', event => event.stopPropagation());
   window.addEventListener('message', event => {
     const message = event.data;
     if (message?.type === 'configuration-state') {
       data = clone(message.data); scope = message.scope; revision = message.revision; t = window.CommanderI18n.create(message.language).t; section = message.section; dirty = false; pendingBrowse = null; setSaving(false);
+      settings = message.settings || []; shortcuts.setState(message, data); renderSettings();
       for (const element of document.querySelectorAll('[data-text]')) element.textContent = t(element.dataset.text);
       document.documentElement.lang = /^de/.test(message.language) ? 'de' : 'en';
       $('#scope').value = scope; $('#scope option[value="workspace"]').disabled = !message.workspace;
       selected = data.favorites[0]?.id || null; expanded.clear(); data.favorites.filter(item => item.type === 'group').forEach(item => expanded.add(item.id));
-      $('[data-save]').disabled = false; $('[data-discard]').disabled = false; error(''); status(''); render();
+      $('[data-save]').disabled = shortcutConflict; $('[data-discard]').disabled = false; error(''); status(''); render();
     } else if (message?.type === 'configuration-section') setSection(message.section);
-    else if (message?.type === 'configuration-saved') { data = clone(message.data); revision = message.revision; dirty = false; setSaving(false); render(); status('Gespeichert'); error(''); $('[data-save]').focus(); }
+    else if (message?.type === 'configuration-saved') { data = clone(message.data); revision = message.revision; dirty = false; setSaving(false); shortcuts.setState(message, data); render(); status('Gespeichert'); error(''); $('[data-save]').focus(); }
     else if (message?.type === 'configuration-error') { setSaving(false); error(message.error); status(dirty ? 'Ungespeicherte Änderungen' : ''); }
     else if (message?.type === 'configuration-browsed') {
       if (!pendingBrowse || pendingBrowse.requestId !== message.requestId || pendingBrowse.scope !== scope || message.scope !== scope || saving) return;
       pendingBrowse = null;
-      const node = data.favorites.find(item => item.id === message.id); if (node?.type === 'favorite' && ['path', 'target'].includes(message.field)) { node[message.field] = message.value; modified(); if (node.id === selected) renderDetails(); }
+      const node = data.favorites.find(item => item.id === message.id); if (node?.type === 'favorite' && ['path', 'target'].includes(message.field)) { node[message.field] = paths.normalizePath(message.value, { input: true }); modified(); if (node.id === selected) renderDetails(); }
     }
     else if (message?.type === 'configuration-changed') { if (dirty || saving) error('Die Konfiguration wurde außerhalb dieses Editors geändert. Bitte neu laden.'); else host.postMessage({ type: 'configuration-reload' }); }
   });

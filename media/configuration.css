@@ -1,6 +1,24 @@
 :root { color-scheme: light dark; font-family: var(--vscode-font-family, sans-serif); font-size: var(--vscode-font-size, 13px); color: var(--vscode-foreground); background: var(--vscode-editor-background); }
 * { box-sizing: border-box; }
 body { margin: 0; padding: 20px; max-width: 1400px; }
+.settings-layout { display: grid; grid-template-columns: minmax(180px, 230px) minmax(0, 1fr); gap: 24px; }
+.settings-sidebar { display: flex; flex-direction: column; gap: 8px; padding-top: 12px; }
+.settings-sidebar { position: sticky; top: 12px; align-self: start; }
+.settings-sidebar nav { display: flex; flex-direction: column; gap: 4px; border: 0; }
+.settings-sidebar nav button { text-align: left; padding: 8px; }
+.settings-sidebar [aria-selected="true"] { background: var(--vscode-list-activeSelectionBackground); color: var(--vscode-list-activeSelectionForeground); }
+.setting-card { border-bottom: 1px solid var(--vscode-panel-border); padding: 12px 0; }
+.setting-card h3 { font-size: 1em; margin: 4px 0; }
+.setting-card p { color: var(--vscode-descriptionForeground); }
+#shortcut-rows td:last-child { white-space: normal; min-width: 160px; }
+#shortcut-rows button { margin: 2px; }
+#shortcuts-section .table-container { max-height: 65vh; overflow: auto; }
+#shortcuts-section th { position: sticky; top: 0; background: var(--vscode-editor-background); }
+#shortcut-conflicts { white-space: pre-wrap; }
+#shortcut-dialog { color: var(--vscode-foreground); background: var(--vscode-editor-background); border: 1px solid var(--vscode-focusBorder); max-width: min(620px, 90vw); padding: 24px; }
+#shortcut-dialog::backdrop { background: var(--vscode-widget-shadow); }
+#shortcut-capture { display: block; width: 100%; margin: 12px 0; }
+@media (max-width: 650px) { .settings-layout { grid-template-columns: 1fr; } }
 header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; }
 h1 { font-size: 1.5em; font-weight: 500; }
 button, input, select { font: inherit; }

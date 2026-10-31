@@ -17,6 +17,54 @@ async function contents(file, password) {
   try { return await Promise.all((await reader.getEntries()).map(async entry => ({ name: entry.filename, encrypted: entry.encrypted, method: entry.compressionMethod, comment: entry.comment, text: entry.directory ? null : await entry.getData(new zip.TextWriter(), { useWebWorkers: false }) }))); }
   finally { await reader.close(); }
 }
+
+test('packing reports its own phase and verification announces empty entries before reading', async t => {
+  const { archive, operations } = await fixture(t), events = [];
+  await operations.write({ archive, additions: [{ name: 'first.txt', data: 'content' }, { name: 'empty.txt', data: '' }] }, { onProgress: event => events.push(event) });
+  assert.ok(events.some(event => event.phase === 'packing' && event.currentPath === 'first.txt'));
+  assert.ok(events.some(event => event.phase === 'packing' && event.currentPath === 'first.txt' && event.transferred === 7 && event.total === 7));
+  assert.equal(events.some(event => event.phase === 'copying'), false);
+  const verification = events.filter(event => event.phase === 'verifying');
+  assert.ok(verification.some(event => event.currentPath === 'first.txt' && event.transferred === 0 && event.total === 7));
+  assert.ok(verification.some(event => event.currentPath === 'empty.txt' && event.total === 0));
+  assert.equal(verification.at(-1).completedBytes, 7);
+  assert.equal(verification.at(-1).totalBytes, 7);
+});
+
+test('source preparation reports the file being examined before packing starts', async t => {
+  const { root, archive, operations } = await fixture(t), source = path.join(root, 'source.txt'), events = [];
+  await fs.writeFile(source, 'content');
+  await operations.write({ archive, sources: [source] }, { onProgress: event => events.push(event) });
+  assert.ok(events.some(event => event.phase === 'preparing' && event.currentPath === source));
+  assert.equal(events[0].phase, 'preparing');
+});
+test('packing into an existing archive requires confirmation and retains unrelated entries', async t => {
+  const { root, archive, operations } = await fixture(t);
+  await operations.write({ archive, additions: [{ name: 'keep.txt', data: 'keep' }] });
+  const before = await fs.readFile(archive);
+  const source = path.join(root, 'new.txt'); await fs.writeFile(source, 'new');
+  const request = { archive, sources: [source], move: true, confirmExisting: true };
+  await assert.rejects(operations.write(request), { name: 'AbortError' });
+  await assert.rejects(operations.write(request, { onArchiveExists: async target => { assert.equal(target, archive); return 'cancel'; } }), { name: 'AbortError' });
+  assert.deepEqual(await fs.readFile(archive), before);
+  assert.equal(await fs.readFile(source, 'utf8'), 'new');
+  const confirmed = [];
+  await operations.write({ ...request, move: false }, { onArchiveExists: async target => { confirmed.push(target); return 'update'; } });
+  assert.deepEqual(confirmed, [archive]);
+  assert.deepEqual((await contents(archive)).map(entry => entry.name).sort(), ['keep.txt', 'new.txt']);
+});
+
+test('archive changes or cancellation during confirmation stop packing before source collection', async t => {
+  const { root, archive, operations } = await fixture(t);
+  await operations.write({ archive, additions: [{ name: 'keep.txt', data: 'keep' }] });
+  const request = { archive, sources: [path.join(root, 'missing.txt')], confirmExisting: true };
+  await assert.rejects(operations.write(request, { onArchiveExists: async () => { await fs.appendFile(archive, 'external'); return 'update'; } }), /geändert/);
+  const before = await fs.readFile(archive), controller = new AbortController();
+  await assert.rejects(operations.write(request, { signal: controller.signal, onArchiveExists: async () => { controller.abort(); return 'update'; } }), { name: 'AbortError' });
+  assert.deepEqual(await fs.readFile(archive), before);
+  assert.deepEqual((await fs.readdir(root)).sort(), ['result.zip']);
+});
+
 test('ZIP-F17/F19 create stores selected directory structure, empty folders and comments', async t => {
   const { root, archive, operations } = await fixture(t);
   const folder = path.join(root, 'docs'); await fs.mkdir(path.join(folder, 'empty'), { recursive: true }); await fs.writeFile(path.join(folder, 'hello.txt'), 'hello');

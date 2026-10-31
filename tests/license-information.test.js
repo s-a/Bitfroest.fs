@@ -49,6 +49,29 @@ test('license credits contain the project author, complete required notices and 
   }
 });
 
+test('localized license summaries state own-risk use, warranty limits and statutory rights', t => {
+  for (const language of ['de', 'en']) {
+    const app = fixture(t, { language });
+    const content = app.registration.provider.provideTextDocumentContent({
+      toString: () => `bitfroest-licenses:/${language}/licenses.md`
+    }).split(language === 'de' ? '## Verwendete Komponenten' : '## Included components')[0];
+    const patterns = language === 'de'
+      ? [/Nutzung auf eigene Gefahr/, /ohne Gewährleistung/, /soweit gesetzlich zulässig/, /Abschnitte 7 und 8/, /Zwingende gesetzliche Rechte bleiben unberührt/]
+      : [/Use at your own risk/, /without warranties/, /to the extent permitted by applicable law/, /Sections 7 and 8/, /Mandatory statutory rights remain unaffected/];
+    for (const pattern of patterns) assert.match(content, pattern);
+  }
+});
+
+test('Marketplace introduction displays the license disclaimer beside the beta notice', () => {
+  const intro = fs.readFileSync(path.join(root, 'README.md'), 'utf8').split('## Beta-Veröffentlichung')[0];
+  assert.match(intro, /Use at your own risk/);
+  assert.match(intro, /without warranties/);
+  assert.match(intro, /to the extent permitted by applicable law/);
+  assert.match(intro, /Apache License 2\.0/);
+  assert.match(intro, /Sections 7 and 8/);
+  assert.match(intro, /Mandatory statutory rights remain unaffected/);
+});
+
 test('license preview failure falls back to the same readonly document', async t => {
   const app = fixture(t, { previewError: true });
   await app.view.open();

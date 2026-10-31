@@ -1,21 +1,24 @@
-const { execFile } = require('node:child_process');
+const { loadNativeApi } = require('./native-api');
 
 async function openTrash(options = {}) {
   const platform = options.platform || process.platform;
-  let command, args;
-  if (platform === 'win32') {
-    command = 'powershell.exe';
-    args = ['-NoProfile', '-NonInteractive', '-Command', "$ErrorActionPreference='Stop'; $trashShell=New-Object -ComObject Shell.Application; try { $trashShell.Open(10) } finally { [void][Runtime.InteropServices.Marshal]::ReleaseComObject($trashShell) }"];
-  } else if (platform === 'darwin') {
-    command = '/usr/bin/osascript';
-    args = ['-e', 'tell application "Finder" to open trash', '-e', 'tell application "Finder" to activate'];
-  } else if (platform === 'linux') {
-    command = '/usr/bin/gio'; args = ['open', 'trash:///'];
-  } else throw new Error('Die Papierkorbansicht ist auf diesem System nicht verfügbar.');
+  if (platform !== 'win32' && platform !== 'linux') throw Object.assign(new Error('Diese Funktion wird auf diesem Betriebssystem noch nicht unterstützt.'), { code: 'ENOTSUPPORTED' });
   try {
-    await new Promise((resolve, reject) => (options.executeFile || execFile)(command, args, { shell: false, windowsHide: true, timeout: 10000, maxBuffer: 16384 }, error => error ? reject(error) : resolve()));
+    if (platform === 'win32' || platform === 'linux') {
+      const session = (options.nativeApi || loadNativeApi()).openSession();
+      let timer;
+      try {
+        const result = await Promise.race([
+          session.invoke('shell.openTrash', { inspectOnly: false }),
+          new Promise((_, reject) => {
+            timer = setTimeout(() => reject(Object.assign(new Error('Trash opening timed out.'), { code: 'ETIMEDOUT' })), options.timeout ?? 10000);
+          })
+        ]);
+        if (result?.available !== true || result?.requested !== true) throw new Error('Invalid native trash opening response.');
+      } finally { clearTimeout(timer); session.close(); }
+    }
   } catch (cause) {
-    const message = cause.code === 'ENOENT' ? 'Die Papierkorbansicht ist auf diesem System nicht verfügbar.' : cause.code === 'ETIMEDOUT' || cause.killed ? 'Zeitlimit beim Öffnen des Papierkorbs überschritten.' : 'Der Papierkorb konnte nicht geöffnet werden.';
+    const message = ['ENOENT', 'Unavailable', 'UnsupportedOperation'].includes(cause.code) ? 'Die Papierkorbansicht ist auf diesem System nicht verfügbar.' : cause.code === 'ETIMEDOUT' || cause.killed ? 'Zeitlimit beim Öffnen des Papierkorbs überschritten.' : 'Der Papierkorb konnte nicht geöffnet werden.';
     throw new Error(message, { cause });
   }
   return { requested: true };

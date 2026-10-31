@@ -16,8 +16,12 @@ test('real folder and file creation report success only after successful host ac
     assert.equal(app.messages.some(item => item.type === 'edit'), false);
     reply(app, { ok: true, state: structuredClone(request.state) });
     if (expected === 'File system updated') {
-      assert.equal(app.document.querySelector('#status-message').textContent, expected);
+      assert.match(app.document.querySelector('#status-message').textContent, /Action in progress/);
       assert.equal(app.messages.filter(item => item.type === 'edit').length, 1);
+      const edit = app.messages.find(item => item.type === 'edit');
+      assert.match(edit.requestId, /^ui-action-/);
+      app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'ui-action-result', requestId: edit.requestId, ok: true } }));
+      assert.match(app.document.querySelector('#status-message').textContent, /opened for editing/i);
     } else assert.equal(app.document.querySelector('#status-message').textContent, expected);
   }
 });
@@ -57,6 +61,36 @@ test('real inline rename and deletion replace old success feedback with an in-pr
     assert.doesNotMatch(app.document.querySelector('#status-message').textContent, /created|updated|progress|running|Deleting/i);
   }
 });
+test('error copy preserves full details and recovery paths in every error presentation', async t => {
+  for (const language of ['de', 'en']) for (const kind of ['copy', 'mkdir', 'rename-one']) {
+    const original = fixture(), app = createApp(t, structuredClone(original), { language });
+    const error = "EPERM: operation not permitted, lstat 'C:\\DumpStack.log.tmp'\nC:\\Recovery\\Ä <backup>.stage\n" + 'details '.repeat(200);
+    app.action(kind);
+    if (kind === 'rename-one') {
+      app.document.querySelector('.inline-rename').value = 'renamed.txt';
+      app.key('Enter', {}, app.document.querySelector('.inline-rename'));
+    } else { if (kind === 'mkdir') app.document.querySelector('#value').value = 'new'; submit(app); }
+    await new Promise(resolve => setImmediate(resolve));
+    reply(app, { ok: false, state: original, error });
+    const button = app.document.querySelector('[data-copy-error]');
+    assert.ok(button);
+    assert.equal(button.textContent, language === 'de' ? 'Fehlerdetails kopieren' : 'Copy error details');
+    app.click(button);
+    const request = app.messages.find(message => message.type === 'selection-io');
+    assert.equal(request.action, 'copy');
+    assert.equal(request.text, (language === 'de' ? 'Dateioperation fehlgeschlagen' : 'File operation failed') + '\n\n' + error);
+    assert.equal(request.pathRanges, undefined);
+    assert.equal(app.document.querySelector('.operation-error-text').value, error);
+    app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'selection-io-result', requestId: request.requestId, ok: false, error: 'Clipboard blocked' } }));
+    assert.equal(app.document.querySelector('.operation-error-text').value, error);
+    app.click(button);
+    const retry = app.messages.filter(message => message.type === 'selection-io').at(-1);
+    app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'selection-io-result', requestId: retry.requestId, ok: true } }));
+    assert.equal(app.document.querySelector('.operation-error-text').value, error);
+    assert.equal(app.messages.filter(message => message.type === 'filesystem-apply').length, 1);
+  }
+});
+
 test('real batch rename success feedback is host-gated and never labelled as sample data', t => {
   const app = createApp(t, fixture(), { language: 'en' }); app.action('rename');
   app.document.querySelector('#mask').value = '[N]-new'; submit(app);

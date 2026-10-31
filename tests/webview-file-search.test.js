@@ -92,7 +92,7 @@ test('start sends independent search settings, escape cancels once, stale comple
   assert.ok(dialog.open);
 });
 
-test('apply creates a distinct result tab per list and F2 refreshes without removing it', t => {
+test('apply creates a distinct result tab per list and Ctrl R refreshes without removing it', t => {
   const app = open(t), initial = fixture();
   app.key('s', { altKey: true }); const request = app.messages.find(m => m.type === 'search-start');
   const row = { id: 'fs:C:/tmp/a.txt', name: 'a.txt', type: 'text', fsSource: 'C:/tmp/a.txt', size: 1 };
@@ -105,7 +105,7 @@ test('apply creates a distinct result tab per list and F2 refreshes without remo
   assert.ok(app.state().panes[0].tabStates[1].searchResult);
   assert.deepEqual(Object.keys(app.state().folders), ['C:/tmp', 'C:/temp']);
   assert.ok(app.row('a.txt'));
-  app.key('F2');
+  app.key('r', { ctrlKey: true });
   const refresh = app.messages.filter(message => message.type === 'filesystem-refresh').at(-1); assert.ok(refresh);
   respond(app, { type: 'filesystem-result', ok: true, state: structuredClone(refresh.state) });
   assert.equal(app.state().panes[0].tabStates[1].searchResult.id, request.searchId);
@@ -350,7 +350,7 @@ test('result rows show their source directories and visually separate duplicate 
   const saved = fixture(), rows = ['a', 'b'].map((id, i) => ({ id, name: `${id}.txt`, fsSource: `C:/tmp/${id}.txt`, type: 'text', mtimeMs: i + 1 }));
   saved.folders['C:/tmp'] = rows; saved.panes[0].tabStates = [{ path: 'C:/tmp', searchResult: { paths: rows.map(row => row.fsSource), groups: Object.fromEntries(rows.map((row, i) => [row.fsSource, i])) } }];
   const app = createApp(t, saved);
-  assert.equal(app.row('a.txt').querySelector('[data-result-source]').textContent, 'C:/tmp');
+  assert.equal(app.row('a.txt').querySelector('[data-result-source]').textContent, 'C:\\tmp');
   assert.equal(app.row('b.txt').classList.contains('search-group-start'), true);
   assert.equal(app.row('a.txt').draggable, false);
 });
@@ -411,7 +411,7 @@ test('a disposed duplicate preset request cannot launch a job after the template
 test('Shift+F5 proposes the actual nested result path rather than the search root', t => {
   const saved = fixture(), row = { id: 'a', name: 'a.txt', type: 'text', fsSource: 'C:/tmp/sub/a.txt' }; saved.folders['C:/tmp/sub'] = [row]; saved.panes[0].cursor = 'a'; saved.panes[0].tabStates = [{ path: 'C:/tmp', searchResult: { paths: [row.fsSource] } }];
   const app = createApp(t, saved); app.key('F5', { shiftKey: true });
-  assert.equal(app.document.querySelector('#value').value, row.fsSource);
+  assert.equal(app.document.querySelector('#value').value, 'C:\\tmp\\sub\\a.txt');
 });
 
 test('content options follow their enable switch and hex and regex are mutually exclusive', t => {
@@ -421,4 +421,19 @@ test('content options follow their enable switch and hex and regex are mutually 
   app.key('h', { altKey: true }); app.key('2', { altKey: true });
   assert.equal(dialog.querySelector('[name=hex]').checked, false); assert.equal(dialog.querySelector('[name=textRegex]').checked, true);
   app.click(dialog.querySelector('[name=textEnabled]')); assert.equal(dialog.querySelector('[name=textRegex]').disabled, true);
+});
+
+test('search paths display Windows separators and normalize inputs without per-result identity changes', t => {
+  const app = open(t), dialog = app.document.querySelector('[data-file-search]');
+  assert.equal(dialog.querySelector('[name=searchIn]').value, 'C:\\tmp');
+  respond(app, { type: 'search-presets', histories: { searchIn: ['c:/tmp'] } });
+  assert.equal(dialog.querySelector('[data-search-history="searchIn"] option').value, 'C:\\tmp');
+  dialog.querySelector('[name=searchIn]').value = 'c:\\tmp; C:\\temp';
+  app.key('Enter', {}, dialog.querySelector('[name=searchIn]'));
+  const request = app.messages.find(message => message.type === 'search-start'); assert.ok(request);
+  assert.equal(request.settings.searchIn, 'c:/tmp; C:/temp');
+  respond(app, { type: 'search-progress', searchId: request.searchId, path: 'c:/tmp/sub', count: 1 });
+  assert.match(dialog.querySelector('[data-search-status]').textContent, /C:\\tmp\\sub/);
+  respond(app, { type: 'search-complete', searchId: request.searchId, results: [{ name: 'one.txt', fsSource: 'c:/tmp/one.txt' }] });
+  assert.equal(dialog.querySelector('[data-search-result]').textContent, 'C:\\tmp\\one.txt');
 });

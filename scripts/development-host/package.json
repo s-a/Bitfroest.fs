@@ -1,0 +1,11 @@
+{
+  "name": "bitfroest-development-reload",
+  "displayName": "Bitfroest.fs Development Reload",
+  "publisher": "bitfroest",
+  "version": "0.0.1",
+  "private": true,
+  "engines": { "vscode": "^1.100.0" },
+  "main": "./extension.cjs",
+  "extensionKind": ["ui"],
+  "activationEvents": ["onStartupFinished"]
+}

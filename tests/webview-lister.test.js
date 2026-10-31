@@ -38,7 +38,7 @@ test('F3 replaces only the initiating list, changes menus by focus, and Escape r
 });
 
 test('real lister ignores late replies after Escape and never sends content to a text editor', t => {
-  const state = { version: 1, realFilesystem: true, active: 0, snapshotId: 'one', panes: [{ tabs: ['C:/tmp'], tab: 0, cursor: 'a', selected: ['a'] }, { tabs: ['C:/temp'], tab: 0 }], folders: { 'C:/tmp': [{ id: 'a', name: 'huge.bin', type: 'text', fsSource: 'C:/tmp/huge.bin', size: 8 * 2 ** 30 }], 'C:/temp': [] } };
+  const state = { version: 1, realFilesystem: true, active: 0, snapshotId: 'one', panes: [{ tabs: ['C:/tmp'], tab: 0, cursor: 'a', selected: ['a'] }, { tabs: ['C:/temp'], tab: 0, selected: [], cursor: null }], folders: { 'C:/tmp': [{ id: 'a', name: 'huge.bin', type: 'text', fsSource: 'C:/tmp/huge.bin', size: 8 * 2 ** 30 }], 'C:/temp': [] } };
   for (const pane of state.panes) Object.assign(pane, { filter: '', sort: 'name', descending: false });
   const app = createApp(t, state);
   app.key('F3');
@@ -163,4 +163,10 @@ test('Escape returns to the file list immediately even while a search is running
   assert.equal(app.document.querySelector('.lister'), null);
   assert.ok(app.messages.some(message => message.type === 'lister-cancel' && message.id === 'session'));
   assert.ok(app.document.activeElement.matches('.list'));
+});
+
+test('Lister heading formats Windows paths while keeping the file request unchanged', t => {
+  const app = realApp(t);
+  assert.equal(app.document.querySelector('.lister-heading span').textContent, 'C:\\tmp\\file.txt');
+  assert.equal(app.messages.find(message => message.type === 'lister-open').path, 'C:/tmp/file.txt');
 });

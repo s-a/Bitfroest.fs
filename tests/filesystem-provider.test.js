@@ -126,6 +126,70 @@ test('unreadable small files do not block filesystem listings', async t => {
   assert.equal(row(state, left, 'plain.txt').content, undefined);
 });
 
+for (const code of ['EPERM', 'EACCES']) test(`navigation retains ${code} children without blocking readable siblings`, async t => {
+  const { left, right, parent } = await setup(t);
+  const protectedPath = slash(path.join(parent, 'DumpStack.log.tmp'));
+  await fs.writeFile(protectedPath, 'protected');
+  await fs.writeFile(path.join(parent, 'readable.txt'), 'readable');
+  let denied = true;
+  const deniedFs = { ...fs, lstat: async (file, ...args) => {
+    if (denied && slash(String(file)) === protectedPath) throw Object.assign(new Error('Access denied'), { code });
+    return fs.lstat(file, ...args);
+  } };
+  const provider = createProvider({ roots: [left, right], allowNavigationOutsideRoots: true, fs: deniedFs });
+  await provider.load();
+  const state = await provider.load({ left: parent });
+  const protectedRow = row(state, slash(parent), 'DumpStack.log.tmp');
+  assert.equal(protectedRow.fsSource, protectedPath);
+  assert.equal(protectedRow.size, undefined);
+  assert.equal(protectedRow.mtimeMs, undefined);
+  assert.equal(row(state, slash(parent), 'readable.txt').size, 8);
+  const after = clone(state);
+  after.folders[left].push({ id: 'new-readable', name: 'new.txt', type: 'text', content: 'new' });
+  const fresh = await provider.apply(state, after);
+  assert.equal(await fs.readFile(`${left}/new.txt`, 'utf8'), 'new');
+  const removed = clone(fresh);
+  removed.folders[slash(parent)] = removed.folders[slash(parent)].filter(file => file.name !== 'DumpStack.log.tmp');
+  denied = false;
+  await assert.rejects(provider.apply(fresh, removed));
+  assert.equal(await fs.readFile(protectedPath, 'utf8'), 'protected');
+  denied = true;
+  await assert.rejects(provider.load({ left: parent, recursiveDirectories: [parent] }), { code });
+});
+
+test('later metadata permission failures retain listed files and directories', async t => {
+  const { left, right } = await setup(t);
+  await fs.writeFile(`${left}/program.exe`, 'not an executable');
+  for (const [name, deniedRead] of [['plain.txt', 2], ['program.exe', 3], ['docs', 1]]) {
+    let reads = 0;
+    const target = `${left}/${name}`;
+    const provider = createProvider({ roots: [left, right], fs: { ...fs, lstat: async (file, ...args) => {
+      if (slash(String(file)) === target && ++reads === deniedRead) throw Object.assign(new Error('Access denied'), { code: 'EPERM', path: target });
+      return fs.lstat(file, ...args);
+    } } });
+    const state = await provider.load();
+    assert.equal(row(state, left, name).fsSource, target);
+    assert.equal(row(state, left, name).size, undefined);
+    if (name === 'docs') assert.ok(state.unloadedFolders.includes(target));
+    const copied = clone(state);
+    copied.folders[right].push({ ...row(state, left, name), id: 'copy-denied', name: 'copy' });
+    if (name === 'docs') copied.folders[`${right}/copy`] = [];
+    await assert.rejects(provider.apply(state, copied));
+    await assert.rejects(fs.lstat(`${right}/copy`), { code: 'ENOENT' });
+  }
+});
+
+test('directory permission failures and unrelated metadata errors remain navigation errors', async t => {
+  const { left, right } = await setup(t);
+  for (const [target, code] of [[left, 'EPERM'], [`${left}/plain.txt`, 'EIO']]) {
+    const provider = createProvider({ roots: [left, right], fs: { ...fs, lstat: async (file, ...args) => {
+      if (slash(String(file)) === target) throw Object.assign(new Error('Read failed'), { code });
+      return fs.lstat(file, ...args);
+    } } });
+    await assert.rejects(provider.load(), { code });
+  }
+});
+
 test('default scan limit permits a realistic large directory', async t => {
   const { left, right } = await setup(t);
   const names = Array.from({ length: 10001 }, (_, index) => `entry-${index}.txt`);
@@ -176,7 +240,46 @@ test('contains rejects siblings, traversal and symbolic links', async t => {
   const outside = path.join(parent, 'outside'); await fs.mkdir(outside);
   await fs.symlink(outside, `${left}/linked`, process.platform === 'win32' ? 'junction' : 'dir');
   assert.equal(provider.contains(`${left}/linked/child.txt`), false);
-  await assert.rejects(provider.load({ recursive: true }), /link|reparse|Verknüpfung/i);
+  const state = await provider.load({ recursive: true });
+  assert.equal(row(state, left, 'linked').type, 'link');
+  assert.equal(Object.hasOwn(state.folders, `${left}/linked`), false);
+  assert.ok(row(state, left, 'plain.txt'));
+  await assert.rejects(provider.load({ directories: [`${left}/linked`] }), /link|reparse|Verknüpfung/i);
+  const fresh = await provider.load(), after = clone(fresh);
+  after.folders[left].push({ id: 'beside-link', name: 'beside-link.txt', type: 'text', content: 'safe' });
+  await provider.apply(fresh, after);
+  assert.equal(await fs.readFile(`${left}/beside-link.txt`, 'utf8'), 'safe');
+  assert.deepEqual(await fs.readdir(outside), []);
+});
+
+test('unrelated changes cannot block creating or moving a file in another loaded directory', async t => {
+  const { provider, left, right } = await setup(t);
+  let before = await provider.load(), after = clone(before);
+  await fs.writeFile(`${right}/unrelated.txt`, 'background update');
+  after.folders[left].push({ id: 'created', name: 'created.txt', type: 'text', content: 'created' });
+  await provider.apply(before, after);
+  assert.equal(await fs.readFile(`${left}/created.txt`, 'utf8'), 'created');
+  before = await provider.load(); after = clone(before);
+  const file = row(before, left, 'plain.txt');
+  after.folders[left] = after.folders[left].filter(item => item.id !== file.id);
+  after.folders[right].push({ ...file, id: 'moved' });
+  await fs.writeFile(`${right}/unrelated.txt`, 'another unrelated update');
+  await provider.apply(before, after);
+  assert.equal(await fs.readFile(`${right}/plain.txt`, 'utf8'), 'original text');
+  assert.equal(await fs.readFile(`${right}/unrelated.txt`, 'utf8'), 'another unrelated update');
+});
+
+test('a removed optional loaded directory cannot turn a committed creation into a reported failure', async t => {
+  const { provider, left, right } = await setup(t);
+  const before = await provider.load({ directories: [`${left}/docs`] });
+  before.panes[0].tabs = [`${left}/docs`, left, right]; before.panes[0].tab = 1;
+  const after = clone(before);
+  after.folders[right].push({ id: 'created', name: 'committed.txt', type: 'text', content: 'committed' });
+  await fs.unlink(`${left}/docs/nested.txt`); await fs.rmdir(`${left}/docs`);
+  const result = await provider.apply(before, after);
+  assert.equal(await fs.readFile(`${right}/committed.txt`, 'utf8'), 'committed');
+  assert.equal(Object.hasOwn(result.folders, `${left}/docs`), false);
+  assert.equal(result.panes[0].tabs[result.panes[0].tab], left);
 });
 
 test('copy obtains binary bytes from the original source rather than mock content', async t => {
@@ -590,4 +693,16 @@ test('append rejects an externally replaced stage before writing to the replacem
   target.fsAppend = { source: `${left}/binary.bin`, target: targetPath }; target.size += 4; delete target.content;
   await assert.rejects(provider.apply(before, after));
   assert.equal(await fs.readFile(externalPath, 'utf8'), 'keep');
+});
+
+test('explicit unrestricted navigation loads parents and unrelated directories lazily', async t => {
+  const { left, right, parent } = await setup(t);
+  const outside = path.join(parent, 'outside'); await fs.mkdir(outside); await fs.writeFile(path.join(outside, 'other.txt'), 'outside');
+  const provider = createProvider({ roots: [left, right], allowNavigationOutsideRoots: true });
+  const before = await provider.load();
+  assert.equal(provider.contains(slash(parent)), true);
+  const after = await provider.prepare(before, { directories: [slash(parent), slash(outside)] });
+  assert.ok(after.folders[slash(parent)].some(row => row.name === 'outside'));
+  assert.ok(after.folders[slash(outside)].some(row => row.name === 'other.txt'));
+  assert.equal(after.unloadedFolders.includes(`${left}/docs`), true);
 });

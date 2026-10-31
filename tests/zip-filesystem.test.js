@@ -5,6 +5,26 @@ const os = require('node:os');
 const path = require('node:path');
 const { createProvider } = require('../filesystem-provider');
 const { zip } = require('./support/search-archives.cjs');
+test('pack provider appends the ZIP extension and detects an existing target absent from the view', async t => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'zip-pack-target-'));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const sourcePath = root.replaceAll('\\', '/'), source = path.join(root, 'source.txt'), archive = path.join(root, 'result.zip');
+  await fs.writeFile(source, 'source');
+  const { createZipFilesystem } = require('../zip-filesystem');
+  const provider = createZipFilesystem(createProvider({ roots: [root] })); t.after(() => provider.dispose());
+  const state = await provider.load(), id = state.folders[sourcePath].find(row => row.name === 'source.txt').id;
+  await fs.writeFile(archive, zip({ 'keep.txt': 'keep' }));
+  const before = await fs.readFile(archive), request = { action: 'pack', sourcePath, ids: [id], archive: path.join(root, 'result') };
+  await assert.rejects(provider.writeArchive(state, request, { onArchiveExists: async () => 'cancel' }), { name: 'AbortError' });
+  assert.deepEqual(await fs.readFile(archive), before);
+  const targets = [];
+  await provider.writeArchive(state, request, { onArchiveExists: async target => { targets.push(target); return 'update'; } });
+  assert.deepEqual(targets, [archive]);
+  await assert.rejects(fs.stat(path.join(root, 'result')), { code: 'ENOENT' });
+  const z = require('@zip.js/zip.js'), reader = new z.ZipReader(new z.Uint8ArrayReader(await fs.readFile(archive)));
+  assert.deepEqual((await reader.getEntries()).map(entry => entry.filename).sort(), ['keep.txt', 'source.txt']); await reader.close();
+});
+
 test('ZIP integration preserves an unavailable base filesystem during activation', async () => {
   const { createZipFilesystem } = require('../zip-filesystem');
   const provider = createZipFilesystem({ contains: () => false, load: async () => null });
@@ -92,7 +112,9 @@ test('ZIP-F25 selected archive subtrees copy directly into another ZIP without c
   const { createZipFilesystem } = require('../zip-filesystem'), provider = createZipFilesystem(createProvider({ roots: [root] })); t.after(() => provider.dispose());
   const opened = await provider.openArchive(await provider.load(), source), destination = await provider.openArchive(opened.state, target);
   const id = destination.state.folders[opened.path].find(row => row.name === 'docs').id;
-  await provider.writeArchive(destination.state, { action: 'pack', sourcePath: opened.path, path: destination.path, ids: [id] });
+  const confirmations = [];
+  await provider.writeArchive(destination.state, { action: 'pack', sourcePath: opened.path, path: destination.path, ids: [id] }, { onArchiveExists: async archive => { confirmations.push(archive); return 'update'; } });
+  assert.deepEqual(confirmations, [target]);
   assert.deepEqual(await fs.readFile(source), before);
   const reader = require('../zip-provider').createZipProvider({ contains: value => value.startsWith(root) }); t.after(() => reader.dispose());
   const rows = []; for await (const entry of reader.entries(target)) rows.push(entry.archiveEntry);

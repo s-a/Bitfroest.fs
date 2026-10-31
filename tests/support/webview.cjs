@@ -9,6 +9,7 @@ function createApp(t, saved, options = {}) {
   t.after(() => dom.window.close());
   const window = dom.window, document = window.document;
   document.body.dataset.language = options.language || document.body.dataset.language || 'de';
+  if (options.platform) document.body.dataset.platform = options.platform;
   document.body.dataset.extensionVersion = require('../../package.json').version;
   if (options.columnSettings) document.body.dataset.columnSettings = JSON.stringify(options.columnSettings);
   if (options.fileSettings) document.body.dataset.fileSettings = encodeURIComponent(JSON.stringify(options.fileSettings));
@@ -25,7 +26,7 @@ function createApp(t, saved, options = {}) {
   window.TextDecoder = TextDecoder;
   window.structuredClone = structuredClone;
   window.HTMLDialogElement.prototype.show = function () { this.setAttribute('open', ''); };
-  for (const name of ['commander-i18n.js', 'commander-column-settings.js', 'commander-tabs.js', 'commander-columns.js', 'commander-search.js', 'file-search-view.js', 'commander-contrast.js', 'commander-file-names.js', 'commander-transfer.js', 'search-duplicates.js', 'commander-clipboard.js', 'commander-lister.js', 'lister-view.js', 'workbench-vendor.js', 'workbench-icons.js', 'commander-statusbar.js', 'app.js']) {
+  for (const name of ['commander-paths.js', 'commander-shortcuts.js', 'shortcut-runtime.js', 'commander-i18n.js', 'commander-column-settings.js', 'commander-tabs.js', 'commander-columns.js', 'commander-search.js', 'file-search-view.js', 'commander-contrast.js', 'commander-file-colors.js', 'commander-file-names.js', 'commander-transfer.js', 'search-duplicates.js', 'commander-clipboard.js', 'commander-lister.js', 'lister-view.js', 'workbench-vendor.js', 'workbench-icons.js', 'git-status-icons.js', 'commander-statusbar.js', 'app.js']) {
     const file = path.join(root, 'media', name);
     new vm.Script(fs.readFileSync(file, 'utf8'), { filename: file }).runInContext(dom.getInternalVMContext());
   }

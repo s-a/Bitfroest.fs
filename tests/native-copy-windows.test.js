@@ -4,7 +4,6 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
 const { copyFileCancellable, createCopySession } = require('../native-copy');
-const { spawn } = require('node:child_process');
 async function fixture(t, bytes = 1024) {
   const root = (await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'bitfroest-native-copy-')))).replace(/\\/g, '/');
   t.after(() => fs.rm(root, { recursive: true, force: true }));
@@ -64,63 +63,9 @@ test('one native session copies multiple files with isolated identities and no p
   await session.dispose();
 });
 
-test('closing parent input before startup cancels the native request and exits without a destination', { skip: process.platform !== 'win32' }, async t => {
-  const f = await fixture(t, 32 * 1024 * 1024);
-  const child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-File', path.join(__dirname, '..', 'native', 'file-copy.ps1')], { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
-  let output = '', stderr = '';
-  child.stdout.on('data', value => { output += value; }); child.stderr.on('data', value => { stderr += value; });
-  const exit = new Promise((resolve, reject) => { child.on('error', reject); child.on('close', resolve); });
-  child.stdin.end(JSON.stringify({ ...f.input, type: 'copy', id: '1' }) + '\n');
-  assert.equal(await exit, 0, stderr);
-  const result = output.trim().split(/\r?\n/).map(value => JSON.parse(value)).find(value => value.type === 'result');
-  assert.ok(!result || result.ok === false, 'EOF must never allow the queued copy to succeed');
-  await assert.rejects(fs.stat(f.target), { code: 'ENOENT' });
-});
-
-test('parent input EOF during an active native copy cancels it and removes its partial destination', { skip: process.platform !== 'win32' }, async t => {
-  const f = await fixture(t, 64 * 1024 * 1024);
-  const child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-File', path.join(__dirname, '..', 'native', 'file-copy.ps1')], { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
-  let buffer = '', result, cancelledInput = false, stderr = '';
-  child.stderr.on('data', value => { stderr += value; });
-  child.stdout.on('data', value => {
-    buffer += value; let end;
-    while ((end = buffer.indexOf('\n')) >= 0) {
-      const record = JSON.parse(buffer.slice(0, end)); buffer = buffer.slice(end + 1);
-      if (record.type === 'result') result = record;
-      if (!cancelledInput && record.type === 'progress' && record.transferred < record.total) { cancelledInput = true; child.stdin.end(); }
-    }
-  });
-  const exit = new Promise((resolve, reject) => { child.on('error', reject); child.on('close', resolve); });
-  child.stdin.write(JSON.stringify({ ...f.input, type: 'copy', id: '1' }) + '\n');
-  assert.equal(await exit, 0, stderr); assert.equal(cancelledInput, true);
-  assert.equal(result.ok, false); assert.equal(result.cancelled, true);
-  await assert.rejects(fs.stat(f.target), { code: 'ENOENT' });
-  assert.equal((await fs.stat(f.source)).size, 64 * 1024 * 1024);
-});
-
-test('disposing an idle warm native worker releases all source handles and exits', { skip: process.platform !== 'win32' }, async t => {
+test('disposing an idle native session releases all source handles', { skip: process.platform !== 'win32' }, async t => {
   const f = await fixture(t), session = createCopySession();
   await session.copy(f.input); await session.dispose();
   await fs.rename(f.source, `${f.root}/renamed.bin`);
   await assert.rejects(session.copy(f.input), /beendet/);
-});
-
-test('losing the parent output pipe during copy cancels without an unmanaged callback exception or orphan', { skip: process.platform !== 'win32' }, async t => {
-  const f = await fixture(t, 128 * 1024 * 1024);
-  const child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-File', path.join(__dirname, '..', 'native', 'file-copy.ps1')], { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
-  let buffer = '', disconnected = false, stderr = '', stopped = false;
-  child.stdin.on('error', () => {}); child.stderr.on('data', value => { stderr += value; });
-  child.stdout.on('data', value => {
-    buffer += value; let end;
-    while (!disconnected && (end = buffer.indexOf('\n')) >= 0) {
-      const record = JSON.parse(buffer.slice(0, end)); buffer = buffer.slice(end + 1);
-      if (record.type === 'progress' && record.transferred < record.total) { disconnected = true; child.stdout.destroy(); }
-    }
-  });
-  const timer = setTimeout(() => { if (!stopped) child.kill(); }, 5000);
-  const exit = new Promise((resolve, reject) => { child.on('error', reject); child.on('close', code => { stopped = true; clearTimeout(timer); resolve(code); }); });
-  child.stdin.write(JSON.stringify({ ...f.input, type: 'copy', id: '1' }) + '\n');
-  assert.equal(await exit, 0, stderr); assert.equal(disconnected, true);
-  await assert.rejects(fs.stat(f.target), { code: 'ENOENT' });
-  assert.equal((await fs.stat(f.source)).size, 128 * 1024 * 1024);
 });

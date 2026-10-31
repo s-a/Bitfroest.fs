@@ -53,3 +53,9 @@ test('Windows ancestor spelling is retained when the entered path uses different
   assert.deepEqual(result.paths, ['C:/tmp/new/nested']);
   assert.ok(data['C:/tmp/new/nested']);
 });
+
+test('UNC directory planning preserves the known share root', () => {
+  const result = names.plan('\\\\server\\share\\new\\nested', { base: '//server/share', folders: { '//server/share': [] }, kind: 'folder' });
+  assert.deepEqual(result.paths, ['//server/share/new/nested']);
+  assert.deepEqual(result.directories, ['//server/share/new', '//server/share/new/nested']);
+});

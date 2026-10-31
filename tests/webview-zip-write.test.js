@@ -9,6 +9,69 @@ function state(inside = false) {
     archiveLocations: { [root]: { archive: 'C:/tmp/test.zip', parent: 'C:/tmp' } } };
 }
 const submit = app => app.document.querySelector('#modal-form').dispatchEvent(new app.window.Event('submit', { bubbles: true, cancelable: true }));
+
+test('ZIP progress names packing and verification, shows literal entries and resets file progress between phases', t => {
+  for (const language of ['de', 'en']) {
+    const saved = state(), app = createApp(t, saved, { language });
+    app.click(app.row('file.txt')); app.action('pack'); submit(app);
+    const request = app.messages.find(message => message.type === 'zip-write');
+    const send = progress => app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-progress', operationId: request.operationId, progress } }));
+    send({ phase: 'packing', currentPath: 'docs/A & B.txt', transferred: 80, total: 100 });
+    assert.equal(app.document.querySelector('#status-message').textContent, language === 'de' ? 'ZIP erstellen: A & B.txt' : 'Creating ZIP: A & B.txt');
+    assert.equal(app.document.querySelector('[data-current-file-path]').textContent, 'docs/A & B.txt');
+    assert.match(app.document.querySelector('#status-message').title, /docs\/A & B.txt/);
+    assert.equal(app.document.querySelector('#status-progress-file').getAttribute('aria-valuenow'), '80');
+    send({ phase: 'verifying', currentPath: 'docs/A & B.txt', transferred: 0, total: 100, completedBytes: 0, totalBytes: 100 });
+    assert.equal(app.document.querySelector('#status-message').textContent, language === 'de' ? 'Archiv prüfen: A & B.txt' : 'Verifying archive: A & B.txt');
+    assert.equal(app.document.querySelector('#status-progress-file').getAttribute('aria-valuenow'), '0');
+    send({ phase: 'verifying', currentPath: 'empty.txt', transferred: 0, total: 0, completedBytes: 100, totalBytes: 100 });
+    assert.match(app.document.querySelector('#status-message').textContent, /empty\.txt/);
+    assert.equal(app.document.querySelector('#status-progress-file').hasAttribute('aria-valuenow'), false);
+    app.click(app.document.querySelector('#status-cancel'));
+    assert.equal(app.messages.filter(message => message.type === 'filesystem-cancel').length, 1);
+    assert.equal(app.document.querySelector('#status-message').textContent, language === 'de' ? 'Abbruch wird ausgeführt…' : 'Cancelling…');
+    app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-result', operationId: request.operationId, ok: true, cancelled: true, archiveCommitted: true, notice: 'saved', state: saved } }));
+    assert.equal(app.document.querySelector('#status-progress-area').classList.contains('is-idle'), true);
+    send({ phase: 'packing', currentPath: 'late.txt' });
+    assert.equal(app.document.querySelector('#status-message').textContent, 'saved');
+  }
+});
+
+test('explicit archive testing is labeled before its first progress event', t => {
+  for (const language of ['de', 'en']) {
+    const saved = state(); saved.folders['C:/tmp'][0] = { id: 'archive', name: 'test.zip', type: 'archive', fsSource: 'C:/tmp/test.zip' };
+    const app = createApp(t, saved, { language }); app.click(app.row('test.zip')); app.action('test-archives');
+    assert.ok(app.messages.find(message => message.type === 'zip-test'));
+    assert.equal(app.document.querySelector('#status-message').textContent, language === 'de' ? 'Archiv wird geprüft…' : 'Verifying archive…');
+  }
+});
+
+test('pack normalizes edited ZIP extensions before sending the target to the host', t => {
+  for (const [entered, expected] of [['result', 'result.zip'], ['result.ZIP', 'result.ZIP'], ['report.backup', 'report.backup.zip']]) {
+    const app = createApp(t, state()); app.click(app.row('file.txt')); app.action('pack');
+    app.document.querySelector('#value').value = entered; submit(app);
+    assert.equal(app.messages.find(message => message.type === 'zip-write')?.archive, `C:/temp/${expected}`);
+  }
+});
+
+test('pack options have associated labels and separate checkbox rows in both languages', t => {
+  const css = require('node:fs').readFileSync(require('node:path').join(__dirname, '../media/app.css'), 'utf8');
+  for (const language of ['de', 'en']) {
+    const app = createApp(t, state(), { language }); app.click(app.row('file.txt')); app.action('pack');
+    const style = app.document.createElement('style'); style.textContent = css; app.document.head.append(style);
+    const groups = app.document.querySelectorAll('fieldset.zip-pack-group');
+    assert.equal(groups.length, 2);
+    assert.ok([...groups].every(group => group.querySelector('legend')?.textContent));
+    for (const id of ['zip-level', 'zip-encryption']) assert.ok(app.document.querySelector(`label[for="${id}"]`));
+    for (const id of ['zip-paths', 'zip-recursive', 'zip-move']) {
+      const input = app.document.getElementById(id), label = input.closest('label.zip-pack-check');
+      assert.ok(label); assert.ok(label.querySelector('span')?.textContent);
+      assert.equal(label.querySelectorAll('input').length, 1);
+      assert.equal(app.window.getComputedStyle(label).display, 'grid');
+      assert.equal(app.window.getComputedStyle(input).width, '16px');
+    }
+  }
+});
 test('ZIP-F17/F18/F27 pack dialog is immediately usable and sends options without passwords', t => {
   const app = createApp(t, state()); app.click(app.row('file.txt')); app.action('pack');
   assert.equal(app.document.querySelector('#modal').open, true);

@@ -36,12 +36,14 @@ function createZipOperations(options = {}) {
     if (typeof value !== 'string' || !path.isAbsolute(value) || !options.contains?.(value)) throw new Error('Ungültiger Archiv- oder Dateipfad.');
     return path.resolve(value);
   };
-  async function collect(request, archive, signal) {
+  async function collect(request, archive, settings) {
+    const { signal } = settings;
     const files = [], roots = [], names = new Set();
     const inside = request.inside ? normalize(request.inside) : '';
     const add = item => { const key = normalize(item.name); if (names.has(key)) throw new Error('Doppelte Namen im ZIP-Auftrag.'); names.add(key); files.push(item); };
     async function visit(source, relative, root) {
-      stop(signal); allowed(source); await noLinks(source);
+      stop(signal); allowed(source); settings.onProgress?.({ phase: 'preparing', currentPath: source }); stop(signal);
+      await noLinks(source);
       const stat = await fs.lstat(source, { bigint: true });
       if (path.resolve(source) === archive || stat.isFile() && (await exists(archive))?.ino === stat.ino && (await exists(archive))?.dev === stat.dev) throw new Error('Das Quellarchiv kann nicht in sich selbst gepackt werden.');
       if (!stat.isDirectory() && !stat.isFile()) throw new Error('Nur gewöhnliche Dateien und Verzeichnisse können gepackt werden.');
@@ -91,14 +93,20 @@ function createZipOperations(options = {}) {
     const original = await exists(archive);
     if (original && !original.isFile()) throw new Error('Das Archivziel ist keine gewöhnliche Datei.');
     if (request.revision && (!original || revision(original) !== request.revision)) throw new Error('Das ZIP-Archiv wurde geändert.');
+    if (original && request.confirmExisting) {
+      if (await settings.onArchiveExists?.(archive) !== 'update') throw new DOMException('Packen abgebrochen.', 'AbortError');
+      stop(signal); await noLinks(archive);
+      const confirmed = await exists(archive);
+      if (!confirmed || signature(confirmed) !== signature(original)) throw new Error('Das ZIP-Archiv wurde geändert.');
+    }
     if (request.level !== undefined && (!Number.isInteger(request.level) || request.level < 0 || request.level > 9)) throw new Error('Die ZIP-Kompressionsrate muss zwischen 0 und 9 liegen.');
     const encryption = encryptionOptions(request.encryption, request.password);
     const removal = (request.remove || []).map(normalize), renames = (request.rename || []).map(item => ({ from: normalize(item.from), to: normalize(item.to) }));
-    const { files, roots } = await collect(request, archive, signal);
+    const { files, roots } = await collect(request, archive, settings);
     const stage = path.join(path.dirname(archive), `.zip-write-${crypto.randomUUID()}.tmp`);
     let input, source, output, writer, backup, originalComment, committedResult, publishedStat;
     const skipped = new Set(); let completed = 0;
-    const progress = (phase, currentPath, loaded) => settings.onProgress?.({ phase, currentPath, completed, completedBytes: loaded || 0 });
+    const progress = (phase, currentPath, transferred = 0, total) => settings.onProgress?.({ phase, currentPath, completed, transferred, total });
     async function cleanup() {
       const beforeCleanup = committedResult && await fs.stat(archive, { bigint: true }).catch(() => null);
       try {
@@ -152,10 +160,11 @@ function createZipOperations(options = {}) {
       const writable = new WritableStream({ async write(bytes) { stop(signal); let offset = 0; while (offset < bytes.length) { const result = await output.write(bytes, offset, bytes.length - offset); if (!result.bytesWritten) throw new Error('ZIP-Ausgabe konnte nicht geschrieben werden.'); offset += result.bytesWritten; } } });
       writer = new zip.ZipWriter(writable, { useWebWorkers: false, level: request.level ?? 6, zip64: request.zip64 });
       const unchanged = new Set(keep.filter(item => item.name === item.entry.filename).map(item => item.name));
+      progress('packing', archive);
       if (unchanged.size) await writer.appendZip(readFile(input, Number(original.size), signal), { filter: entry => unchanged.has(entry.filename), readerOptions: { strictness: 'strict' } });
       for (const { entry, name } of keep) {
         if (unchanged.has(name)) continue;
-        stop(signal); progress('copying', name);
+        stop(signal); progress('packing', name);
         const localExtraField = await localFields(readFile(input, Number(original.size), signal), entry);
         if (entry.directory) await writer.add(name, null, { entry, localExtraField, directory: true, passThrough: true, signal });
         else {
@@ -167,7 +176,7 @@ function createZipOperations(options = {}) {
         stop(signal); const name = normalize(item.name);
         if (skipped.has(name) || item.directory && seen.has(name)) continue;
         if (seen.has(name)) throw new Error('Doppelte Namen im ZIP-Auftrag.'); seen.add(name);
-        progress('copying', item.name);
+        progress('packing', item.name);
         let stream, handle;
         try {
           if (item.source && !item.directory) {
@@ -176,7 +185,7 @@ function createZipOperations(options = {}) {
             stream = Readable.toWeb(handle.createReadStream({ autoClose: false }));
           }
           const data = item.directory ? null : stream || (item.data?.[Symbol.asyncIterator] ? Readable.toWeb(Readable.from(item.data)) : new zip.Uint8ArrayReader(Buffer.from(item.data)));
-          await writer.add(item.name, data, { entry: item.metadata, localExtraField: item.localExtraField, ...encryption, directory: item.directory, lastModDate: item.stat?.mtime || item.date || new Date(), signal, onprogress: loaded => progress('copying', item.name, loaded) });
+          await writer.add(item.name, data, { entry: item.metadata, localExtraField: item.localExtraField, ...encryption, directory: item.directory, lastModDate: item.stat?.mtime || item.date || new Date(), signal, onprogress: (loaded, total) => progress('packing', item.name, loaded, total) });
           if (handle && signature(await handle.stat({ bigint: true })) !== signature(item.stat)) throw new Error('Die Quelldatei wurde geändert.');
           completed++;
         } finally { await handle?.close(); }
@@ -223,10 +232,15 @@ function createZipOperations(options = {}) {
     const reader = new zip.ZipReader(readFile(handle, Number(original.size), settings.signal), { checkCrc32: true, checkAuthenticationCode: true, useWebWorkers: false });
     let files = 0, bytes = 0;
     try {
-      for (const entry of await reader.getEntries()) {
+      const entries = await reader.getEntries(), totalBytes = entries.reduce((sum, entry) => sum + (entry.directory ? 0 : entry.uncompressedSize), 0);
+      settings.onProgress?.({ phase: 'verifying', currentPath: archive, completedBytes: 0, totalBytes });
+      for (const entry of entries) {
         stop(settings.signal); if (entry.directory) continue;
+        let transferred = 0;
+        const report = () => settings.onProgress?.({ phase: 'verifying', currentPath: entry.filename, transferred, total: entry.uncompressedSize, completedBytes: bytes, totalBytes });
+        report(); stop(settings.signal);
         const password = await resolvePassword(entry, settings);
-        await entry.getData(new WritableStream({ write(chunk) { stop(settings.signal); bytes += chunk.length; settings.onProgress?.({ phase: 'verifying', currentPath: entry.filename, completedBytes: bytes }); } }), { password, signal: settings.signal }); files++;
+        await entry.getData(new WritableStream({ write(chunk) { stop(settings.signal); bytes += chunk.length; transferred += chunk.length; report(); } }), { password, signal: settings.signal }); files++;
       }
       stop(settings.signal);
       if (signature(await handle.stat({ bigint: true })) !== signature(original) || signature(await fs.stat(archive, { bigint: true })) !== signature(original)) throw new Error('Das ZIP-Archiv wurde geändert.');

@@ -1,8 +1,13 @@
 const vscode = require('vscode');
+const { createSelectionIO } = require('./selection-io');
+const { selectStartupRoots, existingDirectories } = require('./startup-paths');
+const { resolveUncPaths } = require('./network-paths');
+const defaultFileColors = Object.fromEntries(require('./file-type-colors.json').flatMap(group => group.patterns.map(pattern => [pattern, group.color])));
 const { createGitStatusProvider } = require('./git-status-provider');
 const { allowedGitPath } = require('./git-status-paths');
 const fs = require('node:fs');
 const path = require('node:path');
+const { normalizePath, displayPath, identity: pathIdentity } = require('./media/commander-paths');
 const crypto = require('node:crypto');
 const { loadIconTheme } = require('./icon-theme');
 const { getFilesystemIcons } = require('./filesystem-icons');
@@ -15,21 +20,22 @@ const { create } = require('./media/commander-i18n');
 const { columnSetsFromTables, columnSetFromPreferences, catalog } = require('./media/commander-column-settings');
 const { renderOperationError } = require('./operation-errors');
 const { openTrash } = require('./open-trash');
+const { openTerminal } = require('./open-terminal');
 const { openAssociatedFile } = require('./open-file');
+const { maximizeWindow } = require('./native-window');
 const { createListerProvider } = require('./lister-provider');
 const { createSearchProvider } = require('./search-provider');
 const { validateSettings: validateSearchSettings } = require('./file-search');
 const { createConfigurationEditor } = require('./configuration-editor');
 const { createConfigurationSettings } = require('./configuration-settings');
+const { catalog: shortcutCatalog, localizedCatalog, effectiveBindings } = require('./shortcut-settings');
+const { resolve: resolveShortcut } = require('./media/commander-shortcuts');
 const { favoritesToTables, validateColumns } = require('./media/configuration-model');
 const { archiveEntries } = require('./search-archives');
 const { createShellMenuProvider } = require('./native-shell-menu');
 const { createLockInspector } = require('./lock-inspector');
 const { createLicenseInformation } = require('./license-information');
 const os = require('node:os');
-const { execFile } = require('node:child_process');
-const { promisify } = require('node:util');
-const executeFile = promisify(execFile);
 
 function activate(context) {
   const displayLanguage = () => {
@@ -109,7 +115,7 @@ function activate(context) {
     favoriteQueue = favoriteQueue.then(async () => {
       if (typeof directory !== 'string' || !directory.trim() || directory.length > 4096 || directory.includes('\0')) return;
       const favorites = favoriteSettings();
-      const identity = value => { const normalized = value.replace(/\\/g, '/').replace(/\/+$/, ''); return process.platform === 'win32' ? normalized.toLowerCase() : normalized; };
+      const identity = value => pathIdentity(value, { platform: process.platform });
       const exists = Object.values(favorites.entries).some(value => identity(value) === identity(directory));
       if (exists) {
         for (const scope of ['user', 'workspace']) {
@@ -122,7 +128,7 @@ function activate(context) {
         const scope = settings.get('favorites.storage', 'user') === 'workspace' ? 'workspace' : 'user';
         let data = configurationData.read(scope);
         const duplicate = name => data.favorites.some(item => !item.parent && item.name === name.trim());
-        const name = await vscode.window.showInputBox({ title: t('Favorit hinzufügen'), prompt: t('Name des Favoriten'), value: path.basename(directory.replace(/\\/g, '/')) || directory,
+        const name = await vscode.window.showInputBox({ title: t('Favorit hinzufügen'), prompt: t('Name des Favoriten'), value: path.basename(normalizePath(directory)) || displayPath(directory),
           validateInput: value => !value.trim() ? t('Ein Name ist erforderlich.') : duplicate(value) ? t('Dieser Name ist bereits vergeben.') : undefined });
         data = configurationData.read(scope);
         if (!name?.trim() || duplicate(name)) return;
@@ -135,21 +141,51 @@ function activate(context) {
   }
   const fileSettings = () => {
     const settings = vscode.workspace.getConfiguration('bitfroest');
-    return { deleteToTrash: settings.get('files.deleteToTrash', true) !== false, countFolderSizeOnSpace: settings.get('files.countFolderSizeOnSpace', true) !== false,
+    return { deleteToTrash: settings.get('files.deleteToTrash', true) !== false, countFolderSizeOnSpace: settings.get('files.countFolderSizeOnSpace', true) !== false, selectDirectories: settings.get('files.selectDirectories', true) !== false,
+      colors: { enabled: settings.get('colors.fileTypes', true), git: settings.get('colors.gitStatus', true), rules: settings.get('colors.rules', defaultFileColors) },
+      gitStatus: { iconSizePercent: settings.get('gitStatus.iconSizePercent', 66) },
       zip: { level: settings.get('zip.compressionLevel', 6), paths: settings.get('zip.storePaths', true), recursive: settings.get('zip.recursive', true), verify: settings.get('zip.verifyAfterWrite', true) } };
   };
   let panel, resetListerViews = async () => {}, resetSearchViews = () => {};
+  let shortcutBindings = {}, shortcutContext = {}, shortcutSync = Promise.resolve(), shortcutsDisposed = false;
+  function shortcutState() { return { catalog: localizedCatalog(displayLanguage()), bindings: shortcutBindings }; }
+  function syncShortcuts() {
+    shortcutSync = shortcutSync.then(async () => {
+    if (shortcutsDisposed) return;
+    try {
+      const next = effectiveBindings(vscode.workspace.getConfiguration('bitfroest'));
+      for (const id of new Set([...Object.keys(shortcutBindings), ...Object.keys(next)])) {
+        if (shortcutsDisposed) return;
+        if (Object.hasOwn(shortcutBindings, id) !== Object.hasOwn(next, id)) await vscode.commands.executeCommand('setContext', `bitfroest.shortcutOverride.${id}`, Object.hasOwn(next, id));
+      }
+      shortcutBindings = next;
+      if (panel) await panel.webview.postMessage({ type: 'shortcut-settings', ...shortcutState() });
+    } catch (error) { vscode.window.showErrorMessage(t(error.message)); }
+    });
+    return shortcutSync;
+  }
   const configurationData = createConfigurationSettings(vscode, { t, saved: async () => {
     if (panel) {
       await panel.webview.postMessage({ type: 'favorite-settings', settings: favoriteSettings() });
       await panel.webview.postMessage({ type: 'column-settings', settings: columnSettings() });
     }
+    await syncShortcuts();
   } });
-  const configurationEditor = createConfigurationEditor(vscode, context, {
+  const configurationOptions = {
     t, read: configurationData.read, write: configurationData.write, language: displayLanguage,
     workspace: () => Boolean(vscode.workspace.workspaceFolders?.length),
+    shortcutBase: requestedScope => requestedScope === 'workspace' ? vscode.workspace.getConfiguration('bitfroest').inspect('shortcuts.bindings')?.globalValue || {} : {},
+    settings: () => {
+      const labels = /^de/.test(displayLanguage()) ? require('./package.nls.de.json') : require('./package.nls.json');
+      const label = value => typeof value === 'string' && value.startsWith('%') ? labels[value.slice(1, -1)] || value : value || '';
+      return require('./package.json').contributes.configuration.flatMap(group => Object.entries(group.properties).map(([key, property]) => ({ key, title: `${label(group.title)} · ${key.replace(/^bitfroest\./, '')}`, description: label(property.markdownDescription || property.description) })));
+    },
+    openSetting: key => { if (require('./package.json').contributes.configuration.some(group => Object.hasOwn(group.properties, key))) return vscode.commands.executeCommand('workbench.action.openSettings', key); },
     browse: async () => { const chosen = await vscode.window.showOpenDialog({ canSelectFiles: false, canSelectFolders: true, canSelectMany: false, title: t('Verzeichnis auswählen') }); return chosen?.[0]?.fsPath; }
-  });
+  };
+  const configurationEditor = createConfigurationEditor(vscode, context, configurationOptions);
+  const initialShortcutsReady = syncShortcuts();
+  context.subscriptions.push({ dispose() { shortcutsDisposed = true; for (const entry of shortcutCatalog.filter(item => item.source === 'manifest' && item.editable)) vscode.commands.executeCommand('setContext', `bitfroest.shortcutOverride.${entry.id}`, false); } });
   let searchPresetQueue = Promise.resolve();
   let panelReady = false, panelFailed = false;
   function setReady(value) {
@@ -161,16 +197,17 @@ function activate(context) {
   let scope = context.workspaceState.get('tabScope', vscode.workspace.workspaceFolders?.length ? 'workspace' : 'global');
   const storage = () => scope === 'global' ? context.globalState : context.workspaceState;
   let savedState = storage().get('fileManagerState');
-  const fileRoots = process.platform === 'win32' ? ['C:/tmp', 'C:/temp'] : [path.join(os.homedir(), 'tmp'), path.join(os.homedir(), 'temp')];
+  const fileRoots = selectStartupRoots(process.platform === 'win32' ? ['C:/tmp', 'C:/temp'] : [path.join(os.homedir(), 'tmp'), path.join(os.homedir(), 'temp')], os.homedir());
   const favoriteRoots = () => { const settings = favoriteSettings(); return [...Object.values(settings.entries), ...Object.values(settings.targets)]; };
   const minimizeRoots = values => {
-    const normalized = [...new Set(values.filter(value => typeof value === 'string' && path.isAbsolute(value) && !value.includes('\0') && !value.split(/[\\/]/).includes('..')).map(value => path.resolve(value).replace(/\\/g, '/')))];
+    const normalized = [...new Set(values.filter(value => typeof value === 'string' && path.isAbsolute(value) && !value.includes('\0') && !value.split(/[\\/]/).includes('..')).map(value => normalizePath(path.resolve(value), { platform: process.platform })))];
     const identity = value => process.platform === 'win32' ? value.toLowerCase() : value;
     return normalized.filter((value, index) => !normalized.some((other, otherIndex) => otherIndex !== index && (identity(value) === identity(other) ? otherIndex < index : identity(value).startsWith(`${identity(other).replace(/\/$/, '')}/`))));
   };
-  const provider = createZipFilesystem(createProvider({ roots: fileRoots, additionalRoots: favoriteRoots, deletePath: (target, options) => vscode.workspace.fs.delete(vscode.Uri.file(target), options) }));
+  const provider = createZipFilesystem(createProvider({ roots: fileRoots, additionalRoots: favoriteRoots, allowNavigationOutsideRoots: true, deletePath: (target, options) => vscode.workspace.fs.delete(vscode.Uri.file(target), options) }));
   context.subscriptions.push(provider);
   const fileClipboard = createClipboardProvider({ contains: provider.contains });
+  context.subscriptions.push({ dispose: () => fileClipboard.dispose() });
   let clipboardTicket = null, filesystemRevision = 0;
   let clipboardQueue = Promise.resolve();
   const clipboardIdentity = value => /^[a-z]:\//i.test(value) ? value.toLowerCase() : value;
@@ -215,24 +252,27 @@ function activate(context) {
     let target;
     try {
       target = await zipEditor.open(reference, { onPassword: askZipPassword });
-      if (panel !== currentPanel) { await zipEditor.close(target); return; }
-      if (associated && !(await openAssociatedFile(target)).editor) return;
+      if (panel !== currentPanel) { await zipEditor.close(target); return { ok: false, cancelled: true }; }
+      if (associated && !(await openAssociatedFile(target)).editor) return { ok: true };
       const document = await vscode.workspace.openTextDocument(vscode.Uri.file(target));
       await vscode.window.showTextDocument(document, { viewColumn: vscode.ViewColumn.One, preview: false });
-    } catch (error) { if (target) await zipEditor.close(target); if (error.name !== 'AbortError') vscode.window.showErrorMessage(t(error.message)); }
+      return { ok: true };
+    } catch (error) { if (target) await zipEditor.close(target); if (error.name !== 'AbortError') vscode.window.showErrorMessage(t(error.message)); return { ok: false, cancelled: error.name === 'AbortError', error: t(error.message) }; }
   }
   function loadView(view) {
-    const directories = [...new Set((view?.panes || []).flatMap(pane => pane.tabs || []).filter(target => typeof target === 'string' && provider.canNavigate(target)))];
-    const resultDirectories = (view?.panes || []).flatMap(p => (p.tabStates || []).flatMap(tab => tab.searchResult?.paths || [])).filter(target => typeof target === 'string' && provider.contains(target)).map(target => path.dirname(target).replaceAll('\\', '/'));
+    const directories = existingDirectories([...new Set((view?.panes || []).flatMap(pane => pane.tabs || []).filter(target => typeof target === 'string' && provider.canNavigate(target)))]);
+    const resultDirectories = (view?.panes || []).flatMap(p => (p.tabStates || []).flatMap(tab => tab.searchResult?.paths || [])).filter(target => typeof target === 'string' && provider.contains(target)).map(target => normalizePath(path.dirname(target)));
     directories.push(...resultDirectories.filter(target => !directories.includes(target) && fs.existsSync(target)));
     return provider.load({ directories });
   }
   function retainView(fresh, view) {
     if (!fresh || !view?.realFilesystem) return fresh;
     fresh.panes = view.panes.map((p, index) => {
+      const activePath = p.tabs[p.tab];
       const pane = { ...p, tabs: p.tabs.filter(target => Object.hasOwn(fresh.folders, target)) };
       if (!pane.tabs.length) return fresh.panes[index];
-      pane.tab = Math.min(pane.tab, pane.tabs.length - 1);
+      const retainedIndex = pane.tabs.indexOf(activePath);
+      pane.tab = retainedIndex >= 0 ? retainedIndex : Math.min(pane.tab, pane.tabs.length - 1);
       if (pane.tabStates) pane.tabStates = pane.tabStates.filter(tab => pane.tabs.includes(tab.path));
       return pane;
     });
@@ -270,6 +310,7 @@ function activate(context) {
     let restoredDisposed = false;
     const restoringSubscription = restoredPanel?.onDidDispose(() => { restoredDisposed = true; });
     try {
+    await initialShortcutsReady;
     try {
       await filesystemQueue;
       const fresh = await loadView(savedState);
@@ -301,15 +342,20 @@ function activate(context) {
     panel.onDidDispose(() => lockInspector.dispose());
     context.subscriptions.push(shellMenu);
     let shellMenuBusy = false;
-    let auxiliaryMoveCompleted = false, auxiliaryReady = false, auxiliaryCheckSent = false, auxiliaryCompactApplied = false;
-    const auxiliaryCheckId = crypto.randomUUID();
+    let auxiliaryMoveCompleted = Boolean(restoredPanel), auxiliaryReady = false, auxiliaryCheckSent = false, auxiliaryCompactApplied = false;
+    let auxiliaryCheckId = crypto.randomUUID();
+    const hasSingleEditor = () => {
+      if (messagePanel.viewColumn === undefined) return false;
+      const group = vscode.window.tabGroups.all.find(group => group.viewColumn === messagePanel.viewColumn);
+      return group?.tabs.length === 1;
+    };
     const requestAuxiliaryReady = () => {
-      if (!auxiliaryMoveCompleted || !panelReady || auxiliaryCheckSent || panel !== messagePanel) return;
+      if (!auxiliaryMoveCompleted || !panelReady || auxiliaryCheckSent || panel !== messagePanel || !hasSingleEditor()) return;
       auxiliaryCheckSent = true;
       messagePanel.webview.postMessage({ type: 'auxiliary-compact-check', requestId: auxiliaryCheckId });
     };
     const applyCompactWhenReady = () => {
-      if (!auxiliaryMoveCompleted || !panelReady || !auxiliaryReady || auxiliaryCompactApplied || panel !== messagePanel) return;
+      if (!auxiliaryMoveCompleted || !panelReady || !auxiliaryReady || auxiliaryCompactApplied || panel !== messagePanel || !hasSingleEditor()) return;
       auxiliaryCompactApplied = true;
       Promise.resolve(vscode.commands.executeCommand('workbench.action.enableCompactAuxiliaryWindow')).catch(() => {});
     };
@@ -323,21 +369,37 @@ function activate(context) {
       status.tooltip = t('Bitfroest.fs ein-/ausblenden (Strg+Alt+Umschalt+F12)');
       panel.webview.html = template
         .replace('<!--POLICY-->', `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${panel.webview.cspSource} 'nonce-${nonce}'; script-src 'nonce-${nonce}'; img-src ${panel.webview.cspSource} data:; font-src ${panel.webview.cspSource};"><style nonce="${nonce}">${icons.css(panel.webview)}</style>`)
-        .replace('<body>', `<body data-favorite-settings="${encodeURIComponent(JSON.stringify(favoriteSettings()))}" data-startup-error="${encodeURIComponent(t('Die Dateiverwaltung konnte nicht gestartet werden. Diesen Tab schließen und erneut öffnen.'))}" data-language="${encodeURIComponent(language)}" data-file-settings="${encodeURIComponent(JSON.stringify(fileSettings()))}" data-column-settings="${encodeURIComponent(JSON.stringify(columnSettings()))}" data-icon-theme="${encodeURIComponent(JSON.stringify(icons.associations))}">`)
-        .replace('<body ', `<body data-extension-version="${encodeURIComponent(require('./package.json').version)}" data-initial-state="${JSON.stringify(savedState || null).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;')}" `)
+        .replace('<body>', `<body data-shortcut-settings="${encodeURIComponent(JSON.stringify(shortcutState()))}" data-favorite-settings="${encodeURIComponent(JSON.stringify(favoriteSettings()))}" data-startup-error="${encodeURIComponent(t('Die Dateiverwaltung konnte nicht gestartet werden. Diesen Tab schließen und erneut öffnen.'))}" data-language="${encodeURIComponent(language)}" data-file-settings="${encodeURIComponent(JSON.stringify(fileSettings()))}" data-column-settings="${encodeURIComponent(JSON.stringify(columnSettings()))}" data-icon-theme="${encodeURIComponent(JSON.stringify(icons.associations))}">`)
+        .replace('<body ', `<body data-platform="${process.platform}" data-extension-version="${encodeURIComponent(require('./package.json').version)}" data-initial-state="${JSON.stringify(savedState || null).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;')}" `)
         .replace(/href="([a-z0-9-]+\.css)"/g, (_, name) => `href="${resource(name)}"`)
         .replace('Loading file manager…', () => t('Dateiverwaltung wird geladen…'))
         .replace(/src="([a-z0-9-]+\.js)"/g, (_, name) => `nonce="${nonce}" src="${resource(name)}"`);
     };
     renderHtml();
     panel.onDidDispose(() => { shellMenu.dispose(); for (const job of transferJobs.values()) job.controller.abort(); panel = undefined; setReady(false); vscode.commands.executeCommand('setContext', 'bitfroest.textInput', false); vscode.commands.executeCommand('setContext', 'bitfroest.listFocus', false); vscode.commands.executeCommand('setContext', 'bitfroest.conflictDialog', false); vscode.commands.executeCommand('setContext', 'bitfroest.transferNameInput', false); vscode.commands.executeCommand('setContext', 'bitfroest.fileDialog', false); vscode.commands.executeCommand('setContext', 'bitfroest.inlineRenameInput', false); updateStatus(); }, null, context.subscriptions);
-    panel.onDidChangeViewState(() => { updateStatus(); if (panel === messagePanel && messagePanel.visible) publishGit().catch(() => {}); }, null, context.subscriptions);
+    panel.onDidChangeViewState(() => { updateStatus(); updateAuxiliaryTabs(); if (panel === messagePanel && messagePanel.visible) publishGit().catch(() => {}); }, null, context.subscriptions);
     updateStatus();
     const messagePanel = panel;
+    let singleEditor = hasSingleEditor();
+    const updateAuxiliaryTabs = () => {
+      if (panel !== messagePanel) return;
+      const next = hasSingleEditor();
+      if (next === singleEditor) return;
+      singleEditor = next;
+      auxiliaryCheckId = crypto.randomUUID();
+      auxiliaryReady = false; auxiliaryCheckSent = false; auxiliaryCompactApplied = false;
+      requestAuxiliaryReady();
+    };
+    const auxiliaryTabSubscriptions = [
+      vscode.window.tabGroups.onDidChangeTabs(updateAuxiliaryTabs),
+      vscode.window.tabGroups.onDidChangeTabGroups(updateAuxiliaryTabs)
+    ];
+    context.subscriptions.push(...auxiliaryTabSubscriptions);
+    messagePanel.onDidDispose(() => auxiliaryTabSubscriptions.forEach(subscription => subscription.dispose()));
     let gitQuery, gitDisposed = false, gitUpdating = false, gitDirty = false;
     const gitSettings = () => {
       const settings = vscode.workspace.getConfiguration('bitfroest');
-      return Object.fromEntries(Object.entries({ enabled: true, showClean: true, showUntracked: true, showIgnored: false, recursive: true, untrackedAsModified: false, allowNetwork: false, includePaths: [], excludePaths: [] }).map(([key, fallback]) => [key, settings.get(`gitStatus.${key}`, fallback) ?? fallback]));
+      return Object.fromEntries(Object.entries({ enabled: true, showClean: true, showUntracked: true, showIgnored: true, recursive: true, untrackedAsModified: false, allowNetwork: false, includePaths: [], excludePaths: [] }).map(([key, fallback]) => [key, settings.get(`gitStatus.${key}`, fallback) ?? fallback]));
     };
     const validGitPath = directory => typeof directory === 'string' && directory.length <= 4096 && !directory.includes('\0') && !directory.includes('!') && !directory.startsWith('zip:') && provider.contains(directory) && Object.hasOwn(filesystemState?.folders || {}, directory) && !filesystemState.unloadedFolders?.includes(directory);
     const gitService = createGitStatusProvider({ onChange: () => { if (messagePanel.visible) publishGit().catch(() => {}); } });
@@ -345,13 +407,17 @@ function activate(context) {
     messagePanel.onDidDispose(closeGit); context.subscriptions.push({ dispose: closeGit });
     async function publishGit() {
       if (gitDisposed || !gitQuery) return;
-      if (gitUpdating) { gitDirty = true; return; }
-      gitUpdating = true;
+      if (gitUpdating === gitQuery) { gitDirty = true; return; }
+      gitUpdating = gitQuery;
       const query = gitQuery, settings = gitSettings();
       try {
         const allowed = query.directories.filter(directory => validGitPath(directory) && allowedGitPath(directory, settings) && (settings.allowNetwork || !/^(?:\\\\|\/\/)/.test(directory)));
         let directories = {};
-        if (settings.enabled && allowed.length) directories = await gitService.inspect(allowed, settings);
+        if (settings.enabled && allowed.length) directories = await gitService.inspect(allowed, settings, updates => {
+          if (gitDisposed || panel !== messagePanel || gitQuery !== query || filesystemState?.snapshotId !== query.snapshotId) return;
+          const filtered = Object.fromEntries(Object.entries(updates).filter(([directory]) => allowed.includes(directory)).map(([directory, info]) => [directory, { ...info, statuses: Object.fromEntries(Object.entries(info.statuses || {}).filter(([, status]) => (settings.showClean || status !== 'clean') && (settings.showUntracked || status !== 'untracked'))) }]));
+          messagePanel.webview.postMessage({ type: 'git-status-result', requestId: query.requestId, snapshotId: query.snapshotId, partial: true, directories: filtered }).then(undefined, () => {});
+        });
         else gitService.suspend?.();
         for (const info of Object.values(directories)) if (info.statuses) {
           info.statuses = Object.fromEntries(Object.entries(info.statuses).filter(([, status]) => (settings.showClean || status !== 'clean') && (settings.showUntracked || status !== 'untracked')));
@@ -360,8 +426,10 @@ function activate(context) {
       } catch (error) {
         if (!gitDisposed && panel === messagePanel && gitQuery === query && filesystemState?.snapshotId === query.snapshotId) await messagePanel.webview.postMessage({ type: 'git-status-result', requestId: query.requestId, snapshotId: query.snapshotId, directories: Object.fromEntries(query.directories.map(directory => [directory, { ok: false, error: error.message, statuses: {} }])) });
       } finally {
-        gitUpdating = false;
-        if (gitDirty) { gitDirty = false; publishGit().catch(() => {}); }
+        if (gitUpdating === query) {
+          gitUpdating = false;
+          if (gitDirty) { gitDirty = false; publishGit().catch(() => {}); }
+        }
       }
     }
     messagePanel.onDidDispose(() => provider.clear());
@@ -384,7 +452,7 @@ function activate(context) {
       searchTemp ||= fs.promises.mkdtemp(path.join(os.tmpdir(), 'bitfroest-search-'));
       const directory = await searchTemp;
       if (row.revision && row.archiveEntry) {
-        const target = path.join(directory, crypto.randomUUID() + path.extname(row.name)).replaceAll('\\', '/'), output = await fs.promises.open(target, 'wx', 0o600);
+        const target = normalizePath(path.join(directory, crypto.randomUUID() + path.extname(row.name))), output = await fs.promises.open(target, 'wx', 0o600);
         try {
           for await (const chunk of provider.readArchiveEntry(row, { onPassword: async ({ name, attempt, signal }) => {
             if (searchDisposed || generation !== searchGeneration) throw new DOMException('Archivansicht wurde geschlossen.', 'AbortError');
@@ -401,7 +469,7 @@ function activate(context) {
       for await (const entry of archiveEntries(row.archive)) {
         if ((entry.archiveEntry || entry.entry) !== (row.archiveEntry || row.entry)) continue;
         if (row.revision && row.revision !== entry.revision) throw new Error('Das ZIP-Archiv wurde geändert.');
-        const target = path.join(directory, crypto.randomUUID() + path.extname(row.name)).replaceAll('\\', '/');
+        const target = normalizePath(path.join(directory, crypto.randomUUID() + path.extname(row.name)));
         const output = await fs.promises.open(target, 'wx');
         try { try { for await (const chunk of entry.chunks()) { if (searchDisposed || generation !== searchGeneration) throw new Error('Die Dateisuche ist geschlossen.'); await output.writeFile(chunk); } } finally { await output.close(); } }
         catch (error) { await fs.promises.rm(target, { force: true }); throw error; }
@@ -424,8 +492,20 @@ function activate(context) {
     const closeListers = () => { listerDisposed = true; listerVersions[0]++; listerVersions[1]++; for (const job of listerJobs.values()) job.abort(); listerJobs.clear(); listerSides.clear(); return lister.dispose().catch(() => {}); };
     context.subscriptions.push({ dispose: closeListers });
     messagePanel.onDidDispose(closeListers);
+    const selectionIO = createSelectionIO(vscode, t, () => panel === messagePanel && !listerDisposed, resolveUncPaths);
+    const replyUiAction = (message, result) => {
+      if (panel === messagePanel && !listerDisposed && typeof message.requestId === 'string' && /^ui-action-\d{1,15}$/.test(message.requestId)) return messagePanel.webview.postMessage({ type: 'ui-action-result', requestId: message.requestId, ...result });
+    };
     panel.webview.onDidReceiveMessage(async message => {
       if (panel !== messagePanel) return;
+      if (message?.type === 'selection-io') {
+        if (typeof message.requestId !== 'string' || !/^selection-\d{1,15}$/.test(message.requestId)) return;
+        let result;
+        try { result = await selectionIO(message.action, message.text, message.pathRanges); }
+        catch (error) { result = { ok: false, error: t(error.message) }; }
+        if (panel === messagePanel && !listerDisposed) await messagePanel.webview.postMessage({ type: 'selection-io-result', requestId: message.requestId, ...result });
+        return;
+      }
       if (message?.type === 'app-startup-error') { panelFailed = true; setReady(false); return; }
       if (message?.type === 'app-ready') {
         if (!panelFailed) {
@@ -454,12 +534,30 @@ function activate(context) {
           const result = await gitService.branches(message.path);
           if (!gitDisposed && panel === messagePanel && gitQuery === query && filesystemState?.snapshotId === message.snapshotId) {
             if (!result.ok) throw new Error(result.error);
-            vscode.window.showInformationMessage(t('Lokale Branches: {count}. Weitere Branches: {otherCount}.', result));
+            const names = [...new Set([...(result.branch ? [result.branch] : []), ...(result.names || [])])];
+            const items = names.map(label => ({ label, description: t(label === result.branch ? 'Aktueller Branch' : 'Lokaler Branch') }));
+            items.push(...(result.remoteNames || []).map(label => ({ label, description: t('Remote-Branch') })));
+            if (result.detached) items.unshift({ label: `Detached HEAD ${String(result.head || '').slice(0, 8)}`, description: t('Aktueller Stand') });
+            await vscode.window.showQuickPick(items, { title: t('Verfügbare Branches'), placeHolder: t('Branchliste (nur Anzeige)'), matchOnDescription: true });
           }
         } catch (error) { if (!gitDisposed && panel === messagePanel && gitQuery === query && filesystemState?.snapshotId === message.snapshotId) vscode.window.showWarningMessage(t('Git-Status nicht verfügbar: {error}', { error: error.message })); }
         return;
       }
-      if (message?.type === 'show-licenses') { await vscode.commands.executeCommand('bitfroest.licenses'); return; }
+      if (message?.type === 'configure-settings') { configurationEditor.open('settings'); return; }
+      if (message?.type === 'shortcut-execute') {
+        const entry = shortcutCatalog.find(item => item.id === message.id);
+        const resolved = typeof message.key === 'string' && resolveShortcut(shortcutCatalog, shortcutBindings, message.key, shortcutContext, process.platform);
+        if (panel === messagePanel && panelReady && messagePanel.active && entry?.editable && resolved?.entry?.id === entry.id && entry.source !== 'local') await vscode.commands.executeCommand(entry.command, entry.args);
+        return;
+      }
+      if (['open-settings', 'show-licenses'].includes(message?.type)) {
+        try {
+          if (message.type === 'open-settings') await vscode.commands.executeCommand('workbench.action.openSettings', '@ext:bitfroest.bitfroest-fs-prototype');
+          else await licenseInformation.open();
+          await replyUiAction(message, { ok: true });
+        } catch (error) { await replyUiAction(message, { ok: false, error: t(error.message) }); vscode.window.showErrorMessage(t(error.message)); }
+        return;
+      }
       if (message?.type?.startsWith('search-')) {
         const id = message.searchId;
         const reply = data => { if (panel === messagePanel) return messagePanel.webview.postMessage({ ...data, ...(id ? { searchId: id } : {}) }); };
@@ -484,7 +582,7 @@ function activate(context) {
           }
           if (['search-browse', 'search-drives'].includes(message.type)) {
             const chosen = await vscode.window.showOpenDialog({ canSelectFiles: false, canSelectFolders: true, canSelectMany: true, title: t('Suchorte wählen') });
-            await reply({ type: 'search-browsed', dialogId: message.dialogId, paths: chosen?.map(uri => uri.fsPath.replaceAll('\\', '/')) }); return;
+            await reply({ type: 'search-browsed', dialogId: message.dialogId, paths: chosen?.map(uri => normalizePath(uri.fsPath, { platform: process.platform })) }); return;
           }
           if (message.type === 'search-release') { if (Array.isArray(message.ids)) for (const searchId of message.ids) searchService.release(searchId); return; }
           if (typeof id !== 'string' || !/^search-[a-f0-9]{16}-\d{1,15}$/.test(id)) return;
@@ -503,7 +601,7 @@ function activate(context) {
           if (message.type === 'search-cancel') { searchService.cancel(id); return; }
           if (message.type === 'search-skip') {
             if (typeof message.path !== 'string' || !provider.contains(message.path)) return;
-            const target = fs.statSync(message.path).isDirectory() ? message.path : path.dirname(message.path).replaceAll('\\', '/');
+            const target = fs.statSync(message.path).isDirectory() ? message.path : normalizePath(path.dirname(message.path));
             const yes = t('Überspringen');
             if (await vscode.window.showWarningMessage(t('Verzeichnis während der Suche überspringen: {path}', { path: target }), { modal: true }, yes) === yes) searchService.skip(id, target);
             return;
@@ -516,7 +614,7 @@ function activate(context) {
             if (!selected.length || navigate && selected.length !== 1) return;
             const paths = [...new Set(selected.map(row => row.archive || row.fsSource))];
             if (paths.some(target => !provider.contains(target))) throw new Error('Ungültiger Suchergebnispfad.');
-            const directories = [...new Set(paths.map(target => path.dirname(target).replaceAll('\\', '/')))];
+            const directories = [...new Set(paths.map(target => normalizePath(path.dirname(target))))];
             filesystemRequests++;
             filesystemQueue = filesystemQueue.catch(() => {}).then(async () => {
               const before = { ...filesystemState, panes: message.state?.panes || filesystemState.panes, active: message.state?.active === 1 ? 1 : 0 };
@@ -589,7 +687,7 @@ function activate(context) {
               if (/^https?:\/\//i.test(message.href)) { await vscode.env.openExternal(vscode.Uri.parse(message.href)); await reply({ ok: true }); }
               else {
                 if (/^[a-z][a-z0-9+.-]*:/i.test(message.href) || message.href.startsWith('//') || message.href.startsWith('\\\\')) throw new Error('Ungültiger Lister-Pfad.');
-                const target = path.resolve(path.dirname(lister.path(message.id)), decodeURIComponent(message.href)).replace(/\\/g, '/');
+                const target = normalizePath(path.resolve(path.dirname(lister.path(message.id)), decodeURIComponent(message.href)), { platform: process.platform });
                 if (!provider.contains(target)) throw new Error('Ungültiger Lister-Pfad.');
                 const side = [...listerSides].find(([, id]) => id === message.id)?.[0];
                 const version = ++listerVersions[side];
@@ -629,11 +727,9 @@ function activate(context) {
           let target = (await vscode.env.clipboard.readText()).trim();
           if (target.startsWith('"') && target.endsWith('"')) target = target.slice(1, -1);
           if (!target || target.length > 4096 || /[\r\n\0]/.test(target) || !(process.platform === 'win32' ? /^(?:[a-z]:[\\/]|\\\\[^\\/]+[\\/][^\\/]+)/i.test(target) : path.isAbsolute(target))) throw new Error(t('Ungültiger Datei- oder Ordnername.'));
-          target = target.replace(/\\/g, '/').replace(/\/+$/, '');
-          if (/^[a-z]:$/i.test(target)) target += '/';
-          if (!target && process.platform !== 'win32') target = '/';
+          target = normalizePath(target, { platform: process.platform });
           if (!provider.contains(target)) throw new Error(t('Der Pfad liegt außerhalb der erlaubten Root-Verzeichnisse.'));
-          target = path.resolve(target).replace(/\\/g, '/');
+          target = normalizePath(path.resolve(target), { platform: process.platform });
           if (!(await fs.promises.stat(target)).isDirectory()) throw new Error(t('Ungültiger Datei- oder Ordnername.'));
           response = { ok: true, path: target };
         } catch (error) { response = { ok: false, error: renderOperationError(error, t) }; }
@@ -721,16 +817,31 @@ function activate(context) {
         }
         return;
       }
+      if (message?.type === 'open-terminal') {
+        if (!panel?.visible || !panelReady || typeof message.requestId !== 'string' || !/^ui-action-\d{1,15}$/.test(message.requestId)) return;
+        try {
+          const directory = message.path;
+          if (typeof directory !== 'string' || directory.includes('\0') || directory.startsWith('zip:') || !provider.contains(directory) ||
+              !Object.hasOwn(filesystemState?.folders || {}, directory) || filesystemState?.archiveLocations?.[directory] || filesystemState?.unloadedFolders?.includes(directory)) throw new Error('Ungültiger Ordnerpfad.');
+          await openTerminal(directory, { window: vscode.window });
+          await replyUiAction(message, { ok: true });
+        } catch (error) {
+          await replyUiAction(message, { ok: false, unsupported: error.code === 'ENOTSUPPORTED', error: t(error.code === 'NotFound' || error.code === 'ENOENT' ? 'Windows Terminal ist nicht verfügbar.' : error.message) });
+        }
+        return;
+      }
       if (message?.type === 'open-trash') {
         if (panel !== messagePanel || !panel?.visible) return;
         try {
           await openTrash();
-          if (panel === messagePanel) messagePanel.webview.postMessage({ type: 'open-trash-result', ok: true });
+          if (message.requestId) await replyUiAction(message, { ok: true });
+          else if (panel === messagePanel) messagePanel.webview.postMessage({ type: 'open-trash-result', ok: true });
         } catch (error) {
           if (panel !== messagePanel) return;
-          const message = t(error.message);
-          vscode.window.showErrorMessage(message);
-          messagePanel.webview.postMessage({ type: 'open-trash-result', ok: false, error: message });
+          const errorText = t(error.message);
+          if (message.requestId) await replyUiAction(message, { ok: false, error: errorText });
+          else messagePanel.webview.postMessage({ type: 'open-trash-result', ok: false, error: errorText });
+          vscode.window.showErrorMessage(errorText);
         }
         return;
       }
@@ -772,6 +883,13 @@ function activate(context) {
         if (copying && (!operationId || transferJobs.has(operationId))) return;
         const job = copying ? { controller: new AbortController(), panel: current } : null;
         if (job) transferJobs.set(operationId, job);
+        let pendingProgress;
+        const flushProgress = () => {
+          if (!pendingProgress || !job || transferJobs.get(operationId) !== job || panel !== current) return;
+          const progress = pendingProgress; pendingProgress = undefined;
+          job.progressAt = Date.now(); job.progressPhase = progress.phase;
+          current.webview.postMessage({ type: 'filesystem-progress', operationId, progress });
+        };
         filesystemRequests++;
         filesystemQueue = filesystemQueue.then(async () => {
           let ok = true, cancelled = false, error, navigation, archiveCommitted, notice;
@@ -794,7 +912,21 @@ function activate(context) {
                     return await vscode.window.showInputBox({ title: t(attempt ? 'Passwort erneut eingeben' : 'ZIP-Passwort'), prompt: name, password: true, ignoreFocusOut: true }, token?.token);
                   } finally { job.controller.signal.removeEventListener('abort', cancel); token?.dispose(); }
                 },
-                onProgress: progress => { if (panel === current) current.webview.postMessage({ type: 'filesystem-progress', operationId, progress }); },
+                onProgress: progress => {
+                  if (transferJobs.get(operationId) !== job || panel !== current) return;
+                  pendingProgress = progress;
+                  const final = progress.done || progress.totalBytes > 0 && progress.completedBytes === progress.totalBytes;
+                  if (final || job.progressAt === undefined || progress.phase !== job.progressPhase || Date.now() - job.progressAt >= 50) flushProgress();
+                },
+                onArchiveExists: async target => {
+                  const token = vscode.CancellationTokenSource ? new vscode.CancellationTokenSource() : null;
+                  const cancel = () => token?.cancel(); job.controller.signal.addEventListener('abort', cancel, { once: true });
+                  try {
+                    if (job.controller.signal.aborted) return 'cancel';
+                    const choice = await vscode.window.showQuickPick([{ label: t('Vorhandenes Archiv aktualisieren'), value: 'update' }, { label: t('Abbrechen'), value: 'cancel' }], { title: t('Archiv bereits vorhanden'), placeHolder: target, ignoreFocusOut: true }, token?.token);
+                    return choice?.value || 'cancel';
+                  } finally { job.controller.signal.removeEventListener('abort', cancel); token?.dispose(); }
+                },
                 onConflict: async target => {
                   const token = vscode.CancellationTokenSource ? new vscode.CancellationTokenSource() : null;
                   const cancel = () => token?.cancel(); job.controller.signal.addEventListener('abort', cancel, { once: true });
@@ -825,6 +957,7 @@ function activate(context) {
             if (failure.name === 'AbortError') cancelled = true; else { ok = false; error = [notice, renderOperationError(failure, t)].filter(Boolean).join('\n'); }
           }
           finally {
+            flushProgress();
             if (copying && panel === current) { try { filesystemState = retainView(await loadView(view), view); } catch (failure) { ok = false; error ||= renderOperationError(failure, t); } }
             if (job) transferJobs.delete(operationId);
           }
@@ -932,6 +1065,7 @@ function activate(context) {
         return;
       }
       if (message?.type === 'inputFocus') {
+        shortcutContext = { searchFocus: Boolean(message.search), searchResultsFocus: Boolean(message.searchResults && message.search), searchResults: Boolean(message.resultTab), listerFocus: Boolean(message.lister && !message.dialog), textInput: Boolean(message.value), listFocus: Boolean(message.list), conflictDialog: Boolean(message.conflict), transferNameInput: Boolean(message.transferName && message.value), fileDialog: Boolean(message.dialog), inlineRenameInput: Boolean(message.inlineRename && message.value) };
         await vscode.commands.executeCommand('setContext', 'bitfroest.searchFocus', Boolean(message.search));
         await vscode.commands.executeCommand('setContext', 'bitfroest.searchResultsFocus', Boolean(message.searchResults && message.search));
         await vscode.commands.executeCommand('setContext', 'bitfroest.searchResults', Boolean(message.resultTab));
@@ -958,7 +1092,6 @@ function activate(context) {
         try {
           const target = await readonlyResources.createUri(message.targetPath, fileSnapshot(message.targetPath)), source = await readonlyResources.createUri(message.sourcePath, fileSnapshot(message.sourcePath));
           await vscode.commands.executeCommand('vscode.diff', target, source, `${path.basename(message.targetPath)} (${t('Ziel')}) ↔ ${path.basename(message.sourcePath)} (${t('Quelle')})`, { viewColumn: panel?.viewColumn || vscode.ViewColumn.Active, preview: false });
-          await vscode.commands.executeCommand('workbench.action.enableCompactAuxiliaryWindow');
         } catch (error) { await vscode.window.showErrorMessage(t('Dateivergleich fehlgeschlagen: {error}', { error: error.message })); }
         return;
       }
@@ -970,32 +1103,32 @@ function activate(context) {
           if (message.plain) await vscode.commands.executeCommand('vscode.openWith', resource, 'default', options);
           else await vscode.commands.executeCommand('vscode.open', resource, options);
           if (!message.plain && message.language === 'markdown') await vscode.commands.executeCommand('markdown.showPreview', resource);
-          await vscode.commands.executeCommand('workbench.action.enableCompactAuxiliaryWindow');
         } catch (error) { await vscode.window.showErrorMessage(t('Dateivergleich fehlgeschlagen: {error}', { error: error.message })); }
         return;
       }
       if (message?.type === 'open') {
-        if (!knownFilePath(message.path)) return;
+        if (!knownFilePath(message.path)) { await replyUiAction(message, { ok: false, error: t('Ungültiger Dateipfad.') }); return; }
         try {
           const result = await openAssociatedFile(message.path);
-          if (!result.editor) return;
-          message = { type: 'edit', path: message.path };
+          if (!result.editor) { await replyUiAction(message, { ok: true }); return; }
+          message = { ...message, type: 'edit' };
         } catch (error) {
-          vscode.window.showErrorMessage(t('Datei konnte nicht geöffnet werden: {error}', { error: error.message }));
+          await replyUiAction(message, { ok: false, error: t(error.message) }); vscode.window.showErrorMessage(t('Datei konnte nicht geöffnet werden: {error}', { error: error.message }));
           return;
         }
       }
       if (!message || !['edit', 'preview'].includes(message.type)) return;
       const archiveReference = fileSnapshot(message.path);
       if (archiveReference?.archive && archiveReference.archiveEntry && archiveReference.revision && archiveReference.encryption && provider.contains(archiveReference.archive)) {
-        await openArchiveDocument(archiveReference, messagePanel);
+        await replyUiAction(message, await openArchiveDocument(archiveReference, messagePanel));
         return;
       }
-      if (searchCatalog.get(message.path)?.archive || filesystemState?.panes.some(p => (p.tabStates || []).some(tab => tab.searchResult?.archiveRows?.some(row => row.fsSource === message.path)))) { vscode.window.showErrorMessage(t('Bearbeiten von Archivtreffern ist nicht verfügbar. F3 zeigt den Inhalt schreibgeschützt an.')); return; }
+      if (searchCatalog.get(message.path)?.archive || filesystemState?.panes.some(p => (p.tabStates || []).some(tab => tab.searchResult?.archiveRows?.some(row => row.fsSource === message.path)))) { const error = t('Bearbeiten von Archivtreffern ist nicht verfügbar. F3 zeigt den Inhalt schreibgeschützt an.'); await replyUiAction(message, { ok: false, error }); vscode.window.showErrorMessage(error); return; }
       const column = message.type === 'edit' ? vscode.ViewColumn.One : panel?.viewColumn || vscode.ViewColumn.Active;
       const localPath = knownFilePath(message.path) ? message.path : null;
-      if (filesystemState && !localPath) return;
-      if (!localPath && (typeof message.content !== 'string' || message.content.length > 100000)) return;
+      if (filesystemState && !localPath) { await replyUiAction(message, { ok: false, error: t('Ungültiger Dateipfad.') }); return; }
+      if (!localPath && (typeof message.content !== 'string' || message.content.length > 100000)) { await replyUiAction(message, { ok: false, error: t('Ungültiger Dateipfad.') }); return; }
+      try {
       const document = await vscode.workspace.openTextDocument(localPath ? vscode.Uri.file(localPath) : {
         content: message.content,
         language: message.language === 'markdown' ? 'markdown' : 'plaintext'
@@ -1006,7 +1139,8 @@ function activate(context) {
       } else {
         await vscode.window.showTextDocument(document, { viewColumn: column, preview: false });
       }
-      if (message.type === 'preview') await vscode.commands.executeCommand('workbench.action.enableCompactAuxiliaryWindow');
+      await replyUiAction(message, { ok: true });
+      } catch (error) { await replyUiAction(message, { ok: false, error: t(error.message) }); vscode.window.showErrorMessage(t(error.message)); }
     }, null, context.subscriptions);
     if (restoredPanel) return;
     const current = panel;
@@ -1017,9 +1151,7 @@ function activate(context) {
       auxiliaryMoveCompleted = true;
       requestAuxiliaryReady();
       if (process.platform === 'win32') {
-        await executeFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-File', path.join(context.extensionPath, 'native', 'maximize-window.ps1'), '-TitleToken', token, '-ExecutablePath', process.execPath], { windowsHide: true, timeout: 12000 });
-      } else {
-        vscode.window.showInformationMessage(t('Das Commander-Fenster ist im Compact Mode geöffnet. Automatisches Maximieren ist derzeit unter Windows implementiert.'));
+        await maximizeWindow(token);
       }
     } catch (error) {
       vscode.window.showErrorMessage(t('Das Commander-Fenster konnte nicht vollständig eingerichtet werden: {error}', { error: t(error.message) }));
@@ -1032,23 +1164,29 @@ function activate(context) {
     } finally { restoringSubscription?.dispose(); opening = false; }
   }
   context.subscriptions.push(vscode.commands.registerCommand('bitfroest.openPrototype', () => open()));
-  context.subscriptions.push(vscode.commands.registerCommand('bitfroest.inspect-folder-locks', () => { if (panel && panelReady) panel.webview.postMessage({ type: 'action', action: 'inspect-folder-locks' }); }));
+  context.subscriptions.push(vscode.commands.registerCommand('bitfroest.inspect-folder-locks', selection => { if (panel && panelReady) panel.webview.postMessage({ type: 'action', action: 'inspect-folder-locks', ...(selection?.webviewSection === 'folder' ? { contextSelection: { directory: selection.directory, ids: selection.ids, snapshotId: selection.snapshotId } } : {}) }); }));
   context.subscriptions.push(vscode.window.registerWebviewPanelSerializer('bitfroestPrototype', {
     deserializeWebviewPanel: restoredPanel => open(restoredPanel)
   }));
   for (const action of ['search', 'search-separate', 'search-normal', 'search-duplicates']) context.subscriptions.push(vscode.commands.registerCommand(`bitfroest.${action}`, () => { if (panel && panelReady) panel.webview.postMessage({ type: 'action', action }); }));
   context.subscriptions.push(vscode.commands.registerCommand('bitfroest.search-key', key => { if (panel && panelReady && typeof key === 'string') panel.webview.postMessage({ type: 'action', action: `search-key:${key}` }); }));
+  context.subscriptions.push(vscode.commands.registerCommand('bitfroest.select-all-text', () => vscode.commands.executeCommand('editor.action.selectAll')));
   context.subscriptions.push(vscode.commands.registerCommand('bitfroest.configureColumns', () => configurationEditor.open('columns')));
+  context.subscriptions.push(vscode.commands.registerCommand('bitfroest.configureSettings', () => configurationEditor.open('settings')));
+  context.subscriptions.push(vscode.commands.registerCommand('bitfroest.configureShortcuts', () => configurationEditor.open('shortcuts')));
   context.subscriptions.push(vscode.commands.registerCommand('bitfroest.showLocalBranches', () => { if (panel && panelReady) panel.webview.postMessage({ type: 'action', action: 'git-branches' }); }));
   context.subscriptions.push(vscode.commands.registerCommand('bitfroest.configureFavorites', () => configurationEditor.open('favorites')));
   for (const action of ['conflict-target', 'conflict-source', 'conflict-target-plain', 'conflict-source-plain', 'conflict-compare', 'conflict-compare-internal']) context.subscriptions.push(vscode.commands.registerCommand(`bitfroest.${action}`, () => { if (panel && panelReady) panel.webview.postMessage({ type: 'action', action }); }));
   context.subscriptions.push(vscode.commands.registerCommand('bitfroest.transfer-name-parts', key => { if (panel && panelReady) panel.webview.postMessage({ type: 'action', action: 'transfer-name-parts', key }); }));
   context.subscriptions.push(vscode.commands.registerCommand('bitfroest.transfer-name-start', () => { if (panel && panelReady) panel.webview.postMessage({ type: 'action', action: 'transfer-name-start' }); }));
   context.subscriptions.push(vscode.commands.registerCommand('bitfroest.ignore-dialog-function-key', () => undefined));
+  for (const action of ['select-group', 'unselect-group', 'select-extension', 'unselect-extension', 'save-selection', 'restore-selection', 'save-selection-file', 'load-selection-file', 'copy-names', 'copy-full-names', 'copy-details', 'copy-full-details']) {
+    context.subscriptions.push(vscode.commands.registerCommand(`bitfroest.${action}`, options => { if (panel && panelReady) panel.webview.postMessage({ type: 'action', action, reverseDirectories: options?.reverseDirectories === true }); }));
+  }
   context.subscriptions.push(vscode.commands.registerCommand('bitfroest.lister-action', action => { if (panel && panelReady && typeof action === 'string') panel.webview.postMessage({ type: 'action', action: `lister:${action}` }); }));
-  for (const action of ['shell-context-menu', 'view', 'edit', 'clipboard-copy', 'clipboard-cut', 'clipboard-paste', 'copy', 'copy-same', 'move', 'mkdir', 'mkdir-other', 'new-file', 'delete', 'delete-alternate', 'delete-permanently', 'pack', 'pack-move', 'test-archives', 'unpack', 'rename', 'select-all', 'invert', 'clear', 'toggle-selection-next', 'open-trash', 'swap', 'reset', 'help', 'new-tab', 'close-tab', 'next-tab', 'previous-tab', 'refresh', 'filter', 'path', 'path-clipboard', 'background-tab', 'open-dir-tab', 'open-dir-other-tab', 'rename-one', 'back', 'forward', 'swap-paths']) {
-    context.subscriptions.push(vscode.commands.registerCommand(`bitfroest.${action}`, () => {
-      if (panel && panelReady) panel.webview.postMessage({ type: 'action', action });
+  for (const action of ['open-terminal', 'shell-context-menu', 'view', 'edit', 'clipboard-copy', 'clipboard-cut', 'clipboard-paste', 'copy', 'copy-same', 'move', 'mkdir', 'mkdir-other', 'new-file', 'delete', 'delete-alternate', 'delete-permanently', 'pack', 'pack-move', 'test-archives', 'unpack', 'rename', 'select-all', 'invert', 'clear', 'toggle-selection-next', 'open-trash', 'swap', 'reset', 'help', 'new-tab', 'close-tab', 'next-tab', 'previous-tab', 'refresh', 'filter', 'path', 'path-clipboard', 'background-tab', 'open-dir-tab', 'open-dir-other-tab', 'rename-one', 'back', 'forward', 'swap-paths']) {
+    context.subscriptions.push(vscode.commands.registerCommand(`bitfroest.${action}`, options => {
+      if (panel && panelReady) panel.webview.postMessage({ type: 'action', action, ...(options?.reverseDirectories === true ? { reverseDirectories: true } : {}) });
     }));
   }
   context.subscriptions.push(vscode.commands.registerCommand('bitfroest.chooseTabMode', async () => {
@@ -1095,11 +1233,13 @@ function activate(context) {
   }
   context.subscriptions.push(vscode.commands.registerCommand('bitfroest.chooseLanguage', chooseLanguage));
   context.subscriptions.push(vscode.workspace.onDidChangeConfiguration(async event => {
-    if (event.affectsConfiguration('bitfroest.gitStatus') && panel) await panel.webview.postMessage({ type: 'git-settings-changed' });
+    const gitBehaviorChanged = ['enabled', 'showClean', 'showUntracked', 'showIgnored', 'recursive', 'untrackedAsModified', 'allowNetwork', 'includePaths', 'excludePaths'].some(key => event.affectsConfiguration(`bitfroest.gitStatus.${key}`));
+    if (event.affectsConfiguration('bitfroest.gitStatus') && (!event.affectsConfiguration('bitfroest.gitStatus.iconSizePercent') || gitBehaviorChanged) && panel) await panel.webview.postMessage({ type: 'git-settings-changed' });
     if (configurationData.saving && (event.affectsConfiguration('bitfroest.columns') || event.affectsConfiguration('bitfroest.favorites'))) return;
-    if (event.affectsConfiguration('bitfroest.columns') || event.affectsConfiguration('bitfroest.favorites')) configurationEditor.changed();
+    if (event.affectsConfiguration('bitfroest.columns') || event.affectsConfiguration('bitfroest.favorites') || event.affectsConfiguration('bitfroest.shortcuts')) { configurationEditor.changed(); }
+    if (event.affectsConfiguration('bitfroest.shortcuts')) await syncShortcuts();
     if (event.affectsConfiguration('bitfroest.language')) notifyLanguageChange();
-    if ((event.affectsConfiguration('bitfroest.files') || event.affectsConfiguration('bitfroest.zip')) && panel) await panel.webview.postMessage({ type: 'file-settings', settings: fileSettings() });
+    if ((event.affectsConfiguration('bitfroest.files') || event.affectsConfiguration('bitfroest.zip') || event.affectsConfiguration('bitfroest.colors') || event.affectsConfiguration('bitfroest.gitStatus.iconSizePercent')) && panel) await panel.webview.postMessage({ type: 'file-settings', settings: fileSettings() });
     if (event.affectsConfiguration('bitfroest.columns') && panel) await panel.webview.postMessage({ type: 'column-settings', settings: columnSettings() });
     if (event.affectsConfiguration('bitfroest.favorites') && panel) await panel.webview.postMessage({ type: 'favorite-settings', settings: favoriteSettings() });
     if (!event.affectsConfiguration('workbench.iconTheme') || !panel) return;

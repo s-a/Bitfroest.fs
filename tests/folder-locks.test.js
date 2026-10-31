@@ -45,9 +45,22 @@ test('external paths, links and non-directories never reach native inspection', 
 
 test('unsupported platforms and disposed sessions cannot launch helpers', async () => {
   let calls = 0;
-  const provider = createFolderLocks({ platform: 'linux', roots: ['/tmp'], run: async () => calls++ });
-  await assert.rejects(provider.scan('/tmp'), /Windows/); assert.equal(calls, 0);
+  const provider = createFolderLocks({ platform: 'freebsd', roots: ['/tmp'], run: async () => calls++ });
+  await assert.rejects(provider.scan('/tmp'), /Betriebssystem/); assert.equal(calls, 0);
   provider.dispose(); await assert.rejects(provider.scan('/tmp'));
+});
+
+test('Unix ordinary copy never claims to unlock and unsupported mutations are blocked before dispatch', async t => {
+  const requests = [], enabled = { available: true }, disabled = { available: false, reason: 'foreign-handles' };
+  const actions = { scan: enabled, copy: enabled, rename: enabled, delete: enabled, terminate: enabled, unlock: disabled, schedule: disabled, 'delete-processes': enabled };
+  const { provider, folder, root } = await fixture(t, { platform: 'linux', posixAdapter: { capabilities: async () => ({ platform: 'linux', referencesOnly: true, actions }), request: async input => { requests.push(input); return { rows: [], inaccessible: 0, referencesOnly: true }; }, dispose() {} }, run: undefined });
+  await fs.writeFile(path.join(folder, 'data'), 'content');
+  const state = await provider.scan(folder); assert.equal(state.referencesOnly, true); assert.equal(state.capabilities.actions.unlock.available, false);
+  await assert.rejects(provider.act('unlock', ['invented']), /nicht verfügbar/);
+  await assert.rejects(provider.schedule(path.join(root, 'backup.reg')), /nicht verfügbar/);
+  await provider.fileAction('copy', [], path.join(root, 'copy'));
+  assert.equal(await fs.readFile(path.join(root, 'copy', 'data'), 'utf8'), 'content');
+  assert.deepEqual(requests.map(request => request.action), ['scan']);
 });
 
 test('busy and disposed inspections cannot publish late results or overlap', async t => {
@@ -95,4 +108,21 @@ test('closing during unlock prevents later file mutations', async t => {
   while (!finish) await new Promise(resolve => setImmediate(resolve));
   provider.dispose(); finish({ changed: 1 });
   await assert.rejects(pending, /geschlossen/); assert.equal(trashed, 0);
+});
+
+test('a replaced executable cannot be trashed after waiting for process termination', async t => {
+  let trashed = 0, executable;
+  const { provider, folder } = await fixture(t, { trash: async () => trashed++, run: async input => {
+    if (input.action === 'scan') return { rows: [{ pid: 8123, started: '1', file: path.join(input.path, 'held'), executable, kind: 'handle', handle: '2' }], inaccessible: 0 };
+    await fs.rename(executable, executable + '-original'); await fs.writeFile(executable, 'replacement'); return { changed: 1 };
+  } });
+  executable = path.join(folder, 'owned.exe'); await fs.writeFile(executable, 'original');
+  const state = await provider.scan(folder);
+  await assert.rejects(provider.fileAction('delete-processes', state.rows.map(row => row.id)), /geändert/);
+  assert.equal(trashed, 0); assert.equal(await fs.readFile(executable, 'utf8'), 'replacement');
+});
+
+test('an explicitly allowed filesystem root permits its real descendant directories', async t => {
+  const { provider, folder } = await fixture(t, { roots: [path.parse(os.tmpdir()).root] });
+  assert.equal((await provider.scan(folder)).rows.length, 1);
 });

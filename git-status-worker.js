@@ -26,8 +26,18 @@ function watch(paths) {
   }
 }
 parentPort.on('message', message => {
+  if (message.type === 'branches') {
+    engine.branches(message.directory).then(result => parentPort.postMessage({ id: message.id, result }), error => parentPort.postMessage({ id: message.id, error: error.message }));
+    return;
+  }
+  const metadata = message.type === 'inspect' ? Promise.all(message.directories.map(async directory => {
+    const info = await engine.describe(directory, message.settings);
+    parentPort.postMessage({ id: message.id, type: 'progress', result: { [directory]: { ...info, loading: info.ok } } });
+  })) : Promise.resolve();
+  metadata.catch(() => {});
   queue = queue.then(async () => {
     try {
+      await metadata;
       let result;
       if (message.type === 'branches') result = await engine.branches(message.directory);
       else {
@@ -44,14 +54,18 @@ parentPort.on('message', message => {
             try {
               const info = await engine.locate(directory);
               paths.push([directory, true], [info.gitdir, true]);
-            } catch { paths.push([directory, false]); }
+            } catch {
+              paths.push([directory, false]);
+              for (const child of await engine.repositories(directory, message.settings)) paths.push([child, true]);
+            }
           }
           watch(paths);
           const started = generation;
           result = Object.create(null);
           for (const directory of message.directories) {
-            result[directory] = await engine.inspect(directory, message.settings);
+            result[directory] = await engine.inspect(directory, message.settings, update => parentPort.postMessage({ id: message.id, type: 'progress', result: { [directory]: update } }));
             result[directory] = { ...result[directory], statuses: Object.fromEntries(Object.entries(result[directory].statuses).filter(([name]) => !name.includes('/'))) };
+            parentPort.postMessage({ id: message.id, type: 'progress', result: { [directory]: result[directory] } });
           }
           if (generation === started) { lastKey = key; lastResult = result; lastTime = Date.now(); }
           else { engine.invalidate(); parentPort.postMessage({ type: 'changed' }); }

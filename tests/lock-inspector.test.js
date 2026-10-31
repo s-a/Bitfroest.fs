@@ -8,13 +8,13 @@ const { createLockInspector } = require('../lock-inspector');
 
 function fixture(t, overrides = {}) {
   const panels = [], calls = [];
-  const context = { extensionUri: { fsPath: path.resolve(__dirname, '..') }, globalStorageUri: { fsPath: path.join(require('node:os').tmpdir(), 'lock-inspector-backups') }, subscriptions: [] };
+  const context = { extensionUri: { fsPath: overrides.extensionPath || path.resolve(__dirname, '..') }, globalStorageUri: { fsPath: path.join(require('node:os').tmpdir(), 'lock-inspector-backups') }, subscriptions: [] };
   const rows = [{ id: 'one', pid: 8123, started: '637000000000000000', executable: 'C:\\tmp\\target\\app.exe', name: 'literal <app>', file: 'C:\\tmp\\target\\held.txt', kind: 'handle' }];
   const provider = { scan: async folder => { calls.push(['scan', folder]); return { path: folder, rows, inaccessible: 3 }; }, act: async (...args) => calls.push(args), fileAction: async (...args) => calls.push(args), dispose: () => calls.push(['dispose']), ...overrides.provider };
   const vscode = {
     Uri: { joinPath: (base, ...parts) => ({ fsPath: path.join(base.fsPath, ...parts), toString() { return this.fsPath; } }), file: fsPath => ({ fsPath }) },
     ViewColumn: { Active: -1 }, env: { clipboard: { writeText: async value => calls.push(['clipboard', value]) } },
-    window: { showWarningMessage: async (...args) => { calls.push(['confirm', ...args]); return overrides.confirm; }, showQuickPick: async () => undefined,
+    window: { showInputBox: async settings => { calls.push(['input', settings]); return overrides.input; }, showWarningMessage: async (...args) => { calls.push(['confirm', ...args]); return overrides.confirm; }, showQuickPick: async choices => { calls.push(['choices', choices]); return choices.find(choice => choice.id === overrides.choice); },
       createWebviewPanel: (_type, _title, _column, settings) => {
         const panel = { messages: [], settings, visible: true, reveal() {}, webview: { cspSource: 'test-resource:', asWebviewUri: uri => uri, postMessage: async value => panel.messages.push(value), onDidReceiveMessage: callback => { panel.receive = callback; } }, onDidDispose: callback => { panel.disposed = callback; }, dispose() { panel.disposed(); } };
         panels.push(panel); return panel;
@@ -31,6 +31,56 @@ test('generated inspector HTML has restrictive CSP and readiness starts a single
   assert.equal(calls.length, 0); await panel.receive({ type: 'locks-ready' });
   assert.deepEqual(calls[0], ['scan', 'C:\\tmp\\target']);
   assert.equal(panel.messages.find(message => message.type === 'locks-state').inaccessible, 3);
+});
+
+test('Unix capabilities are visible, unsupported actions cannot be confirmed and ordinary copy is named accurately', async t => {
+  const enabled = { available: true }, disabled = { available: false, reason: 'foreign-handles' };
+  const capabilities = { platform: 'darwin', referencesOnly: true, actions: { scan: enabled, 'copy-info': enabled, unlock: disabled, terminate: enabled, copy: enabled, rename: enabled, delete: enabled, 'delete-processes': enabled, schedule: { available: false, reason: 'restart-delete' } } };
+  const { inspector, panels, calls } = fixture(t, { choice: 'schedule', provider: { capabilities: async () => capabilities } });
+  inspector.open('/safe/target'); const panel = panels[0]; await panel.receive({ type: 'locks-ready' });
+  const initial = panel.messages.find(message => message.type === 'locks-init');
+  assert.equal(initial.capabilities.actions.unlock.available, false);
+  await panel.receive({ type: 'locks-action', action: 'unlock', ids: ['one'] });
+  assert.equal(calls.some(call => call[0] === 'confirm'), false); assert.equal(calls.some(call => call[0] === 'unlock'), false);
+  await panel.receive({ type: 'locks-action', action: 'other', ids: [] });
+  const choices = calls.find(call => call[0] === 'choices')[1];
+  assert.equal(choices.find(choice => choice.id === 'copy').label, 'Kopieren…');
+  assert.match(choices.find(choice => choice.id === 'schedule').label, /Nicht verfügbar/);
+  assert.equal(calls.some(call => call[0] === 'confirm'), false);
+  const dom = new JSDOM(panel.webview.html, { runScripts: 'outside-only' }); t.after(() => dom.window.close());
+  dom.window.acquireVsCodeApi = () => ({ postMessage() {} });
+  if (!dom.window.CommanderPaths) new vm.Script(fs.readFileSync(path.join(__dirname, '..', 'media', 'commander-paths.js'), 'utf8')).runInContext(dom.getInternalVMContext());
+  new vm.Script(fs.readFileSync(path.join(__dirname, '..', 'media', 'lock-inspector.js'), 'utf8')).runInContext(dom.getInternalVMContext());
+  for (const data of panel.messages) dom.window.dispatchEvent(new dom.window.MessageEvent('message', { data }));
+  assert.equal(dom.window.document.querySelector('[data-action="unlock"]').disabled, true);
+  assert.match(dom.window.document.querySelector('#availability').textContent, /Nicht verfügbar/);
+  assert.match(dom.window.document.querySelector('#reference-notice').textContent, /keine.*sperre/i);
+});
+
+test('a read-only process identity cannot reach native termination confirmation', async t => {
+  const actions = Object.fromEntries(['scan', 'copy-info', 'unlock', 'terminate', 'copy', 'rename', 'delete', 'delete-processes', 'schedule'].map(action => [action, { available: true }]));
+  const { inspector, panels, calls, rows } = fixture(t, { choice: 'terminate', provider: { capabilities: async () => ({ platform: 'darwin', referencesOnly: true, actions }) } });
+  rows[0].canTerminate = false;
+  inspector.open('/safe'); const panel = panels[0]; await panel.receive({ type: 'locks-ready' });
+  await panel.receive({ type: 'locks-action', action: 'context', ids: ['one'] });
+  assert.match(calls.find(call => call[0] === 'choices')[1].find(choice => choice.id === 'terminate').label, /Nicht verfügbar/);
+  assert.equal(calls.some(call => call[0] === 'confirm'), false); assert.equal(calls.some(call => call[0] === 'terminate'), false);
+});
+
+test('missing installed view files cannot leave a blank panel and a later complete installation can open', async t => {
+  const directory = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'locks-install-'));
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  fs.mkdirSync(path.join(directory, 'media'));
+  const { inspector, panels, calls } = fixture(t, { extensionPath: directory });
+  for (const missing of ['lock-inspector.html', 'lock-inspector.css', 'commander-paths.js', 'lock-inspector.js']) {
+    assert.throws(() => inspector.open('C:\\temp\\target'), error => error.code === 'ENOENT');
+    assert.equal(panels.length, 0, `missing ${missing} cannot create a blank tab`);
+    assert.equal(calls.length, 0);
+    fs.copyFileSync(path.join(__dirname, '..', 'media', missing), path.join(directory, 'media', missing));
+  }
+  inspector.open('C:\\temp\\target'); assert.equal(panels.length, 1);
+  await panels[0].receive({ type: 'locks-ready' });
+  assert.equal(panels[0].messages.find(message => message.type === 'locks-state').rows.length, 1);
 });
 
 test('native confirmation cancellation does not run mutation; invented IDs cannot be confirmed', async t => {
@@ -87,6 +137,7 @@ test('actual host HTML renders process children safely, warns about incomplete a
   const { inspector, panels } = fixture(t); inspector.open('C:\\tmp\\target'); const panel = panels[0];
   const dom = new JSDOM(panel.webview.html, { runScripts: 'outside-only', pretendToBeVisual: true }); t.after(() => dom.window.close());
   const messages = []; dom.window.acquireVsCodeApi = () => ({ postMessage: value => messages.push(value) });
+  if (!dom.window.CommanderPaths) new vm.Script(fs.readFileSync(path.join(__dirname, '..', 'media', 'commander-paths.js'), 'utf8')).runInContext(dom.getInternalVMContext());
   new vm.Script(fs.readFileSync(path.join(__dirname, '..', 'media', 'lock-inspector.js'), 'utf8')).runInContext(dom.getInternalVMContext());
   assert.equal(messages[0].type, 'locks-ready');
   await panel.receive(messages[0]);
@@ -103,6 +154,7 @@ test('main actions request all listed processes while the process context keeps 
   const { inspector, panels, rows } = fixture(t); inspector.open('C:\\tmp\\target'); const panel = panels[0];
   const dom = new JSDOM(panel.webview.html, { runScripts: 'outside-only' }); t.after(() => dom.window.close());
   const messages = []; dom.window.acquireVsCodeApi = () => ({ postMessage: value => messages.push(value) });
+  if (!dom.window.CommanderPaths) new vm.Script(fs.readFileSync(path.join(__dirname, '..', 'media', 'commander-paths.js'), 'utf8')).runInContext(dom.getInternalVMContext());
   new vm.Script(fs.readFileSync(path.join(__dirname, '..', 'media', 'lock-inspector.js'), 'utf8')).runInContext(dom.getInternalVMContext());
   dom.window.dispatchEvent(new dom.window.MessageEvent('message', { data: { type: 'locks-state', path: 'target', rows: [...rows, { ...rows[0], id: 'two', pid: 9999 }], inaccessible: 0 } }));
   dom.window.document.querySelector('[data-process]').checked = true;
@@ -114,4 +166,26 @@ test('main actions request all listed processes while the process context keeps 
   dom.window.document.querySelector('[data-process]').focus();
   dom.window.document.activeElement.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'F10', shiftKey: true, bubbles: true, cancelable: true }));
   assert.equal(messages.at(-1)?.action, 'context');
+});
+
+test('lock inspector displays native Windows paths without changing action targets', async t => {
+  const { inspector, panels, calls } = fixture(t); inspector.open('c:/tmp/target');
+  const panel = panels[0]; await panel.receive({ type: 'locks-ready' });
+  const dom = new JSDOM(panel.webview.html, { runScripts: 'outside-only' }); t.after(() => dom.window.close());
+  dom.window.acquireVsCodeApi = () => ({ postMessage() {} });
+  new vm.Script(fs.readFileSync(path.join(__dirname, '..', 'media', 'commander-paths.js'), 'utf8')).runInContext(dom.getInternalVMContext());
+  if (!dom.window.CommanderPaths) new vm.Script(fs.readFileSync(path.join(__dirname, '..', 'media', 'commander-paths.js'), 'utf8')).runInContext(dom.getInternalVMContext());
+  new vm.Script(fs.readFileSync(path.join(__dirname, '..', 'media', 'lock-inspector.js'), 'utf8')).runInContext(dom.getInternalVMContext());
+  for (const data of panel.messages) dom.window.dispatchEvent(new dom.window.MessageEvent('message', { data }));
+  assert.equal(dom.window.document.querySelector('#target').textContent, 'C:\\tmp\\target');
+  assert.deepEqual(calls[0], ['scan', 'c:/tmp/target']);
+});
+
+test('lock copy destination uses native display and shared input normalization', async t => {
+  const { inspector, panels, calls } = fixture(t, { choice: 'copy', input: 'c:\\tmp\\copy', confirm: 'Ausführen' });
+  inspector.open('c:/tmp/target'); const panel = panels[0]; await panel.receive({ type: 'locks-ready' });
+  await panel.receive({ type: 'locks-action', action: 'other', ids: [] });
+  assert.equal(calls.find(call => call[0] === 'input')[1].value, 'C:\\tmp\\target');
+  assert.equal(calls.find(call => call[0] === 'copy')[2], 'c:/tmp/copy');
+  assert.match(calls.find(call => call[0] === 'confirm')[2].detail, /C:\\tmp\\target/);
 });

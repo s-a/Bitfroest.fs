@@ -15,6 +15,31 @@ function drag(app, type, target, transfer = {}, modifiers = {}) {
   target.dispatchEvent(event); return event;
 }
 const submit = app => app.document.querySelector('#modal-form').dispatchEvent(new app.window.Event('submit', { bubbles: true, cancelable: true }));
+
+test('F2 edits the current filename and Enter sends the existing rename operation', t => {
+  const app = createApp(t, fixture());
+  app.document.querySelector('.list').focus(); app.key('F2');
+  const input = app.document.querySelector('.inline-rename'); assert.ok(input);
+  assert.equal(input.value, 'original.txt'); assert.equal(app.document.activeElement, input);
+  assert.equal(app.messages.some(item => item.type === 'filesystem-refresh'), false);
+  input.value = 'renamed.txt'; app.key('Enter', {}, input);
+  assert.ok(app.messages.find(item => item.type === 'filesystem-apply'));
+  assert.equal(app.state().folders['C:/tmp'][0].name, 'renamed.txt');
+});
+
+test('F2 rename cancels without changing files and does not start in text fields or dialogs', t => {
+  const app = createApp(t, fixture());
+  app.document.querySelector('.list').focus(); app.key('F2');
+  const input = app.document.querySelector('.inline-rename'); assert.ok(input);
+  input.value = 'discarded.txt'; app.key('Escape', {}, input);
+  assert.equal(app.document.querySelector('.inline-rename'), null);
+  assert.equal(app.state().folders['C:/tmp'][0].name, 'original.txt');
+  app.document.querySelector('.path-input').focus(); app.key('F2');
+  assert.equal(app.document.querySelector('.inline-rename'), null);
+  app.action('mkdir'); app.key('F2');
+  assert.equal(app.document.querySelector('.inline-rename'), null);
+  assert.equal(app.messages.some(item => item.type === 'filesystem-apply'), false);
+});
 test('invalid, occupied and reserved inline names keep the typed value and keyboard focus', t => {
   for (const name of ['bad?name', 'occupied.txt', 'CON', 'con.txt', 'LPT1.log', 'bad\u0001name']) {
     const app = createApp(t, fixture()); app.action('rename-one');

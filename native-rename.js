@@ -1,11 +1,5 @@
 const path = require('node:path');
-const { execFile } = require('node:child_process');
-function runHelper(input) {
-  return new Promise((resolve, reject) => {
-    const child = execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-File', path.join(__dirname, 'native', 'file-rename.ps1')], { windowsHide: true, timeout: 20000, maxBuffer: 65536 }, (error, stdout) => error ? reject(error) : resolve(stdout));
-    child.stdin.end(JSON.stringify(input));
-  });
-}
+const { loadNativeApi } = require('./native-api');
 async function renameCase(input, options = {}) {
   if ((options.platform || process.platform) !== 'win32') throw new Error('Atomic case rename requires Windows.');
   if (!input || !Array.isArray(input.roots) || !input.roots.length) throw new Error('Allowed roots are required.');
@@ -20,12 +14,55 @@ async function renameCase(input, options = {}) {
   if (source === target || lower(source) !== lower(target) || lower(path.win32.dirname(source)) !== lower(path.win32.dirname(target))) throw new Error('Only a case change in the same directory is supported.');
   if (!roots.some(root => lower(source).startsWith(lower(root.endsWith('\\') ? root : root + '\\')))) throw new Error('The path is outside the allowed roots.');
   if (!input.expected || !['dev', 'ino', 'size', 'mtimeNs', 'ctimeNs'].every(key => (key.endsWith('Ns') ? /^-?\d+$/ : /^\d+$/).test(String(input.expected[key])))) throw new Error('A complete expected file identity is required.');
-  const response = await (options.runHelper || runHelper)({ roots, source, target, expected: input.expected });
-  let result;
-  try { result = typeof response === 'string' ? JSON.parse(response.replace(/^\uFEFF/, '')) : response; } catch (cause) { throw new Error('The native rename response is invalid.', { cause }); }
-  if (!result || result.ok !== true) {
-    const error = new Error(result?.message || 'The atomic rename failed.'); error.code = result?.code || 'ERENAME'; throw error;
+  const request = { roots, source, target, expected: input.expected };
+  return renameCaseWithNativeApi(request, options.nativeApi || loadNativeApi(), options);
+}
+async function renameCaseWithNativeApi(request, nativeApi, options) {
+  const capability = nativeApi?.capabilities?.['files.rename'];
+  if (!nativeApi || typeof nativeApi.openSession !== 'function' || !['supported', 'conditional'].includes(capability?.status)) {
+    const error = new Error(capability?.reason || 'The native case rename operation is unavailable.');
+    error.code = 'UnsupportedOperation';
+    throw error;
   }
-  return { renamed: true };
+  const session = nativeApi.openSession();
+  let outcome, operationError, closeError, timer;
+  try {
+    outcome = await Promise.race([
+      session.invoke('files.rename', request),
+      new Promise((_, reject) => { timer = setTimeout(() => reject(Object.assign(new Error('The native rename timed out; its outcome is unknown.'), { code: 'NativeTimeout', outcome: { status: 'unknown' } })), options.timeout || 20000); })
+    ]);
+  } catch (error) {
+    operationError = error;
+  } finally {
+    clearTimeout(timer);
+    try { session.close(); } catch (error) { closeError = error; }
+  }
+
+  const committed = operationError?.outcome?.status === 'committed' && operationError.outcome.renamed === true || outcome?.status === 'committed' && outcome?.renamed === true;
+  if (committed) return { renamed: true };
+  if (operationError) {
+    if (operationError.outcome?.status === 'unchanged' && operationError.outcome.renamed === false) {
+      const messages = { IdentityChanged: 'The source identity changed before the rename.', ReparsePoint: 'Reparse points are not allowed in the rename path.' };
+      const message = messages[operationError.code];
+      if (message) throw Object.assign(new Error(message, { cause: operationError }), operationError);
+      throw operationError;
+    }
+    const error = new Error('The native rename outcome is unknown; the operation was not retried.', { cause: operationError });
+    error.code = 'NativeOutcomeUnknown';
+    throw error;
+  }
+  if (outcome?.status === 'unchanged' && outcome?.renamed === false) {
+    const error = new Error('The native operation completed without changing the filename.');
+    error.code = 'NativeOutcomeUnchanged';
+    throw error;
+  }
+  if (closeError) {
+    const error = new Error('The native session could not be closed after the rename outcome was received.', { cause: closeError });
+    error.code = 'NativeSessionCloseFailed';
+    throw error;
+  }
+  const error = new Error('The native rename returned an unknown outcome; the operation was not retried.');
+  error.code = 'NativeOutcomeUnknown';
+  throw error;
 }
 module.exports = { renameCase };

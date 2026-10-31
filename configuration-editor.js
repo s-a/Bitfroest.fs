@@ -1,6 +1,8 @@
 const fs = require('node:fs');
 const crypto = require('node:crypto');
 const { validateFavorites, validateColumns } = require('./media/configuration-model');
+const { localizedCatalog, catalog } = require('./shortcut-settings');
+const { validate: validateShortcuts } = require('./media/commander-shortcuts');
 
 function createConfigurationEditor(vscode, context, options) {
   let panel, section = 'favorites', scope = 'user', saving = false;
@@ -8,10 +10,10 @@ function createConfigurationEditor(vscode, context, options) {
   const sendState = async () => {
     if (!panel) return;
     const data = options.read(scope);
-    await panel.webview.postMessage({ type: 'configuration-state', section, scope, data, revision: revision(data), language: options.language(), workspace: options.workspace() });
+    await panel.webview.postMessage({ type: 'configuration-state', section, scope, data, revision: revision(data), language: options.language(), workspace: options.workspace(), shortcutCatalog: localizedCatalog(options.language()), shortcutBase: options.shortcutBase?.(scope) || {}, platform: process.platform, settings: options.settings?.() || [] });
   };
   function open(requested) {
-    section = requested === 'columns' ? 'columns' : 'favorites';
+    section = ['columns', 'shortcuts', 'settings'].includes(requested) ? requested : 'favorites';
     if (panel) { panel.reveal(); panel.webview.postMessage({ type: 'configuration-section', section }); return; }
     const media = vscode.Uri.joinPath(context.extensionUri, 'media');
     panel = vscode.window.createWebviewPanel('bitfroestConfiguration', options.t('Dateiverwaltung konfigurieren'), vscode.ViewColumn.Active, { enableScripts: true, retainContextWhenHidden: true, localResourceRoots: [media] });
@@ -20,13 +22,14 @@ function createConfigurationEditor(vscode, context, options) {
     const uri = name => current.webview.asWebviewUri(vscode.Uri.joinPath(media, name)).toString();
     let html = fs.readFileSync(vscode.Uri.joinPath(media, 'configuration.html').fsPath, 'utf8');
     html = html.replace('<!--POLICY-->', `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${current.webview.cspSource}; script-src 'nonce-${nonce}';">`);
-    for (const name of ['configuration.css', 'commander-i18n.js', 'commander-column-settings.js', 'configuration-model.js', 'configuration-view.js']) html = html.replaceAll(`"${name}"`, `"${uri(name)}"`);
+    for (const name of ['configuration.css', 'commander-paths.js', 'commander-i18n.js', 'commander-column-settings.js', 'commander-shortcuts.js', 'shortcut-configuration.js', 'configuration-model.js', 'configuration-view.js']) html = html.replaceAll(`"${name}"`, `"${uri(name)}"`);
     html = html.replaceAll('<script ', `<script nonce="${nonce}" `);
     current.webview.html = html;
     current.onDidDispose(() => { if (panel === current) panel = undefined; });
     current.webview.onDidReceiveMessage(async message => {
       if (panel !== current) return;
       try {
+        if (message?.type === 'configuration-open-setting' && typeof message.key === 'string') { await options.openSetting?.(message.key); return; }
         if (message?.type === 'configuration-ready' || message?.type === 'configuration-reload') { if (!saving) await sendState(); return; }
         if (message?.type === 'configuration-scope') {
           if (saving) return;
@@ -44,6 +47,7 @@ function createConfigurationEditor(vscode, context, options) {
           if (saving) return;
           if (message.scope !== scope || message.revision !== revision(options.read(scope))) throw new Error(options.t('Die Konfiguration wurde außerhalb dieses Editors geändert. Bitte neu laden.'));
           const data = { favorites: validateFavorites(message.data?.favorites), columns: validateColumns(message.data?.columns) };
+          data.shortcuts = validateShortcuts(catalog, message.data?.shortcuts || {}, process.platform);
           saving = true;
           try { await options.write(data, scope); } finally { saving = false; }
           if (panel === current) await current.webview.postMessage({ type: 'configuration-saved', revision: revision(options.read(scope)), data: options.read(scope) });

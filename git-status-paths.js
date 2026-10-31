@@ -1,9 +1,9 @@
 const path = require('node:path');
+const { identity: pathIdentity } = require('./media/commander-paths');
 
 function allowedGitPath(directory, settings = {}) {
   const identity = value => {
-    const normalized = path.resolve(value).replaceAll('\\', '/').replace(/\/$/, '');
-    return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
+    return pathIdentity(path.resolve(value), { platform: process.platform }).replace(/\/$/, '');
   };
   const target = identity(directory);
   const inside = value => { const prefix = identity(value); return target === prefix || target.startsWith(prefix + '/'); };

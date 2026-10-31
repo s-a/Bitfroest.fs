@@ -33,3 +33,18 @@ test('metadata adapter reads real file attributes and reports missing paths with
   if (process.platform === 'win32') await assert.rejects(metadata.attributes(path.join(root, 'missing'), await fs.stat(file)));
   assert.equal(await fs.readFile(file, 'utf8'), 'unchanged');
 });
+
+test('search worker applies native readonly and directory filters to actual files', { skip: process.platform !== 'win32' }, async t => {
+  const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'search-native-flags-')));
+  const readonly = path.join(root, 'readonly.txt');
+  t.after(async () => { await fs.chmod(readonly, 0o666); await fs.rm(root, { recursive: true, force: true }); });
+  await fs.writeFile(readonly, 'READONLY'); await fs.writeFile(path.join(root, 'ordinary.txt'), 'ORDINARY');
+  await fs.mkdir(path.join(root, 'folder'));
+  await fs.chmod(readonly, 0o444);
+  const provider = createSearchProvider({ roots: [root] }); t.after(() => provider.dispose());
+  const result = await provider.run('native-attributes', { searchIn: root, attributesEnabled: true, attributes: { readonly: 'yes', directory: 'no' } });
+  assert.deepEqual(result.errors, []);
+  assert.deepEqual(result.results.map(row => row.name), ['readonly.txt']);
+  assert.equal(result.results[0].flags.readonly, true);
+  assert.equal(await fs.readFile(readonly, 'utf8'), 'READONLY');
+});

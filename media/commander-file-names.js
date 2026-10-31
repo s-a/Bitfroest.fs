@@ -1,11 +1,12 @@
 (function (root, factory) {
-  const api = factory();
+  const paths = typeof module === 'object' && module.exports ? require('./commander-paths') : root.CommanderPaths;
+  const api = factory(paths);
   if (typeof module === 'object' && module.exports) module.exports = api;
   if (root) root.CommanderFileNames = api;
-})(typeof globalThis === 'object' ? globalThis : this, function () {
-  const parent = value => value.slice(0, value.lastIndexOf('/')) || '/';
-  const basename = value => value.slice(value.lastIndexOf('/') + 1);
-  const equal = (a, b) => /^[a-z]:\//i.test(a) ? a.toLowerCase() === b.toLowerCase() : a === b;
+})(typeof globalThis === 'object' ? globalThis : this, function (pathTools) {
+  const parent = pathTools.parentPath;
+  const basename = pathTools.baseName;
+  const equal = (a, b) => pathTools.identity(a) === pathTools.identity(b);
   const fail = () => { throw new Error('Ungültiger Name, Namenskonflikt oder Ziel außerhalb der bekannten Ordner.'); };
   function valid(segment) {
     return segment && !['.', '..'].includes(segment) && !/[<>:"|?*\\/]/.test(segment) && ![...segment].some(c => c.charCodeAt(0) < 32) && !/[. ]$/.test(segment) && !/^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(segment);
@@ -44,18 +45,16 @@
     const expanded = expand(input.trim(), options), paths = [], directories = [], known = new Set(Object.keys(options.folders));
     const existing = directory => Object.keys(options.folders).find(path => equal(path, directory));
     for (const raw of expanded.names) {
-      const value = raw.replace(/\\/g, '/');
+      const value = pathTools.isWindowsPath(raw) || pathTools.isWindowsPath(options.base) ? raw.replace(/\\/g, '/') : raw;
       if (!value || value.endsWith('/')) fail();
-      let path = value.startsWith('/') || /^[a-z]:\//i.test(value) ? value : `${options.base.replace(/\/$/, '')}/${value}`;
-      const pieces = path.split('/'), absolute = path.startsWith('/') ? '/' : `${pieces.shift()}/`;
-      if (absolute !== '/' && !/^[a-z]:\/$/i.test(absolute)) fail();
-      const segments = pieces.filter(Boolean);
+      const segments = value.replace(/^[a-z]:\//i, '').split('/').filter(Boolean);
       if (!segments.every(valid)) fail();
-      path = absolute + segments.join('/');
+      let path = pathTools.normalizePath(value, { base: options.base });
+      if (!pathTools.isAbsolutePath(path)) fail();
       const missing = [];
       let ancestor = options.kind === 'folder' ? path : parent(path);
       while (!existing(ancestor) && !known.has(ancestor)) {
-        if (ancestor === '/' || /^[a-z]:$/.test(ancestor) || !ancestor.includes('/')) fail();
+        if (parent(ancestor) === ancestor || !ancestor.includes('/')) fail();
         missing.unshift(ancestor); ancestor = parent(ancestor);
       }
       const resolved = existing(ancestor);

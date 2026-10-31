@@ -10,6 +10,30 @@ const requests = app => app.messages.filter(message => message.type === 'shell-c
 function context(app, target) { const event = new app.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }); target.dispatchEvent(event); return event; }
 const send = (app, data) => app.window.dispatchEvent(new app.window.MessageEvent('message', { data }));
 
+test('Unix folder context uses the native workbench contribution instead of launching a Windows shell helper', t => {
+  for (const platform of ['linux']) {
+    const state = fixture(); state.folders['C:/tmp'][0].type = 'folder'; state.panes[0].selected = ['a'];
+    const app = createApp(t, state, { platform });
+    const row = app.row('literal & Datei.txt'), event = context(app, row);
+    assert.equal(event.defaultPrevented, false); assert.equal(requests(app).length, 0);
+    assert.equal(JSON.parse(row.dataset.vscodeContext).webviewSection, 'folder');
+    app.action('inspect-folder-locks'); assert.equal(requests(app)[0].inspectLocks, true);
+    send(app, { type: 'shell-context-menu-result', requestId: requests(app)[0].requestId, ok: true });
+    context(app, app.row('second.txt'));
+    assert.equal(JSON.parse(app.row('second.txt').dataset.vscodeContext).webviewSection, 'files');
+  }
+});
+
+test('Unix menu context keeps the opening selection when the current selection changes before invocation', t => {
+  const state = fixture(); state.folders['C:/tmp'][0].type = 'folder'; state.panes[0].selected = ['a'];
+  const app = createApp(t, state, { platform: 'linux' });
+  context(app, app.row('literal & Datei.txt'));
+  const selection = JSON.parse(app.row('literal & Datei.txt').dataset.vscodeContext);
+  app.click(app.row('second.txt').querySelector('[data-cell="size"]'));
+  send(app, { type: 'action', action: 'inspect-folder-locks', contextSelection: selection });
+  assert.deepEqual(Array.from(requests(app)[0].ids), ['a']); assert.equal(requests(app)[0].snapshotId, 'menu-snapshot');
+});
+
 test('folder lock command freezes selected IDs for direct host inspection', t => {
   const state = fixture(); state.folders['C:/tmp'][0].type = 'folder'; state.panes[0].selected = ['a'];
   const app = createApp(t, state); app.action('inspect-folder-locks');
@@ -73,4 +97,33 @@ test('empty list space and the parent entry cannot open an older selected file c
     assert.equal(app.document.querySelector('#modal').open, false);
     assert.match(app.document.querySelector('#status-message').textContent, /Ordnerhintergrund/);
   }
+});
+
+test('path textbox context menu preserves native editing and never starts a shell menu', t => {
+  const app = createApp(t, fixture());
+  const input = app.document.querySelector('.path-input'); input.focus(); input.setSelectionRange(1, 4);
+  const event = context(app, input);
+  assert.equal(event.defaultPrevented, false);
+  assert.equal(app.document.activeElement, input);
+  assert.equal(input.selectionStart, 1); assert.equal(input.selectionEnd, 4);
+  assert.equal(requests(app).length, 0);
+  const ownContext = JSON.parse(input.dataset.vscodeContext);
+  assert.equal(ownContext.webviewSection, 'textInput');
+  assert.equal(ownContext.preventDefaultContextMenuItems, false);
+});
+
+test('textbox menu exposes a declared native select-all command and hides file commands', () => {
+  const menus = require('../package.json').contributes.menus['webview/context'];
+  assert.ok(menus.some(item => item.command === 'bitfroest.select-all-text' && item.when.includes('webviewSection == textInput')));
+  assert.ok(require('../package.json').contributes.commands.some(item => item.command === 'bitfroest.select-all-text'));
+  assert.ok(menus.every(item => item.command !== 'editor.action.selectAll'));
+  for (const item of menus.filter(item => item.submenu || /bitfroest\.clipboard-/.test(item.command || ''))) assert.match(item.when, /webviewSection != textInput/);
+});
+
+test('inline rename text keeps the native editing menu inside a file row', t => {
+  const app = createApp(t, fixture()); app.action('rename-one');
+  const input = app.document.querySelector('.inline-rename'); assert.ok(input); input.focus();
+  const event = context(app, input);
+  assert.equal(event.defaultPrevented, false); assert.equal(requests(app).length, 0);
+  assert.equal(JSON.parse(input.dataset.vscodeContext).webviewSection, 'textInput');
 });

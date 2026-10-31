@@ -1,5 +1,12 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+
+test('release integrity and startup errors have explicit English translations', () => {
+  const { t } = require('../media/commander-i18n').create('en');
+  assert.equal(t('Datei während der Kopierprüfung extern geändert.'), 'A file changed externally during copy verification.');
+  assert.equal(t('Der Zielpfad ist bereits vorhanden.'), 'The destination path already exists.');
+  assert.equal(t('Ein vorhandenes Startverzeichnis ist erforderlich.'), 'An existing startup directory is required.');
+});
 const fs = require('node:fs');
 const path = require('node:path');
 const { create, dictionaries } = require('../media/commander-i18n');

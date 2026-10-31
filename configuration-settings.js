@@ -1,5 +1,7 @@
 const { catalog, columnSetFromPreferences, normalizeColumnSets, columnSetsFromTables } = require('./media/commander-column-settings');
 const { favoritesFromTables, validateFavorites, validateColumns } = require('./media/configuration-model');
+const { catalog: shortcutCatalog } = require('./shortcut-settings');
+const { validate: validateShortcuts } = require('./media/commander-shortcuts');
 
 function createConfigurationSettings(vscode, options) {
   let saving = false;
@@ -12,9 +14,10 @@ function createConfigurationSettings(vscode, options) {
   function read(scope) {
     const settings = configuration(), scopeKey = scope === 'workspace' ? 'workspaceValue' : 'globalValue';
     const value = key => settings.inspect(key)?.[scopeKey];
+    const shortcuts = value('shortcuts.bindings') || {};
     const favorites = readFavorites(scope);
     const layout = value('columns.layout');
-    if (Array.isArray(layout)) return { favorites, columns: validateColumns(layout) };
+    if (Array.isArray(layout)) return { favorites, columns: validateColumns(layout), shortcuts };
     const preferences = Object.fromEntries(catalog.flatMap(column => ['visible', 'title', 'width', 'alignment', 'position'].map(kind => [`${kind}.${column.id}`, value(`columns.${kind}.${column.id}`)])));
     const fixed = Object.values(preferences).some(item => item !== undefined);
     const tableKeys = ['names', 'fields', 'titles', 'widths', 'alignments', 'visibility', 'order'];
@@ -35,15 +38,18 @@ function createConfigurationSettings(vscode, options) {
     });
     const position = id => { const index = source.findIndex(item => item.id === id || item.field === catalog.find(column => column.id === id).field); return index < 0 ? source.length + catalog.findIndex(item => item.id === id) : index; };
     columns.sort((left, right) => position(left.id) - position(right.id));
-    return { favorites, columns };
+    return { favorites, columns, shortcuts };
   }
   async function write(data, scope) {
     if (saving) throw new Error(options.t('Die Konfiguration wird gerade gespeichert. Bitte erneut versuchen.'));
     if (!['user', 'workspace'].includes(scope) || scope === 'workspace' && !vscode.workspace.workspaceFolders?.length) throw new Error(options.t('Kein Arbeitsbereich geöffnet.'));
     const next = { favorites: validateFavorites(data.favorites), columns: validateColumns(data.columns) };
+    next.shortcuts = validateShortcuts(shortcutCatalog, data.shortcuts || {}, process.platform);
+    const inherited = scope === 'workspace' ? configuration().inspect('shortcuts.bindings')?.globalValue || {} : {};
+    validateShortcuts(shortcutCatalog, { ...inherited, ...next.shortcuts }, process.platform);
     const before = read(scope), settings = configuration(), target = scope === 'workspace' ? vscode.ConfigurationTarget.Workspace : vscode.ConfigurationTarget.Global;
     const scopeKey = scope === 'workspace' ? 'workspaceValue' : 'globalValue', changes = [];
-    for (const [part, key] of [['favorites', 'favorites.items'], ['columns', 'columns.layout']]) if (JSON.stringify(before[part]) !== JSON.stringify(next[part])) changes.push({ key, value: next[part], previous: settings.inspect(key)?.[scopeKey] });
+    for (const [part, key] of [['favorites', 'favorites.items'], ['columns', 'columns.layout'], ['shortcuts', 'shortcuts.bindings']]) if (JSON.stringify(before[part]) !== JSON.stringify(next[part])) changes.push({ key, value: next[part], previous: settings.inspect(key)?.[scopeKey] });
     saving = true;
     const completed = [];
     try {

@@ -29,7 +29,8 @@ test('recovery details remain selectable until explicit dismissal', t => {
   const detail = 'Recovery incomplete. C:/tmp/<Neuer Ordner>&".stage/content';
   response(app, state, { error: detail });
   assert.equal(app.document.querySelector('#toast').classList.contains('visible'), false);
-  assert.notEqual(app.document.querySelector('#toast').textContent, detail);
+  assert.equal(app.document.querySelector('#toast').textContent, '');
+  assert.equal(app.document.querySelector('#status-message').textContent, detail);
   callbacks.forEach(callback => callback());
   assert.equal(app.document.querySelector('#modal').open, true);
   const text = app.document.querySelector('.operation-error-text');
@@ -63,7 +64,7 @@ test('copy and cut have distinct feedback and temporary cut markers', t => {
   app.key('x', { ctrlKey: true });
   const cut = app.messages.find(message => message.type === 'clipboard-write');
   clipboardResponse(app, cut, { paths: ['C:/tmp/Neuer Ordner.txt'], mode: 'move', token: 'cut', source: 'system' });
-  assert.match(app.document.querySelector('#toast').textContent, /cut|move/i);
+  assert.match(app.document.querySelector('#status-message').textContent, /cut|move/i);
   assert.equal(app.row('Neuer Ordner.txt').classList.contains('is-cut'), true);
   assert.match(app.row('Neuer Ordner.txt').getAttribute('aria-label'), /move/i);
   assert.ok(app.row('Neuer Ordner.txt').querySelector('.cut-marker'));
@@ -71,7 +72,7 @@ test('copy and cut have distinct feedback and temporary cut markers', t => {
   app.key('c', { ctrlKey: true });
   const copy = app.messages.filter(message => message.type === 'clipboard-write').at(-1);
   clipboardResponse(app, copy, { paths: ['C:/tmp/Neuer Ordner.txt'], mode: 'copy', token: 'copy', source: 'system' });
-  assert.match(app.document.querySelector('#toast').textContent, /copied/i);
+  assert.match(app.document.querySelector('#status-message').textContent, /copied/i);
   assert.equal(app.row('Neuer Ordner.txt').classList.contains('is-cut'), false);
 });
 
@@ -109,7 +110,7 @@ test('late clipboard-write acknowledgements cannot restore an older cut selectio
   clipboardResponse(app, copy, { paths: ['C:/tmp/Neuer Ordner.txt'], mode: 'copy', token: 'new', source: 'system' });
   clipboardResponse(app, cut, { paths: ['C:/tmp/Neuer Ordner.txt'], mode: 'move', token: 'old', source: 'system' });
   assert.equal(app.row('Neuer Ordner.txt').classList.contains('is-cut'), false);
-  assert.match(app.document.querySelector('#toast').textContent, /copied/i);
+  assert.match(app.document.querySelector('#status-message').textContent, /copied/i);
 });
 
 test('a stale dialog-close event cannot steal focus from a failed inline rename', t => {

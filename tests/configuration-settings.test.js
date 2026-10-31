@@ -29,3 +29,17 @@ test('partial legacy tables retain widths and localized defaults in the configur
   assert.equal(data.columns.find(item => item.id === 'size').visible, true);
   assert.equal(data.columns.find(item => item.id === 'path').visible, false);
 });
+
+test('workspace shortcut edits preserve user inheritance and reject inherited collisions', async () => {
+  const { catalog } = require('../shortcut-settings');
+  const copy = catalog.find(item => item.command === 'bitfroest.copy' && item.key === 'f5');
+  const move = catalog.find(item => item.command === 'bitfroest.move' && item.key === 'f6');
+  const { backend, writes } = setup({ 'shortcuts.bindings': { globalValue: { [copy.id]: 'ctrl+shift+k' } } });
+  const data = backend.read('workspace');
+  assert.deepEqual(data.shortcuts, {});
+  data.shortcuts[move.id] = 'ctrl+shift+k';
+  await assert.rejects(backend.write(data, 'workspace'), /Überlappende/);
+  assert.equal(writes.length, 0);
+  data.shortcuts[move.id] = 'ctrl+shift+j'; await backend.write(data, 'workspace');
+  assert.equal(writes[0].target, 2); assert.deepEqual(writes[0].value, { [move.id]: 'ctrl+shift+j' });
+});

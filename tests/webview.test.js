@@ -95,7 +95,7 @@ test('arrow keys traverse substring hits while the full list remains visible', t
   assert.equal(app.row('CHANGELOG.md').getAttribute('aria-selected'), 'true');
 });
 
-test('native icons replace fallbacks on rows and tabs without being saved as layout data', t => {
+test('native icons replace file row fallbacks while tabs remain text-only and layout stays free of image data', t => {
   const app = createApp(t);
   assert.ok(app.messages.some(message => message.type === 'icons'));
   app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'icons', icons: {
@@ -103,7 +103,9 @@ test('native icons replace fallbacks on rows and tabs without being saved as lay
     '/workspace/bitfroest/docs': 'data:image/png;base64,AQ=='
   } } }));
   assert.ok(app.row('README.md').querySelector('img.native-icon'));
-  assert.ok(app.document.querySelector('[data-pane="0"] [data-tab="1"] img.native-icon'));
+  assert.match(app.document.querySelector('[data-pane="0"] [data-tab="1"]').textContent, /docs/);
+  assert.equal(app.document.querySelector('[data-pane="0"] [data-tab="1"] svg'), null);
+  assert.equal(app.document.querySelector('[data-pane="0"] [data-tab="1"] img.native-icon'), null);
   assert.equal(JSON.stringify(app.state()).includes('data:image'), false);
 });
 

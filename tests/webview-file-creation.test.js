@@ -5,7 +5,7 @@ const submit = app => app.document.querySelector('#modal-form').dispatchEvent(ne
 
 test('F7 creates multiple nested folders after validating the whole list', t => {
   const app = createApp(t);
-  app.action('mkdir'); app.document.querySelector('#value').value = 'one\\two|three'; submit(app);
+  app.action('mkdir'); app.document.querySelector('#value').value = 'one/two|three'; submit(app);
   const state = app.state();
   assert.ok(state.folders['/workspace/bitfroest/one/two']);
   assert.ok(state.folders['/workspace/bitfroest/three']);
@@ -82,7 +82,7 @@ test('invalid creation names report localized errors without losing their entere
   for (const language of ['en', 'de']) {
     const app = createApp(t, undefined, { language });
     app.action('new-file'); app.document.querySelector('#value').value = '../outside.txt'; submit(app);
-    assert.match(app.document.querySelector('#toast').textContent, language === 'en' ? /Invalid name/ : /Ungültiger Name/);
+    assert.match(app.document.querySelector('#status-message').textContent, language === 'en' ? /Invalid name/ : /Ungültiger Name/);
     assert.equal(app.document.querySelector('#value').value, '../outside.txt');
     assert.equal(app.document.activeElement, app.document.querySelector('#value'));
   }

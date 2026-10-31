@@ -1,22 +1,27 @@
 const path = require('node:path');
-const { execFile } = require('node:child_process');
-const { promisify } = require('node:util');
-const executeFile = promisify(execFile);
+const { loadNativeApi } = require('./native-api');
 
 async function openAssociatedFile(target, options = {}) {
   const platform = options.platform || process.platform;
   const paths = platform === 'win32' ? path.win32 : path.posix;
   if (typeof target !== 'string' || !paths.isAbsolute(target) || target.includes('\0')) throw new Error('Ungültiger Dateipfad.');
-  const execute = options.executeFile || executeFile;
-  if (platform === 'win32') {
-    const { stdout } = await execute('powershell.exe', ['-NoProfile', '-NonInteractive', '-File', path.join(__dirname, 'native', 'open-file.ps1'), '-EncodedPath', Buffer.from(target, 'utf8').toString('base64')], { windowsHide: true, timeout: 15000, maxBuffer: 65536 });
-    const result = JSON.parse(stdout.replace(/^\uFEFF/, ''));
-    if (!result || typeof result.editor !== 'boolean') throw new Error('Ungültige Antwort beim Öffnen der Datei.');
-    return { editor: result.editor };
+  if (platform === 'win32' || platform === 'linux') {
+      const session = (options.nativeApi || loadNativeApi()).openSession();
+      let timer;
+      try {
+        const response = await Promise.race([
+          session.invoke('shell.openAssociated', { path: target, ...(options.inspectOnly ? { inspectOnly: true } : {}) }),
+          new Promise((_, reject) => { timer = setTimeout(() => reject(Object.assign(new Error('Die Programmöffnung antwortet nicht.'), { code: 'DesktopTimeout' })), options.timeout || 15000); })
+        ]);
+        if (typeof response?.editor !== 'boolean') throw new Error('Ungültige Antwort beim Öffnen der Datei.');
+        if (platform === 'linux' && !options.inspectOnly && (response.available !== true || response.requested !== true)) throw new Error('Ungültige Antwort beim Öffnen der Datei.');
+        return { editor: response.editor };
+      } finally {
+        clearTimeout(timer);
+        try { session.close(); } catch { /* Session cleanup must not replace the lookup result. */ }
+      }
   }
-  if (!['darwin', 'linux'].includes(platform)) throw new Error('Das Öffnen verknüpfter Programme ist auf diesem Betriebssystem nicht verfügbar.');
-  await execute(platform === 'darwin' ? 'open' : 'xdg-open', [target], { timeout: 15000 });
-  return { editor: false };
+  throw Object.assign(new Error('Diese Funktion wird auf diesem Betriebssystem noch nicht unterstützt.'), { code: 'ENOTSUPPORTED' });
 }
 
 module.exports = { openAssociatedFile };

@@ -3,10 +3,13 @@
 <body>
   <header><h1 data-label="title">Ordnersperren untersuchen</h1><p id="target"></p></header>
   <main>
+    <p id="reference-notice" hidden></p>
+    <section id="availability" hidden aria-label="Verfügbarkeit"><h2 id="availability-title"></h2><ul></ul></section>
     <div class="list-tools"><h2 data-label="processes">Sperrende Prozesse</h2><label><input id="details" type="checkbox"><span data-label="details">Details anzeigen</span></label><button data-action="refresh" data-label="refresh">Aktualisieren (F5)</button></div>
     <div id="processes" role="region" aria-label="Sperrende Prozesse" tabindex="0"></div>
-    <p id="status" role="status" aria-live="polite"></p><p id="error" role="alert" hidden></p><p id="notice" hidden></p>
+    <p id="status" role="status" aria-live="polite"></p><p id="diagnostic" hidden></p><p id="error" role="alert" hidden></p><p id="notice" hidden></p>
   </main>
   <footer><button data-action="unlock" data-label="unlock">Freigeben</button><button data-action="delete" data-label="delete">Löschen…</button><button data-action="other" data-label="other">Weitere Aktionen…</button><button data-action="close" data-label="close">Schließen</button></footer>
+  <script src="commander-paths.js"></script>
   <script src="lock-inspector.js"></script>
 </body></html>

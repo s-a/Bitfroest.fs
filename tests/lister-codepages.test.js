@@ -1,10 +1,24 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs/promises');
+const path = require('node:path');
 const { createCodepageDecoder } = require('../lister-codepages');
+const { createNativeApi } = require('../native-api');
 const core = require('../media/commander-lister');
 
-test('Windows lister decoder reuses its worker for DOS, Mac, local aliases and manual codepages', { skip: process.platform !== 'win32' }, async t => {
-  const decoder = createCodepageDecoder(); t.after(() => decoder.dispose());
+function createNativeDecoder() {
+  const bindingPath = process.env.NATIVE_BINDING_TEST_PATH || path.join(__dirname, '..', 'native', 'binding.node');
+  return createCodepageDecoder({ apiFactory: () => createNativeApi(require(bindingPath)) });
+}
+
+test('lister codepage decoder uses the native binding without an external runtime helper', async () => {
+  const source = await fs.readFile(require.resolve('../lister-codepages'), 'utf8');
+  assert.doesNotMatch(source, /node:child_process|child_process|spawn\s*\(/);
+  await assert.rejects(fs.access(path.join(__dirname, '..', 'native', 'lister-codepages.ps1')), { code: 'ENOENT' });
+});
+
+test('Windows lister decoder uses the native binding for DOS, Mac, local aliases and manual codepages', { skip: process.platform !== 'win32' }, async t => {
+  const decoder = createNativeDecoder(); t.after(() => decoder.dispose());
   assert.equal((await decoder.decode(Buffer.from([0x82]), '437')).text, 'é');
   assert.equal((await decoder.decode(Buffer.from([0x9b]), '850')).text, 'ø');
   assert.equal((await decoder.decode(Buffer.from([0x8e]), '2')).text, 'é');

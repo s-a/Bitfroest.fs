@@ -17,10 +17,27 @@ test('Git settings are editable as scalar values or simple lists with German and
   assert.ok(manifest.contributes.commands.some(command => command.command === 'bitfroest.showLocalBranches'));
 });
 
-test('Git runtime dependency and its license are explicitly included in the extension package', () => {
+test('native Git binding and its linked component licenses are included without an isomorphic Git dependency', () => {
+  const manifest = require('../package.json');
+  const lock = require('../package-lock.json');
   const rules = fs.readFileSync(path.join(root, '.vscodeignore'), 'utf8');
-  assert.match(rules, /!node_modules\/isomorphic-git\/\*\*/);
-  const component = require('../licenses/components.json').find(item => item.name === 'isomorphic-git'); assert.ok(component);
-  assert.ok(component.files.every(file => fs.existsSync(path.join(root, file))));
-  assert.equal(component.version, JSON.parse(fs.readFileSync(path.join(root, 'node_modules/isomorphic-git/package.json'), 'utf8')).version);
+  assert.deepEqual(Object.keys(manifest.dependencies), ['@zip.js/zip.js']);
+  assert.equal(lock.packages[''].dependencies['isomorphic-git'], undefined);
+  assert.ok(lock.packages['node_modules/@zip.js/zip.js']);
+  assert.match(rules, /!native\/binding\.node/);
+  for (const broker of ['network-broker-win.exe', 'icons-broker-win.exe', 'file-broker-win.exe', 'clipboard-broker-win.exe']) {
+    assert.equal(fs.existsSync(path.join(root, 'native', broker)), false, broker);
+    assert.doesNotMatch(rules, new RegExp(`!native/${broker.replaceAll('.', '\\.')}\\r?\\n`), broker);
+  }
+  assert.match(rules, /^native\/\*\.exe$/m);
+  assert.match(rules, /!node_modules\/@zip\.js\/zip\.js\/\*\*/);
+  assert.doesNotMatch(rules, /!node_modules\/(?!@zip\.js\/zip\.js\/)/);
+  assert.doesNotMatch(fs.readFileSync(path.join(root, 'Start-Development.ps1'), 'utf8'), /isomorphic-git/);
+  assert.equal(fs.existsSync(path.join(root, 'licenses/GIT-DEPENDENCIES.txt')), false);
+  const components = require('../licenses/components.json');
+  for (const name of ['libgit2', 'sha1dc', 'llhttp', 'LibXDiff', 'PCRE2', 'zlib']) {
+    const component = components.find(item => item.name === name); assert.ok(component, name);
+    assert.ok(component.files.every(file => fs.existsSync(path.join(root, file))), name);
+  }
+  assert.equal(components.find(item => item.name === 'libgit2').version, '1.9.7');
 });

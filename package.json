@@ -1,12 +1,35 @@
 {
   "name": "bitfroest-fs-prototype",
-  "displayName": "Bitfroest.fs Prototype",
+  "displayName": "Bitfroest.fs (Beta)",
   "description": "%extension.description%",
-  "version": "0.0.24",
+  "version": "0.0.28",
+  "preview": true,
   "publisher": "bitfroest",
   "author": "Stephan Ahlf",
   "license": "Apache-2.0",
   "icon": "media/icons/bitfroest-app.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/s-a/Bitfroest.fs.git"
+  },
+  "homepage": "https://github.com/s-a/Bitfroest.fs#readme",
+  "bugs": {
+    "url": "https://github.com/s-a/Bitfroest.fs/issues"
+  },
+  "keywords": [
+    "file manager",
+    "dual pane",
+    "commander",
+    "file search",
+    "zip",
+    "git status",
+    "file operations",
+    "administrator"
+  ],
+  "galleryBanner": {
+    "color": "#0A1827",
+    "theme": "dark"
+  },
   "engines": {
     "vscode": "^1.100.0"
   },
@@ -21,19 +44,105 @@
   "contributes": {
     "keybindings": [
       {
+        "command": "bitfroest.open-terminal",
+        "key": "f9",
+        "when": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput && !bitfroest.searchResults && !bitfroest.shortcutOverride.k147jcir"
+      },
+      {
+        "command": "bitfroest.copy-full-names",
+        "key": "ctrl+y",
+        "mac": "cmd+y",
+        "when": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.k8uf8ir"
+      },
+      {
+        "command": "bitfroest.select-group",
+        "key": "numpad_add",
+        "when": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype && bitfroest.listFocus && !bitfroest.textInput && webviewFocus && !bitfroest.shortcutOverride.kye6hkb"
+      },
+      {
+        "command": "bitfroest.select-group",
+        "key": "shift+numpad_add",
+        "args": {
+          "reverseDirectories": true
+        },
+        "when": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype && bitfroest.listFocus && !bitfroest.textInput && webviewFocus && !bitfroest.shortcutOverride.k1qjg4jc"
+      },
+      {
+        "command": "bitfroest.select-extension",
+        "key": "ctrl+numpad_add",
+        "mac": "cmd+numpad_add",
+        "when": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype && bitfroest.listFocus && !bitfroest.textInput && webviewFocus && !bitfroest.shortcutOverride.klwycqb"
+      },
+      {
+        "command": "bitfroest.select-extension",
+        "key": "alt+numpad_add",
+        "when": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype && bitfroest.listFocus && !bitfroest.textInput && webviewFocus && !bitfroest.shortcutOverride.k1ue4kep"
+      },
+      {
+        "command": "bitfroest.unselect-group",
+        "key": "numpad_subtract",
+        "when": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype && bitfroest.listFocus && !bitfroest.textInput && webviewFocus && !bitfroest.shortcutOverride.kt8lf8f"
+      },
+      {
+        "command": "bitfroest.unselect-group",
+        "key": "shift+numpad_subtract",
+        "args": {
+          "reverseDirectories": true
+        },
+        "when": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype && bitfroest.listFocus && !bitfroest.textInput && webviewFocus && !bitfroest.shortcutOverride.k13hq0y2"
+      },
+      {
+        "command": "bitfroest.clear",
+        "key": "ctrl+numpad_subtract",
+        "mac": "cmd+numpad_subtract",
+        "when": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype && bitfroest.listFocus && !bitfroest.textInput && webviewFocus && !bitfroest.shortcutOverride.kdxczd7"
+      },
+      {
+        "command": "bitfroest.clear",
+        "key": "ctrl+shift+numpad_subtract",
+        "mac": "cmd+shift+numpad_subtract",
+        "args": {
+          "reverseDirectories": true
+        },
+        "when": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype && bitfroest.listFocus && !bitfroest.textInput && webviewFocus && !bitfroest.shortcutOverride.k1luy12u"
+      },
+      {
+        "command": "bitfroest.unselect-extension",
+        "key": "alt+numpad_subtract",
+        "when": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype && bitfroest.listFocus && !bitfroest.textInput && webviewFocus && !bitfroest.shortcutOverride.kwr625"
+      },
+      {
+        "command": "bitfroest.invert",
+        "key": "numpad_multiply",
+        "when": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype && bitfroest.listFocus && !bitfroest.textInput && webviewFocus && !bitfroest.shortcutOverride.k14mrbsu"
+      },
+      {
+        "command": "bitfroest.invert",
+        "key": "shift+numpad_multiply",
+        "args": {
+          "reverseDirectories": true
+        },
+        "when": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype && bitfroest.listFocus && !bitfroest.textInput && webviewFocus && !bitfroest.shortcutOverride.k1ckdaht"
+      },
+      {
+        "command": "bitfroest.restore-selection",
+        "key": "numpad_divide",
+        "when": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype && bitfroest.listFocus && !bitfroest.textInput && webviewFocus && !bitfroest.shortcutOverride.k39j5cu"
+      },
+      {
         "command": "bitfroest.path-clipboard",
         "key": "ctrl+shift+l",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.kt7be58"
       },
       {
         "command": "bitfroest.shell-context-menu",
         "key": "shift+f10",
-        "when": "isWindows && bitfroest.ready && activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput"
+        "when": "isWindows && bitfroest.ready && activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.k1opszch"
       },
       {
         "command": "bitfroest.rename-one",
         "key": "shift+f6",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.inlineRenameInput && bitfroest.textInput"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.inlineRenameInput && bitfroest.textInput && !bitfroest.shortcutOverride.k1s1ndxp"
       },
       {
         "command": "bitfroest.ignore-dialog-function-key",
@@ -48,24 +157,24 @@
       {
         "command": "bitfroest.toggle-selection-next",
         "key": "insert",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.kuwpopz"
       },
       {
         "command": "bitfroest.transfer-name-start",
         "key": "ctrl+home",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.transferNameInput && bitfroest.textInput"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.transferNameInput && bitfroest.textInput && !bitfroest.shortcutOverride.klygkrn"
       },
       {
         "command": "bitfroest.transfer-name-parts",
         "key": "f5",
         "args": "F5",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.transferNameInput && bitfroest.textInput"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.transferNameInput && bitfroest.textInput && !bitfroest.shortcutOverride.k17o0o77"
       },
       {
         "command": "bitfroest.transfer-name-parts",
         "key": "f6",
         "args": "F6",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.transferNameInput && bitfroest.textInput"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.transferNameInput && bitfroest.textInput && !bitfroest.shortcutOverride.ksl6w6l"
       },
       {
         "command": "bitfroest.openPrototype",
@@ -75,633 +184,712 @@
       {
         "command": "bitfroest.new-tab",
         "key": "ctrl+t",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.kp63a4l",
         "mac": "cmd+t"
       },
       {
         "command": "bitfroest.close-tab",
         "key": "ctrl+w",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.kgvp98w",
         "mac": "cmd+w"
       },
       {
         "command": "bitfroest.next-tab",
         "key": "ctrl+tab",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.kqztrg3"
       },
       {
         "command": "bitfroest.previous-tab",
         "key": "ctrl+shift+tab",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.k1o87ddq"
       },
       {
         "command": "bitfroest.refresh",
         "key": "ctrl+r",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.kczo40o",
         "mac": "cmd+r"
       },
       {
         "command": "bitfroest.filter",
         "key": "ctrl+f",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.k1lrnyvt",
         "mac": "cmd+f"
       },
       {
         "command": "bitfroest.path",
         "key": "ctrl+l",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.k12wli76",
         "mac": "cmd+l"
       },
       {
         "command": "bitfroest.select-all",
         "key": "ctrl+a",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.k145twfa",
         "mac": "cmd+a"
       },
       {
         "command": "bitfroest.rename",
         "key": "ctrl+m",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.kmwlf0y",
         "mac": "cmd+m"
       },
       {
         "command": "bitfroest.view",
         "key": "f3",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.kq8s8yn"
       },
       {
         "command": "bitfroest.edit",
         "key": "f4",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.klowged"
       },
       {
         "command": "bitfroest.copy",
         "key": "f5",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.k1mkot75"
       },
       {
         "command": "bitfroest.move",
         "key": "f6",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.k1yionhe"
       },
       {
         "command": "bitfroest.mkdir",
         "key": "f7",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.k1d26t45"
       },
       {
         "command": "bitfroest.delete",
         "key": "f8",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.ksiw1lq"
       },
       {
         "command": "bitfroest.delete",
         "key": "delete",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.kqvryhl"
       },
       {
         "command": "bitfroest.pack",
         "key": "alt+f5",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.ko2l0gl"
       },
       {
         "command": "bitfroest.unpack",
         "key": "alt+f9",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.k4kr3jm"
       },
       {
         "command": "bitfroest.background-tab",
         "key": "ctrl+shift+t",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.k26cw8i",
         "mac": "cmd+shift+t"
       },
       {
         "command": "bitfroest.open-dir-tab",
         "key": "ctrl+up",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.k1gcx3jq",
         "mac": "cmd+up"
       },
       {
         "command": "bitfroest.open-dir-other-tab",
         "key": "ctrl+shift+up",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.k1d6iqas",
         "mac": "cmd+shift+up"
       },
       {
         "command": "bitfroest.rename-one",
         "key": "shift+f6",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.kn0gjbz"
       },
       {
-        "command": "bitfroest.refresh",
+        "command": "bitfroest.rename-one",
         "key": "f2",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.k1lghbzg"
       },
       {
         "command": "bitfroest.unpack",
         "key": "alt+f6",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.kdbcel"
       },
       {
         "command": "bitfroest.back",
         "key": "alt+left",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.k2qs9xf"
       },
       {
         "command": "bitfroest.forward",
         "key": "alt+right",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.k2b775u"
       },
       {
         "command": "bitfroest.swap-paths",
         "key": "ctrl+u",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.k1oa8nya",
         "mac": "cmd+u"
       },
       {
         "command": "bitfroest.swap",
         "key": "ctrl+shift+u",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput",
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.k1qogxsy",
         "mac": "cmd+shift+u"
       },
       {
         "command": "bitfroest.copy-same",
         "key": "shift+f5",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.kzgmvsp"
       },
       {
         "command": "bitfroest.mkdir-other",
         "key": "shift+f7",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.k1leoqd"
       },
       {
         "command": "bitfroest.new-file",
         "key": "shift+f4",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.krxhabp"
       },
       {
         "command": "bitfroest.delete-alternate",
         "key": "shift+f8",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.k1mu4t6q"
       },
       {
         "command": "bitfroest.delete-alternate",
         "key": "shift+delete",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.khjopmd"
       },
       {
         "command": "bitfroest.conflict-target",
         "key": "f3",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.conflictDialog"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.conflictDialog && !bitfroest.shortcutOverride.k18maxws"
       },
       {
         "command": "bitfroest.conflict-source",
         "key": "shift+f3",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.conflictDialog"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.conflictDialog && !bitfroest.shortcutOverride.k13fnp45"
       },
       {
         "command": "bitfroest.conflict-target-plain",
         "key": "alt+f3",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.conflictDialog"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.conflictDialog && !bitfroest.shortcutOverride.k1v5cxsb"
       },
       {
         "command": "bitfroest.conflict-source-plain",
         "key": "alt+shift+f3",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.conflictDialog"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.conflictDialog && !bitfroest.shortcutOverride.k1tuwidu"
       },
       {
         "command": "bitfroest.conflict-compare",
         "key": "ctrl+f3",
         "mac": "cmd+f3",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.conflictDialog"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.conflictDialog && !bitfroest.shortcutOverride.k1q5blzy"
       },
       {
         "command": "bitfroest.conflict-compare-internal",
         "key": "ctrl+shift+f3",
         "mac": "cmd+shift+f3",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.conflictDialog"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.conflictDialog && !bitfroest.shortcutOverride.kfxsabd"
       },
       {
         "command": "bitfroest.clipboard-copy",
         "key": "ctrl+c",
         "mac": "cmd+c",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.k1l6qk0i"
       },
       {
         "command": "bitfroest.clipboard-cut",
         "key": "ctrl+x",
         "mac": "cmd+x",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.k15s2iqe"
       },
       {
         "command": "bitfroest.clipboard-paste",
         "key": "ctrl+v",
         "mac": "cmd+v",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.kemf5dz"
       },
       {
         "key": "escape",
         "command": "bitfroest.lister-action",
         "args": "escape",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.listerFocus && !bitfroest.textInput"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.listerFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.k1fkrg3e"
       },
       {
         "key": "f2",
         "command": "bitfroest.lister-action",
         "args": "reload",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.listerFocus && !bitfroest.textInput"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.listerFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.ks7o9uf"
       },
       {
         "key": "f3",
         "command": "bitfroest.lister-action",
         "args": "next",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.listerFocus && !bitfroest.textInput"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.listerFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.kihsozo"
       },
       {
         "key": "f4",
         "command": "bitfroest.lister-action",
         "args": "edit",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.listerFocus && !bitfroest.textInput"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.listerFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.k7ga8h2"
       },
       {
         "key": "f5",
         "command": "bitfroest.lister-action",
         "args": "next",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.listerFocus && !bitfroest.textInput"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.listerFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.k1s7i5sm"
       },
       {
         "key": "f6",
         "command": "bitfroest.lister-action",
         "args": "cursor",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.listerFocus && !bitfroest.textInput"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.listerFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.kyrt9re"
       },
       {
         "key": "f7",
         "command": "bitfroest.lister-action",
         "args": "find",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.listerFocus && !bitfroest.textInput"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.listerFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.k1j8gm9e"
       },
       {
         "key": "shift+f3",
         "command": "bitfroest.lister-action",
         "args": "previous",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.listerFocus && !bitfroest.textInput"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.listerFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.k1wg6wpd"
       },
       {
         "key": "shift+f5",
         "command": "bitfroest.lister-action",
         "args": "previous",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.listerFocus && !bitfroest.textInput"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.listerFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.kid55mz"
       },
       {
         "key": "shift+f7",
         "command": "bitfroest.lister-action",
         "args": "next",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.listerFocus && !bitfroest.textInput"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.listerFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.ko5w1vd"
       },
       {
         "key": "ctrl+f3",
         "command": "bitfroest.lister-action",
         "args": "inverse",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.listerFocus && !bitfroest.textInput"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.listerFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.k1n7mcaj"
       },
       {
         "key": "ctrl+f5",
         "command": "bitfroest.lister-action",
         "args": "inverse",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.listerFocus && !bitfroest.textInput"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.listerFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.k1gx5o95"
       },
       {
         "key": "ctrl+f",
         "command": "bitfroest.lister-action",
         "args": "find",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.listerFocus && !bitfroest.textInput"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.listerFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.kwmqchd"
       },
       {
         "key": "ctrl+a",
         "command": "bitfroest.lister-action",
         "args": "select-all",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.listerFocus && !bitfroest.textInput"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.listerFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.katbgob"
       },
       {
         "key": "ctrl+c",
         "command": "bitfroest.lister-action",
         "args": "copy",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.listerFocus && !bitfroest.textInput"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.listerFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.k1buxk7s"
       },
       {
         "key": "ctrl+shift+c",
         "command": "bitfroest.lister-action",
         "args": "copy-hex",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.listerFocus && !bitfroest.textInput"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.listerFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.k15e7ki7"
       },
       {
         "key": "ctrl+home",
         "command": "bitfroest.lister-action",
         "args": "first",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.listerFocus && !bitfroest.textInput"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.listerFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.k1v8qbrt"
       },
       {
         "key": "ctrl+end",
         "command": "bitfroest.lister-action",
         "args": "last",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.listerFocus && !bitfroest.textInput"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.listerFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.knvbu97"
       },
       {
         "key": "ctrl+shift+home",
         "command": "bitfroest.lister-action",
         "args": "extend-first",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.listerFocus && !bitfroest.textInput"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.listerFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.k19nbzx1"
       },
       {
         "key": "ctrl+shift+end",
         "command": "bitfroest.lister-action",
         "args": "extend-last",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.listerFocus && !bitfroest.textInput"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.listerFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.k127insp"
       },
       {
         "key": "alt+f7",
         "command": "bitfroest.search",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.listFocus && !bitfroest.textInput"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.listFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.k11mtghn"
       },
       {
         "key": "alt+shift+f7",
         "command": "bitfroest.search-separate",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.listFocus && !bitfroest.textInput"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.listFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.k53d17o"
       },
       {
         "key": "alt+a",
         "command": "bitfroest.search-key",
         "args": "alt+a",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus && !bitfroest.shortcutOverride.kuf5dz9"
       },
       {
         "key": "alt+d",
         "command": "bitfroest.search-key",
         "args": "alt+d",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus && !bitfroest.shortcutOverride.kgmtjr1"
       },
       {
         "key": "alt+e",
         "command": "bitfroest.search-key",
         "args": "alt+e",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus && !bitfroest.shortcutOverride.knn4bsl"
       },
       {
         "key": "alt+f",
         "command": "bitfroest.search-key",
         "args": "alt+f",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus && !bitfroest.shortcutOverride.kqdfg7l"
       },
       {
         "key": "alt+g",
         "command": "bitfroest.search-key",
         "args": "alt+g",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus && !bitfroest.shortcutOverride.klm5int"
       },
       {
         "key": "alt+h",
         "command": "bitfroest.search-key",
         "args": "alt+h",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus && !bitfroest.shortcutOverride.k7zvwfx"
       },
       {
         "key": "alt+i",
         "command": "bitfroest.search-key",
         "args": "alt+i",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus && !bitfroest.shortcutOverride.keimbb9"
       },
       {
         "key": "alt+k",
         "command": "bitfroest.search-key",
         "args": "alt+k",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus && !bitfroest.shortcutOverride.kp07k4x"
       },
       {
         "key": "alt+l",
         "command": "bitfroest.search-key",
         "args": "alt+l",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus && !bitfroest.shortcutOverride.k16vnazx"
       },
       {
         "key": "alt+m",
         "command": "bitfroest.search-key",
         "args": "alt+m",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus && !bitfroest.shortcutOverride.kswdvqt"
       },
       {
         "key": "alt+n",
         "command": "bitfroest.search-key",
         "args": "alt+n",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus && !bitfroest.shortcutOverride.k1v2ph0x"
       },
       {
         "key": "alt+o",
         "command": "bitfroest.search-key",
         "args": "alt+o",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus && !bitfroest.shortcutOverride.k1e68y7d"
       },
       {
         "key": "alt+p",
         "command": "bitfroest.search-key",
         "args": "alt+p",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus && !bitfroest.shortcutOverride.k1igodkd"
       },
       {
         "key": "alt+r",
         "command": "bitfroest.search-key",
         "args": "alt+r",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus && !bitfroest.shortcutOverride.kaoyuzd"
       },
       {
         "key": "alt+s",
         "command": "bitfroest.search-key",
         "args": "alt+s",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus && !bitfroest.shortcutOverride.k3d5bu9"
       },
       {
         "key": "alt+t",
         "command": "bitfroest.search-key",
         "args": "alt+t",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus && !bitfroest.shortcutOverride.k1i3aaal"
       },
       {
         "key": "alt+u",
         "command": "bitfroest.search-key",
         "args": "alt+u",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus && !bitfroest.shortcutOverride.kwlnw2d"
       },
       {
         "key": "alt+v",
         "command": "bitfroest.search-key",
         "args": "alt+v",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus && !bitfroest.shortcutOverride.k1u3yl1t"
       },
       {
         "key": "alt+w",
         "command": "bitfroest.search-key",
         "args": "alt+w",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus && !bitfroest.shortcutOverride.k1wix3cp"
       },
       {
         "key": "alt+x",
         "command": "bitfroest.search-key",
         "args": "alt+x",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus && !bitfroest.shortcutOverride.k16qmdst"
       },
       {
         "key": "alt+y",
         "command": "bitfroest.search-key",
         "args": "alt+y",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus && !bitfroest.shortcutOverride.k1aqpft1"
       },
       {
         "key": "alt+z",
         "command": "bitfroest.search-key",
         "args": "alt+z",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus && !bitfroest.shortcutOverride.k1c0ckx5"
       },
       {
         "key": "alt+1",
         "command": "bitfroest.search-key",
         "args": "alt+1",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus && !bitfroest.shortcutOverride.k14ji6kl"
       },
       {
         "key": "alt+2",
         "command": "bitfroest.search-key",
         "args": "alt+2",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus && !bitfroest.shortcutOverride.ksqz4gp"
       },
       {
         "key": "alt+8",
         "command": "bitfroest.search-key",
         "args": "alt+8",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus && !bitfroest.shortcutOverride.k1osmna5"
       },
       {
         "key": "alt+[Semicolon]",
         "command": "bitfroest.search-key",
         "args": "alt+ö",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus && !bitfroest.shortcutOverride.kywjw28"
       },
       {
         "key": "alt+[Quote]",
         "command": "bitfroest.search-key",
         "args": "alt+ä",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus && !bitfroest.shortcutOverride.k1ocvrzf"
       },
       {
         "key": "alt+left",
         "command": "bitfroest.search-key",
         "args": "alt+left",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus && !bitfroest.shortcutOverride.k16kweb3"
       },
       {
         "key": "alt+right",
         "command": "bitfroest.search-key",
         "args": "alt+right",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus && !bitfroest.shortcutOverride.k9g8b1x"
       },
       {
         "key": "f2",
         "command": "bitfroest.search-key",
         "args": "f2",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus && !bitfroest.shortcutOverride.k1q6vaul"
       },
       {
         "key": "f3",
         "command": "bitfroest.search-key",
         "args": "f3",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus && !bitfroest.shortcutOverride.kys6wo3"
       },
       {
         "key": "f4",
         "command": "bitfroest.search-key",
         "args": "f4",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus && !bitfroest.shortcutOverride.knzrhpd"
       },
       {
         "key": "escape",
         "command": "bitfroest.search-key",
         "args": "escape",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus && !bitfroest.shortcutOverride.k13uocb"
       },
       {
         "key": "ctrl+tab",
         "command": "bitfroest.search-key",
         "args": "ctrl+tab",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus && !bitfroest.shortcutOverride.kpnmxi7"
       },
       {
         "key": "ctrl+shift+tab",
         "command": "bitfroest.search-key",
         "args": "ctrl+shift+tab",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus && !bitfroest.shortcutOverride.k1dkt1wx"
       },
       {
         "key": "ctrl+pageup",
         "command": "bitfroest.search-key",
         "args": "ctrl+pageup",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus && !bitfroest.shortcutOverride.kw0jppx"
       },
       {
         "key": "ctrl+pagedown",
         "command": "bitfroest.search-key",
         "args": "ctrl+pagedown",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus && !bitfroest.shortcutOverride.kphevtp"
       },
       {
         "key": "ctrl+up",
         "command": "bitfroest.search-key",
         "args": "ctrl+up",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus && !bitfroest.shortcutOverride.kacqgbl"
       },
       {
         "key": "ctrl+down",
         "command": "bitfroest.search-key",
         "args": "ctrl+down",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
-      },
-      {
-        "key": "f2",
-        "command": "bitfroest.search-normal",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchResults && bitfroest.listFocus && !bitfroest.textInput"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus && !bitfroest.shortcutOverride.k13iswi1"
       },
       {
         "key": "shift+delete",
         "command": "bitfroest.search-key",
         "args": "shift+delete",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchFocus && !bitfroest.shortcutOverride.kv6fqx"
       },
       {
         "key": "ctrl+c",
         "command": "bitfroest.search-key",
         "args": "ctrl+c",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchResultsFocus"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchResultsFocus && !bitfroest.shortcutOverride.k168merd"
       },
       {
         "key": "numpad_add",
         "command": "bitfroest.search-duplicates",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchResults && bitfroest.listFocus && !bitfroest.textInput"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.ready && bitfroest.searchResults && bitfroest.listFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.kzx2aqg"
       },
       {
         "command": "bitfroest.pack-move",
         "key": "alt+shift+f5",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.k18ikiza"
       },
       {
         "command": "bitfroest.test-archives",
         "key": "alt+shift+f9",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.k1rfv7mn"
       }
     ],
     "commands": [
       {
+        "command": "bitfroest.open-terminal",
+        "title": "%command.bitfroest.open-terminal.title%",
+        "category": "Bitfroest.fs",
+        "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype && bitfroest.listFocus && !bitfroest.textInput && !bitfroest.searchResults"
+      },
+      {
+        "command": "bitfroest.select-group",
+        "title": "%command.bitfroest.select-group.title%",
+        "category": "Bitfroest.fs",
+        "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype && bitfroest.listFocus && !bitfroest.textInput"
+      },
+      {
+        "command": "bitfroest.unselect-group",
+        "title": "%command.bitfroest.unselect-group.title%",
+        "category": "Bitfroest.fs",
+        "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype && bitfroest.listFocus && !bitfroest.textInput"
+      },
+      {
+        "command": "bitfroest.select-extension",
+        "title": "%command.bitfroest.select-extension.title%",
+        "category": "Bitfroest.fs",
+        "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype && bitfroest.listFocus && !bitfroest.textInput"
+      },
+      {
+        "command": "bitfroest.unselect-extension",
+        "title": "%command.bitfroest.unselect-extension.title%",
+        "category": "Bitfroest.fs",
+        "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype && bitfroest.listFocus && !bitfroest.textInput"
+      },
+      {
+        "command": "bitfroest.save-selection",
+        "title": "%command.bitfroest.save-selection.title%",
+        "category": "Bitfroest.fs",
+        "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype && bitfroest.listFocus && !bitfroest.textInput"
+      },
+      {
+        "command": "bitfroest.restore-selection",
+        "title": "%command.bitfroest.restore-selection.title%",
+        "category": "Bitfroest.fs",
+        "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype && bitfroest.listFocus && !bitfroest.textInput"
+      },
+      {
+        "command": "bitfroest.save-selection-file",
+        "title": "%command.bitfroest.save-selection-file.title%",
+        "category": "Bitfroest.fs",
+        "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype && bitfroest.listFocus && !bitfroest.textInput"
+      },
+      {
+        "command": "bitfroest.load-selection-file",
+        "title": "%command.bitfroest.load-selection-file.title%",
+        "category": "Bitfroest.fs",
+        "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype && bitfroest.listFocus && !bitfroest.textInput"
+      },
+      {
+        "command": "bitfroest.copy-names",
+        "title": "%command.bitfroest.copy-names.title%",
+        "category": "Bitfroest.fs",
+        "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype && bitfroest.listFocus && !bitfroest.textInput"
+      },
+      {
+        "command": "bitfroest.copy-full-names",
+        "title": "%command.bitfroest.copy-full-names.title%",
+        "category": "Bitfroest.fs",
+        "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype && bitfroest.listFocus && !bitfroest.textInput"
+      },
+      {
+        "command": "bitfroest.copy-details",
+        "title": "%command.bitfroest.copy-details.title%",
+        "category": "Bitfroest.fs",
+        "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype && bitfroest.listFocus && !bitfroest.textInput"
+      },
+      {
+        "command": "bitfroest.copy-full-details",
+        "title": "%command.bitfroest.copy-full-details.title%",
+        "category": "Bitfroest.fs",
+        "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype && bitfroest.listFocus && !bitfroest.textInput"
+      },
+      {
+        "command": "bitfroest.select-all-text",
+        "title": "%command.bitfroest.select-all-text.title%",
+        "category": "Bitfroest.fs",
+        "enablement": "bitfroest.ready && bitfroest.textInput && activeWebviewPanelId == bitfroestPrototype"
+      },
+      {
         "command": "bitfroest.inspect-folder-locks",
         "title": "%command.bitfroest.inspect-folder-locks.title%",
         "category": "Bitfroest.fs",
-        "enablement": "isWindows && bitfroest.ready && activeWebviewPanelId == bitfroestPrototype && bitfroest.listFocus && !bitfroest.textInput"
+        "enablement": "(isWindows || isLinux || isMac) && bitfroest.ready && activeWebviewPanelId == bitfroestPrototype && bitfroest.listFocus && !bitfroest.textInput"
       },
       {
         "command": "bitfroest.chooseLanguage",
@@ -1033,6 +1221,16 @@
         "title": "%command.bitfroest.showLocalBranches.title%",
         "category": "Bitfroest.fs",
         "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype"
+      },
+      {
+        "command": "bitfroest.configureSettings",
+        "title": "%shortcuts.settingsCommand%",
+        "category": "Bitfroest.fs"
+      },
+      {
+        "command": "bitfroest.configureShortcuts",
+        "title": "%shortcuts.command%",
+        "category": "Bitfroest.fs"
       }
     ],
     "submenus": [
@@ -1183,8 +1381,18 @@
       ],
       "webview/context": [
         {
+          "command": "bitfroest.select-all-text",
+          "when": "webviewId == bitfroestPrototype && webviewSection == textInput",
+          "group": "5_cutcopypaste@4"
+        },
+        {
+          "command": "bitfroest.inspect-folder-locks",
+          "when": "!isWindows && (isLinux || isMac) && bitfroest.ready && webviewId == bitfroestPrototype && webviewSection == folder",
+          "group": "2_inspection"
+        },
+        {
           "submenu": "bitfroest.menu",
-          "when": "bitfroest.ready && webviewId == bitfroestPrototype",
+          "when": "bitfroest.ready && webviewId == bitfroestPrototype && webviewSection != textInput",
           "group": "navigation@1"
         },
         {
@@ -1194,21 +1402,69 @@
         },
         {
           "command": "bitfroest.clipboard-copy",
-          "when": "bitfroest.ready && webviewId == bitfroestPrototype && webviewSection != columns",
+          "when": "bitfroest.ready && webviewId == bitfroestPrototype && webviewSection != columns && webviewSection != textInput",
           "group": "1_fileclipboard"
         },
         {
           "command": "bitfroest.clipboard-cut",
-          "when": "bitfroest.ready && webviewId == bitfroestPrototype && webviewSection != columns",
+          "when": "bitfroest.ready && webviewId == bitfroestPrototype && webviewSection != columns && webviewSection != textInput",
           "group": "1_fileclipboard"
         },
         {
           "command": "bitfroest.clipboard-paste",
-          "when": "bitfroest.ready && webviewId == bitfroestPrototype && webviewSection != columns",
+          "when": "bitfroest.ready && webviewId == bitfroestPrototype && webviewSection != columns && webviewSection != textInput",
           "group": "1_fileclipboard"
         }
       ],
       "commandPalette": [
+        {
+          "command": "bitfroest.select-group",
+          "when": "activeWebviewPanelId == bitfroestPrototype"
+        },
+        {
+          "command": "bitfroest.unselect-group",
+          "when": "activeWebviewPanelId == bitfroestPrototype"
+        },
+        {
+          "command": "bitfroest.select-extension",
+          "when": "activeWebviewPanelId == bitfroestPrototype"
+        },
+        {
+          "command": "bitfroest.unselect-extension",
+          "when": "activeWebviewPanelId == bitfroestPrototype"
+        },
+        {
+          "command": "bitfroest.save-selection",
+          "when": "activeWebviewPanelId == bitfroestPrototype"
+        },
+        {
+          "command": "bitfroest.restore-selection",
+          "when": "activeWebviewPanelId == bitfroestPrototype"
+        },
+        {
+          "command": "bitfroest.save-selection-file",
+          "when": "activeWebviewPanelId == bitfroestPrototype"
+        },
+        {
+          "command": "bitfroest.load-selection-file",
+          "when": "activeWebviewPanelId == bitfroestPrototype"
+        },
+        {
+          "command": "bitfroest.copy-names",
+          "when": "activeWebviewPanelId == bitfroestPrototype"
+        },
+        {
+          "command": "bitfroest.copy-full-names",
+          "when": "activeWebviewPanelId == bitfroestPrototype"
+        },
+        {
+          "command": "bitfroest.copy-details",
+          "when": "activeWebviewPanelId == bitfroestPrototype"
+        },
+        {
+          "command": "bitfroest.copy-full-details",
+          "when": "activeWebviewPanelId == bitfroestPrototype"
+        },
         {
           "command": "bitfroest.view",
           "when": "activeWebviewPanelId == bitfroestPrototype"
@@ -1378,6 +1634,12 @@
               "Deutsch",
               "English"
             ]
+          },
+          "bitfroest.files.selectDirectories": {
+            "type": "boolean",
+            "default": true,
+            "scope": "resource",
+            "description": "%files.selectDirectories.description%"
           },
           "bitfroest.files.countFolderSizeOnSpace": {
             "type": "boolean",
@@ -3245,7 +3507,7 @@
           },
           "bitfroest.gitStatus.showIgnored": {
             "type": "boolean",
-            "default": false,
+            "default": true,
             "scope": "window",
             "description": "%gitStatus.showIgnored.description%"
           },
@@ -3286,18 +3548,646 @@
               "type": "string"
             },
             "uniqueItems": true
+          },
+          "bitfroest.gitStatus.iconSizePercent": {
+            "type": "integer",
+            "minimum": 25,
+            "maximum": 100,
+            "default": 66,
+            "scope": "window",
+            "description": "%gitStatus.iconSizePercent%"
+          }
+        }
+      },
+      {
+        "title": "%colors.title%",
+        "properties": {
+          "bitfroest.colors.fileTypes": {
+            "type": "boolean",
+            "default": true,
+            "scope": "window",
+            "description": "%colors.fileTypes%"
+          },
+          "bitfroest.colors.gitStatus": {
+            "type": "boolean",
+            "default": true,
+            "scope": "window",
+            "description": "%colors.gitStatus%"
+          },
+          "bitfroest.colors.rules": {
+            "type": "object",
+            "default": {
+              "*.c": "#519aba",
+              "*.cc": "#519aba",
+              "*.cpp": "#519aba",
+              "*.cxx": "#519aba",
+              "*.h": "#519aba",
+              "*.hh": "#519aba",
+              "*.hpp": "#519aba",
+              "*.hxx": "#519aba",
+              "*.inl": "#519aba",
+              "*.ipp": "#519aba",
+              "*.tpp": "#519aba",
+              "*.m": "#519aba",
+              "*.mm": "#519aba",
+              "*.cs": "#519aba",
+              "*.csx": "#519aba",
+              "*.vb": "#519aba",
+              "*.fs": "#519aba",
+              "*.fsi": "#519aba",
+              "*.fsx": "#519aba",
+              "*.java": "#519aba",
+              "*.kt": "#519aba",
+              "*.kts": "#519aba",
+              "*.scala": "#519aba",
+              "*.sc": "#519aba",
+              "*.groovy": "#519aba",
+              "*.gvy": "#519aba",
+              "*.clj": "#519aba",
+              "*.cljs": "#519aba",
+              "*.cljc": "#519aba",
+              "*.js": "#519aba",
+              "*.cjs": "#519aba",
+              "*.mjs": "#519aba",
+              "*.jsx": "#519aba",
+              "*.ts": "#519aba",
+              "*.cts": "#519aba",
+              "*.mts": "#519aba",
+              "*.tsx": "#519aba",
+              "*.d.ts": "#519aba",
+              "*.d.cts": "#519aba",
+              "*.d.mts": "#519aba",
+              "*.py": "#519aba",
+              "*.pyw": "#519aba",
+              "*.pyi": "#519aba",
+              "*.pyx": "#519aba",
+              "*.pxd": "#519aba",
+              "*.pxi": "#519aba",
+              "*.rb": "#519aba",
+              "*.rake": "#519aba",
+              "*.gemspec": "#519aba",
+              "*.php": "#519aba",
+              "*.phtml": "#519aba",
+              "*.phar": "#519aba",
+              "*.pl": "#519aba",
+              "*.pm": "#519aba",
+              "*.pod": "#519aba",
+              "*.psgi": "#519aba",
+              "*.go": "#519aba",
+              "*.rs": "#519aba",
+              "*.swift": "#519aba",
+              "*.dart": "#519aba",
+              "*.hs": "#519aba",
+              "*.lhs": "#519aba",
+              "*.ml": "#519aba",
+              "*.mli": "#519aba",
+              "*.ex": "#519aba",
+              "*.exs": "#519aba",
+              "*.erl": "#519aba",
+              "*.hrl": "#519aba",
+              "*.rkt": "#519aba",
+              "*.scm": "#519aba",
+              "*.lisp": "#519aba",
+              "*.el": "#519aba",
+              "*.cl": "#519aba",
+              "*.r": "#519aba",
+              "*.jl": "#519aba",
+              "*.f": "#519aba",
+              "*.for": "#519aba",
+              "*.f90": "#519aba",
+              "*.f95": "#519aba",
+              "*.f03": "#519aba",
+              "*.f08": "#519aba",
+              "*.cbl": "#519aba",
+              "*.cob": "#519aba",
+              "*.cpy": "#519aba",
+              "*.adb": "#519aba",
+              "*.ads": "#519aba",
+              "*.pas": "#519aba",
+              "*.dpr": "#519aba",
+              "*.dpk": "#519aba",
+              "*.asm": "#519aba",
+              "*.s": "#519aba",
+              "*.nasm": "#519aba",
+              "*.v": "#519aba",
+              "*.vh": "#519aba",
+              "*.sv": "#519aba",
+              "*.svh": "#519aba",
+              "*.vhd": "#519aba",
+              "*.vhdl": "#519aba",
+              "*.lua": "#519aba",
+              "*.tcl": "#519aba",
+              "*.tk": "#519aba",
+              "*.zig": "#519aba",
+              "*.d": "#519aba",
+              "*.di": "#519aba",
+              "*.elm": "#519aba",
+              "*.purs": "#519aba",
+              "*.sol": "#519aba",
+              "*.cls": "#519aba",
+              "*.pro": "#519aba",
+              "*.pp": "#519aba",
+              "*.p": "#519aba",
+              "*.inc": "#519aba",
+              "*.ps1": "#4ec9b0",
+              "*.psm1": "#4ec9b0",
+              "*.psd1": "#4ec9b0",
+              "*.sh": "#4ec9b0",
+              "*.bash": "#4ec9b0",
+              "*.zsh": "#4ec9b0",
+              "*.fish": "#4ec9b0",
+              "*.ksh": "#4ec9b0",
+              "*.bat": "#4ec9b0",
+              "*.cmd": "#4ec9b0",
+              "*.awk": "#4ec9b0",
+              "*.vbs": "#4ec9b0",
+              "*.ahk": "#4ec9b0",
+              "*.au3": "#4ec9b0",
+              "*.html": "#ce9178",
+              "*.htm": "#ce9178",
+              "*.xhtml": "#ce9178",
+              "*.vue": "#ce9178",
+              "*.svelte": "#ce9178",
+              "*.astro": "#ce9178",
+              "*.hbs": "#ce9178",
+              "*.handlebars": "#ce9178",
+              "*.mustache": "#ce9178",
+              "*.ejs": "#ce9178",
+              "*.pug": "#ce9178",
+              "*.njk": "#ce9178",
+              "*.jinja2": "#ce9178",
+              "*.twig": "#ce9178",
+              "*.blade.php": "#ce9178",
+              "*.erb": "#ce9178",
+              "*.cshtml": "#ce9178",
+              "*.jsp": "#ce9178",
+              "*.jspx": "#ce9178",
+              "*.xaml": "#ce9178",
+              "*.axaml": "#ce9178",
+              "*.razor": "#ce9178",
+              "*.aspx": "#ce9178",
+              "*.ascx": "#ce9178",
+              "*.component.html": "#ce9178",
+              "*.template.html": "#ce9178",
+              "*.css": "#c586c0",
+              "*.scss": "#c586c0",
+              "*.sass": "#c586c0",
+              "*.less": "#c586c0",
+              "*.xml": "#d7ba7d",
+              "*.json": "#d7ba7d",
+              "*.jsonc": "#d7ba7d",
+              "*.json5": "#d7ba7d",
+              "*.yaml": "#d7ba7d",
+              "*.yml": "#d7ba7d",
+              "*.toml": "#d7ba7d",
+              "*.ini": "#d7ba7d",
+              "*.properties": "#d7ba7d",
+              "*.edn": "#d7ba7d",
+              "*.xsd": "#d7ba7d",
+              "*.xsl": "#d7ba7d",
+              "*.xslt": "#d7ba7d",
+              "*.wsdl": "#d7ba7d",
+              "*.proto": "#d7ba7d",
+              "*.avsc": "#d7ba7d",
+              "*.avdl": "#d7ba7d",
+              "*.xlf": "#d7ba7d",
+              "*.xliff": "#d7ba7d",
+              "*.rdf": "#d7ba7d",
+              "*.owl": "#d7ba7d",
+              "*.resx": "#d7ba7d",
+              "*.resw": "#d7ba7d",
+              "*.schema.json": "#d7ba7d",
+              ".gitignore": "#d7ba7d",
+              ".gitattributes": "#d7ba7d",
+              ".gitmodules": "#d7ba7d",
+              ".mailmap": "#d7ba7d",
+              ".gitconfig": "#d7ba7d",
+              ".gitmessage": "#d7ba7d",
+              ".editorconfig": "#d7ba7d",
+              ".npmrc": "#d7ba7d",
+              ".nvmrc": "#d7ba7d",
+              ".node-version": "#d7ba7d",
+              ".env": "#d7ba7d",
+              ".env.*": "#d7ba7d",
+              ".env.example": "#d7ba7d",
+              ".env.sample": "#d7ba7d",
+              ".env.template": "#d7ba7d",
+              "tsconfig*": "#d7ba7d",
+              "jsconfig*": "#d7ba7d",
+              "eslint.config.*": "#d7ba7d",
+              ".eslintrc*": "#d7ba7d",
+              ".prettierrc*": "#d7ba7d",
+              "rustfmt.toml": "#d7ba7d",
+              ".rustfmt.toml": "#d7ba7d",
+              "ruff.toml": "#d7ba7d",
+              ".ruff.toml": "#d7ba7d",
+              "*.sln": "#dcdcaa",
+              "*.slnx": "#dcdcaa",
+              "*.csproj": "#dcdcaa",
+              "*.fsproj": "#dcdcaa",
+              "*.vbproj": "#dcdcaa",
+              "*.vcxproj": "#dcdcaa",
+              "*.props": "#dcdcaa",
+              "*.targets": "#dcdcaa",
+              "*.cmake": "#dcdcaa",
+              "*.mk": "#dcdcaa",
+              "*.bzl": "#dcdcaa",
+              "*.tf": "#dcdcaa",
+              "*.tfvars": "#dcdcaa",
+              "*.tf.json": "#dcdcaa",
+              "*.bicep": "#dcdcaa",
+              "*.pkr.hcl": "#dcdcaa",
+              "*.pkr.json": "#dcdcaa",
+              "package.json": "#dcdcaa",
+              "package-lock.json": "#dcdcaa",
+              "npm-shrinkwrap.json": "#dcdcaa",
+              "yarn.lock": "#dcdcaa",
+              "pnpm-lock.yaml": "#dcdcaa",
+              "pyproject.toml": "#dcdcaa",
+              "requirements.txt": "#dcdcaa",
+              "requirements-*.txt": "#dcdcaa",
+              "Pipfile": "#dcdcaa",
+              "Pipfile.lock": "#dcdcaa",
+              "poetry.lock": "#dcdcaa",
+              "uv.lock": "#dcdcaa",
+              "setup.py": "#dcdcaa",
+              "setup.cfg": "#dcdcaa",
+              "tox.ini": "#dcdcaa",
+              "pom.xml": "#dcdcaa",
+              "build.gradle": "#dcdcaa",
+              "build.gradle.kts": "#dcdcaa",
+              "settings.gradle": "#dcdcaa",
+              "settings.gradle.kts": "#dcdcaa",
+              "gradle.properties": "#dcdcaa",
+              "gradlew": "#dcdcaa",
+              "gradlew.bat": "#dcdcaa",
+              "build.xml": "#dcdcaa",
+              "global.json": "#dcdcaa",
+              "NuGet.config": "#dcdcaa",
+              "packages.config": "#dcdcaa",
+              "Directory.Build.props": "#dcdcaa",
+              "Directory.Build.targets": "#dcdcaa",
+              "Makefile": "#dcdcaa",
+              "GNUmakefile": "#dcdcaa",
+              "CMakeLists.txt": "#dcdcaa",
+              "meson.build": "#dcdcaa",
+              "meson_options.txt": "#dcdcaa",
+              "build.ninja": "#dcdcaa",
+              "BUILD": "#dcdcaa",
+              "BUILD.bazel": "#dcdcaa",
+              "WORKSPACE": "#dcdcaa",
+              "WORKSPACE.bazel": "#dcdcaa",
+              "MODULE.bazel": "#dcdcaa",
+              "flake.nix": "#dcdcaa",
+              "flake.lock": "#dcdcaa",
+              "default.nix": "#dcdcaa",
+              "shell.nix": "#dcdcaa",
+              "Dockerfile": "#dcdcaa",
+              "Dockerfile.*": "#dcdcaa",
+              "Containerfile": "#dcdcaa",
+              "Containerfile.*": "#dcdcaa",
+              ".dockerignore": "#dcdcaa",
+              "compose.yaml": "#dcdcaa",
+              "compose.yml": "#dcdcaa",
+              "docker-compose.yaml": "#dcdcaa",
+              "docker-compose.yml": "#dcdcaa",
+              "kustomization.yaml": "#dcdcaa",
+              "Chart.yaml": "#dcdcaa",
+              "Chart.lock": "#dcdcaa",
+              "values.yaml": "#dcdcaa",
+              "values-*.yaml": "#dcdcaa",
+              "Jenkinsfile": "#dcdcaa",
+              ".gitlab-ci.yml": "#dcdcaa",
+              "azure-pipelines.yml": "#dcdcaa",
+              ".travis.yml": "#dcdcaa",
+              ".appveyor.yml": "#dcdcaa",
+              "Cargo.toml": "#dcdcaa",
+              "Cargo.lock": "#dcdcaa",
+              "go.mod": "#dcdcaa",
+              "go.sum": "#dcdcaa",
+              "go.work": "#dcdcaa",
+              "go.work.sum": "#dcdcaa",
+              "Gemfile": "#dcdcaa",
+              "Gemfile.lock": "#dcdcaa",
+              "Rakefile": "#dcdcaa",
+              "Package.swift": "#dcdcaa",
+              "Package.resolved": "#dcdcaa",
+              "pubspec.yaml": "#dcdcaa",
+              "pubspec.lock": "#dcdcaa",
+              "mix.exs": "#dcdcaa",
+              "mix.lock": "#dcdcaa",
+              "composer.json": "#dcdcaa",
+              "composer.lock": "#dcdcaa",
+              "Vagrantfile": "#dcdcaa",
+              "Procfile": "#dcdcaa",
+              "*.md": "#b180d7",
+              "*.mdx": "#b180d7",
+              "*.rst": "#b180d7",
+              "*.adoc": "#b180d7",
+              "*.asciidoc": "#b180d7",
+              "*.org": "#b180d7",
+              "*.textile": "#b180d7",
+              "*.tex": "#b180d7",
+              "*.sty": "#b180d7",
+              "*.bib": "#b180d7",
+              "*.bst": "#b180d7",
+              "*.chm": "#b180d7",
+              "*.hlp": "#b180d7",
+              "README": "#b180d7",
+              "README.*": "#b180d7",
+              "LICENSE": "#b180d7",
+              "LICENSE.*": "#b180d7",
+              "COPYING": "#b180d7",
+              "COPYING.*": "#b180d7",
+              "NOTICE": "#b180d7",
+              "NOTICE.*": "#b180d7",
+              "AUTHORS": "#b180d7",
+              "CONTRIBUTORS": "#b180d7",
+              "CHANGELOG": "#b180d7",
+              "CHANGELOG*": "#b180d7",
+              "CHANGES": "#b180d7",
+              "NEWS": "#b180d7",
+              "*.docx": "#569cd6",
+              "*.docm": "#569cd6",
+              "*.dotx": "#569cd6",
+              "*.dotm": "#569cd6",
+              "*.doc": "#569cd6",
+              "*.dot": "#569cd6",
+              "*.odt": "#569cd6",
+              "*.ott": "#569cd6",
+              "*.odm": "#569cd6",
+              "*.oth": "#569cd6",
+              "*.fodt": "#569cd6",
+              "*.sxw": "#569cd6",
+              "*.stw": "#569cd6",
+              "*.sxg": "#569cd6",
+              "*.sdw": "#569cd6",
+              "*.sgl": "#569cd6",
+              "*.rtf": "#569cd6",
+              "*.txt": "#569cd6",
+              "*.mht": "#569cd6",
+              "*.mhtml": "#569cd6",
+              "*.epub": "#569cd6",
+              "*.xlsx": "#6a9955",
+              "*.xlsm": "#6a9955",
+              "*.xlsb": "#6a9955",
+              "*.xltx": "#6a9955",
+              "*.xltm": "#6a9955",
+              "*.xls": "#6a9955",
+              "*.xlt": "#6a9955",
+              "*.xlw": "#6a9955",
+              "*.xlc": "#6a9955",
+              "*.xlb": "#6a9955",
+              "*.xla": "#6a9955",
+              "*.xlam": "#6a9955",
+              "*.xlm": "#6a9955",
+              "*.ods": "#6a9955",
+              "*.ots": "#6a9955",
+              "*.fods": "#6a9955",
+              "*.sxc": "#6a9955",
+              "*.stc": "#6a9955",
+              "*.sdc": "#6a9955",
+              "*.csv": "#6a9955",
+              "*.tsv": "#6a9955",
+              "*.tab": "#6a9955",
+              "*.dif": "#6a9955",
+              "*.slk": "#6a9955",
+              "*.pptx": "#ce9178",
+              "*.pptm": "#ce9178",
+              "*.ppt": "#ce9178",
+              "*.ppsx": "#ce9178",
+              "*.ppsm": "#ce9178",
+              "*.pps": "#ce9178",
+              "*.potx": "#ce9178",
+              "*.potm": "#ce9178",
+              "*.pot": "#ce9178",
+              "*.ppam": "#ce9178",
+              "*.ppa": "#ce9178",
+              "*.thmx": "#ce9178",
+              "*.odp": "#ce9178",
+              "*.otp": "#ce9178",
+              "*.fodp": "#ce9178",
+              "*.sxi": "#ce9178",
+              "*.sti": "#ce9178",
+              "*.sdd": "#ce9178",
+              "*.sqlite": "#4ec9b0",
+              "*.sqlite3": "#4ec9b0",
+              "*.db": "#4ec9b0",
+              "*.accdb": "#4ec9b0",
+              "*.mdb": "#4ec9b0",
+              "*.accde": "#4ec9b0",
+              "*.mde": "#4ec9b0",
+              "*.accdr": "#4ec9b0",
+              "*.accdt": "#4ec9b0",
+              "*.odb": "#4ec9b0",
+              "*.sql": "#4ec9b0",
+              "*.pls": "#4ec9b0",
+              "*.pkb": "#4ec9b0",
+              "*.pks": "#4ec9b0",
+              "*.psql": "#4ec9b0",
+              "*.graphql": "#4ec9b0",
+              "*.gql": "#4ec9b0",
+              "schema.prisma": "#4ec9b0",
+              "alembic.ini": "#4ec9b0",
+              "knexfile.*": "#4ec9b0",
+              "drizzle.config.*": "#4ec9b0",
+              "*.jsonl": "#9cdcfe",
+              "*.ndjson": "#9cdcfe",
+              "*.parquet": "#9cdcfe",
+              "*.orc": "#9cdcfe",
+              "*.avro": "#9cdcfe",
+              "*.arrow": "#9cdcfe",
+              "*.feather": "#9cdcfe",
+              "*.h5": "#9cdcfe",
+              "*.hdf5": "#9cdcfe",
+              "*.nc": "#9cdcfe",
+              "*.ipynb": "#9cdcfe",
+              "*.rmd": "#9cdcfe",
+              "*.qmd": "#9cdcfe",
+              "*.mlx": "#9cdcfe",
+              "*.pkl": "#9cdcfe",
+              "*.pickle": "#9cdcfe",
+              "*.npy": "#9cdcfe",
+              "*.npz": "#9cdcfe",
+              "*.rds": "#9cdcfe",
+              "*.rda": "#9cdcfe",
+              "*.rdata": "#9cdcfe",
+              "*.mat": "#9cdcfe",
+              "*.geojson": "#9cdcfe",
+              "*.topojson": "#9cdcfe",
+              "*.shp": "#9cdcfe",
+              "*.shx": "#9cdcfe",
+              "*.dbf": "#9cdcfe",
+              "*.prj": "#9cdcfe",
+              "*.gpkg": "#9cdcfe",
+              "*.kml": "#9cdcfe",
+              "*.gpx": "#9cdcfe",
+              "*.pst": "#dcdcaa",
+              "*.ost": "#dcdcaa",
+              "*.msg": "#dcdcaa",
+              "*.oft": "#dcdcaa",
+              "*.eml": "#dcdcaa",
+              "*.vcf": "#dcdcaa",
+              "*.vcard": "#dcdcaa",
+              "*.ics": "#dcdcaa",
+              "*.ical": "#dcdcaa",
+              "*.vcs": "#dcdcaa",
+              "*.mbox": "#dcdcaa",
+              "*.pub": "#c586c0",
+              "*.puz": "#c586c0",
+              "*.vor": "#c586c0",
+              "*.one": "#b180d7",
+              "*.onepkg": "#b180d7",
+              "*.vsdx": "#4ec9b0",
+              "*.vsdm": "#4ec9b0",
+              "*.vssx": "#4ec9b0",
+              "*.vssm": "#4ec9b0",
+              "*.vstx": "#4ec9b0",
+              "*.vstm": "#4ec9b0",
+              "*.vsd": "#4ec9b0",
+              "*.vdx": "#4ec9b0",
+              "*.vss": "#4ec9b0",
+              "*.vst": "#4ec9b0",
+              "*.vsx": "#4ec9b0",
+              "*.vtx": "#4ec9b0",
+              "*.odg": "#4ec9b0",
+              "*.otg": "#4ec9b0",
+              "*.fodg": "#4ec9b0",
+              "*.odc": "#4ec9b0",
+              "*.otc": "#4ec9b0",
+              "*.odi": "#4ec9b0",
+              "*.oti": "#4ec9b0",
+              "*.odf": "#4ec9b0",
+              "*.sxd": "#4ec9b0",
+              "*.std": "#4ec9b0",
+              "*.sda": "#4ec9b0",
+              "*.sxm": "#4ec9b0",
+              "*.smf": "#4ec9b0",
+              "*.drawio": "#4ec9b0",
+              "*.puml": "#4ec9b0",
+              "*.mmd": "#4ec9b0",
+              "*.dwg": "#4ec9b0",
+              "*.dxf": "#4ec9b0",
+              "*.step": "#4ec9b0",
+              "*.stp": "#4ec9b0",
+              "*.stl": "#4ec9b0",
+              "*.mpp": "#d7ba7d",
+              "*.mpt": "#d7ba7d",
+              "*.mpx": "#d7ba7d",
+              "*.pdf": "#f48771",
+              "*.xps": "#f48771",
+              "*.oxps": "#f48771",
+              "*.png": "#d7ba7d",
+              "*.jpg": "#d7ba7d",
+              "*.jpeg": "#d7ba7d",
+              "*.gif": "#d7ba7d",
+              "*.bmp": "#d7ba7d",
+              "*.tif": "#d7ba7d",
+              "*.tiff": "#d7ba7d",
+              "*.webp": "#d7ba7d",
+              "*.avif": "#d7ba7d",
+              "*.heic": "#d7ba7d",
+              "*.ico": "#d7ba7d",
+              "*.svg": "#d7ba7d",
+              "*.svgz": "#d7ba7d",
+              "*.eps": "#d7ba7d",
+              "*.emf": "#d7ba7d",
+              "*.wmf": "#d7ba7d",
+              "*.ttf": "#c586c0",
+              "*.otf": "#c586c0",
+              "*.woff": "#c586c0",
+              "*.woff2": "#c586c0",
+              "*.eot": "#c586c0",
+              "*.zip": "#c586c0",
+              "*.7z": "#c586c0",
+              "*.rar": "#c586c0",
+              "*.tar": "#c586c0",
+              "*.tar.gz": "#c586c0",
+              "*.tgz": "#c586c0",
+              "*.tar.bz2": "#c586c0",
+              "*.tbz2": "#c586c0",
+              "*.tar.xz": "#c586c0",
+              "*.txz": "#c586c0",
+              "*.tar.zst": "#c586c0",
+              "*.gz": "#c586c0",
+              "*.bz2": "#c586c0",
+              "*.xz": "#c586c0",
+              "*.zst": "#c586c0",
+              "*.jar": "#c8c8c8",
+              "*.war": "#c8c8c8",
+              "*.ear": "#c8c8c8",
+              "*.nupkg": "#c8c8c8",
+              "*.vsix": "#c8c8c8",
+              "*.whl": "#c8c8c8",
+              "*.gem": "#c8c8c8",
+              "*.crate": "#c8c8c8",
+              "*.msi": "#c8c8c8",
+              "*.msix": "#c8c8c8",
+              "*.deb": "#c8c8c8",
+              "*.rpm": "#c8c8c8",
+              "*.iso": "#c8c8c8",
+              "*.exe": "#9a9a9a",
+              "*.dll": "#9a9a9a",
+              "*.so": "#9a9a9a",
+              "*.dylib": "#9a9a9a",
+              "*.class": "#9a9a9a",
+              "*.pyc": "#9a9a9a",
+              "*.o": "#9a9a9a",
+              "*.obj": "#9a9a9a",
+              "*.a": "#9a9a9a",
+              "*.lib": "#9a9a9a",
+              "*.pdb": "#9a9a9a",
+              "*.pem": "#dcdcaa",
+              "*.key": "#dcdcaa",
+              "*.p12": "#dcdcaa",
+              "*.pfx": "#dcdcaa",
+              "*.jks": "#dcdcaa",
+              "*.cer": "#dcdcaa",
+              "*.crt": "#dcdcaa",
+              "id_rsa": "#dcdcaa",
+              "id_ed25519": "#dcdcaa",
+              "known_hosts": "#dcdcaa",
+              "authorized_keys": "#dcdcaa"
+            },
+            "scope": "window",
+            "additionalProperties": {
+              "type": "string",
+              "pattern": "^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$"
+            },
+            "description": "%colors.rules%"
+          }
+        }
+      },
+      {
+        "title": "%shortcuts.title%",
+        "properties": {
+          "bitfroest.shortcuts.bindings": {
+            "type": "object",
+            "default": {},
+            "scope": "machine-overridable",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "%shortcuts.bindings%"
           }
         }
       }
     ]
   },
   "scripts": {
+    "package:beta": "npx --yes --package @vscode/vsce -- vsce package --pre-release --baseContentUrl https://github.com/s-a/Bitfroest.fs/blob/main/ --baseImagesUrl https://raw.githubusercontent.com/s-a/Bitfroest.fs/main/",
+    "publish:beta": "npx --yes --package @vscode/vsce -- vsce publish --pre-release --baseContentUrl https://github.com/s-a/Bitfroest.fs/blob/main/ --baseImagesUrl https://raw.githubusercontent.com/s-a/Bitfroest.fs/main/",
     "preview": "node scripts/preview.cjs",
-    "check": "npm run check:zip && node --check license-information.js && node --check extension.js && node --check icon-theme.js && node --check filesystem-icons.js && node --check media/app.js && node --check media/webview-bootstrap.js && node --check media/commander-file-names.js && node --check media/commander-tabs.js && node --check media/commander-columns.js && node --check media/commander-search.js && node --check scripts/preview.cjs && node --check filesystem-provider.js && node --check zip-provider.js && node --check zip-filesystem.js && node --check pe-file-version.js && node --check readonly-files.js && node --check clipboard-provider.js && node --check media/commander-clipboard.js && node --check native/file-clipboard-macos.js && node --check native-copy.js && node --check native-rename.js && node --check operation-errors.js && node --check open-trash.js && node --check native-shell-menu.js && node --check media/commander-statusbar.js && node --check media/workbench-vendor.js && node --check media/workbench-icons.js && node --check lister-provider.js && node --check lister-codepages.js && node --check lister-search-worker.js && node --check media/commander-lister.js && node --check media/lister-view.js && node --check configuration-editor.js && node --check configuration-settings.js && node --check media/configuration-model.js && node --check media/configuration-view.js && node --check file-search.js && node --check file-search-worker.js && node --check search-provider.js && node --check search-metadata.js && node --check search-archives.js && node --check media/file-search-view.js && node --check media/search-duplicates.js && node --check git-status-engine.js && node --check git-status-paths.js && node --check git-status-provider.js && node --check git-status-worker.js && node --check folder-locks.js && node --check lock-inspector.js && node --check media/lock-inspector.js",
+    "check": "npm run check:zip && node --check network-paths.js && node --check selection-io.js && node --check license-information.js && node --check extension.js && node --check icon-theme.js && node --check filesystem-icons.js && node --check media/app.js && node --check media/webview-bootstrap.js && node --check media/commander-paths.js && node --check media/commander-file-names.js && node --check media/commander-tabs.js && node --check media/commander-columns.js && node --check media/commander-search.js && node --check scripts/preview.cjs && node --check filesystem-provider.js && node --check zip-provider.js && node --check zip-filesystem.js && node --check pe-file-version.js && node --check readonly-files.js && node --check clipboard-provider.js && node --check media/commander-clipboard.js && node --check native-copy.js && node --check native-rename.js && node --check operation-errors.js && node --check open-trash.js && node --check native-shell-menu.js && node --check media/commander-statusbar.js && node --check media/workbench-vendor.js && node --check media/workbench-icons.js && node --check lister-provider.js && node --check lister-codepages.js && node --check lister-search-worker.js && node --check media/commander-lister.js && node --check media/lister-view.js && node --check configuration-editor.js && node --check configuration-settings.js && node --check media/configuration-model.js && node --check media/configuration-view.js && node --check file-search.js && node --check file-search-worker.js && node --check search-provider.js && node --check search-metadata.js && node --check search-archives.js && node --check media/file-search-view.js && node --check media/search-duplicates.js && node --check git-status-engine.js && node --check git-status-paths.js && node --check git-status-provider.js && node --check git-status-worker.js && node --check folder-locks-posix.js && node --check folder-locks.js && node --check lock-inspector.js && node --check media/lock-inspector.js && node --check media/commander-file-colors.js && node --check scripts/generate-file-color-defaults.cjs && node --check media/git-status-icons.js && node --check startup-paths.js && node --check shortcut-settings.js && node --check media/commander-shortcuts.js && node --check media/shortcut-configuration.js && node --check media/shortcut-runtime.js",
     "test": "node --test",
-    "coverage": "c8 --check-coverage --lines=95 --statements=95 --functions=95 --branches=90 --all --include=zip-*.js --include=search-archives.js --include=search-metadata.js --include=search-provider.js --include=file-search-worker.js --include=file-search.js --include=lister-provider.js --include=lister-codepages.js --include=lister-search-worker.js --include=git-status-engine.js --include=git-status-paths.js --include=git-status-provider.js --include=git-status-worker.js --include=extension.js --include=operation-errors.js --include=open-trash.js --include=native-copy.js --include=native-shell-menu.js --include=folder-locks.js --include=lock-inspector.js --include=native-rename.js --include=clipboard-provider.js --include=icon-theme.js --include=filesystem-icons.js --include=filesystem-provider.js --include=pe-file-version.js --include=readonly-files.js --include=media/*.js --reporter=text --reporter=html --reporter=lcov --reporter=json-summary --reports-dir=coverage npm test",
+    "test:architecture": "node --test tests/runtime-architecture-policy.test.js tests/product-runtime-architecture.test.js",
+    "test:native": "node --test tests/native-terminal.test.js tests/native-api.test.js tests/native-binding.test.js tests/native-windows-queries.test.js tests/native-case-rename.test.js tests/native-network-direct.test.js tests/native-icons-api.test.js tests/native-desktop-api.test.js tests/native-window-actions.test.js tests/native-window.test.js tests/native-locks-api.test.js tests/native-async-lifecycle.test.js tests/native-clipboard-direct.test.js tests/native-copy.test.js tests/native-copy-session.test.js tests/native-copy-progress.test.js tests/native-copy-contract.test.js tests/native-copy-windows.test.js tests/native-default-routing.test.js tests/native-transfer-integration.test.js tests/git-status-native.test.js",
+    "test:native:linux": "node --test tests/native-api.test.js tests/native-locks-linux-api.test.js tests/native-desktop-linux-api.test.js tests/folder-locks-linux-routing.test.js tests/folder-locks-posix.test.js tests/folder-locks-posix-native.test.js tests/open-file.test.js tests/open-trash.test.js",
+    "vscode:prepublish": "npm run test:architecture",
+    "coverage": "c8 --check-coverage --lines=95 --statements=95 --functions=95 --branches=90 --all --include=zip-*.js --include=search-archives.js --include=search-metadata.js --include=search-provider.js --include=file-search-worker.js --include=file-search.js --include=lister-provider.js --include=lister-codepages.js --include=lister-search-worker.js --include=git-status-engine.js --include=git-status-paths.js --include=git-status-provider.js --include=git-status-worker.js --include=network-paths.js --include=selection-io.js --include=startup-paths.js --include=extension.js --include=operation-errors.js --include=open-trash.js --include=native-copy.js --include=native-shell-menu.js --include=folder-locks.js --include=folder-locks-posix.js --include=lock-inspector.js --include=native-rename.js --include=clipboard-provider.js --include=icon-theme.js --include=filesystem-icons.js --include=filesystem-provider.js --include=pe-file-version.js --include=readonly-files.js --include=media/*.js --reporter=text --reporter=html --reporter=lcov --reporter=json-summary --reports-dir=coverage npm test",
     "lint": "eslint . --max-warnings=0",
-    "check:zip": "node --check zip-codecs.js && node --check zip-editor.js && node --check zip-filter.js && node --check zip-io.js && node --check zip-operations.js && node --check zip-password.js && node --check zip-provider.js && node --check zip-filesystem.js"
+    "check:zip": "node --check zip-codecs.js && node --check zip-editor.js && node --check zip-filter.js && node --check zip-io.js && node --check zip-operations.js && node --check zip-password.js && node --check zip-provider.js && node --check zip-filesystem.js",
+    "generate:file-colors": "node scripts/generate-file-color-defaults.cjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -3310,7 +4200,6 @@
     "ui"
   ],
   "dependencies": {
-    "@zip.js/zip.js": "2.24.0",
-    "isomorphic-git": "1.44.8"
+    "@zip.js/zip.js": "2.24.0"
   }
 }

@@ -28,7 +28,7 @@ test('both panels share a status request and async badges preserve path editing,
   assert.equal(JSON.stringify(app.state()).includes('statuses'), false);
 });
 
-test('branch button requests local count without changing directory or triggering a file operation', t => {
+test('branch button requests available branches without changing directory or triggering a file operation', t => {
   const app = createApp(t, fixture()), request = app.messages.find(m => m.type === 'git-status'); assert.ok(request);
   reply(app, request); app.click(app.document.querySelector('[data-git-branch]'));
   const branches = app.messages.find(m => m.type === 'git-branches'); assert.ok(branches); assert.equal(branches.path, '/repo');
@@ -80,4 +80,97 @@ test('identical background status keeps existing icon elements and branch focus'
   reply(app, request);
   assert.equal(app.row('a.txt').querySelector('.fileicon'), icon); assert.equal(app.row('a.txt').querySelector('[data-git-status]'), badge);
   assert.equal(app.document.activeElement, branch);
+});
+
+test('status badges use a circular white background at the bottom left', () => {
+  const fs = require('node:fs'), path = require('node:path');
+  const css = fs.readFileSync(path.join(__dirname, '../media/app.css'), 'utf8');
+  const rule = css.match(/\[data-git-status\]\s*\{([^}]+)\}/)[1];
+  assert.match(rule, /left:\s*-?\d+px/);
+  assert.match(rule, /border-radius:\s*50%/);
+  assert.match(rule, /background:\s*(?:#fff(?:fff)?|white)\s*;/);
+});
+
+test('repository roots are decorated in a parent view without inventing its branch', t => {
+  const app = createApp(t, fixture()), request = app.messages.find(m => m.type === 'git-status');
+  reply(app, request, { directories: { '/repo': { ok: true, repository: false, statuses: { folder: 'modified' } } } });
+  assert.equal(app.row('folder').querySelector('[data-git-status]').dataset.gitStatus, 'modified');
+  assert.equal(app.document.querySelector('[data-git-branch]'), null);
+});
+
+test('all Git states use fixed vector symbols and preserve status labels', t => {
+  const state = fixture(), states = ['clean', 'modified', 'added', 'deleted', 'untracked', 'ignored', 'conflict'];
+  state.folders['/repo'] = states.map((status, id) => ({ id: String(id), name: status + '.txt', type: 'text' }));
+  const app = createApp(t, state), request = app.messages.find(message => message.type === 'git-status');
+  reply(app, request, { directories: { '/repo': { ok: true, repository: true, statuses: Object.fromEntries(states.map(status => [status + '.txt', status])) } } });
+  for (const status of states) {
+    const badge = app.row(status + '.txt').querySelector('[data-git-status]');
+    assert.ok(badge.querySelector('svg path'));
+    assert.equal(badge.textContent.trim(), '');
+    assert.ok(badge.getAttribute('aria-label'));
+    assert.equal(badge.querySelector('svg').getAttribute('viewBox'), '0 0 16 16');
+  }
+});
+
+test('status vector layout is centered independently of text baseline and font metrics', t => {
+  const app = createApp(t, fixture());
+  const style = app.document.createElement('style');
+  style.textContent = require('node:fs').readFileSync(require('node:path').join(__dirname, '../media/app.css'), 'utf8');
+  app.document.head.appendChild(style);
+  reply(app, app.messages.find(message => message.type === 'git-status'));
+  const badge = app.row('a.txt').querySelector('[data-git-status]'), computed = app.window.getComputedStyle(badge);
+  assert.equal(computed.display, 'inline-flex');
+  assert.equal(computed.alignItems, 'center');
+  assert.equal(computed.justifyContent, 'center');
+  assert.equal(computed.width, computed.height);
+  const svg = app.window.getComputedStyle(badge.querySelector('svg'));
+  assert.equal(svg.width, '100%'); assert.equal(svg.height, '100%');
+  assert.equal(svg.display, 'block');
+  assert.equal(Number(svg.strokeWidth), 0);
+});
+
+test('branch button uses theme accent text without a colored background', t => {
+  const app = createApp(t, fixture());
+  const style = app.document.createElement('style');
+  style.textContent = require('node:fs').readFileSync(require('node:path').join(__dirname, '../media/app.css'), 'utf8');
+  app.document.head.appendChild(style);
+  reply(app, app.messages.find(message => message.type === 'git-status'));
+  const rules = Array.from(style.sheet.cssRules);
+  const rule = rules.find(rule => rule.selectorText === '[data-git-branch]').style;
+  assert.equal(rule.getPropertyValue('background'), 'transparent');
+  assert.equal(rule.getPropertyValue('color'), 'var(--vscode-textLink-foreground)');
+  assert.equal(rule.getPropertyValue('border'), '1px solid transparent');
+  assert.equal(rules.find(rule => rule.selectorText === '[data-git-branch]:hover').style.getPropertyValue('background'), 'transparent');
+  const button = app.document.querySelector('[data-git-branch]');
+  assert.equal(app.window.getComputedStyle(button).fontWeight, '600');
+  button.focus();
+  assert.equal(app.document.activeElement, button);
+});
+
+test('early branch progress preserves editing and completes without replacing the focused branch', t => {
+  const app = createApp(t, fixture()), request = app.messages.find(message => message.type === 'git-status');
+  const input = app.document.querySelector('.path-input'); input.focus(); input.value = '/editing';
+  reply(app, request, { partial: true, directories: { '/repo': { ok: true, repository: true, branch: 'main', loading: true, statuses: {} } } });
+  const branch = app.document.querySelector('[data-git-branch]');
+  assert.ok(branch); assert.equal(branch.getAttribute('aria-busy'), 'true');
+  assert.ok(branch.querySelector('[role="progressbar"]'));
+  assert.equal(app.document.activeElement, input); assert.equal(input.value, '/editing');
+  branch.focus(); reply(app, request, { directories: { '/repo': { ok: true, repository: true, branch: 'main', statuses: {} } } });
+  assert.equal(app.document.activeElement.getAttribute('data-git-branch'), '');
+  assert.equal(app.document.querySelector('[data-git-branch] [role="progressbar"]'), null);
+  assert.equal(app.document.querySelector('[data-git-branch]').getAttribute('aria-busy'), 'false');
+});
+
+test('incremental status patches retain previous entries and finish the loading indicator', t => {
+  const app = createApp(t, fixture()), request = app.messages.find(message => message.type === 'git-status');
+  const info = { ok: true, repository: true, branch: 'main', loading: true };
+  reply(app, request, { partial: true, directories: { '/repo': { ...info, statuses: {} } } });
+  reply(app, request, { partial: true, directories: { '/repo': { ...info, incremental: true, statuses: { 'a.txt': 'modified' } } } });
+  reply(app, request, { partial: true, directories: { '/repo': { ...info, incremental: true, statuses: { folder: 'conflict' } } } });
+  assert.equal(app.row('a.txt').querySelector('[data-git-status]').dataset.gitStatus, 'modified');
+  assert.equal(app.row('folder').querySelector('[data-git-status]').dataset.gitStatus, 'conflict');
+  assert.ok(app.document.querySelector('[data-git-branch] [role="progressbar"]'));
+  reply(app, request, { directories: { '/repo': { ok: false, error: 'Timed out', statuses: {} } } });
+  assert.equal(app.document.querySelector('[data-git-branch] [role="progressbar"]'), null);
+  assert.equal(app.document.querySelector('[data-git-status]'), null);
 });

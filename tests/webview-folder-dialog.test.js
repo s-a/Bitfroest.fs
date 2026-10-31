@@ -44,7 +44,7 @@ test('search highlights switch foreground with opaque theme backgrounds and reje
 test('unmarked cursor entry remains the target for preview and delete', t => {
   const app = createApp(t);
   app.click(app.row('README.md').querySelector('[data-filename]'));
-  app.key(' ');
+  app.action('clear');
   assert.deepEqual(app.state().panes[0].selected, []);
   app.action('view');
   assert.match(app.document.querySelector('.lister-heading').textContent, /README.md/);

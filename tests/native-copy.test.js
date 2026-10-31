@@ -1,81 +1,91 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { EventEmitter } = require('node:events');
-const { PassThrough } = require('node:stream');
-const { copyFileCancellable } = require('../native-copy');
-
-function runner(scenario) {
-  return (command, args, options) => {
-    const child = new EventEmitter();
-    child.stdin = new PassThrough(); child.stdout = new PassThrough(); child.stderr = new PassThrough();
-    let input = '';
-    child.stdin.on('data', chunk => { input += chunk; const request = JSON.parse(chunk.toString().trim()); if (request.type === 'copy') child.requestId = request.id; scenario({ child, command, args, options, input }); });
-    child.stdin.on('end', () => queueMicrotask(() => child.emit('close', 0)));
-    return child;
-  };
-}
-function reply(child, record) { child.stdout.write(JSON.stringify({ ...record, id: child.requestId }) + '\n'); }
+const nativeFs = require('node:fs');
+const { copyFileCancellable, createCopySession } = require('../native-copy');
 const input = { roots: ['C:/tmp', 'C:/temp'], source: 'C:/tmp/a.bin', target: 'C:/temp/.stage/content', expected: { dev: '1', ino: '2', size: '100', mtimeNs: '10', ctimeNs: '11' } };
-test('copy progress is monotonic and completion waits for the native terminal record', async () => {
-  const events = []; let calls = 0;
-  const spawn = runner(({ child, command, args, options }) => {
-    if (calls++) return;
-    assert.equal(command, 'powershell.exe'); assert.equal(options.windowsHide, true); assert.ok(!options.timeout);
-    assert.ok(args.includes('-File'));
-    queueMicrotask(() => {
-      reply(child, { type: 'progress', transferred: 40, total: 100 });
-      reply(child, { type: 'progress', transferred: 20, total: 100 });
-      reply(child, { type: 'progress', transferred: 100, total: 100 });
-      reply(child, { type: 'result', ok: true }); child.emit('close', 0);
-    });
-  });
-  await copyFileCancellable(input, { platform: 'win32', spawn, onProgress: event => events.push(event) });
-  assert.deepEqual(events.map(event => event.transferred), [40, 100]);
-});
-test('mid-file abort sends cancellation and rejects only after the native worker has stopped', async () => {
-  const controller = new AbortController(); let stopped = false, started = false;
-  const spawn = runner(({ child, input: lines }) => {
-    if (!started) { started = true; queueMicrotask(() => { reply(child, { type: 'progress', transferred: 1, total: 100 }); controller.abort(); }); }
-    else if (lines.includes('"type":"cancel"')) queueMicrotask(() => { stopped = true; reply(child, { type: 'result', ok: false, cancelled: true, code: 1235 }); child.emit('close', 0); });
-  });
-  await assert.rejects(copyFileCancellable(input, { platform: 'win32', spawn, signal: controller.signal }), error => error.name === 'AbortError' && stopped);
-});
-test('already aborted jobs do not start a child or copy a byte', async () => {
+
+test('already aborted jobs do not open a native session or copy any byte', async () => {
   const controller = new AbortController(); controller.abort();
-  await assert.rejects(copyFileCancellable(input, { platform: 'win32', signal: controller.signal, spawn: () => assert.fail('worker must not start') }), { name: 'AbortError' });
-});
-test('missing terminal record and native failures cannot be reported as success', async () => {
-  for (const record of ['', '{"type":"result","ok":false,"code":5,"message":"Access denied"}\n']) {
-    const spawn = runner(({ child }) => queueMicrotask(() => { if (record) reply(child, JSON.parse(record)); child.emit('close', 0); }));
-    await assert.rejects(copyFileCancellable(input, { platform: 'win32', spawn }));
-  }
-});
-test('non-Windows fallback honestly reports between-file cancellation capability', async () => {
-  const events = []; let copied = false;
-  await copyFileCancellable(input, { platform: 'linux', copyFile: async () => { copied = true; }, onProgress: event => events.push(event) });
-  assert.equal(copied, true); assert.equal(events[0].granular, false);
+  const nativeApi = { openSession: () => assert.fail('An aborted request must not start.') };
+  await assert.rejects(copyFileCancellable(input, { platform: 'win32', nativeApi, signal: controller.signal }), { name: 'AbortError' });
 });
 
-test('invalid native requests never start a process', async () => {
-  let calls = 0; const options = { platform: 'win32', spawn: () => { calls++; throw new Error('unexpected'); } };
-  for (const invalid of [null, { ...input, roots: [] }, { ...input, source: 'relative' }, { ...input, target: 'C:/temp/../temp/t' }, { ...input, source: 'C:/tmp/a\0.bin' }, { ...input, target: 'C:/temp/x:stream' }, { ...input, roots: ['C:/outside'] }, { ...input, target: input.source }, { ...input, expected: {} }]) await assert.rejects(copyFileCancellable(invalid, options));
+test('non-Windows copy retains exclusive creation and between-file cancellation capability', async () => {
+  const events = [], calls = [];
+  await copyFileCancellable(input, { platform: 'linux', copyFile: async (...args) => { calls.push(args); }, onProgress: event => events.push(event) });
+  assert.deepEqual(calls, [[input.source, input.target, nativeFs.constants.COPYFILE_EXCL]]);
+  assert.equal(events[0].granular, false);
+});
+
+test('invalid copy requests never reach the native module', async () => {
+  let calls = 0;
+  const nativeApi = { capabilities: { 'files.copy': { status: 'supported' } }, openSession() { calls++; throw new Error('Unexpected native request.'); } };
+  for (const invalid of [null, { ...input, roots: [] }, { ...input, source: 'relative' }, { ...input, target: 'C:/temp/../temp/t' }, { ...input, source: 'C:/tmp/a\0.bin' }, { ...input, target: 'C:/temp/x:stream' }, { ...input, roots: ['C:/outside'] }, { ...input, target: input.source }, { ...input, expected: {} }]) {
+    await assert.rejects(copyFileCancellable(invalid, { platform: 'win32', nativeApi }));
+  }
   assert.equal(calls, 0);
 });
-test('malformed native output requests cancellation and waits for actual process exit', async () => {
-  let called = false, stopped = false;
-  const spawn = runner(({ child, input: lines }) => {
-    if (!called) { called = true; queueMicrotask(() => child.stdout.write('not-json\n')); }
-    else if (lines.includes('"type":"cancel"')) queueMicrotask(() => { stopped = true; child.emit('close', 0); });
-  });
-  await assert.rejects(copyFileCancellable(input, { platform: 'win32', spawn }), error => stopped && /ungültig/.test(error.message));
+
+test('native API session copies through one native session without starting the legacy worker', async () => {
+  const calls = [], opened = [], closed = [];
+  const nativeApi = { capabilities: { 'files.copy': { status: 'supported' } }, openSession() {
+    const index = opened.length + 1; opened.push(index);
+    return { invoke: async (operation, request, options) => {
+      calls.push({ operation, request, options });
+      options.onProgress({ transferred: 100, total: 100 });
+      return { status: 'committed', copied: true, cancelled: false };
+    }, close: () => closed.push(index) };
+  } };
+  const session = createCopySession({ platform: 'win32', nativeApi, spawn: () => assert.fail('The legacy worker must not start.') });
+  const events = [];
+  await session.copy(input, { onProgress: event => events.push(event) });
+  await session.copy({ ...input, target: 'C:/temp/.stage/second' });
+  assert.equal(opened.length, 1);
+  assert.deepEqual(calls.map(call => call.operation), ['files.copy', 'files.copy']);
+  assert.deepEqual(calls.map(call => call.request.target), ['C:\\temp\\.stage\\content', 'C:\\temp\\.stage\\second']);
+  assert.deepEqual(events, [{ transferred: 100, total: 100, granular: true }]);
+  await session.dispose();
+  assert.deepEqual(closed, [1]);
 });
-test('process startup failures and early worker errors propagate', async () => {
-  await assert.rejects(copyFileCancellable(input, { platform: 'win32', spawn: () => { throw new Error('spawn failed'); } }), /spawn failed/);
-  await assert.rejects(copyFileCancellable(input, { platform: 'win32', spawn: runner(({ child }) => queueMicrotask(() => child.emit('error', new Error('worker failed')))) }), /worker failed/);
+
+test('native API copy does not retry unknown outcomes and preserves their original cause', async () => {
+  let calls = 0;
+  const nativeError = Object.assign(new Error('The broker exited before its terminal record.'), { code: 'OutcomeUnknown', outcome: { status: 'unknown', copied: false, cancelled: false } });
+  const nativeApi = { capabilities: { 'files.copy': { status: 'supported' } }, openSession: () => ({ invoke: async () => { calls++; throw nativeError; }, close() {} }) };
+  const session = createCopySession({ platform: 'win32', nativeApi, spawn: () => assert.fail('The legacy worker must not start.') });
+  await assert.rejects(session.copy(input), error => error.code === 'NativeOutcomeUnknown' && error.cause === nativeError && error.outcome.status === 'unknown');
+  assert.equal(calls, 1);
+  await session.dispose();
 });
-test('late worker progress after process close cannot update a completed operation', async () => {
-  const events = []; let worker;
-  await assert.rejects(copyFileCancellable(input, { platform: 'win32', onProgress: event => events.push(event), spawn: runner(({ child }) => { worker = child; queueMicrotask(() => child.emit('close', 1)); }) }));
-  worker.stdout.write('{"type":"progress","transferred":10,"total":100}\n');
-  assert.deepEqual(events, []);
+
+test('native copy accepts only a witnessed commit and exposes final partial identity separately', async () => {
+  const committedError = Object.assign(new Error('The session closed after commit.'), { code: 'SessionClosed', outcome: { status: 'committed', copied: true, cancelled: false } });
+  const committedApi = { capabilities: { 'files.copy': { status: 'supported' } }, openSession: () => ({ invoke: async () => { throw committedError; }, close() {} }) };
+  const committedSession = createCopySession({ platform: 'win32', nativeApi: committedApi });
+  assert.deepEqual(await committedSession.copy(input), { copied: true, granular: true });
+  await committedSession.dispose();
+
+  const identity = { dev: '1', ino: '2', size: '3', mtimeNs: '4', ctimeNs: '5' };
+  const partialCause = Object.assign(new Error('Copy stopped with a partial stage.'), { code: 'CopyCancelled', outcome: { status: 'partial', copied: false, cancelled: true, ownedDestination: identity } });
+  const partialApi = { capabilities: { 'files.copy': { status: 'supported' } }, openSession: () => ({ invoke: async () => { throw partialCause; }, close() {} }) };
+  const partialSession = createCopySession({ platform: 'win32', nativeApi: partialApi });
+  await assert.rejects(partialSession.copy(input), error => error.name === 'AbortError' && error.code === 'NativeCopyPartial' && error.cause === partialCause && error.ownedDestination.path === 'C:\\temp\\.stage\\content' && error.ownedDestination.ino === '2');
+  await partialSession.dispose();
+});
+
+test('disposing a native copy aborts and waits for the native result before closing the session', async () => {
+  let closed = false, cancelled = false;
+  const nativeApi = { capabilities: { 'files.copy': { status: 'supported' } }, openSession: () => ({
+    invoke: (_operation, _request, options) => new Promise(resolve => {
+      options.signal.addEventListener('abort', () => { cancelled = true; queueMicrotask(() => resolve({ status: 'unchanged', copied: false, cancelled: true })); }, { once: true });
+    }),
+    closeAsync: async () => { closed = true; }
+  }) };
+  const session = createCopySession({ platform: 'win32', nativeApi, spawn: () => assert.fail('The legacy worker must not start.') });
+  const pending = session.copy(input);
+  pending.catch(() => {});
+  await session.dispose();
+  await assert.rejects(pending, error => error.name === 'AbortError' && error.outcome.status === 'unchanged');
+  assert.equal(cancelled, true);
+  assert.equal(closed, true);
 });

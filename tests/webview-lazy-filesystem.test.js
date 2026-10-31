@@ -14,8 +14,8 @@ test('opening an unloaded folder waits for its shallow snapshot before changing 
  result(app,{resumeNavigation:{path:'C:/tmp/docs',side:0}});
  assert.equal(app.state().panes[0].tabs[0],'C:/tmp/docs');assert.ok(app.row('child.txt'));
 });
-test('folder copy and delete prepare their selected subtree before opening a single dialog',t=>{
- for(const action of ['copy','delete','rename']){const app=createApp(t,fixture());select(app,'docs');app.action(action);
+test('delete and rename prepare their selected subtree before opening a single dialog',t=>{
+ for(const action of ['delete','rename']){const app=createApp(t,fixture());select(app,'docs');app.action(action);
  const request=app.messages.find(message=>message.type==='filesystem-prepare');assert.ok(request,action);assert.deepEqual([...request.paths],['C:/tmp/docs']);
  assert.equal(app.document.querySelector('#modal').open,false);assert.equal(app.messages.some(message=>message.type==='filesystem-apply'),false);
  result(app,{resumeAction:action});assert.equal(app.document.querySelector('#modal').open,true,action);
@@ -36,9 +36,9 @@ const tick=()=>new Promise(resolve=>setImmediate(resolve));
 function submit(app){app.document.querySelector('#modal-form').dispatchEvent(new app.window.Event('submit',{bubbles:true,cancelable:true}));}
 test('existing target folder children are prepared and collisions wait for explicit decisions',async t=>{
  const state=fixture();state.folders['C:/temp'].push({id:'target-docs',name:'docs',type:'folder'});state.folders['C:/temp/docs']=[];state.unloadedFolders.push('C:/temp/docs');
- const app=createApp(t,state);select(app,'docs');app.action('copy');const request=app.messages.find(m=>m.type==='filesystem-prepare');assert.deepEqual([...request.paths],['C:/tmp/docs','C:/temp/docs']);
+ const app=createApp(t,state);select(app,'docs');app.action('copy');assert.equal(app.document.querySelector('#modal').open,true);assert.equal(app.messages.some(m=>m.type==='filesystem-prepare'),false);submit(app);const request=app.messages.find(m=>m.type==='filesystem-prepare');assert.deepEqual([...request.paths],['C:/tmp/docs','C:/temp/docs']);
  const fresh=app.state();fresh.unloadedFolders=[];fresh.snapshotId='new';fresh.folders['C:/tmp/docs']=[{id:'source-child',name:'same.txt',type:'text',content:'new',fsSource:'C:/tmp/docs/same.txt'}];fresh.folders['C:/temp/docs']=[{id:'target-child',name:'same.txt',type:'text',content:'old',fsSource:'C:/temp/docs/same.txt'}];
- app.window.dispatchEvent(new app.window.MessageEvent('message',{data:{type:'filesystem-result',ok:true,state:fresh}}));submit(app);await tick();
+ app.window.dispatchEvent(new app.window.MessageEvent('message',{data:{type:'filesystem-result',ok:true,state:fresh}}));await tick();
  assert.ok(app.document.querySelector('[data-conflict-action="overwrite"]'));assert.equal(app.messages.some(m=>m.type==='filesystem-apply'),false);assert.equal(app.state().folders['C:/temp/docs'][0].content,'old');
 });
 test('a target edited in the transfer dialog is prepared without losing the chosen filter',async t=>{
@@ -51,12 +51,12 @@ test('opening a folder in the opposite new tab waits for loading and leaves the 
  const app=createApp(t,fixture());select(app,'docs');app.action('open-dir-other-tab');assert.equal(app.state().panes[1].tabs.length,1);result(app);
  assert.equal(app.state().panes[0].tabs[0],'C:/tmp');assert.equal(app.state().panes[1].tabs.at(-1),'C:/tmp/docs');assert.equal(app.state().active,1);
 });
-test('dropping on an unloaded destination retains the source selection and move mode after loading',t=>{
+test('dropping on an unloaded destination retains the source selection and move mode after loading',async t=>{
  const app=createApp(t,fixture()), store=new Map(),data={setData:(key,value)=>store.set(key,value),getData:key=>store.get(key)||''};select(app,'a.txt');
  const drag=(type,target)=>{const event=new app.window.Event(type,{bubbles:true,cancelable:true});Object.defineProperty(event,'dataTransfer',{value:data});Object.defineProperty(event,'shiftKey',{value:true});target.dispatchEvent(event);};
  drag('dragstart',app.row('a.txt').querySelector('[data-filename]'));drag('drop',app.document.querySelector('[data-pane="1"] tr[data-id="incoming"]'));
- const request=app.messages.find(m=>m.type==='filesystem-prepare');assert.deepEqual([...request.paths],['C:/temp/incoming']);assert.equal(request.recursive,false);assert.equal(app.document.querySelector('#modal').open,false);
- result(app);assert.match(app.document.querySelector('#modal-title').textContent,/Verschieben/);assert.equal(app.document.querySelector('#value').value,'C:/temp/incoming');assert.match(app.document.querySelector('[data-transfer-source]').textContent,/C:\/tmp/);assert.equal(app.state().panes[0].selected[0],'a');
+ assert.equal(app.document.querySelector('#modal').open,true);assert.equal(app.messages.some(m=>m.type==='filesystem-prepare'),false);assert.match(app.document.querySelector('#modal-title').textContent,/Verschieben/);assert.equal(app.document.querySelector('#value').value,'C:\\temp\\incoming');assert.equal(app.document.querySelector('[data-transfer-source]').textContent,'C:\\tmp');submit(app);await tick();const request=app.messages.find(m=>m.type==='filesystem-prepare');assert.deepEqual([...request.paths],['C:/temp/incoming']);assert.equal(request.recursive,false);
+ result(app);await tick();assert.equal(app.state().panes[0].selected[0],'a');
 });
 
 test('a folder rename mask prepares the renamed merge target rather than the original folder name', async t => {

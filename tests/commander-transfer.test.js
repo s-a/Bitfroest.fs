@@ -335,3 +335,9 @@ test('several original files append in selection order when destination masks co
   assert.deepEqual(options.folders['/target'][0].fsAppend.sources, ['/source/same.one', '/source/same.two']);
   assert.equal(options.folders['/target'][0].size, 3);
 });
+
+test('shared transfer normalization preserves drive and UNC roots', () => {
+  assert.equal(transfer.normalizePath('C:\\', 'C:/source'), 'C:/');
+  assert.equal(transfer.normalizePath('\\\\server\\share\\folder', 'C:/source'), '//server/share/folder');
+  assert.equal(transfer.normalizePath('..\\..', '//server/share/folder'), '//server/share');
+});

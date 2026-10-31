@@ -1,0 +1,32 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs/promises');
+const path = require('node:path');
+const os = require('node:os');
+const { spawn } = require('node:child_process');
+const { once } = require('node:events');
+const { createFolderLocks } = require(process.env.NATIVE_PRODUCT_TEST_ROOT ? path.join(process.env.NATIVE_PRODUCT_TEST_ROOT, 'folder-locks.js') : '../folder-locks');
+
+test('Linux adapter discovers a real descendant descriptor, copies without releasing it and terminates the confirmed fixture', { skip: process.platform !== 'linux', timeout: 60000 }, async t => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'folder-lock-linux-'));
+  const source = path.join(root, 'source'); await fs.mkdir(source);
+  const file = path.join(source, 'space and newline\nfile.txt'); await fs.writeFile(file, 'ORIGINAL');
+  const child = spawn(process.execPath, ['-e', "require('fs').openSync(process.argv[1],'r'); process.stdout.write('ready'); setInterval(()=>{},1000)", file], { stdio: ['ignore', 'pipe', 'pipe'] });
+  t.after(async () => { child.kill(); await fs.rm(root, { recursive: true, force: true }); });
+  await once(child.stdout, 'data');
+  const provider = createFolderLocks({ roots: [root] }); t.after(() => provider.dispose());
+  const supported = await provider.capabilities(); assert.equal(supported.actions.terminate.available, true); assert.equal(supported.actions.unlock.available, false);
+  const state = await provider.scan(source), held = state.rows.filter(row => row.pid === child.pid && row.file === file);
+  assert.ok(held.length); assert.equal(state.referencesOnly, true);
+  await provider.fileAction('copy', held.map(row => row.id), path.join(root, 'copy'));
+  assert.equal(await fs.readFile(path.join(root, 'copy', path.basename(file)), 'utf8'), 'ORIGINAL');
+  assert.ok((await provider.scan(source)).rows.some(row => row.pid === child.pid && row.file === file));
+  const fresh = await provider.scan(source), ids = fresh.rows.filter(row => row.pid === child.pid).map(row => row.id);
+  const exit = once(child, 'exit'); await provider.act('terminate', ids); await exit;
+  assert.equal(await fs.readFile(file, 'utf8'), 'ORIGINAL');
+  assert.equal((await provider.scan(source)).rows.some(row => row.pid === child.pid), false);
+  assert.equal(supported.actions.rename.available, true);
+  const renamed = path.join(root, 'renamed'); await provider.fileAction('rename', [], renamed);
+  assert.equal(await fs.readFile(path.join(renamed, path.basename(file)), 'utf8'), 'ORIGINAL');
+  await assert.rejects(fs.stat(source), { code: 'ENOENT' });
+});

@@ -23,10 +23,5 @@ module.exports = [
   {
     files: ['media/app.js', 'media/webview-bootstrap.js', 'media/configuration-view.js'],
     languageOptions: { globals: { acquireVsCodeApi: 'readonly', CommanderContrast: 'readonly' } }
-  },
-  {
-    files: ['native/file-icons-macos.js', 'native/file-clipboard-macos.js'],
-    languageOptions: { sourceType: 'script', globals: { ObjC: 'readonly', $: 'readonly' } },
-    rules: { 'no-unused-vars': ['error', { varsIgnorePattern: '^run$', argsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' }] }
   }
 ];

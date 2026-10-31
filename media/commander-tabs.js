@@ -7,8 +7,8 @@
 
   let sequence = 0;
   const copy = value => JSON.parse(JSON.stringify(value));
-  const viewFields = ['selected', 'cursor', 'filter', 'sort', 'descending', 'scrollTop'];
-  const defaults = () => ({ selected: [], cursor: null, filter: '', sort: 'name', descending: false, scrollTop: 0 });
+  const viewFields = ['selected', 'spaceMarked', 'cursorSelection', 'cursor', 'filter', 'sort', 'descending', 'scrollTop'];
+  const defaults = () => ({ selected: [], spaceMarked: [], cursorSelection: null, cursor: null, filter: '', sort: 'name', descending: false, scrollTop: 0 });
   const validIndex = (pane, index) => Number.isInteger(index) && index >= 0 && index < pane.tabs.length;
   const createId = () => `tab-${Date.now().toString(36)}-${(++sequence).toString(36)}`;
 

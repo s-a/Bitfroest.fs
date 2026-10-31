@@ -32,7 +32,7 @@ test('English language also translates static main-menu controls while retaining
   assert.equal(first.textContent, 'Files');
   app.click(first);
   assert.equal(app.document.querySelector('#main-menu-popup [data-group="Dateien"]').hidden, false);
-  assert.match(app.document.querySelector('#main-menu-popup [data-group="Dateien"]').textContent, /Open/);
+  assert.match(app.document.querySelector('#main-menu-popup [data-group="Dateien"]').textContent, /Pack/);
 });
 
 test('language reload waits for the matching transfer result without requesting cancellation', async t => {

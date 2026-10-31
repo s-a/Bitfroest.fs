@@ -1,7 +1,7 @@
 const path = require('node:path');
-const { spawn } = require('node:child_process');
 const fs = require('node:fs/promises');
 const os = require('node:os');
+const { loadNativeApi } = require('./native-api');
 
 const MAX_REQUESTS = 128;
 const MAX_CACHE = 512;
@@ -78,29 +78,6 @@ function normalizeRequests(requests) {
   }));
 }
 
-function runHelper(command, args, payload, options = {}) {
-  return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
-    let output = '', errorOutput = '', finished = false;
-    const timeout = setTimeout(() => { child.kill(); finish(new Error('Icon lookup timed out')); }, options.timeout || 8000);
-    function finish(error) {
-      if (finished) return;
-      finished = true; clearTimeout(timeout);
-      error ? reject(error) : resolve(output);
-    }
-    child.on('error', finish);
-    child.stdout.setEncoding('utf8'); child.stderr.setEncoding('utf8');
-    child.stdout.on('data', chunk => {
-      output += chunk;
-      if (Buffer.byteLength(output) > 4 * 1024 * 1024) { child.kill(); finish(new Error('Icon output exceeded limit')); }
-    });
-    child.stderr.on('data', chunk => { if (errorOutput.length < 4096) errorOutput += chunk; });
-    child.stdin.on('error', () => {});
-    child.on('close', code => finish(code === 0 ? null : new Error(errorOutput || `Icon helper exited with ${code}`)));
-    child.stdin.end(JSON.stringify(payload));
-  });
-}
-
 async function getFilesystemIcons(requests, options = {}) {
   const normalized = normalizeRequests(requests);
   const platform = options.platform || process.platform;
@@ -122,17 +99,43 @@ async function getFilesystemIcons(requests, options = {}) {
     }
     return result;
   }
-  if (!['win32', 'darwin'].includes(platform)) return result;
-  const runner = options.runHelper || runHelper;
-  const helperRoot = options.helperRoot || path.join(__dirname, 'native');
-  const command = platform === 'win32' ? 'powershell.exe' : '/usr/bin/osascript';
-  const args = platform === 'win32'
-    ? ['-NoProfile', '-NonInteractive', '-File', path.join(helperRoot, 'file-icons.ps1')]
-    : ['-l', 'JavaScript', path.join(helperRoot, 'file-icons-macos.js')];
+  if (platform === 'win32' && (!options.testLookup || options.nativeApi)) {
+    for (let offset = 0; offset < pending.length; offset += 24) {
+      const batch = pending.slice(offset, offset + 24);
+      let session, timer;
+      try {
+        const api = options.nativeApi || loadNativeApi();
+        session = api.openSession();
+        const response = await Promise.race([
+          session.invoke('icons.resolve', { requests: batch.map(({ identity: _identity, ...request }) => request) }),
+          new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('Icon lookup timed out.')), options.timeout || 8000); })
+        ]);
+        const rows = Array.isArray(response?.icons) ? response.icons : [];
+        const byKey = new Map(rows.filter(row => row && typeof row.key === 'string').map(row => [row.key, row]));
+        for (const request of batch) {
+          const png = byKey.get(request.key)?.png;
+          const value = Buffer.isBuffer(png) && png.length <= 65536 ? pngData(png) : null;
+          result[request.key] = value && value.length <= MAX_ICON_BYTES ? value : null;
+          cache.set(request.identity, { value: result[request.key], expires: Date.now() + (result[request.key] ? 60000 : 10000) });
+          while (cache.size > MAX_CACHE) cache.delete(cache.keys().next().value);
+        }
+      } catch {
+        for (const request of batch) cache.set(request.identity, { value: null, expires: Date.now() + 5000 });
+        while (cache.size > MAX_CACHE) cache.delete(cache.keys().next().value);
+      } finally {
+        clearTimeout(timer);
+        try { session?.close(); } catch { /* Session cleanup must not replace the lookup result. */ }
+      }
+    }
+    return result;
+  }
+  if (platform === 'darwin' || platform !== 'win32' || typeof options.testLookup !== 'function') return result;
+  // An injected lookup service is available for isolated adapter tests.
+  const runner = options.testLookup;
   for (let offset = 0; offset < pending.length; offset += 24) {
     const batch = pending.slice(offset, offset + 24);
     try {
-      const rows = JSON.parse(await runner(command, args, batch.map(({ identity: _identity, ...request }) => request), { timeout: 8000 }));
+      const rows = JSON.parse(await runner(null, [], batch.map(({ identity: _identity, ...request }) => request)));
       if (!Array.isArray(rows)) continue;
       for (const request of batch) {
         const row = rows.find(item => item?.key === request.key);

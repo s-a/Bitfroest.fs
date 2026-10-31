@@ -7,10 +7,11 @@ const { createOperationError } = require('./operation-errors');
 const { getFileVersion } = require('./pe-file-version');
 const { renameCase } = require('./native-rename');
 const { createCopySession, abortError, throwIfAborted } = require('./native-copy');
+const { normalizePath } = require('./media/commander-paths');
 
 const clone = value => JSON.parse(JSON.stringify(value));
 const hash = value => crypto.createHash('sha256').update(value).digest('hex');
-const slash = value => value.replace(/\\/g, '/');
+const slash = value => normalizePath(value, { platform: process.platform });
 const identity = value => process.platform === 'win32' ? value.toLowerCase() : value;
 
 function canonical(value) {
@@ -77,7 +78,7 @@ function createProvider(options = {}) {
 
   function allowed(value) {
     const absolute = canonical(value);
-    if (!permittedRoots().some(root => below(absolute, root))) throw new Error('Der Pfad liegt außerhalb der erlaubten Root-Verzeichnisse.');
+    if (!options.allowNavigationOutsideRoots && !permittedRoots().some(root => below(absolute, root))) throw new Error('Der Pfad liegt außerhalb der erlaubten Root-Verzeichnisse.');
     return absolute;
   }
 
@@ -111,7 +112,11 @@ function createProvider(options = {}) {
       throwIfAborted(settings.signal);
       if (depth > limits.depth) throw new Error('Die Tiefengrenze des Dateisystem-Scans wurde erreicht.');
       if (loadedDirectories.has(directory)) {
-        if (recursive) for (const row of folders[directory]) if (row.type === 'folder') await scan(`${directory}/${row.name}`, depth + 1, false, true);
+        if (recursive) for (const row of folders[directory]) {
+          const entry = entries.get(identity(row.fsSource));
+          if (entry?.metadataError) throw entry.metadataError;
+          if (row.type === 'folder') await scan(`${directory}/${row.name}`, depth + 1, false, true);
+        }
         return;
       }
       await assertComponents(directory);
@@ -122,22 +127,38 @@ function createProvider(options = {}) {
       const names = (await fs.readdir(directory)).sort();
       loadedDirectories.add(directory);
       folders[directory] = [];
+      let directoryEntries;
       for (const name of names) {
         throwIfAborted(settings.signal);
         const absolute = canonical(path.join(directory, name));
         if (!entries.has(identity(absolute)) && ++count > limits.entries) throw new Error('Die Eintragsgrenze des Dateisystem-Scans wurde erreicht.');
-        await assertComponents(absolute);
-        const child = await fs.lstat(absolute, { bigint: true });
-        if (!child.isFile() && !child.isDirectory()) throw new Error('Nicht reguläre Dateisystemeinträge sind nicht erlaubt.');
-        const row = { id: `fs:${identity(absolute)}`, name, type: child.isDirectory() ? 'folder' : fileType(name), size: child.isDirectory() ? 0 : Number(child.size), date: displayDate(child.mtimeMs), mtimeMs: Number(child.mtimeMs), attributes: `${child.isDirectory() ? 'd' : '-'}${child.isFile() ? 'a' : '-'}${(child.mode & 0o200n) === 0n ? 'r' : '-'}-`, fsSource: absolute };
+        let child, fileVersion;
+        try {
+          child = await fs.lstat(absolute, { bigint: true });
+          if (!child.isSymbolicLink()) await assertComponents(absolute);
+          if (child.isFile() && /\.(exe|dll)$/i.test(name)) {
+            fileVersion = await getFileVersion(absolute, { fs });
+            if (statSignature(await fs.lstat(absolute, { bigint: true })) !== statSignature(child)) throw new Error('Datei während der Bestandsaufnahme geändert.');
+          }
+        }
+        catch (error) {
+          if (recursive || !['EPERM', 'EACCES'].includes(error.code)) throw error;
+          if (error.path && identity(canonical(error.path)) !== identity(absolute)) throw error;
+          directoryEntries ||= await fs.readdir(directory, { withFileTypes: true });
+          const listed = directoryEntries.find(entry => entry.name === name);
+          if (!listed || !listed.isFile() && !listed.isDirectory() && !listed.isSymbolicLink()) throw error;
+          const row = { id: `fs:${identity(absolute)}`, name, type: listed.isSymbolicLink() ? 'link' : listed.isDirectory() ? 'folder' : fileType(name), fsSource: absolute };
+          entries.set(identity(absolute), { path: absolute, type: listed.isDirectory() ? 'folder' : 'file', signature: '', metadataError: error, row });
+          folders[directory].push(row);
+          if (listed.isDirectory()) folders[absolute] ||= [];
+          continue;
+        }
+        if (!child.isFile() && !child.isDirectory() && !child.isSymbolicLink()) throw new Error('Nicht reguläre Dateisystemeinträge sind nicht erlaubt.');
+        const row = { id: `fs:${identity(absolute)}`, name, type: child.isSymbolicLink() ? 'link' : child.isDirectory() ? 'folder' : fileType(name), size: child.isDirectory() ? 0 : Number(child.size), date: displayDate(child.mtimeMs), mtimeMs: Number(child.mtimeMs), attributes: `${child.isSymbolicLink() ? 'l' : child.isDirectory() ? 'd' : '-'}${child.isFile() ? 'a' : '-'}${(child.mode & 0o200n) === 0n ? 'r' : '-'}-`, fsSource: absolute };
         for (const [field, timestamp] of [['writedate', child.mtimeMs], ['creationdate', child.birthtimeMs], ['accessdate', child.atimeMs]]) {
           if (timestamp !== undefined && Number.isFinite(Number(timestamp))) row[field] = new Date(Number(timestamp)).toISOString();
         }
-        if (child.isFile() && /\.(exe|dll)$/i.test(name)) {
-          const version = await getFileVersion(absolute, { fs });
-          if (statSignature(await fs.lstat(absolute, { bigint: true })) !== statSignature(child)) throw new Error('Datei während der Bestandsaufnahme geändert.');
-          if (version) row.fileVersion = version;
-        }
+        if (fileVersion) row.fileVersion = fileVersion;
         entries.set(identity(absolute), { path: absolute, type: child.isDirectory() ? 'folder' : 'file', signature: statSignature(child), contentSignature: contentSignature(child), row });
         folders[directory].push(row);
         settings.onProgress?.({ phase: settings.phase || 'preparing', filesScanned: count, path: absolute });
@@ -169,6 +190,14 @@ function createProvider(options = {}) {
   }
 
   function pane(directory) { return { tabs: [directory], tab: 0, selected: [], cursor: null, filter: '', sort: 'name', descending: false }; }
+
+  async function availableViewDirectories(directories) {
+    const available = await Promise.all(directories.map(async directory => {
+      try { return (await fs.lstat(directory)).isDirectory() ? directory : null; }
+      catch (error) { if (error.code === 'ENOENT' || error.code === 'ENOTDIR') return null; throw error; }
+    }));
+    return available.filter(Boolean);
+  }
 
   async function load(settings = {}) {
     const left = allowed(settings.left || roots[0]), right = allowed(settings.right || roots[1] || roots[0]);
@@ -205,13 +234,23 @@ function createProvider(options = {}) {
     return entries;
   }
 
-  async function validateCurrent(expected, operation = {}) {
-    const current = await readSnapshot({ directories: expected.loadedDirectories, signal: operation.signal, onProgress: operation.onProgress, phase: 'validating' });
-    if (current.entries.size !== expected.entries.size) throw new Error('Der Dateisystem-Snapshot ist veraltet: Einträge wurden geändert.');
-    for (const [key, entry] of expected.entries) {
-      const actual = current.entries.get(key);
-      if (!actual || actual.signature !== entry.signature || actual.hash !== entry.hash) throw new Error('Der Dateisystem-Snapshot ist veraltet: Einträge wurden geändert.');
+  async function validateEntries(expected, selected, signal) {
+    const checked = new Set();
+    async function verify(entry) {
+      if (checked.has(identity(entry.path))) return;
+      checked.add(identity(entry.path));
+      throwIfAborted(signal);
+      if (entry.metadataError) throw entry.metadataError;
+      await assertComponents(entry.path);
+      if (statSignature(await fs.lstat(entry.path, { bigint: true })) !== entry.signature) throw new Error('Eintrag vor dem Schreiben extern geändert.');
+      if (entry.type === 'file' && entry.hash && hash(await fs.readFile(entry.path)) !== entry.hash) throw new Error('Datei vor dem Schreiben extern geändert.');
+      if (entry.type !== 'folder') return;
+      const children = [...expected.entries.values()].filter(child => !child.root && identity(slash(path.dirname(child.path))) === identity(entry.path));
+      const names = (await fs.readdir(entry.path)).sort();
+      if (JSON.stringify(names) !== JSON.stringify(children.map(child => path.basename(child.path)).sort())) throw new Error('Ordner vor dem Schreiben extern geändert.');
+      for (const child of children) await verify(child);
     }
+    for (const entry of selected) await verify(entry);
   }
 
   function inheritedPanes(state, desired) {
@@ -219,9 +258,11 @@ function createProvider(options = {}) {
     if (!Array.isArray(desired.panes) || desired.panes.length !== 2) return state;
     state.panes = clone(desired.panes);
     for (const p of state.panes) {
+      const activePath = p.tabs[p.tab];
       p.tabs = p.tabs.filter(directory => Object.hasOwn(state.folders, directory));
       if (!p.tabs.length) p.tabs = [roots[0]];
-      p.tab = Math.max(0, Math.min(p.tabs.length - 1, p.tab || 0));
+      const retainedIndex = p.tabs.indexOf(activePath);
+      p.tab = retainedIndex >= 0 ? retainedIndex : Math.max(0, Math.min(p.tabs.length - 1, p.tab || 0));
       p.selected = []; p.cursor = null;
       if (Array.isArray(p.tabStates)) p.tabStates = undefined;
     }
@@ -305,14 +346,20 @@ function createProvider(options = {}) {
       const old = baseline.entries.get(key);
       if (data || !old || old.type !== 'file' || source !== old) staged.set(key, { ...item, data, source, hash: data ? hash(data) : source.hash });
     }
-    if (transfer?.mode !== 'copy') {
-      for (const directory of Object.keys(after.folders)) await assertComponents(directory, true);
-      for (const item of desired.values()) await assertComponents(item.path, true);
-    }
-    try { if (transfer?.mode !== 'copy') await validateCurrent(baseline, operation); }
-    catch (error) { if (transfer && error.name === 'AbortError') return abortedState([], false); throw error; }
     const removed = [...baseline.entries.values()].filter(item => !item.root && (!desired.has(identity(item.path)) || desired.get(identity(item.path)).type !== item.type || staged.has(identity(item.path))));
     const quarantine = removed.filter(item => !removed.some(other => other !== item && other.type === 'folder' && below(item.path, other.path)));
+    try {
+      const sources = [...staged.values()].flatMap(item => [item.source, ...(item.appendSources || [])]).filter(Boolean);
+      await validateEntries(baseline, [...quarantine, ...sources, ...caseChanges.map(change => change.original), ...(transfer?.selected || [])], operation.signal);
+      for (const item of desired.values()) {
+        if (!staged.has(identity(item.path)) && !(item.type === 'folder' && !baseline.entries.has(identity(item.path)))) continue;
+        await assertComponents(item.path, true);
+        if (baseline.entries.has(identity(item.path))) continue;
+        try { await fs.lstat(item.path); }
+        catch (error) { if (error.code === 'ENOENT') continue; throw error; }
+        throw new Error('Der Zielpfad ist bereits vorhanden.');
+      }
+    } catch (error) { if (transfer && error.name === 'AbortError') return abortedState([], false); throw error; }
     const sourcePaths = [...desired.values()].flatMap(item => [item.row.fsSource, ...(item.row.fsAppend ? item.row.fsAppend.sources || [item.row.fsAppend.source] : [])]).filter(Boolean);
     const deferredSources = new Set(quarantine.filter(item => !desired.has(identity(item.path)) && sourcePaths.some(source => below(source, item.path))));
     const newDirectories = [...desired.values()].filter(item => item.type === 'folder' && baseline.entries.get(identity(item.path))?.type !== 'folder').sort((a, b) => a.path.split('/').length - b.path.split('/').length);
@@ -320,6 +367,36 @@ function createProvider(options = {}) {
     const totalBytes = [...staged.values()].reduce((sum, file) => sum + (file.expectedSize ?? file.data?.length ?? file.source?.row.size ?? 0), 0);
     let publishedBytes = 0;
     const report = (file, event) => { const bytes = file.expectedSize ?? file.data?.length ?? file.source?.row.size ?? 0; operation.onProgress?.({ ...event, path: file.path, sourcePath: file.appendSources?.[0]?.path || file.source?.path || file.path, totalBytes, completedBytes: publishedBytes + (event.phase === 'published' ? bytes : Math.min(bytes, event.transferred || 0)), filesCompleted: createdFiles.filter(item => item.completed).length, filesTotal: staged.size }); };
+    async function verifyCopiedBytes(file, sourcePath, destination) {
+      const original = Buffer.alloc(65536), copied = Buffer.alloc(65536);
+      let destinationOffset = 0;
+      async function readExact(handle, buffer, length, position) {
+        let offset = 0;
+        while (offset < length) {
+          throwIfAborted(operation.signal);
+          const { bytesRead } = await handle.read(buffer, offset, length - offset, position + offset);
+          if (!bytesRead) throw new Error('Die Kopierprüfung der Zieldatei ist fehlgeschlagen.');
+          offset += bytesRead;
+        }
+      }
+      for (const source of [{ ...file.source, path: sourcePath }, ...(file.appendSources || [])]) {
+        await assertComponents(source.path);
+        const input = await fs.open(source.path, 'r');
+        try {
+          if (contentSignature(await input.stat({ bigint: true })) !== source.contentSignature) throw new Error('Datei während der Kopierprüfung extern geändert.');
+          for (let offset = 0; offset < source.row.size;) {
+            const length = Math.min(original.length, source.row.size - offset);
+            await readExact(input, original, length, offset);
+            await readExact(destination, copied, length, destinationOffset + offset);
+            if (!original.subarray(0, length).equals(copied.subarray(0, length))) throw new Error('Die Kopierprüfung der Zieldatei ist fehlgeschlagen.');
+            offset += length;
+          }
+          if (contentSignature(await input.stat({ bigint: true })) !== source.contentSignature) throw new Error('Datei während der Kopierprüfung extern geändert.');
+        } finally { await input.close(); }
+        destinationOffset += source.row.size;
+      }
+      throwIfAborted(operation.signal);
+    }
     async function appendToStage(source, stage, file) {
       throwIfAborted(operation.signal);
       await assertComponents(source.path);
@@ -366,17 +443,8 @@ function createProvider(options = {}) {
       if (statSignature(await fs.lstat(stage.path, { bigint: true })) !== stage.signature || stage.hash && hash(await fs.readFile(stage.path)) !== stage.hash) throw new Error('Sicherungsdatei extern verändert.');
       await fs.unlink(stage.path); await fs.rmdir(stage.directory); stage.cleaned = true;
     }
-    async function verifyEntry(item) {
-      await assertComponents(item.path);
-      const stat = await fs.lstat(item.path, { bigint: true });
-      if (statSignature(stat) !== item.signature) throw new Error('Eintrag vor dem Schreiben extern geändert.');
-      if (item.type === 'file' && item.hash && hash(await fs.readFile(item.path)) !== item.hash) throw new Error('Datei vor dem Schreiben extern geändert.');
-      if (item.type === 'folder') {
-        const names = (await fs.readdir(item.path)).sort();
-        const expected = [...baseline.entries.values()].filter(child => !child.root && identity(slash(path.dirname(child.path))) === identity(item.path));
-        if (JSON.stringify(names) !== JSON.stringify(expected.map(child => path.basename(child.path)).sort())) throw new Error('Ordner vor dem Schreiben extern geändert.');
-        for (const child of expected) await verifyEntry(child);
-      }
+    async function verifyEntry(item, signal) {
+      await validateEntries(baseline, [item], signal);
     }
     async function backupDirectory(target) {
       const root = permittedRoots().find(root => below(target, root));
@@ -390,7 +458,7 @@ function createProvider(options = {}) {
     try {
       for (const item of quarantine.filter(item => !deferredSources.has(item))) {
         throwIfAborted(operation.signal);
-        await verifyEntry(item);
+        await verifyEntry(item, operation.signal);
         const backup = `${await backupDirectory(item.path)}/${crypto.randomUUID()}`;
         await fs.rename(item.path, backup); moved.push({ path: item.path, backup });
       }
@@ -439,6 +507,7 @@ function createProvider(options = {}) {
             if (file.hash) stage.hash = hash(await input.readFile());
             throwIfAborted(operation.signal);
             if (Number(stat.size) !== (file.expectedSize ?? file.source.row.size) || file.hash && stage.hash !== file.hash) throw new Error('Die Kopierprüfung der Zieldatei ist fehlgeschlagen.');
+            await verifyCopiedBytes(file, sourcePath, input);
             if (contentSignature(await fs.lstat(sourcePath, { bigint: true })) !== file.source.contentSignature) throw new Error('Datei während des Kopierens extern geändert.');
             for (const source of file.appendSources || []) { await assertComponents(source.path); if (contentSignature(await fs.lstat(source.path, { bigint: true })) !== source.contentSignature) throw new Error('Datei während des Kopierens extern geändert.'); }
             await assertComponents(file.path, true);
@@ -470,7 +539,7 @@ function createProvider(options = {}) {
       }
       for (const item of deferredSources) {
         throwIfAborted(operation.signal);
-        await verifyEntry(item);
+        await verifyEntry(item, operation.signal);
         const backup = `${await backupDirectory(item.path)}/${crypto.randomUUID()}`;
         await fs.rename(item.path, backup); moved.push({ path: item.path, backup });
       }
@@ -595,7 +664,7 @@ function createProvider(options = {}) {
       snapshot = null;
       throw createOperationError('cleanup-failed', { cause: error, paths: [...backups.values()] });
     }
-    const next = inheritedPanes(await load({ directories: [...baseline.loadedDirectories, ...newDirectories.map(item => item.path)].filter(directory => roots.includes(directory) || baseline.entries.get(identity(directory))?.root || desired.get(identity(directory))?.type === 'folder') }), after);
+    const next = inheritedPanes(await load({ directories: await availableViewDirectories([...baseline.loadedDirectories, ...newDirectories.map(item => item.path)].filter(directory => roots.includes(directory) || baseline.entries.get(identity(directory))?.root || desired.get(identity(directory))?.type === 'folder')) }), after);
     snapshot.state = clone(next);
     return next;
   }
@@ -658,15 +727,14 @@ function createProvider(options = {}) {
     busy = true;
     let completed = 0;
     try {
-      await validateCurrent(baseline);
+      await validateEntries(baseline, targets);
       for (const item of targets) {
-        await assertComponents(item.path);
-        if (statSignature(await fs.lstat(item.path, { bigint: true })) !== item.signature) throw new Error('Eintrag vor dem Schreiben extern geändert.');
+        await validateEntries(baseline, [item]);
         await options.deletePath(item.path, { recursive: true, useTrash: request.useTrash });
         completed++;
       }
       const remainingDirectories = baseline.loadedDirectories.filter(directory => !targets.some(item => below(directory, item.path)));
-      const state = inheritedPanes(await load({ directories: remainingDirectories }), before);
+      const state = inheritedPanes(await load({ directories: await availableViewDirectories(remainingDirectories) }), before);
       snapshot.state = clone(state);
       return state;
     } catch (error) {

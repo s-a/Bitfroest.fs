@@ -69,6 +69,7 @@ function createZipFilesystem(base, options = {}) {
         archive = current.archive; revision = current.revision;
         inside = request.path.slice(request.path.indexOf('!') + 1).replace(/^\//, '');
       }
+      if (request.action === 'pack' && !request.path && typeof archive === 'string' && !/\.zip$/i.test(archive)) archive += '.zip';
       if (['remove', 'rename'].includes(request.action)) {
         const selected = state.folders[request.path]?.filter(row => request.ids?.includes(row.id)) || [];
         if (!selected.length || selected.length !== new Set(request.ids).size) throw new Error('Ungültige Archivauswahl.');
@@ -95,7 +96,7 @@ function createZipFilesystem(base, options = {}) {
           }
         } else sources = selected.map(row => row.fsSource);
       }
-      const result = await operations.write({ archive, revision, inside, sources, remove, rename, additions, level: request.level, encryption: request.encryption, password: settings.password, paths: request.paths, recursive: request.recursive, omitRoot: request.omitRoot, move: request.move, verify: request.verify, comment: request.comment, policy: request.policy }, settings);
+      const result = await operations.write({ archive, revision, inside, sources, remove, rename, additions, confirmExisting: request.action === 'pack', level: request.level, encryption: request.encryption, password: settings.password, paths: request.paths, recursive: request.recursive, omitRoot: request.omitRoot, move: request.move, verify: request.verify, comment: request.comment, policy: request.policy }, settings);
       archives.clear();
       for (const [key, view] of views) if (path.resolve(view.locations[key].archive) === path.resolve(archive)) views.delete(key);
       return result;

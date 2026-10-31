@@ -39,7 +39,7 @@ test('an exchanged source is rejected without renaming external bytes', { skip: 
 test('the adapter validates scope and identity before starting a helper', async () => {
   const input = { roots: ['C:/tmp'], source: 'C:/tmp/name.txt', target: 'C:/tmp/NAME.txt', expected: { dev: '1', ino: '2', size: '3', mtimeNs: '4', ctimeNs: '5' } };
   let calls = 0;
-  const options = { platform: 'win32', runHelper: async () => { calls++; return '{"ok":true}'; } };
+  const options = { platform: 'win32', nativeApi: { capabilities: { 'files.rename': { status: 'supported' } }, openSession: () => ({ invoke: async () => { calls++; return { status: 'committed', renamed: true }; }, close() {} }) } };
   for (const invalid of [null, { ...input, roots: [] }, { ...input, source: 'relative' }, { ...input, target: 'C:/tmp/../tmp/NAME.txt' }, { ...input, target: 'C:/tmp/new.txt' }, { ...input, target: input.source }, { ...input, roots: ['C:/other'] }, { ...input, expected: {} }, { ...input, source: 'C:/tmp/name\0.txt' }]) await assert.rejects(renameCase(invalid, options));
   await assert.rejects(renameCase({ ...input, source: 'C:/tmp/name.txt:stream', target: 'C:/tmp/NAME.txt:stream' }, options));
   await assert.rejects(renameCase(input, { ...options, platform: 'linux' }), /requires Windows/);
@@ -48,11 +48,53 @@ test('the adapter validates scope and identity before starting a helper', async 
   assert.equal(calls, 1);
 });
 
-test('helper errors and malformed results cannot become successful renames', async () => {
+test('native failures and malformed outcomes cannot become successful renames', async () => {
   const input = { roots: ['C:/tmp'], source: 'C:/tmp/name.txt', target: 'C:/tmp/NAME.txt', expected: { dev: '1', ino: '2', size: '3', mtimeNs: '4', ctimeNs: '5' } };
-  await assert.rejects(renameCase(input, { platform: 'win32', runHelper: async () => 'not-json' }), /response is invalid/);
-  for (const result of [null, {}, { ok: false, code: 'EXISTS', message: 'Target exists' }]) await assert.rejects(renameCase(input, { platform: 'win32', runHelper: async () => result }));
-  await assert.rejects(renameCase(input, { platform: 'win32', runHelper: async () => { throw new Error('Stopped'); } }), /Stopped/);
+  const apiFor = invoke => ({ capabilities: { 'files.rename': { status: 'supported' } }, openSession: () => ({ invoke, close() {} }) });
+  for (const result of ['not-json', null, {}, { ok: false, code: 'EXISTS', message: 'Target exists' }]) await assert.rejects(renameCase(input, { platform: 'win32', nativeApi: apiFor(async () => result) }), { code: 'NativeOutcomeUnknown' });
+  const cause = new Error('Stopped');
+  await assert.rejects(renameCase(input, { platform: 'win32', nativeApi: apiFor(async () => { throw cause; }) }), error => error.code === 'NativeOutcomeUnknown' && error.cause === cause);
+});
+
+test('the native API adapter records committed outcomes even when its session closes', async () => {
+  const input = { roots: ['C:/tmp'], source: 'C:/tmp/name.txt', target: 'C:/tmp/NAME.txt', expected: { dev: '1', ino: '2', size: '3', mtimeNs: '4', ctimeNs: '5' } };
+  const invocations = [], sessions = [];
+  const nativeApi = { capabilities: { 'files.rename': { status: 'supported' } }, openSession() {
+    const session = { invoke: async (operation, request) => { invocations.push({ operation, request }); return { status: 'committed', renamed: true }; }, close() { sessions.push('closed'); } };
+    return session;
+  } };
+  assert.deepEqual(await renameCase(input, { platform: 'win32', nativeApi, runHelper: async () => { throw new Error('Legacy helper must not run.'); } }), { renamed: true });
+  assert.deepEqual(invocations, [{ operation: 'files.rename', request: { ...input, roots: ['C:\\tmp'], source: 'C:\\tmp\\name.txt', target: 'C:\\tmp\\NAME.txt' } }]);
+  assert.deepEqual(sessions, ['closed']);
+});
+
+test('a stalled native rename closes its session and reports an unknown outcome without retry', async () => {
+  const input = { roots: ['C:/tmp'], source: 'C:/tmp/name.txt', target: 'C:/tmp/NAME.txt', expected: { dev: '1', ino: '2', size: '3', mtimeNs: '4', ctimeNs: '5' } };
+  let invokes = 0, closes = 0;
+  const nativeApi = { capabilities: { 'files.rename': { status: 'supported' } }, openSession: () => ({ invoke: () => { invokes++; return new Promise(() => {}); }, close() { closes++; } }) };
+  await assert.rejects(renameCase(input, { platform: 'win32', nativeApi, timeout: 2 }), error => error.code === 'NativeOutcomeUnknown' && error.cause?.code === 'NativeTimeout');
+  assert.equal(invokes, 1);
+  assert.equal(closes, 1);
+});
+
+test('native API adapter treats committed close errors as success and never retries ambiguous outcomes', async () => {
+  const input = { roots: ['C:/tmp'], source: 'C:/tmp/name.txt', target: 'C:/tmp/NAME.txt', expected: { dev: '1', ino: '2', size: '3', mtimeNs: '4', ctimeNs: '5' } };
+  let calls = 0, closes = 0;
+  const apiFor = invoke => ({ capabilities: { 'files.rename': { status: 'supported' } }, openSession: () => ({ invoke: async () => { calls++; return invoke(); }, close: () => { closes++; } }) });
+  const committed = Object.assign(new Error('The native session closed.'), { code: 'SessionClosed', outcome: { status: 'committed', renamed: true } });
+  const noLegacy = { runHelper: async () => { throw new Error('Legacy helper must not run.'); } };
+  assert.deepEqual(await renameCase(input, { platform: 'win32', nativeApi: apiFor(() => { throw committed; }), ...noLegacy }), { renamed: true });
+  const unchanged = Object.assign(new Error('The native session closed.'), { code: 'SessionClosed', outcome: { status: 'unchanged', renamed: false } });
+  await assert.rejects(renameCase(input, { platform: 'win32', nativeApi: apiFor(() => { throw unchanged; }), ...noLegacy }), error => error === unchanged);
+  await assert.rejects(renameCase(input, { platform: 'win32', nativeApi: apiFor(() => ({ status: 'unchanged', renamed: false })), ...noLegacy }), error => error.code === 'NativeOutcomeUnchanged');
+  const closedBeforeCommit = Object.assign(new Error('The native session closed.'), { code: 'SessionClosed' });
+  await assert.rejects(renameCase(input, { platform: 'win32', nativeApi: apiFor(() => { throw closedBeforeCommit; }), ...noLegacy }), error => error.code === 'NativeOutcomeUnknown' && error.cause === closedBeforeCommit);
+  const ambiguous = Object.assign(new Error('Connection lost.'), { code: 'TransportFailure' });
+  await assert.rejects(renameCase(input, { platform: 'win32', nativeApi: apiFor(() => { throw ambiguous; }), ...noLegacy }), error => error.code === 'NativeOutcomeUnknown' && error.cause === ambiguous);
+  const malformed = Object.assign(new Error('Malformed operation outcome.'), { code: 'NativeFailure', outcome: { status: 'unchanged', renamed: true } });
+  await assert.rejects(renameCase(input, { platform: 'win32', nativeApi: apiFor(() => { throw malformed; }), ...noLegacy }), error => error.code === 'NativeOutcomeUnknown' && error.cause === malformed);
+  assert.equal(calls, 6);
+  assert.equal(closes, 6);
 });
 
 test('changed source metadata is rejected while preserving its current contents', { skip: process.platform !== 'win32' }, async t => {

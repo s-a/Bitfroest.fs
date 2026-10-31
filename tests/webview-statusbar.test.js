@@ -5,6 +5,7 @@ const path = require('node:path');
 const { createApp } = require('./support/webview.cjs');
 const send = (app, data) => app.window.dispatchEvent(new app.window.MessageEvent('message', { data }));
 const tick = () => new Promise(resolve => setImmediate(resolve));
+const outcome = app => app.document.querySelector('#status-message').dataset.outcome;
 function fixture() {
   const p = path => ({ tabs: [path], tab: 0, selected: ['a'], cursor: 'a', filter: '', sort: 'name' });
   return { version: 1, realFilesystem: true, snapshotId: 'statusbar', active: 0, panes: [p('/left'), p('/right')], folders: { '/left': [{ id: 'a', name: 'Source <literal>.txt', type: 'text', size: 12, fsSource: '/left/Source <literal>.txt' }], '/right': [] } };
@@ -16,8 +17,144 @@ async function start(app) {
   return app.messages.find(message => message.type === 'filesystem-apply');
 }
 
+test('completed selections show a themed success icon while invalid filters show a yellow error outcome', t => {
+  for (const language of ['de', 'en']) {
+    const app = createApp(t, undefined, { language }); app.action('select-all');
+    assert.equal(outcome(app), 'success');
+    assert.ok(app.document.querySelector('#status-message [data-status-icon] svg'));
+    assert.match(app.document.querySelector('#status-message').textContent, language === 'de' ? /markiert/ : /selected/);
+    assert.equal(app.document.querySelector('#status-message [data-status-icon]').getAttribute('aria-hidden'), 'true');
+    app.action('select-group'); app.document.querySelector('#value').value = '<[';
+    app.document.querySelector('#modal-form').dispatchEvent(new app.window.Event('submit', { bubbles: true, cancelable: true }));
+    assert.equal(outcome(app), 'error');
+    assert.ok(app.document.querySelector('#status-message [data-status-icon] svg'));
+  }
+  const css = fs.readFileSync(path.resolve(__dirname, '../media/app.css'), 'utf8');
+  assert.match(css, /#status-message\[data-outcome="success"\][^}]*--vscode-testing-iconPassed/);
+  assert.match(css, /#status-message\[data-outcome="error"\][^}]*--vscode-editorWarning-foreground/);
+});
+
+test('clipboard status waits for acknowledgment and distinguishes errors, cancellation and stale responses', t => {
+  const app = createApp(t, fixture()); app.action('select-all'); app.action('copy-full-names');
+  const request = app.messages.filter(message => message.type === 'selection-io').at(-1);
+  assert.equal(outcome(app), 'info');
+  send(app, { type: 'selection-io-result', requestId: request.requestId, ok: true });
+  assert.equal(outcome(app), 'success');
+  app.action('copy-full-names'); const next = app.messages.filter(message => message.type === 'selection-io').at(-1);
+  send(app, { type: 'selection-io-result', requestId: next.requestId, ok: false, error: 'Failure <img src=x>' });
+  assert.equal(outcome(app), 'error'); assert.equal(app.document.querySelector('#status-message img'), null);
+  app.action('copy-full-names'); const cancelled = app.messages.filter(message => message.type === 'selection-io').at(-1);
+  send(app, { type: 'selection-io-result', requestId: cancelled.requestId, ok: true, cancelled: true });
+  assert.equal(outcome(app), 'cancelled');
+  app.action('copy-full-names'); const stale = app.messages.filter(message => message.type === 'selection-io').at(-1);
+  app.action('clear'); const status = app.document.querySelector('#status-message').textContent;
+  send(app, { type: 'selection-io-result', requestId: stale.requestId, ok: true });
+  assert.equal(app.document.querySelector('#status-message').textContent, status);
+});
+
+test('file transfers show success only after confirmation and never on cancellation or failure', async t => {
+  for (const result of ['success', 'cancelled', 'error']) {
+    const app = createApp(t, fixture()), request = await start(app); assert.ok(request);
+    assert.equal(outcome(app), 'info');
+    send(app, { type: 'filesystem-result', operationId: request.operationId, state: fixture(), ok: result !== 'error',
+      ...(result === 'cancelled' ? { operationOutcome: { cancelled: true, completedIds: [] } } : {}),
+      ...(result === 'error' ? { error: 'Copy failed' } : {}) });
+    assert.equal(outcome(app), result);
+  }
+});
+
+test('starting transfer preparation clears prior success and never reports preparation as completion', async t => {
+  const state = fixture(); state.unloadedFolders = ['/right'];
+  const app = createApp(t, state); app.action('select-all'); assert.equal(outcome(app), 'success');
+  app.action('copy'); app.document.querySelector('#modal-form').dispatchEvent(new app.window.Event('submit', { bubbles: true, cancelable: true }));
+  await tick(); const request = app.messages.find(message => message.type === 'filesystem-prepare'); assert.ok(request);
+  assert.equal(outcome(app), 'info');
+  send(app, { type: 'filesystem-result', operationId: request.operationId, ok: true, state: fixture() });
+  assert.notEqual(outcome(app), 'success');
+});
+test('search completion reports success, partial failure and cancellation in the shared statusbar', t => {
+  for (const result of ['success', 'error', 'cancelled']) {
+    const app = createApp(t, fixture()); app.action('select-all'); app.action('search');
+    app.click(app.document.querySelector('[data-search-start]'));
+    const request = app.messages.filter(message => message.type === 'search-start').at(-1); assert.ok(request);
+    assert.equal(outcome(app), 'info');
+    send(app, { type: 'search-complete', searchId: request.searchId, results: [],
+      ...(result === 'cancelled' ? { cancelled: true } : {}), ...(result === 'error' ? { errors: [{ path: '/left', error: 'Access denied' }] } : {}) });
+    assert.equal(outcome(app), result);
+  }
+});
+test('folder calculation distinguishes pending results, errors and a completed measurement', t => {
+  for (const result of ['success', 'error']) {
+    const state = fixture(); state.panes[0].cursor = 'dir'; state.panes[0].selected = [];
+    state.folders['/left'].push({ id: 'dir', name: 'docs', type: 'folder', fsSource: '/left/docs' });
+    const app = createApp(t, state); app.key(' ');
+    const request = app.messages.find(message => message.type === 'folder-size'); assert.ok(request);
+    assert.equal(outcome(app), 'info');
+    send(app, { ...request, type: 'folder-size-result', ok: result === 'success', size: 0, error: 'Access denied' });
+    assert.equal(outcome(app), result);
+  }
+});
+test('folder size batches retain an earlier error or cancellation when the final folder succeeds', t => {
+  for (const first of ['error', 'cancelled']) {
+    const state = fixture(); state.folders['/left'].push(...['one', 'two'].map(id => ({ id, name: id, type: 'folder', fsSource: '/left/' + id })));
+    const app = createApp(t, state); app.key('Enter', { altKey: true, shiftKey: true });
+    const requests = app.messages.filter(message => message.type === 'folder-size'); assert.equal(requests.length, 2);
+    send(app, { ...requests[0], type: 'folder-size-result', ok: false, ...(first === 'cancelled' ? { cancelled: true } : { error: 'Partial failure' }) });
+    send(app, { ...requests[1], type: 'folder-size-result', ok: true, size: 0 });
+    assert.equal(outcome(app), first);
+  }
+});
+test('an unrelated status change does not discard a valid file selection load', t => {
+  const app = createApp(t, fixture()); app.action('load-selection-file');
+  const request = app.messages.filter(message => message.type === 'selection-io').at(-1); assert.ok(request);
+  app.action('clear'); const status = app.document.querySelector('#status-message').textContent;
+  send(app, { type: 'selection-io-result', requestId: request.requestId, ok: true, text: 'Source <literal>.txt' });
+  assert.deepEqual(app.state().panes[0].selected, ['a']);
+  assert.equal(app.document.querySelector('#status-message').textContent, status, 'old completion does not overwrite newer status');
+});
+test('first native lister open reports its completed display without requiring a second read', t => {
+  const app = createApp(t, fixture()); app.key('F3');
+  const request = app.messages.find(message => message.type === 'lister-open'); assert.ok(request);
+  assert.equal(outcome(app), 'info');
+  send(app, { type: 'lister-result', requestId: request.requestId, ok: true, id: 'opened', size: 1,
+    view: { text: 'a', map: [0, 1], ends: [1], lines: [0], offset: 0, next: 1, previous: 0, size: 1, mode: 'text', encoding: 'utf-8' } });
+  assert.equal(outcome(app), 'success');
+  assert.equal(app.document.querySelector('[data-lister] textarea').value, 'a');
+});
+test('synchronous tab changes and inline renames report their actual completed action', t => {
+  const state = fixture(); state.realFilesystem = false;
+  const app = createApp(t, state); app.action('new-tab');
+  assert.equal(outcome(app), 'success'); assert.match(app.document.querySelector('#status-message').textContent, /Tab/);
+  app.action('rename-one'); const input = app.document.querySelector('.inline-rename'); assert.ok(input);
+  input.value = 'renamed.txt'; app.key('Enter', {}, input);
+  assert.equal(outcome(app), 'success'); assert.match(app.document.querySelector('#status-message').textContent, /umbenannt/);
+});
+test('system file clipboard operations clear old success until their matching acknowledgment', t => {
+  const app = createApp(t, fixture()); app.action('select-all'); app.action('clipboard-copy');
+  const request = app.messages.find(message => message.type === 'clipboard-write'); assert.ok(request);
+  assert.equal(outcome(app), 'info');
+  send(app, { type: 'clipboard-result', requestId: request.requestId, ok: true, selection: { ...request, source: 'system' } });
+  assert.equal(outcome(app), 'success');
+});
+test('late folder results retain model values without replacing a newer clipboard operation status', t => {
+  for (const ok of [true, false]) {
+    const state = fixture(); state.panes[0].cursor = 'dir'; state.panes[0].selected = [];
+    state.folders['/left'].push({ id: 'dir', name: 'docs', type: 'folder', fsSource: '/left/docs' });
+    const app = createApp(t, state); app.key(' ');
+    const measurement = app.messages.find(message => message.type === 'folder-size'); assert.ok(measurement);
+    app.action('copy-full-names'); const copy = app.messages.filter(message => message.type === 'selection-io').at(-1);
+    const pending = app.document.querySelector('#status-message').textContent;
+    send(app, { ...measurement, type: 'folder-size-result', ok, size: 12, error: 'Late folder failure' });
+    assert.equal(app.document.querySelector('#status-message').textContent, pending);
+    send(app, { type: 'selection-io-result', requestId: copy.requestId, ok: true });
+    assert.equal(outcome(app), 'success'); assert.match(app.document.querySelector('#status-message').textContent, /Auswahl übertragen/);
+    if (ok) assert.match(app.row('docs').textContent, /12 B/);
+  }
+});
+
 test('one bottom statusbar contains version, compact function actions and a final notification button', t => {
   const app = createApp(t);
+  const style = app.document.createElement('style'); style.textContent = fs.readFileSync(path.resolve(__dirname, '../media/app.css'), 'utf8'); app.document.head.append(style);
   const bar = app.document.querySelector('#statusbar'); assert.ok(bar);
   assert.equal(bar.querySelector('#status-version'), null);
   assert.ok(bar.querySelector('#status-message'));
@@ -26,6 +163,7 @@ test('one bottom statusbar contains version, compact function actions and a fina
   assert.equal(bar.querySelector('#status-cancel').hidden, true);
   assert.equal(bar.querySelector('.status-cancel-slot').nextElementSibling.id, 'functionbar');
   assert.equal(bar.querySelector('#status-progress-area').classList.contains('is-idle'), true);
+  assert.equal(app.window.getComputedStyle(bar.querySelector('.status-cancel-slot')).display, 'none', 'idle cancel slot reserves no width');
   assert.equal(bar.lastElementChild.id, 'notifications-toggle');
   const buttons = bar.querySelectorAll('#functionbar button'); assert.equal(buttons.length, 6);
   const labels = ['F3 Anzeigen', 'F4 Bearbeiten', 'F5 Kopieren', 'F6 Verschieben', 'F7 Neuer Ordner', 'F8 Löschen'];
@@ -53,11 +191,15 @@ test('notification center retains literal failures, supports dismissal and resto
 
 test('running transfer shows aligned overall and current-file tracks without opening notifications', async t => {
   const state = fixture(), app = createApp(t, state, { language: 'en' });
+  const style = app.document.createElement('style'); style.textContent = fs.readFileSync(path.resolve(__dirname, '../media/app.css'), 'utf8'); app.document.head.append(style);
   const request = await start(app); assert.ok(request);
   const status = app.document.querySelector('#status-progress-area'); assert.ok(status); assert.equal(status.hidden, false);
   const track = status.querySelector('#status-progress-track'); assert.ok(track);
   const cancel = app.document.querySelector('#status-cancel');
   assert.equal(cancel.hidden, false, 'cancel remains reachable in the statusbar with notifications closed');
+  const cancelSlot = cancel.closest('.status-cancel-slot');
+  assert.notEqual(app.window.getComputedStyle(cancelSlot).display, 'none', 'active cancel slot stays visible');
+  assert.notEqual(app.window.getComputedStyle(cancel).display, 'none', 'active cancel button stays visible');
   assert.equal(cancel.textContent, 'Cancel');
   assert.equal(cancel.title, 'Cancel');
   const overall = track.querySelector('#status-progress-overall'), current = track.querySelector('#status-progress-file');
@@ -161,6 +303,41 @@ test('statusbar styles paint overlap once and retain separate theme-colored endp
   assert.match(css, /#status-progress-file\s*\{[^}]*border-right:\s*1px solid var\(--vscode-charts-green/);
   assert.match(css, /#status-progress-track \[role="progressbar"\]\s*\{[^}]*transition:\s*none/);
   assert.doesNotMatch(css, /#status-progress-file\s*\{[^}]*opacity:/);
+});
+
+test('status text expands into free statusbar space and idle progress controls reserve no width', () => {
+  const css = fs.readFileSync(path.resolve(__dirname, '../media/app.css'), 'utf8');
+  const rule = selector => css.match(new RegExp(`${selector}\\s*\\{([^}]*)\\}`))?.[1] || '';
+  const status = rule('#status-message');
+  const progress = rule('#status-progress-area');
+  assert.match(status, /flex:\s*1 1 auto/);
+  assert.match(status, /min-width:\s*0/);
+  assert.match(rule('#status-message \\[data-status-text\\]'), /text-overflow:\s*ellipsis/);
+  assert.match(rule('#status-message \\[data-status-icon\\]'), /flex:\s*0 0 auto/);
+  assert.match(progress, /flex:\s*1 1 0(?:px)?/);
+  assert.match(progress, /min-width:\s*0/);
+  assert.match(css, /#status-progress-area\.is-idle, \.status-cancel-slot:has\(> #status-cancel\[hidden\]\), \.statusbar #status-cancel\[hidden\]\s*\{\s*display:\s*none;\s*\}/);
+  assert.match(css, /\.functionbar\s*\{[^}]*flex:\s*0 0 auto;[^}]*flex-shrink:\s*0/);
+});
+
+test('active progress gets remaining width with a stable bounded text column', async t => {
+  const app = createApp(t, fixture()), request = await start(app);
+  const style = app.document.createElement('style'); style.textContent = fs.readFileSync(path.resolve(__dirname, '../media/app.css'), 'utf8'); app.document.head.append(style);
+  const message = app.document.querySelector('#status-message'), area = app.document.querySelector('#status-progress-area');
+  const basis = () => app.window.getComputedStyle(message).flexBasis;
+  const initial = basis(); assert.ok(Number.parseFloat(initial) > 0);
+  assert.match(style.textContent, /#statusbar:has\(> #status-progress-area:not\(\.is-idle\)\) > #status-message\s*\{[^}]*clamp\(18ch, 30vw, 48ch\)/);
+  assert.equal(app.window.getComputedStyle(message).flexGrow, '0');
+  assert.equal(app.window.getComputedStyle(area).flexGrow, '1');
+  for (const name of ['a.txt', 'very long name '.repeat(20) + '.txt']) {
+    send(app, { type: 'filesystem-progress', operationId: request.operationId, progress: { path: '/left/' + name, transferred: 1, total: 2 } });
+    assert.equal(basis(), initial);
+    assert.equal(app.document.querySelector('#status-progress-area'), area);
+    assert.equal(app.window.getComputedStyle(area).paddingLeft, '0px');
+  }
+  send(app, { type: 'filesystem-result', ok: true, operationId: request.operationId, state: fixture() });
+  assert.equal(app.window.getComputedStyle(message).flexGrow, '1');
+  assert.equal(app.window.getComputedStyle(area).display, 'none');
 });
 
 test('routine filesystem updates appear as status text without creating notifications', async t => {

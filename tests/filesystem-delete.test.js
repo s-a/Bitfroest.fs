@@ -38,12 +38,33 @@ test('all deletion paths and snapshot metadata are validated before invoking the
   let before = await provider.load();
   for (const paths of [[], [left], [`${left}/a.txt`, `${left}/../escape`], [`${left}/missing`], [`${left}/child`], [`${left}/a.txt`, right]]) await assert.rejects(provider.remove(before, { paths, useTrash: true }));
   assert.deepEqual(calls, []);
-  await fs.writeFile(`${left}/b.txt`, 'external');
+  await fs.writeFile(`${left}/a.txt`, 'external');
   await assert.rejects(provider.remove(before, { paths: [`${left}/a.txt`], useTrash: true }), /veraltet|geändert/);
   assert.deepEqual(calls, []);
   before = await provider.load();
   const stale = { ...before, snapshotId: 'fake' };
   await assert.rejects(provider.remove(stale, { paths: [`${left}/a.txt`], useTrash: true }));
+});
+
+test('deleting a selected file tolerates unrelated changes but rejects changed descendants of a selected folder', async t => {
+  const calls = [], { provider, left } = await fixture(t, async target => { calls.push(target); await fs.unlink(target); });
+  let before = await provider.load();
+  await fs.writeFile(`${left}/b.txt`, 'unrelated');
+  await provider.remove(before, { paths: [`${left}/a.txt`], useTrash: true });
+  assert.deepEqual(calls, [`${left}/a.txt`]);
+  before = await provider.load({ recursive: true });
+  await fs.writeFile(`${left}/child/inside.txt`, 'externally changed descendant');
+  await assert.rejects(provider.remove(before, { paths: [`${left}/child`], useTrash: true }), /geändert/);
+  assert.deepEqual(calls, [`${left}/a.txt`]);
+});
+
+test('a removed optional view cannot turn a completed native deletion into a reported failure', async t => {
+  const { provider, left } = await fixture(t, target => fs.unlink(target));
+  const before = await provider.load({ directories: [`${left}/child`] });
+  await fs.unlink(`${left}/child/inside.txt`); await fs.rmdir(`${left}/child`);
+  const result = await provider.remove(before, { paths: [`${left}/a.txt`], useTrash: true });
+  assert.equal(result.folders[left].some(row => row.name === 'a.txt'), false);
+  assert.equal(Object.hasOwn(result.folders, `${left}/child`), false);
 });
 
 test('prepared directory deletion removes a whole selected tree with one native call', async t => {

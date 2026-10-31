@@ -135,7 +135,7 @@ test('dropping a file on an inactive folder tab uses its path without changing t
 test('Ctrl-Shift file drops cannot silently move files when link creation is unavailable',t=>{
  const app=createApp(t,fixture()),data=transfer();app.click(name(app,'a.txt'));drag(app,'dragstart',name(app,'a.txt'),data);const target=app.document.querySelector('[data-pane="1"] .list');
  drag(app,'dragover',target,data,{ctrlKey:true,shiftKey:true});assert.equal(data.dropEffect,'none');
- drag(app,'drop',target,data,{ctrlKey:true,shiftKey:true});assert.equal(app.document.querySelector('#modal').open,false);assert.equal(app.state().folders['/left'].length,3);assert.match(app.document.querySelector('#toast').textContent,/Verknüpfungen/);
+ drag(app,'drop',target,data,{ctrlKey:true,shiftKey:true});assert.equal(app.document.querySelector('#modal').open,false);assert.equal(app.state().folders['/left'].length,3);assert.match(app.document.querySelector('#status-message').textContent,/Verknüpfungen/);
 });
 
 test('source directory drops are rejected on rows, list space and either pane tab', t => {
