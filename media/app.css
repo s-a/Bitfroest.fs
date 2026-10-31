@@ -84,12 +84,20 @@ main { display: flex; flex-direction: column; flex: 1; min-height: 0; min-width:
 .native-icon { object-fit: contain; }
 .cut-marker { color: var(--vscode-icon-foreground, var(--text)); flex: 0 0 10px; font-size: 12px; width: 10px; margin-left: -7px; }
 .operation-error { margin: 0 0 16px; color: var(--vscode-editorWidget-foreground, var(--text)); }
-.operation-error > p { color: var(--vscode-errorForeground, var(--text)); }
-.operation-error > label { display: block; margin-bottom: 6px; }
+.operation-error-art { display: block; width: 100%; height: auto; margin: 0 auto 16px; pointer-events: none; user-select: none; }
+.operation-error .operation-error-intro { text-align: center; font-size: 1.15em; font-weight: 600; line-height: 1.5; margin: 0 0 20px; text-wrap: balance; }
+.operation-error-details { border-top: 1px solid var(--vscode-widget-border, var(--line)); border-bottom: 1px solid var(--vscode-widget-border, var(--line)); padding: 12px 0; }
+.operation-error-details summary { cursor: pointer; color: var(--vscode-textLink-foreground, var(--accent)); width: fit-content; }
+.operation-error-details summary:focus-visible { outline: 1px solid var(--vscode-focusBorder, var(--accent)); outline-offset: 4px; }
+.operation-error-details h3 { font: inherit; font-weight: 600; margin: 16px 0 8px; }
+.operation-error-details label { display: block; margin-bottom: 6px; color: var(--muted); }
+.operation-error-details [data-select-error] { margin-top: 8px; }
 .operation-error-text { display: block; width: 100%; min-height: 84px; max-height: 240px; padding: 7px; resize: vertical; overflow: auto; white-space: pre-wrap; user-select: text; }
-.operation-error-actions { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 8px; }
+.operation-error-actions { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 16px; }
 .operation-error-actions button { color: var(--vscode-textLink-foreground, var(--accent)); padding: 2px 0; }
 .operation-error-inline { flex-shrink: 0; padding: 10px 12px; margin: 0; max-height: 220px; overflow: auto; border-top: 1px solid var(--vscode-widget-border, var(--line)); background: var(--vscode-editorWidget-background, var(--surface)); }
+.operation-error-inline .operation-error-art { width: min(100%, 320px); margin-bottom: 8px; }
+.operation-error-inline .operation-error-intro { margin-bottom: 12px; font-size: 1em; }
 .fileicon.folder::before { content: ''; width: 13px; height: 9px; position: absolute; top: 5px; border: 1px solid currentColor; background: currentColor; }
 .fileicon.folder::after { content: ''; width: 6px; height: 3px; border: 1px solid currentColor; border-bottom: 0; position: absolute; top: 3px; left: 2px; }
 .parent-row { color: var(--muted); }

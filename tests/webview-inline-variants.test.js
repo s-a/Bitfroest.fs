@@ -68,7 +68,7 @@ test('a trash launch failure retains an active inline proposal and shows readabl
   const app = createApp(t, fixture(true)); app.action('rename-one'); const input = app.document.querySelector('.inline-rename'); input.value = 'unsaved proposal.txt';
   app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'open-trash-result', ok: false, error: 'Trash unavailable' } }));
   assert.equal(app.document.querySelector('.inline-rename'), input); assert.equal(input.value, 'unsaved proposal.txt'); assert.equal(app.document.activeElement, input);
-  assert.equal(app.document.querySelector('.operation-error-text').value, 'Trash unavailable');
+  assert.ok(app.document.querySelector('.operation-error-text').value.endsWith('Trash unavailable'));
   assert.equal(app.messages.some(item => item.type === 'filesystem-apply'), false);
 });
 test('unchanged arrow switching performs no host mutation and invalid names cannot advance', t => {

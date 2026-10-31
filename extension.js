@@ -1,4 +1,5 @@
 const vscode = require('vscode');
+const extensionVersion = require('./package.json').version;
 const { createSelectionIO } = require('./selection-io');
 const { selectStartupRoots, existingDirectories } = require('./startup-paths');
 const { resolveUncPaths } = require('./network-paths');
@@ -28,6 +29,33 @@ const { createSearchProvider } = require('./search-provider');
 const { validateSettings: validateSearchSettings } = require('./file-search');
 const { createConfigurationEditor } = require('./configuration-editor');
 const { createConfigurationSettings } = require('./configuration-settings');
+
+function operationDiagnostic(error, request, state) {
+  const fields = ['path', 'paths', 'target', 'archive', 'side', 'action', 'recursive', 'operationId', 'snapshotId'];
+  const requestContext = { type: request.type };
+  for (const key of fields) if (request[key] !== undefined) requestContext[key] = request[key];
+  if (request.transfer && typeof request.transfer === 'object') {
+    const transfer = {};
+    for (const key of ['mode', 'sourcePath', 'sourceSide', 'targetPath']) if (request.transfer[key] !== undefined) transfer[key] = request.transfer[key];
+    requestContext.transfer = transfer;
+  }
+  const serialize = (failure, depth = 0) => {
+    if (!failure || depth > 6) return undefined;
+    const result = {};
+    for (const key of ['name', 'message', 'code', 'path', 'scanPhase']) {
+      const value = failure[key];
+      if (typeof value === 'string' || typeof value === 'number') result[key] = String(value).slice(0, 4000);
+    }
+    if (typeof failure.stack === 'string') result.stack = failure.stack.slice(0, 12000);
+    if (failure.cause) result.cause = serialize(failure.cause, depth + 1);
+    return result;
+  };
+  const panelPaths = (state?.panes || []).slice(0, 2).map(pane => {
+    const index = Number.isInteger(pane?.tab) ? pane.tab : 0;
+    return Array.isArray(pane?.tabs) && typeof pane.tabs[index] === 'string' ? pane.tabs[index].slice(0, 4096) : undefined;
+  }).filter(Boolean);
+  return { request: requestContext, panelPaths, timestamp: new Date().toISOString(), platform: process.platform, architecture: process.arch, osRelease: os.release(), extensionVersion, vscodeVersion: vscode.version, runtimeVersion: process.version, failure: serialize(error) };
+}
 const { catalog: shortcutCatalog, localizedCatalog, effectiveBindings } = require('./shortcut-settings');
 const { resolve: resolveShortcut } = require('./media/commander-shortcuts');
 const { favoritesToTables, validateColumns } = require('./media/configuration-model');
@@ -372,6 +400,7 @@ function activate(context) {
         .replace('<body>', `<body data-shortcut-settings="${encodeURIComponent(JSON.stringify(shortcutState()))}" data-favorite-settings="${encodeURIComponent(JSON.stringify(favoriteSettings()))}" data-startup-error="${encodeURIComponent(t('Die Dateiverwaltung konnte nicht gestartet werden. Diesen Tab schließen und erneut öffnen.'))}" data-language="${encodeURIComponent(language)}" data-file-settings="${encodeURIComponent(JSON.stringify(fileSettings()))}" data-column-settings="${encodeURIComponent(JSON.stringify(columnSettings()))}" data-icon-theme="${encodeURIComponent(JSON.stringify(icons.associations))}">`)
         .replace('<body ', `<body data-platform="${process.platform}" data-extension-version="${encodeURIComponent(require('./package.json').version)}" data-initial-state="${JSON.stringify(savedState || null).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;')}" `)
         .replace(/href="([a-z0-9-]+\.css)"/g, (_, name) => `href="${resource(name)}"`)
+        .replace(/src="([a-z0-9-]+\.png)"/g, (_, name) => `src="${resource(name)}"`)
         .replace('Loading file manager…', () => t('Dateiverwaltung wird geladen…'))
         .replace(/src="([a-z0-9-]+\.js)"/g, (_, name) => `nonce="${nonce}" src="${resource(name)}"`);
     };
@@ -1011,6 +1040,7 @@ function activate(context) {
           let ok = true;
           let cancelled = false;
           let operationError;
+          let diagnostic;
           try {
             if (!filesystemState) throw new Error(t('Kein Dateisystem geladen.'));
             let fresh;
@@ -1029,6 +1059,7 @@ function activate(context) {
             if (job && error.name === 'AbortError') cancelled = true;
             else {
             ok = false;
+            diagnostic = operationDiagnostic(error, message, message.state || filesystemState);
             const detail = Number.isInteger(error.deletedCount) ? t('Löschen fehlgeschlagen nach {count} Einträgen: {error}', { count: error.deletedCount, error: renderOperationError(error.cause, t) }) : renderOperationError(error, t);
             operationError = detail;
             if (message.type !== 'filesystem-prepare') {
@@ -1037,7 +1068,7 @@ function activate(context) {
             }
           }
           if (job) transferJobs.delete(operationId);
-          if (current && panel === current) await current.webview.postMessage({ type: 'filesystem-result', ok, state: filesystemState, ...(cancelled ? { cancelled: true } : {}), ...(operationId ? { operationId, operationOutcome: filesystemState?.operationOutcome } : {}), ...(!ok ? { error: operationError } : {}), ...(ok && !cancelled && message.type === 'filesystem-navigate' ? { resumeNavigation: { path: message.path, side: message.side } } : {}), ...(ok && !cancelled && message.type === 'filesystem-prepare' ? { resumeAction: message.action } : {}) });
+          if (current && panel === current) await current.webview.postMessage({ type: 'filesystem-result', ok, state: filesystemState, ...(cancelled ? { cancelled: true } : {}), ...(operationId ? { operationId, operationOutcome: filesystemState?.operationOutcome } : {}), ...(!ok ? { error: operationError, diagnostic } : {}), ...(ok && !cancelled && message.type === 'filesystem-navigate' ? { resumeNavigation: { path: message.path, side: message.side } } : {}), ...(ok && !cancelled && message.type === 'filesystem-prepare' ? { resumeAction: message.action } : {}) });
         }).finally(() => { filesystemRequests--; });
         await filesystemQueue;
         return;

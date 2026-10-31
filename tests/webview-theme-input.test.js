@@ -26,6 +26,6 @@ test('theme and font changes preserve inline input, caret, focus and recovery wi
     assert.equal(app.messages.filter(item => item.type === 'filesystem-apply').length, writes);
     assert.ok(app.row('source.txt').querySelector('.light-text'));
     assert.equal(app.document.querySelector('#panes').style.getPropertyValue('--match-foreground'), '#000000');
-    if (recovery) assert.equal(app.document.querySelector('.operation-error-text').value, 'Access denied');
+    if (recovery) assert.ok(app.document.querySelector('.operation-error-text').value.endsWith('Access denied'));
   }
 });

@@ -136,12 +136,18 @@ test('error details copy passes through actual host HTML to the public clipboard
   initial.panes.forEach(pane => { pane.filter = ''; pane.sort = 'name'; });
   const app = harness(t, { filesystemLoad: async () => initial });
   await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  assert.match(panel.webview.html, /img-src [^;]+ data:;/);
   const view = require('./support/webview.cjs').createApp(t, initial, { html: panel.webview.html, language: 'de' });
   view.action('mkdir');
   view.document.querySelector('#value').value = 'new';
   view.document.querySelector('#modal-form').dispatchEvent(new view.window.Event('submit', { bubbles: true, cancelable: true }));
   const error = "EPERM: operation not permitted, lstat 'C:\\DumpStack.log.tmp'\nC:\\Recovery\\Ä.stage";
   view.window.dispatchEvent(new view.window.MessageEvent('message', { data: { type: 'filesystem-result', ok: false, state: initial, error } }));
+  const illustration = view.document.querySelector('.operation-error img');
+  assert.ok(illustration);
+  assert.match(illustration.src, /error-monkey\.png$/);
+  assert.notEqual(illustration.getAttribute('src'), 'error-monkey.png', 'host resolves the packaged image URI');
+  assert.equal(view.document.querySelector('.operation-error details').open, false);
   view.click(view.document.querySelector('[data-copy-error]'));
   const request = view.messages.find(message => message.type === 'selection-io');
   await panel.receive(request);
@@ -149,7 +155,7 @@ test('error details copy passes through actual host HTML to the public clipboard
   const response = panel.messages.find(message => message.type === 'selection-io-result' && message.requestId === request.requestId);
   assert.equal(response.ok, true);
   view.window.dispatchEvent(new view.window.MessageEvent('message', { data: response }));
-  assert.equal(view.document.querySelector('.operation-error-text').value, error);
+  assert.ok(view.document.querySelector('.operation-error-text').value.endsWith(error));
   assert.equal(view.document.querySelector('#status-message').textContent, 'Fehlerdetails kopiert.');
   panel.dispose();
 });
@@ -2325,12 +2331,24 @@ test('preparation has progress and a cancellable job before applying any mutatio
 
 test('failed preparation acknowledges and releases the filesystem queue without a blocking native popup', async t => {
   let releaseError;
-  const app = harness(t, { filesystemLoad: async () => clipboardFixture(), filesystemPrepare: async () => { throw new Error('Preparation failed'); }, showErrorMessage: () => new Promise(resolve => { releaseError = resolve; }) });
+  const failure = Object.assign(new Error('Preparation failed'), { code: 'FolderChangedDuringScan', path: 'C:/tmp', scanPhase: 'readdir', cause: Object.assign(new Error('Directory changed'), { code: 'ESTALE', path: 'C:/tmp', scanPhase: 'stat', stack: 'cause stack' }) });
+  const app = harness(t, { filesystemLoad: async () => clipboardFixture(), filesystemPrepare: async () => { throw failure; }, showErrorMessage: () => new Promise(resolve => { releaseError = resolve; }) });
   await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
-  const pending = panel.receive({ type: 'filesystem-prepare', operationId: 'prepare-failure', paths: ['C:/tmp'], action: 'copy', state: clipboardFixture() });
+  const pending = panel.receive({ type: 'filesystem-prepare', operationId: 'prepare-failure', snapshotId: 'clipboard', paths: ['C:/tmp'], action: 'copy', state: clipboardFixture() });
   await tick();
   assert.equal(panel.messages.at(-1)?.type, 'filesystem-result');
   assert.equal(panel.messages.at(-1)?.operationId, 'prepare-failure');
+  assert.deepEqual(panel.messages.at(-1)?.diagnostic.request, { type: 'filesystem-prepare', paths: ['C:/tmp'], action: 'copy', operationId: 'prepare-failure', snapshotId: 'clipboard' });
+  assert.deepEqual(panel.messages.at(-1)?.diagnostic.panelPaths, ['C:/tmp', 'C:/temp']);
+  assert.ok(Number.isFinite(Date.parse(panel.messages.at(-1)?.diagnostic.timestamp)));
+  assert.equal(panel.messages.at(-1)?.diagnostic.architecture, process.arch);
+  assert.equal(panel.messages.at(-1)?.diagnostic.osRelease, require('node:os').release());
+  assert.equal(panel.messages.at(-1)?.diagnostic.failure.code, 'FolderChangedDuringScan');
+  assert.equal(panel.messages.at(-1)?.diagnostic.failure.scanPhase, 'readdir');
+  assert.equal(panel.messages.at(-1)?.diagnostic.failure.cause.code, 'ESTALE');
+  assert.equal(panel.messages.at(-1)?.diagnostic.failure.cause.path, 'C:/tmp');
+  assert.equal(panel.messages.at(-1)?.diagnostic.failure.cause.stack, 'cause stack');
+  assert.equal(panel.messages.at(-1)?.diagnostic.runtimeVersion, process.version);
   assert.equal(app.errors.length, 0, 'the webview owns persistent operation error reporting');
   const refresh = panel.receive({ type: 'filesystem-refresh', state: clipboardFixture() });
   await refresh;

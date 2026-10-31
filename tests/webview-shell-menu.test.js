@@ -61,7 +61,7 @@ test('keyboard context targets the cursor selection and stale responses cannot r
   assert.equal(requests(app).length, 1); assert.equal(requests(app)[0].keyboard, true);
   send(app, { type: 'shell-context-menu-result', requestId: 'foreign', ok: false, error: 'foreign' }); assert.equal(app.document.querySelector('#modal').open, false);
   send(app, { type: 'shell-context-menu-result', requestId: requests(app)[0].requestId, ok: false, error: 'Native detail <literal>' });
-  assert.equal(app.document.querySelector('.operation-error-text').value, 'Native detail <literal>');
+  assert.ok(app.document.querySelector('.operation-error-text').value.endsWith('Native detail <literal>'));
   assert.equal(app.document.querySelector('.operation-error-text literal'), null);
 });
 

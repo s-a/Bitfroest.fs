@@ -1240,20 +1240,52 @@
     else preview(file, false);
   }
   let confirmAction = null;
-  let operationFailure = null, operationErrorDialog = false, operationFailureInline = false, failureFocus = null;
+  let operationFailure = null, operationFailureDiagnostic = null, operationErrorDialog = false, operationFailureInline = false, failureFocus = null;
+  function operationDiagnosticText(diagnostic) {
+    if (!diagnostic || typeof diagnostic !== 'object') return '';
+    const lines = [
+      `${t('Operation')}: ${diagnostic.request?.type || t('Unbekannt')}`,
+      ...(['action', 'mode', 'path', 'paths', 'target', 'archive', 'side', 'recursive'].filter(key => diagnostic.request?.[key] !== undefined).map(key => `${t(({ action: 'Aktion', mode: 'Modus', path: 'Pfad', paths: 'Pfade', target: 'Ziel', archive: 'Archiv', side: 'Seite', recursive: 'Rekursiv' })[key])}: ${Array.isArray(diagnostic.request[key]) ? diagnostic.request[key].join('\n  ') : diagnostic.request[key]}`)),
+      ...(diagnostic.request?.transfer ? Object.entries(diagnostic.request.transfer).map(([key, value]) => `${t(({ mode: 'Modus', sourcePath: 'Quellpfad', sourceSide: 'Quellseite', targetPath: 'Zielpfad' })[key] || key)}: ${value}`) : []),
+      ...(diagnostic.request?.operationId ? [`${t('Auftragskennung')}: ${diagnostic.request.operationId}`] : []),
+      ...(diagnostic.request?.snapshotId ? [`${t('Snapshotkennung')}: ${diagnostic.request.snapshotId}`] : []),
+      ...(diagnostic.panelPaths?.length ? [`${t('Aktive Bereichspfade')}:\n  ${diagnostic.panelPaths.join('\n  ')}`] : []),
+      ...(diagnostic.timestamp ? [`${t('Zeitstempel')}: ${diagnostic.timestamp}`] : []),
+      `${t('Plattform')}: ${diagnostic.platform || t('Unbekannt')}`,
+      ...(diagnostic.architecture ? [`${t('Prozessorarchitektur')}: ${diagnostic.architecture}`] : []),
+      ...(diagnostic.osRelease ? [`${t('Betriebssystemversion')}: ${diagnostic.osRelease}`] : []),
+      `${t('Erweiterungsversion')}: ${diagnostic.extensionVersion || t('Unbekannt')}`,
+      `${t('VS-Code-Version')}: ${diagnostic.vscodeVersion || t('Unbekannt')}`,
+      `${t('Laufzeitversion')}: ${diagnostic.runtimeVersion || t('Unbekannt')}`
+    ];
+    const appendFailure = (failure, label = null, depth = 0) => {
+      if (!failure || depth > 6) return;
+      if (label) lines.push(`${'  '.repeat(depth)}${t('Ursache')}:`);
+      for (const [key, label] of Object.entries({ name: 'Fehlername', code: 'Fehlercode', message: 'Fehlermeldung', path: 'Pfad', scanPhase: 'Scan-Phase' })) if (failure[key]) lines.push(`${t(label)}: ${failure[key]}`);
+      if (failure.stack) lines.push(`${'  '.repeat(depth)}${t('Stack')}:\n${failure.stack}`);
+      if (failure.cause) appendFailure(failure.cause, true, depth + 1);
+    };
+    appendFailure(diagnostic.failure);
+    return lines.join('\n');
+  }
+  function operationFailureReport() {
+    const title = t('Dateioperation fehlgeschlagen');
+    return `${title}${operationFailureDiagnostic ? `\n\n${operationDiagnosticText(operationFailureDiagnostic)}` : ''}\n\n${operationFailure}`;
+  }
   function mountOperationFailure() {
     document.querySelector('.operation-error')?.remove();
     if (!operationFailure) return;
     const area = document.createElement('section'); area.className = 'operation-error'; area.setAttribute('role', 'alert');
-    area.innerHTML = `<p>${t('Die Fehlerdetails bleiben bis zur Bestätigung verfügbar.')}</p><label for="operation-error-text">${t('Fehlerdetails und Wiederherstellungspfade')}</label><textarea id="operation-error-text" class="operation-error-text" readonly rows="4"></textarea><div class="operation-error-actions"><button type="button" data-copy-error>${t('Fehlerdetails kopieren')}</button><button type="button" data-select-error>${t('Details auswählen')}</button>${operationErrorDialog ? '' : `<button type="button" data-dismiss-error>${t('Fehler bestätigen')}</button>`}</div>`;
-    area.querySelector('textarea').value = operationFailure;
+    area.innerHTML = `${$('#operation-error-art').innerHTML}<p class="operation-error-intro">${t('Es ist ein unvorhergesehener Fehler aufgetreten.')}</p><details class="operation-error-details"><summary>${t('Details')}</summary><h3>${t('Details für Computer-Nerds')}</h3><label for="operation-error-text">${t('Fehlerdetails und Wiederherstellungspfade')}</label><textarea id="operation-error-text" class="operation-error-text" readonly rows="6"></textarea><button type="button" data-select-error>${t('Details auswählen')}</button></details><div class="operation-error-actions"><button type="button" data-copy-error>${t('Fehlerdetails kopieren')}</button>${operationErrorDialog ? '' : `<button type="button" data-dismiss-error>${t('Fehler bestätigen')}</button>`}</div>`;
+    area.querySelector('textarea').value = operationFailureReport();
     if (operationFailureInline) { area.classList.add('operation-error-inline'); $('#functionbar').before(area); }
     else $('#modal-body').prepend(area);
   }
-  function showOperationFailure(message, { inline = false } = {}) {
+  function showOperationFailure(message, { inline = false, diagnostic = null } = {}) {
     statusbar.error(message);
     clearTimeout(toast.timer); $('#toast').classList.remove('visible');
     operationFailure = message;
+    operationFailureDiagnostic = diagnostic;
     operationFailureInline = inline && Boolean(document.querySelector('.inline-rename'));
     failureFocus = document.activeElement;
     if (!$('#modal').open && !operationFailureInline) {
@@ -2344,9 +2376,9 @@
     host.postMessage({ type: 'shell-context-menu', requestId, directory: contextSelection ? contextSelection.directory : currentPath(p), ids, snapshotId: contextSelection ? contextSelection.snapshotId : state.snapshotId, keyboard: Boolean(keyboard), ...(inspectLocks ? { inspectLocks: true } : {}) });
   }
   document.addEventListener('click', event => {
-    if (event.target.closest('[data-copy-error]')) { if (operationFailure) selectionIO('copy', `${t('Dateioperation fehlgeschlagen')}\n\n${operationFailure}`, undefined, t('Fehlerdetails kopiert.')); return; }
+    if (event.target.closest('[data-copy-error]')) { if (operationFailure) selectionIO('copy', operationFailureReport(), undefined, t('Fehlerdetails kopiert.')); return; }
     if (event.target.closest('[data-select-error]')) { const text = $('#operation-error-text'); text.focus(); text.select(); return; }
-    if (event.target.closest('[data-dismiss-error]')) { operationFailure = null; document.querySelector('.operation-error')?.remove(); if (failureFocus?.isConnected) failureFocus.focus(); return; }
+    if (event.target.closest('[data-dismiss-error]')) { operationFailure = null; operationFailureDiagnostic = null; document.querySelector('.operation-error')?.remove(); if (failureFocus?.isConnected) failureFocus.focus(); return; }
     const button = event.target.closest('[data-browser-action]');
     if (button) { $('#modal').close(); run(button.dataset.browserAction); }
   });
@@ -2468,7 +2500,7 @@
       if (!event.data.ok && failedCreation) failedCreation();
       if (!event.data.ok && failedTransferPreparation) failedTransferPreparation();
       if (event.data.cancelled && failedTransferPreparation) failedTransferPreparation(true);
-      if (!event.data.ok) showOperationFailure(error, { inline: Boolean(failedRename && restoreRename(failedRename)) });
+      if (!event.data.ok) showOperationFailure(error, { inline: Boolean(failedRename && restoreRename(failedRename)), diagnostic: event.data.diagnostic });
       flushFocusRefresh(); return;
     }
     if (host && event.data?.type === 'git-settings-changed') {

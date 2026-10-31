@@ -34,11 +34,11 @@ test('recovery details remain selectable until explicit dismissal', t => {
   callbacks.forEach(callback => callback());
   assert.equal(app.document.querySelector('#modal').open, true);
   const text = app.document.querySelector('.operation-error-text');
-  assert.equal(text.value, detail);
+  assert.ok(text.value.endsWith(detail));
   assert.equal(text.readOnly, true);
-  assert.equal(app.document.querySelector('.operation-error img'), null);
+  assert.equal(text.querySelector('img'), null);
   app.click(app.document.querySelector('[data-select-error]'));
-  assert.equal(text.selectionEnd - text.selectionStart, detail.length);
+  assert.equal(text.selectionEnd - text.selectionStart, text.value.length);
   app.click(app.document.querySelector('#modal-cancel'));
   assert.equal(app.document.querySelector('.operation-error'), null);
   assert.equal(app.document.querySelector('#modal').open, false);
