@@ -61,7 +61,8 @@ test('native copy supports long Unicode paths and refuses junction ancestors', a
   const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'native-copy-paths-')));
   const api = createNativeApi(require(bindingPath)), session = api.openSession();
   t.after(async () => { await api.shutdownAsync(); await fs.rm(root, { recursive: true, force: true }); });
-  const directory = path.join(root, ...Array(10).fill('Größe-文件-123456789'));
+  let directory = root;
+  while (directory.length <= 280) directory = path.join(directory, 'Größe-文件-123456789');
   await fs.mkdir(directory, { recursive: true });
   const source = path.join(directory, '源.txt'), target = path.join(directory, 'Ziel-ä.txt');
   await fs.writeFile(source, Buffer.from([0, 255, 17, 34]));

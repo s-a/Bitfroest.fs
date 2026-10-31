@@ -94,6 +94,10 @@ else()
   target_compile_options(binding PRIVATE -Wall -Wextra -Werror)
 endif()
 install(TARGETS binding LIBRARY DESTINATION native RUNTIME DESTINATION native)
+option(BITFROEST_BUILD_TEST_FIXTURES "Build native test modules outside the extension package." OFF)
+if(WIN32 AND BITFROEST_BUILD_TEST_FIXTURES)
+  include("${CMAKE_CURRENT_SOURCE_DIR}/../tests/native-fixtures.cmake")
+endif()
 
 
 

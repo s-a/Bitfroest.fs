@@ -40,12 +40,25 @@ async function main() {
   if (process.platform === 'win32') {
     const library = path.join(root, 'node.lib');
     await download('https://nodejs.org/dist/v24.18.0/win-x64/node.lib', library, '589684168a73547ca47cd22d76a4e465ef561abe89fb1b2b23fe35bbe857d505');
-    args.push('-G', 'Visual Studio 18 2026', '-A', 'x64', `-DNODE_LIBRARY=${library}`);
+    args.push('-G', 'Visual Studio 18 2026', '-A', 'x64', `-DNODE_LIBRARY=${library}`, '-DBITFROEST_BUILD_TEST_FIXTURES=ON');
   }
   run('cmake', args);
   run('cmake', ['--build', build, '--config', 'Release', '--parallel', '2']);
   const binary = path.join(build, process.platform === 'win32' ? 'Release/binding.node' : 'binding.node');
   fs.copyFileSync(binary, path.resolve('native/binding.node'));
+  if (process.platform === 'win32') {
+    const fixtures = {
+      NATIVE_CLIPBOARD_TEST_BINDING: 'clipboard_test.node',
+      NATIVE_LOCKS_MODULE_FIXTURE: 'locks_module_fixture.node',
+      NATIVE_LOCKS_DETACH_TEST_BINDING: 'locks_detach_test.node'
+    };
+    if (!process.env.GITHUB_ENV) throw new Error('Workflow environment file is unavailable.');
+    for (const [name, file] of Object.entries(fixtures)) {
+      const fixture = path.join(build, 'Release', file);
+      if (!fs.existsSync(fixture)) throw new Error(`Missing native test module: ${file}`);
+      fs.appendFileSync(process.env.GITHUB_ENV, `${name}=${fixture}\n`);
+    }
+  }
   const binding = require(path.resolve('native/binding.node'));
   if (binding.apiVersion.major !== 1) throw new Error('Unexpected native API version.');
   const session = binding.openSession(); session.close();
