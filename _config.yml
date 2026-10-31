@@ -1,4 +1,11 @@
-theme: jekyll-theme-midnight
+theme: minima
 title: Bitfroest.fs
 description: Dual-pane file management for Visual Studio Code
 lang: en
+url: https://s-a.github.io
+baseurl: /Bitfroest.fs
+defaults:
+  - scope:
+      path: ""
+    values:
+      layout: default
