@@ -597,15 +597,26 @@
   }
   function extension(file) { return file.type === 'folder' ? t('Ordner') : file.name.includes('.') ? file.name.split('.').pop() : '—'; }
   const gitDirectories = new Map();
-  let gitSequence = 0, gitSignature = '', gitRequest;
+  let gitSequence = 0;
+  const gitBindings = new Map();
+  function invalidateChangedDirectories(previousFolders, forced = []) {
+    const changed = [...new Set(state.panes.filter(pane => !resultView(pane)).map(currentPath))].filter(directory => JSON.stringify(previousFolders[directory]) !== JSON.stringify(state.folders[directory]));
+    for (const directory of [...changed, ...forced]) gitBindings.delete(directory);
+    const affected = value => [...changed, ...forced].some(directory => value === directory || value.startsWith(directory + '/') || directory.startsWith(value + '/'));
+    for (const directory of folderSizes.keys()) if (affected(directory)) folderSizes.delete(directory);
+    for (const [operationId, request] of folderSizeRequests) if (affected(request.path)) { host?.postMessage({ type: 'filesystem-cancel', operationId }); folderSizeRequests.delete(operationId); }
+    if (!folderSizeRequests.size) folderSizeBatch = null;
+  }
   function requestGitStatus() {
     if (!host || !startupReady || !state.realFilesystem) return;
     const directories = [...new Set(state.panes.filter(p => !resultView(p)).map(currentPath).filter(path => !path.includes('!') && !path.startsWith('zip:')))];
-    const signature = JSON.stringify([state.snapshotId, directories]);
-    if (gitSignature === signature) return;
-    gitSignature = signature;
-    gitRequest = { type: 'git-status', requestId: `git-${++gitSequence}`, snapshotId: state.snapshotId, directories };
-    host.postMessage(gitRequest);
+    for (const directory of gitBindings.keys()) if (!directories.includes(directory)) { gitBindings.delete(directory); gitDirectories.delete(directory); }
+    const requested = directories.filter(directory => !gitBindings.has(directory));
+    if (!requested.length) return;
+    const request = { type: 'git-status', requestId: `git-${++gitSequence}`, snapshotId: state.snapshotId, directories: requested, visibleDirectories: directories };
+    for (const directory of requested) gitBindings.set(directory, request);
+    refreshVisibleIcons();
+    host.postMessage(request);
   }
   function locationKind(p) {
     const path = currentPath(p);
@@ -629,7 +640,11 @@
     const status = info?.ok && info.statuses?.[file.name];
     const labels = { clean: 'Unverändert', modified: 'Geändert', added: 'Hinzugefügt', deleted: 'Gelöscht', untracked: 'Unversioniert', ignored: 'Ignoriert', conflict: 'Konflikt' };
     const symbols = window.CommanderStatusIcons;
-    if (!labels[status]) return original;
+    if (!labels[status]) {
+      const confirmed = info?.ok && info.loading && (info.repository || file.type === 'folder' && info.loadingRepositories?.includes(file.name));
+      if (!confirmed) return host && state.realFilesystem ? `<span class="git-icon">${original}</span>` : original;
+      return `<span class="git-icon">${original}<span data-git-placeholder role="img" aria-label="${escape(t('Git-Status wird geladen'))}" title="${escape(t('Git-Status wird geladen'))}">${symbols.untracked}</span></span>`;
+    }
     return `<span class="git-icon">${original}<span data-git-status="${status}" role="img" aria-label="${escape(t(labels[status]))}" title="${escape(t(labels[status]))}">${symbols[status]}</span></span>`;
   }
   function refreshGitDisplay() {
@@ -711,6 +726,10 @@
         set(row, '--git-text-color', rowColor ? safe(rowColor, background) : '');
         set(row, '--git-hover-color', rowColor ? safe(rowColor, hover) : '');
       }
+      for (const placeholder of section.querySelectorAll('[data-git-placeholder]')) {
+        set(placeholder, 'width', `${iconSize}%`);
+        set(placeholder, 'height', `${iconSize}%`);
+      }
       for (const badge of section.querySelectorAll('[data-git-status]')) {
         set(badge, 'width', `${iconSize}%`);
         set(badge, 'height', `${iconSize}%`);
@@ -767,7 +786,44 @@
     document.querySelectorAll('.pane').forEach((section, index) => {
       const p = state.panes[index];
       const byId = new Map(files(p).map(file => [file.id, file]));
-      const replace = (element, html) => { if (!element) return; const temp = document.createElement('template'); temp.innerHTML = html; const fresh = temp.content.firstElementChild; const oldBadge = element.querySelector('[data-git-status]'), newBadge = fresh.querySelector('[data-git-status]'); if (oldBadge && newBadge && oldBadge.dataset.gitStatus === newBadge.dataset.gitStatus) newBadge.style.cssText = oldBadge.style.cssText; if (element.outerHTML !== fresh.outerHTML) element.replaceWith(fresh); };
+      const replace = (element, html) => {
+        if (!element) return;
+        const temp = document.createElement('template'); temp.innerHTML = html;
+        const fresh = temp.content.firstElementChild;
+        const original = element.matches('.fileicon') ? element : element.querySelector('.fileicon');
+        const nextOriginal = fresh.matches('.fileicon') ? fresh : fresh.querySelector('.fileicon');
+        if (original.outerHTML !== nextOriginal.outerHTML) original.replaceWith(nextOriginal);
+        const retained = original.isConnected ? original : nextOriginal;
+        if (!fresh.matches('.git-icon')) {
+          if (element.matches('.git-icon')) element.replaceWith(retained);
+          return;
+        }
+        if (!element.matches('.git-icon')) {
+          const wrapper = document.createElement('span'); wrapper.className = 'git-icon';
+          retained.replaceWith(wrapper); wrapper.append(retained);
+          element = wrapper;
+        }
+        const oldBadge = element.querySelector('[data-git-status]'), newBadge = fresh.querySelector('[data-git-status]');
+        const placeholder = element.querySelector('[data-git-placeholder]');
+        if (newBadge) {
+          if (oldBadge?.dataset.gitStatus === newBadge.dataset.gitStatus) return;
+          oldBadge?.remove();
+          if (placeholder) {
+            placeholder.classList.add('git-placeholder-leave');
+            placeholder.setAttribute('aria-hidden', 'true'); placeholder.removeAttribute('role');
+            placeholder.removeAttribute('aria-label'); placeholder.removeAttribute('title');
+            newBadge.classList.add('git-status-enter');
+          }
+          element.append(newBadge);
+        } else {
+          oldBadge?.remove();
+          const nextPlaceholder = fresh.querySelector('[data-git-placeholder]');
+          if (!nextPlaceholder) { placeholder?.remove(); return; }
+          if (!placeholder || placeholder.classList.contains('git-placeholder-leave')) {
+            placeholder?.remove(); element.append(nextPlaceholder);
+          }
+        }
+      };
       section.querySelectorAll('tr[data-id]').forEach(row => {
         const file = byId.get(row.dataset.id);
         if (file) replace(row.querySelector('.git-icon') || row.querySelector('.fileicon'), icon(file, currentPath(p)));
@@ -981,15 +1037,39 @@
   function paneDisplayState(p, index) {
     return JSON.stringify([p, index === state.active, state.realFilesystem, p.tabs.map(displayArchivePath), files(p).map(file => displayFile(file, p))]);
   }
-  function render(focusList = false, previousViews) {
+  function patchView(current, next) {
+    if (current.nodeType === 3) { if (current.nodeValue !== next.nodeValue) current.nodeValue = next.nodeValue; return; }
+    if (current.nodeType !== 1) return;
+    const changedValue = current.matches('input') && current.getAttribute('value') !== next.getAttribute('value');
+    for (const attribute of [...current.attributes]) if (!next.hasAttribute(attribute.name)) current.removeAttribute(attribute.name);
+    for (const attribute of next.attributes) if (current.getAttribute(attribute.name) !== attribute.value) current.setAttribute(attribute.name, attribute.value);
+    if (changedValue) current.value = next.value;
+    const key = node => node.nodeType === 1 ? node.getAttribute('data-id') || node.id || undefined : undefined;
+    const keyed = new Map([...current.childNodes].filter(node => key(node)).map(node => [key(node), node]));
+    let cursor = current.firstChild;
+    for (const child of [...next.childNodes]) {
+      const childKey = key(child);
+      let retained = childKey ? keyed.get(childKey) : cursor && !key(cursor) ? cursor : undefined;
+      if (retained && (retained.nodeType !== child.nodeType || retained.nodeName !== child.nodeName)) retained = undefined;
+      if (!retained) { retained = child.cloneNode(true); current.insertBefore(retained, cursor); }
+      else {
+        if (retained !== cursor) current.insertBefore(retained, cursor);
+        patchView(retained, child);
+      }
+      if (childKey) keyed.delete(childKey);
+      cursor = retained.nextSibling;
+    }
+    while (cursor) { const removed = cursor; cursor = cursor.nextSibling; removed.remove(); }
+  }
+  function render(focusList = false, previousViews, git = true) {
     closeFavorites(false);
     rememberScroll();
     refreshHighlight();
-    if (previousViews) {
+    if ($('#panes').querySelector('[data-pane]')) {
       state.panes.forEach((p, index) => {
-        if (paneDisplayState(p, index) === previousViews[index]) return;
+        if (previousViews && paneDisplayState(p, index) === previousViews[index]) return;
         const template = document.createElement('template'); template.innerHTML = renderPane(p, index);
-        document.querySelector(`[data-pane="${index}"]`).replaceWith(template.content.firstElementChild);
+        patchView(document.querySelector(`[data-pane="${index}"]`), template.content.firstElementChild);
       });
     } else $('#panes').innerHTML = state.panes.map(renderPane).join('');
     refreshFileColors();
@@ -1004,7 +1084,7 @@
     refreshCutMarkers();
     persist();
     requestIcons();
-    requestGitStatus();
+    if (git) requestGitStatus();
   }
   function focusSelection() {
     refreshSelection();
@@ -1172,7 +1252,7 @@
       requestFilesystem({ type: 'filesystem-navigate', path, side }, () => { state.active = side; go(path); }); return;
     }
     if (!Object.hasOwn(state.folders, path)) return toast(t('Dieser Pfad ist in den Beispieldaten nicht vorhanden.'));
-    rememberScroll(); delete pane().tabStates[pane().tab].searchResult; tabs.navigate(pane(), path); render(true); toast(t('Verzeichnis geöffnet: {path}', { path: displayPath(path) }), 'success');
+    rememberScroll(); const previousViews = state.panes.map(paneDisplayState); delete pane().tabStates[pane().tab].searchResult; tabs.navigate(pane(), path); render(true, previousViews); toast(t('Verzeichnis geöffnet: {path}', { path: displayPath(path) }), 'success');
   }
   function displayArchivePath(value) {
     const archive = state.archiveLocations?.[value]?.archive;
@@ -1913,7 +1993,7 @@
       tabs.navigate(state.panes[0], right); tabs.navigate(state.panes[1], left); render(true); toast(t('Pfade getauscht.'), 'success'); return;
     }
     if (['new-tab', 'background-tab', 'close-tab', 'next-tab', 'previous-tab', 'open-dir-tab', 'open-dir-other-tab', 'back', 'forward'].includes(command)) {
-      rememberScroll(); const p = pane();
+      rememberScroll(); const p = pane(), previousViews = state.panes.map(paneDisplayState), previousPath = currentPath(p), previousTab = p.tabStates[p.tab].id, previousSide = state.active;
       if (command === 'new-tab' || command === 'background-tab') tabs.duplicate(p, { background: command === 'background-tab' });
       if (command === 'close-tab' && !tabs.close(p)) return toast(t('Der letzte Ordner-Tab bleibt geöffnet.'));
       if (command === 'next-tab' || command === 'previous-tab') tabs.step(p, command === 'next-tab' ? 1 : -1);
@@ -1930,10 +2010,11 @@
         tabs.openPath(state.panes[other ? 1 - state.active : state.active], destination);
         if (other) state.active = 1 - state.active;
       }
-      if (host && state.realFilesystem && state.unloadedFolders?.includes(currentPath(p))) {
-        requestFilesystem({ type: 'filesystem-navigate', path: currentPath(p), side: state.active }, () => { render(true); toast(t('Ordner-Tab geändert.'), 'success'); }); return;
+      if (host && state.realFilesystem && !resultView(pane()) && (state.unloadedFolders?.includes(currentPath(pane())) || currentPath(pane()) !== previousPath || pane().tabStates[pane().tab].id !== previousTab || state.active !== previousSide)) {
+        render(true, previousViews, false);
+        requestFilesystem({ type: 'filesystem-navigate', path: currentPath(pane()), side: state.active }, () => { focusSelection(); toast(t('Ordner-Tab geändert.'), 'success'); }); return;
       }
-      render(true); toast(t('Ordner-Tab geändert.'), 'success'); return;
+      render(true, previousViews); toast(t('Ordner-Tab geändert.'), 'success'); return;
     }
     if (command === 'rename-one') { startRename(); return; }
     if (command === 'search-next' || command === 'search-previous') { applySearch(pane().filter, command === 'search-next' ? 1 : -1); return; }
@@ -1964,17 +2045,10 @@
         if (Number(target.closest('[data-tab]').dataset.tab) === p.tab) { focusSelection(); return; }
         if (filesystemPending && state.unloadedFolders?.includes(p.tabs[Number(target.closest('[data-tab]').dataset.tab)])) return;
         rememberScroll(); tabs.activate(p, Number(target.closest('[data-tab]').dataset.tab));
-        document.querySelectorAll('.pane').forEach((element, side) => {
-          element.classList.toggle('active', side === state.active);
-          element.querySelectorAll('.tab-wrap').forEach((tab, index) => { tab.classList.toggle('selected', index === state.panes[side].tab); tab.querySelector('[role="tab"]').setAttribute('aria-selected', String(index === state.panes[side].tab)); });
-        });
-        const template = document.createElement('template'); template.innerHTML = renderPane(p, state.active);
-        const fresh = template.content.firstElementChild;
-        for (const selector of ['.pane-label', '.pathbar', '.list', '.pane-status']) section.querySelector(selector).replaceWith(fresh.querySelector(selector));
-        section.dataset.tabKey = p.tabStates[p.tab].id;
-        const list = section.querySelector('.list'); list.scrollTop = p.scrollTop || 0;
-        list.querySelector('table').style.width = `${p.columns.filter(column => column.visible !== false).reduce((sum, column) => sum + column.width, 0)}px`;
-        refreshFileColors(); list.focus({ preventScroll: true }); persist(); requestIcons(); requestGitStatus(); return;
+        render(true, undefined, false);
+        if (host && state.realFilesystem && !resultView(p)) requestFilesystem({ type: 'filesystem-navigate', path: currentPath(p), side: state.active }, () => { focusSelection(); toast(t('Ordner-Tab geändert.'), 'success'); });
+        else requestGitStatus();
+        return;
       }
       if (target.closest('[data-new-tab]')) { run('new-tab'); return; }
       if (target.closest('[data-git-branch]')) { host?.postMessage({ type: 'git-branches', path: currentPath(p), snapshotId: state.snapshotId }); return; }
@@ -2274,7 +2348,7 @@
     if (event.target.matches('input,textarea,select')) {
       if ((event.target.matches('.inline-rename') || event.target.closest('.operation-error')) && ['F5', 'F6'].includes(event.key) && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) event.preventDefault();
       if (event.key === 'Enter' && event.target.classList.contains('path-input')) { event.preventDefault(); go(event.target.value || '/'); }
-      if (event.key === 'Escape') render(true);
+      if (event.key === 'Escape') { if (event.target.classList.contains('path-input')) event.target.value = displayArchivePath(currentPath(pane())); render(true); }
       return;
     }
     if (!event.target.closest('.list')) return;
@@ -2436,10 +2510,12 @@
       const pathNavigation = pendingPathNavigation; pendingPathNavigation = null;
       if (pathNavigation) pathNavigation.valid = pathNavigation.generation === pathRequestGeneration && document.activeElement === pathNavigation.input && state.active === pathNavigation.side;
       rememberScroll();
-      const previousViews = refreshingFilesystem ? state.panes.map(paneDisplayState) : undefined;
+      const navigatingFilesystem = completedFilesystemKind === 'filesystem-navigate';
+      const previousFolders = !refreshingFilesystem && confirmedFolders ? JSON.parse(confirmedFolders) : null;
+      const previousViews = refreshingFilesystem || navigatingFilesystem ? state.panes.map(paneDisplayState) : undefined;
       const previousIcons = refreshingFilesystem ? displayedIconEntries() : undefined;
-      cancelFolderSizes(); folderSizes.clear();
-      const readingView = (transferJob || refreshingFilesystem) && { panes: clone(state.panes), active: state.active };
+      if (refreshingFilesystem) { cancelFolderSizes(); folderSizes.clear(); gitBindings.clear(); }
+      const readingView = (transferJob || refreshingFilesystem || navigatingFilesystem) && { panes: clone(state.panes), active: state.active };
       refreshingFilesystem = false;
       if (transferJob?.modalPreparation) { if ($('#value')) $('#value').disabled = false; $('#modal-confirm').disabled = false; }
       const completedTransferJob = transferJob;
@@ -2453,6 +2529,7 @@
       filesystemPending = false; $('#panes').inert = false; $('#functionbar').inert = false;
       if (event.data.state?.realFilesystem) { state = event.data.state; confirmedFolders = JSON.stringify(state.folders); nextId = Math.max(Date.now(), ...Object.values(state.folders).flat().map(item => Number(item.id) + 1).filter(Number.isFinite)); }
       else if (!event.data.ok && failedRename) { state = failedRename.before; confirmedFolders = JSON.stringify(state.folders); }
+      if (previousFolders) invalidateChangedDirectories(previousFolders, navigatingFilesystem && event.data.ok && event.data.resumeNavigation ? [event.data.resumeNavigation.path] : event.data.refreshGitDirectories || []);
       if (readingView) {
         state.active = readingView.active;
         readingView.panes.forEach((p, index) => {
@@ -2504,13 +2581,14 @@
       flushFocusRefresh(); return;
     }
     if (host && event.data?.type === 'git-settings-changed') {
-      gitSignature = ''; gitDirectories.clear(); refreshGitDisplay(); requestGitStatus(); return;
+      gitBindings.clear(); gitDirectories.clear(); refreshGitDisplay(); requestGitStatus(); return;
     }
     if (host && event.data?.type === 'git-status-result') {
-      if (!gitRequest || event.data.requestId !== gitRequest.requestId || event.data.snapshotId !== state.snapshotId || !event.data.directories || typeof event.data.directories !== 'object') return;
-      for (const directory of gitRequest.directories) {
+      if (!event.data.directories || typeof event.data.directories !== 'object') return;
+      for (const [directory, request] of gitBindings) {
+        if (event.data.requestId !== request.requestId || event.data.snapshotId !== request.snapshotId) continue;
         const info = event.data.directories[directory];
-        if (info) gitDirectories.set(directory, info.incremental ? { ...info, statuses: { ...gitDirectories.get(directory)?.statuses, ...info.statuses } } : info); else if (!event.data.partial) gitDirectories.delete(directory);
+        if (info) gitDirectories.set(directory, info.incremental || info.ok && info.loading ? { ...info, statuses: { ...gitDirectories.get(directory)?.statuses, ...info.statuses } } : info); else if (!event.data.partial) gitDirectories.delete(directory);
       }
       refreshGitDisplay(); return;
     }
@@ -2524,11 +2602,13 @@
       return;
     }
     if (host && event.data?.type === 'restore') {
-      gitSignature = ''; gitRequest = undefined; gitDirectories.clear();
+      rememberScroll();
+      const retained = event.data.preserveUnchanged && { panes: clone(state.panes), active: state.active, folders: JSON.parse(confirmedFolders || '{}') };
+      if (!retained) { gitBindings.clear(); gitDirectories.clear(); }
       fileSearch.dispose();
       if (event.data.resetViews) lister.dispose();
       refreshingFilesystem = false;
-      cancelFolderSizes(); folderSizes.clear();
+      if (!retained) { cancelFolderSizes(); folderSizes.clear(); }
       transferCheckpoint?.cancel(); transferCheckpoint = null;
       transferJob?.controller?.abort();
       transferJob = null; transferProgress(); statusbar.reset(); clearTimeout(toast.timer); $('#toast').classList.remove('visible');
@@ -2536,6 +2616,16 @@
       $('#panes').inert = false; $('#functionbar').inert = false;
       if ($('#modal').open) $('#modal').close();
       state = event.data.state?.version === 1 ? event.data.state : initial();
+      if (retained) {
+        state.active = retained.active;
+        retained.panes.forEach((pane, index) => {
+          if (!pane.tabs.every(path => Object.hasOwn(state.folders, path))) return;
+          const valid = new Set(files(pane).map(file => file.id));
+          pane.selected = pane.selected.filter(id => valid.has(id)); if (!valid.has(pane.cursor)) pane.cursor = null;
+          state.panes[index] = pane;
+        });
+        invalidateChangedDirectories(retained.folders, event.data.refreshGitDirectories || []);
+      }
       confirmedFolders = JSON.stringify(state.folders); filesystemPending = false;
       nextId = Math.max(Date.now(), ...Object.values(state.folders).flat().map(item => Number(item.id) + 1).filter(Number.isFinite));
       render(true); return;

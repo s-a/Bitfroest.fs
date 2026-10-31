@@ -82,5 +82,5 @@ test('failed favorite navigation preserves tabs and does not request the opposit
   app.click(app.document.querySelector('[data-favorites]')); app.click(app.document.querySelector('[data-favorite-entry]'));
   app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-result', ok: false, error: 'Missing directory', state: saved } }));
   assert.equal(app.messages.filter(item => item.type === 'filesystem-navigate').length, 1);
-  assert.deepEqual(app.state().panes.map(pane => pane.tabs), saved.panes.map(pane => pane.tabs));
+  assert.deepEqual(Array.from(app.state().panes, pane => Array.from(pane.tabs)), Array.from(saved.panes, pane => Array.from(pane.tabs)));
 });

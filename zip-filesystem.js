@@ -7,11 +7,14 @@ function createZipFilesystem(base, options = {}) {
   const archives = createZipProvider({ ...options, contains: base.contains });
   const operations = createZipOperations({ contains: base.contains });
   const views = new Map();
+  let deferredViews = [];
   const real = state => ({ ...state, folders: Object.fromEntries(Object.entries(state.folders).filter(([key]) => !archivePath(key))), unloadedFolders: (state.unloadedFolders || []).filter(key => !archivePath(key)) });
   function overlay(state) {
     if (!state) return state;
     const result = { ...state, folders: { ...state.folders }, archiveLocations: {} };
     for (const view of views.values()) { Object.assign(result.folders, structuredClone(view.folders)); Object.assign(result.archiveLocations, view.locations); }
+    for (const directory of deferredViews) result.folders[directory] ||= [];
+    result.unloadedFolders = [...new Set([...(result.unloadedFolders || []), ...deferredViews])];
     return result;
   }
   function readonly(before, after) {
@@ -19,6 +22,7 @@ function createZipFilesystem(base, options = {}) {
     for (const [key, rows] of Object.entries(after.folders)) if (!archivePath(key) && rows.some(row => archivePath(row.fsSource))) throw new Error('Archiveinträge müssen mit Entpacken kopiert werden.');
   }
   async function load(settings = {}) {
+    deferredViews = (settings.deferredDirectories || []).filter(archivePath);
     const requested = settings.directories || [], physical = requested.filter(value => !archivePath(value));
     for (const value of requested) {
       const archive = archivePath(value);
@@ -27,7 +31,7 @@ function createZipFilesystem(base, options = {}) {
       try { const view = await archives.open(archive); views.set(view.path, view); }
       catch { for (const [key, view] of views) if (view.locations[key].archive === archive) views.delete(key); }
     }
-    return overlay(await base.load({ ...settings, directories: [...new Set(physical)] }));
+    return overlay(await base.load({ ...settings, directories: [...new Set(physical)], deferredDirectories: (settings.deferredDirectories || []).filter(value => !archivePath(value)) }));
   }
   return {
     ...base,
@@ -105,7 +109,7 @@ function createZipFilesystem(base, options = {}) {
     async prepare(before, settings) {
       for (const value of settings.directories || []) {
         const archive = archivePath(value);
-        if (archive) { const view = await archives.open(archive); if (!Object.hasOwn(view.folders, value)) throw new Error('Dieser Archivordner ist nicht vorhanden.'); views.set(view.path, view); }
+        if (archive) { const view = await archives.open(archive); if (!Object.hasOwn(view.folders, value)) throw new Error('Dieser Archivordner ist nicht vorhanden.'); views.set(view.path, view); deferredViews = deferredViews.filter(directory => directory !== value); }
       }
       const directories = (settings.directories || []).filter(value => !archivePath(value));
       return directories.length ? overlay(await base.prepare(real(before), { ...settings, directories })) : overlay(real(before));

@@ -270,6 +270,34 @@ test('Git host never queues navigation behind a pending status calculation', asy
   assert.equal(panel.messages.some(message => message.type === 'git-status-result'), false); panel.dispose();
 });
 
+test('Git host keeps the unchanged right status pending across left navigation without querying it again', async t => {
+  const initial = clipboardFixture(), first = deferred(), second = deferred(), calls = [];
+  initial.folders['C:/tmp/next'] = [];
+  let initialProgress;
+  const app = harness(t, { filesystemLoad: async () => initial,
+    filesystemPrepare: async before => ({ ...before, snapshotId: 'navigated' }),
+    gitInspect: (directories, _settings, _creation, onProgress) => {
+      calls.push(directories);
+      if (calls.length === 1) { initialProgress = onProgress; return first.promise; }
+      return second.promise;
+    }
+  });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  const initialRequest = panel.receive({ type: 'git-status', requestId: 'both', snapshotId: initial.snapshotId, directories: ['C:/tmp', 'C:/temp'] });
+  await panel.receive({ type: 'filesystem-navigate', side: 0, path: 'C:/tmp/next', state: initial });
+  const nextRequest = panel.receive({ type: 'git-status', requestId: 'left', snapshotId: 'navigated', directories: ['C:/tmp/next'], visibleDirectories: ['C:/tmp/next', 'C:/temp'] });
+  initialProgress({ 'C:/temp': { ok: true, repository: true, branch: 'right', loading: true, statuses: {} }, 'C:/tmp': { ok: true, repository: true, branch: 'stale-left', statuses: {} } });
+  const progress = panel.messages.filter(message => message.type === 'git-status-result' && message.partial).at(-1);
+  assert.ok(progress);
+  assert.deepEqual(Object.keys(progress.directories), ['C:/temp']);
+  first.resolve({ 'C:/temp': { ok: true, repository: true, branch: 'right', statuses: {} }, 'C:/tmp': { ok: true, repository: true, branch: 'stale-left', statuses: {} } });
+  await initialRequest;
+  assert.deepEqual(calls, [['C:/tmp', 'C:/temp'], ['C:/tmp/next']]);
+  const final = panel.messages.filter(message => message.type === 'git-status-result' && !message.partial && message.requestId === 'both').at(-1);
+  assert.deepEqual(Object.keys(final.directories), ['C:/temp']);
+  second.resolve({}); await nextRequest; panel.dispose();
+});
+
 test('Git host drops a late branch count after navigation with the same snapshot', async t => {
   const initial = clipboardFixture(), work = deferred();
   const app = harness(t, { filesystemLoad: async () => initial, gitBranches: () => work.promise });
@@ -286,7 +314,8 @@ test('Git host defers hidden-panel updates and refreshes when the panel becomes 
   const app = harness(t, { filesystemLoad: async () => initial, gitInspect: async (_directories, _settings, creation) => { inspected++; observer = creation; return {}; } });
   await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
   await panel.receive({ type: 'git-status', requestId: 'visible', snapshotId: initial.snapshotId, directories: ['C:/tmp'] });
-  panel.changeVisibility(false); observer.onChange(); await tick(); assert.equal(inspected, 1);
+  assert.equal(observer.onChange, undefined, 'no filesystem change subscription is configured');
+  panel.changeVisibility(false); await tick(); assert.equal(inspected, 1);
   panel.changeVisibility(true); await tick(); assert.equal(inspected, 2); panel.dispose();
 });
 
@@ -566,6 +595,9 @@ test('ZIP host bounds intermediate progress, forwards phase changes and flushes 
   assert.equal(messages[0].progress.phase, 'packing');
   assert.ok(messages.some(message => message.progress.phase === 'verifying' && message.progress.currentPath === '0.txt'));
   assert.equal(messages.at(-1).progress.currentPath, '999.txt');
+  const refreshed = panel.messages.find(message => message.type === 'filesystem-result').refreshGitDirectories;
+  assert.equal(refreshed?.length, 1);
+  assert.ok(request.archive.startsWith(refreshed[0] + '/'));
   for (const message of messages) view.window.dispatchEvent(new view.window.MessageEvent('message', { data: message }));
   assert.equal(view.document.querySelector('#status-message').textContent, 'Archiv prüfen: 999.txt');
   const lastProgress = panel.messages.lastIndexOf(messages.at(-1));
@@ -574,6 +606,18 @@ test('ZIP host bounds intermediate progress, forwards phase changes and flushes 
   assert.equal(view.document.querySelector('#status-progress-area').classList.contains('is-idle'), true);
   const count = panel.messages.length; report({ phase: 'packing', currentPath: 'late.txt' });
   assert.equal(panel.messages.length, count);
+});
+
+test('read-only archive verification does not reread directory views', async t => {
+  const zipFilesystem = require('../zip-filesystem'), original = zipFilesystem.createZipFilesystem;
+  let verified = 0, loads = 0;
+  zipFilesystem.createZipFilesystem = base => ({ ...original(base), testArchives: async () => { verified++; return []; } });
+  t.after(() => { zipFilesystem.createZipFilesystem = original; });
+  const initial = clipboardFixture(), app = harness(t, { filesystemLoad: async () => { loads++; return structuredClone(initial); } });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  await panel.receive({ type: 'zip-test', sourcePath: 'C:/tmp', ids: ['a'], operationId: 'read-only-archive-test', state: initial });
+  assert.equal(verified, 1); assert.equal(loads, 1);
+  assert.equal(panel.messages.at(-1).ok, true); panel.dispose();
 });
 
 test('ZIP write host requests a native password and confirmation without sending it to the webview', async t => {
@@ -2096,12 +2140,19 @@ test('real URI editor requests accept large text previews without applying the m
 function lazyState() {
   return {version:1,realFilesystem:true,snapshotId:'one',active:0,unloadedFolders:['C:/tmp/docs'],folders:{'C:/tmp':[{id:'docs',name:'docs',type:'folder',fsSource:'C:/tmp/docs'}],'C:/tmp/docs':[],'C:/temp':[]},panes:[{tabs:['C:/tmp'],tab:0,selected:['docs'],cursor:'docs'},{tabs:['C:/temp'],tab:0,selected:[]}]};
 }
+
+test('initial view without saved tabs loads the configured roots instead of deferring them', async t => {
+  const loads = [];
+  const app = harness(t, { filesystemLoad: async settings => { loads.push(settings); return lazyState(); } });
+  await app.command('bitfroest.openPrototype');
+  assert.equal(loads[0]?.visibleOnly, undefined);
+});
 test('lazy navigation prepares only its requested directory and resumes the original pane', async t => {
   const state = lazyState(), preparations=[];
   const app = harness(t,{filesystemLoad:async()=>state,filesystemPrepare:async(before,options)=>{preparations.push({before,options});return {...state,snapshotId:'two',unloadedFolders:[],folders:{...state.folders,'C:/tmp/docs':[{id:'a',name:'a.txt'}]}};}});
   await app.command('bitfroest.openPrototype');
   await app.panels[0].receive({type:'filesystem-navigate',path:'C:/tmp/docs',side:0,state});
-  assert.deepEqual(preparations[0].options,{directories:['C:/tmp/docs'],recursive:false});
+  assert.deepEqual(preparations[0].options,{directories:['C:/tmp/docs'],recursive:false,navigation:true,visibleDirectories:['C:/tmp/docs','C:/temp']});
   assert.equal(preparations[0].before.snapshotId,'one');
   const response=app.panels[0].messages.at(-1); assert.equal(response.ok,true); assert.deepEqual(response.resumeNavigation,{path:'C:/tmp/docs',side:0}); assert.equal(response.state.snapshotId,'two');
 });
@@ -2112,11 +2163,11 @@ test('folder action preparation is recursive and preserves the pending action wi
   await app.panels[0].receive({type:'filesystem-prepare',paths:['C:/tmp/docs'],action:'delete',state});
   assert.deepEqual(preparations,[{directories:['C:/tmp/docs'],recursive:true}]); assert.equal(applied,false); assert.equal(app.panels[0].messages.at(-1).resumeAction,'delete');
 });
-test('refresh reloads all open folder tabs without requesting recursive roots', async t => {
+test('refresh reloads only active folder tabs and defers inactive tabs without reading them', async t => {
   const state=lazyState(); state.panes[0].tabs.push('C:/tmp/docs'); const loads=[];
   const app=harness(t,{filesystemLoad:async options=>{loads.push(options);return state;}});
   await app.command('bitfroest.openPrototype'); await app.panels[0].receive({type:'filesystem-refresh',state});
-  assert.deepEqual(loads.at(-1),{directories:['C:/tmp','C:/tmp/docs','C:/temp']});
+  assert.deepEqual(loads.at(-1),{directories:['C:/tmp','C:/temp'],deferredDirectories:['C:/tmp/docs'],visibleOnly:true});
 });
 
 
@@ -2608,6 +2659,30 @@ test('branch list retains unborn and detached identities on dismissal', async t 
     assert.equal(app.errors.length, 0);
     panel.dispose();
   }
+});
+
+test('Git host HTML limits loading placeholders to confirmed repository entries', async t => {
+  const initial = clipboardFixture(), work = deferred(); let progress;
+  initial.panes.forEach(pane => { pane.filter = ''; pane.sort = 'name'; });
+  initial.folders['C:/tmp'].push({ id: 'repo', name: 'project', type: 'folder', fsSource: 'C:/tmp/project' });
+  const app = harness(t, { filesystemLoad: async () => initial,
+    gitInspect: (_directories, _settings, _creation, onProgress) => { progress = onProgress; return work.promise; } });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  assert.match(panel.webview.html, /Content-Security-Policy/);
+  const view = require('./support/webview.cjs').createApp(t, initial, { html: panel.webview.html });
+  assert.equal(view.document.querySelector('[data-git-placeholder]'), null);
+  const pending = panel.receive(view.messages.find(message => message.type === 'git-status'));
+  progress({ 'C:/tmp': { ok: true, repository: false, loading: true, loadingRepositories: ['project'], statuses: {} } });
+  const deliver = message => view.window.dispatchEvent(new view.window.MessageEvent('message', { data: message }));
+  deliver(panel.messages.filter(message => message.partial).at(-1));
+  assert.ok(view.row('project').querySelector('[data-git-placeholder]'));
+  assert.equal(view.row('a.txt').querySelector('[data-git-placeholder]'), null);
+  work.resolve({ 'C:/tmp': { ok: true, repository: false, statuses: { project: 'clean' } } });
+  await pending;
+  deliver(panel.messages.filter(message => message.type === 'git-status-result' && !message.partial).at(-1));
+  assert.ok(view.row('project').querySelector('[data-git-status="clean"].git-status-enter'));
+  assert.equal(view.document.querySelector('[data-git-branch]'), null);
+  panel.dispose();
 });
 
 test('Git host forwards early branch updates and rejects stale progress after navigation', async t => {

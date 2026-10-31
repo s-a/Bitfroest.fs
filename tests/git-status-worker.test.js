@@ -5,19 +5,47 @@ const path = require('node:path');
 const vm = require('node:vm');
 const { EventEmitter } = require('node:events');
 
-test('new directory and repository metadata are watched before status inspection starts', async () => {
-  const port = new EventEmitter(), observed = new Set(), messages = [];
+function fixture() {
+  const port = new EventEmitter(), messages = [], scans = [], timers = [], watches = [];
+  let revision = 0, status = 'clean', cached;
   port.postMessage = message => messages.push(message);
-  const engine = { invalidate() {}, describe: async () => ({ ok: true, repository: true, branch: 'main', statuses: {} }), locate: async () => ({ gitdir: '/repo/.git', dir: '/repo' }),
-    inspect: async directory => ({ ok: true, repository: true, root: '/repo', gitdir: '/repo/.git', watchedBeforeScan: observed.has(directory), statuses: {} }) };
-  const watcherFs = { watch(directory) { observed.add(directory); const watcher = new EventEmitter(); watcher.close = () => observed.delete(directory); return watcher; } };
+  const engine = {
+    invalidate() { revision++; cached = undefined; },
+    describe: async () => ({ ok: true, repository: true, branch: 'main', statuses: {} }),
+    locate: async directory => ({ gitdir: directory + '/.git', dir: directory }),
+    inspect: async directory => {
+      scans.push({ directory, revision });
+      return cached ||= { ok: true, repository: true, branch: 'main', statuses: { file: status } };
+    }
+  };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../git-status-worker.js'), 'utf8'), {
-    require: name => name === 'node:worker_threads' ? { parentPort: port } : name === 'node:fs' ? watcherFs : name === 'node:path' ? path : { createGitStatusEngine: () => engine },
-    setTimeout, clearTimeout, setInterval, clearInterval
+    require: name => name === 'node:worker_threads' ? { parentPort: port } : name === 'node:fs' ? {
+      watch(directory) { watches.push(directory); const watcher = new EventEmitter(); watcher.close = () => {}; return watcher; }
+    } : name === 'node:path' ? path.posix : { createGitStatusEngine: () => engine },
+    setTimeout: callback => { timers.push(callback); return timers.length; }, clearTimeout() {},
+    setInterval: callback => { timers.push(callback); return timers.length; }, clearInterval() {}
   });
-  port.emit('message', { id: 1, type: 'inspect', directories: ['/repo'], settings: {} });
-  await new Promise(resolve => setImmediate(resolve));
-  assert.equal(messages.find(message => message.id === 1 && message.type !== 'progress')?.result?.['/repo'].watchedBeforeScan, true);
+  return { messages, scans, timers, watches,
+    changeStatus(value) { status = value; },
+    request(id) { port.emit('message', { id, type: 'inspect', directories: ['/repo'], settings: {} }); },
+    async settle() { for (let i = 0; i < 4; i++) await new Promise(resolve => setImmediate(resolve)); }
+  };
+}
+
+test('status requests do not register filesystem watchers or periodic refresh timers', async () => {
+  const app = fixture(); app.request(1); await app.settle();
+  assert.equal(app.messages.find(message => message.id === 1 && !message.type).result['/repo'].statuses.file, 'clean');
+  assert.deepEqual(app.watches, []);
+  assert.deepEqual(app.timers, []);
+  assert.equal(app.messages.some(message => message.type === 'changed'), false);
+});
+
+test('a new focus or explicit refresh request reads fresh status within the former cache interval', async () => {
+  const app = fixture(); app.request(1); await app.settle();
+  app.changeStatus('modified'); app.request(2); await app.settle();
+  assert.equal(app.messages.find(message => message.id === 2 && !message.type).result['/repo'].statuses.file, 'modified');
+  assert.equal(app.scans.length, 2);
+  assert.ok(app.scans[1].revision > app.scans[0].revision);
 });
 
 test('worker publishes branch identities before any status inspection', async t => {
@@ -27,9 +55,8 @@ test('worker publishes branch identities before any status inspection', async t 
   const engine = { invalidate() {}, describe: async () => ({ ok: true, repository: true, branch: 'main', statuses: {} }), locate: async directory => ({ gitdir: directory + '/.git', dir: directory }),
     branches: async () => ({ ok: true, names: ['main'] }),
     inspect: async directory => { scanned.push(directory); await blocked; return { ok: true, repository: true, branch: 'main', statuses: {} }; } };
-  const watcherFs = { watch() { const watcher = new EventEmitter(); watcher.close = () => {}; return watcher; } };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../git-status-worker.js'), 'utf8'), {
-    require: name => name === 'node:worker_threads' ? { parentPort: port } : name === 'node:fs' ? watcherFs : name === 'node:path' ? path : { createGitStatusEngine: () => engine },
+    require: name => name === 'node:worker_threads' ? { parentPort: port } : name === 'node:fs' ? { watch() { const watcher = new EventEmitter(); watcher.close = () => {}; return watcher; } } : name === 'node:path' ? path : { createGitStatusEngine: () => engine },
     setTimeout, clearTimeout, setInterval, clearInterval
   });
   port.emit('message', { id: 1, type: 'inspect', directories: ['/first', '/second'], settings: {} });

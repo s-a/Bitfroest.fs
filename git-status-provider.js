@@ -16,7 +16,6 @@ function createGitStatusProvider(options = {}) {
     worker = current;
     current.on('message', message => {
       if (worker !== current) return;
-      if (message.type === 'changed') { options.onChange?.(); return; }
       const job = pending.get(message.id);
       if (!job) return;
       if (message.type === 'progress') { for (const listener of job.listeners) listener(message.result); return; }

@@ -205,6 +205,24 @@ test('repository description reads HEAD without calculating file statuses', asyn
   assert.equal((await engine.describe(path.dirname(dir))).repository, false);
 });
 
+test('parent progress confirms only a child repository before its status calculation', async t => {
+  const os = require('node:os'), container = await fsp.mkdtemp(path.join(os.tmpdir(), 'git-child-progress-'));
+  t.after(() => fsp.rm(container, { recursive: true, force: true }));
+  const fixture = await repository(t), child = path.join(container, 'child');
+  await fsp.rename(fixture.dir, child);
+  await fsp.mkdir(path.join(container, 'ordinary'));
+  const updates = []; let confirmedBeforeStatus = false;
+  const engine = createEngine(t, { status: async (request, options, invoke) => {
+    confirmedBeforeStatus = updates.some(update => update.ok && update.repository === false && update.loadingRepositories?.includes('child'));
+    return invoke(request, options);
+  } });
+  const result = await engine.inspect(container, {}, update => updates.push(update));
+  assert.equal(confirmedBeforeStatus, true);
+  assert.ok(updates.every(update => !update.loadingRepositories?.includes('ordinary')));
+  assert.equal(result.ok, true); assert.equal(result.statuses.child, 'clean');
+  assert.ok(updates.some(update => update.statuses.child === 'clean' && !update.loadingRepositories?.length));
+});
+
 test('status entries stream in bounded batches from one matrix query', async t => {
   const { dir } = await repository(t); let queries = 0; const batches = [];
   const engine = createEngine(t, { status: async (request, options, invoke) => {

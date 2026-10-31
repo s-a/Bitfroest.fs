@@ -5,6 +5,36 @@ const os = require('node:os');
 const path = require('node:path');
 const { createProvider } = require('../filesystem-provider');
 const { zip } = require('./support/search-archives.cjs');
+
+test('inactive archive tabs remain deferred without entering the physical filesystem snapshot', async t => {
+  const root = (await fs.mkdtemp(path.join(os.tmpdir(), 'zip-deferred-view-'))).replaceAll('\\', '/');
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  await fs.mkdir(`${root}/docs`); await fs.writeFile(`${root}/docs/file.txt`, 'file');
+  const { createZipFilesystem } = require('../zip-filesystem');
+  const provider = createZipFilesystem(createProvider({ roots: [root] })); t.after(() => provider.dispose());
+  const deferred = require('../zip-io').location(`${root}/missing.zip`);
+  const initial = await provider.load({ directories: [root], deferredDirectories: [deferred], visibleOnly: true });
+  assert.ok(initial.unloadedFolders.includes(deferred)); assert.ok(Object.hasOwn(initial.folders, deferred));
+  const navigated = await provider.prepare(initial, { directories: [`${root}/docs`], navigation: true, recursive: false });
+  assert.ok(navigated.folders[`${root}/docs`].some(row => row.name === 'file.txt'));
+  assert.ok(Object.hasOwn(navigated.folders, deferred));
+  await assert.rejects(provider.prepare(navigated, { directories: [deferred], navigation: true, recursive: false }));
+});
+
+test('physical operation preparation ignores the virtual path of an opposite archive tab', async t => {
+  const root = (await fs.mkdtemp(path.join(os.tmpdir(), 'zip-opposite-view-'))).replaceAll('\\', '/');
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  await fs.mkdir(`${root}/docs`); await fs.writeFile(`${root}/docs/file.txt`, 'file');
+  await fs.writeFile(`${root}/view.zip`, zip({ 'view.txt': 'view' }));
+  const { createZipFilesystem } = require('../zip-filesystem');
+  const provider = createZipFilesystem(createProvider({ roots: [root] })); t.after(() => provider.dispose());
+  const initial = await provider.load({ directories: [root], visibleOnly: true });
+  const opened = await provider.openArchive(initial, `${root}/view.zip`);
+  opened.state.panes[0].tabs = [opened.path]; opened.state.active = 1;
+  const prepared = await provider.prepare(opened.state, { directories: [`${root}/docs`], recursive: true });
+  assert.ok(prepared.folders[`${root}/docs`].some(row => row.name === 'file.txt'));
+  assert.ok(prepared.folders[opened.path].some(row => row.name === 'view.txt'));
+});
 test('pack provider appends the ZIP extension and detects an existing target absent from the view', async t => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'zip-pack-target-'));
   t.after(() => fs.rm(root, { recursive: true, force: true }));

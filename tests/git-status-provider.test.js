@@ -39,15 +39,13 @@ test('suspending releases the worker and allows a new lazy worker on reactivatio
   await provider.inspect(['/repo']); assert.equal(created, 2); provider.dispose();
 });
 
-test('watcher updates an externally modified file without repeated polling', async t => {
+test('a requested refresh reads externally modified files without an automatic notification', async t => {
   const { dir, write } = await changedRepository(t);
-  let changed;
-  const notification = new Promise(resolve => { changed = resolve; });
-  const provider = createGitStatusProvider({ onChange: changed }); t.after(() => provider.dispose());
+  let notifications = 0;
+  const provider = createGitStatusProvider({ onChange: () => notifications++ }); t.after(() => provider.dispose());
   await provider.inspect([dir]); await write('clean.txt', 'external change\n');
-  const timeout = setTimeout(() => changed('timeout'), 5000); t.after(() => clearTimeout(timeout));
-  assert.notEqual(await notification, 'timeout');
   const result = await provider.inspect([dir]); assert.equal(result[dir].statuses['clean.txt'], 'modified');
+  assert.equal(notifications, 0);
 });
 
 test('returning to an unwatched repository revalidates changes made while another directory was open', async t => {
@@ -58,20 +56,16 @@ test('returning to an unwatched repository revalidates changes made while anothe
   assert.equal((await provider.inspect([first.dir]))[first.dir].statuses['clean.txt'], 'modified');
 });
 
-test('parent view watches repository contents and updates root decoration', async t => {
+test('a requested parent refresh updates repository root decoration', async t => {
   const fsp = require('node:fs/promises'), os = require('node:os'), path = require('node:path');
   const container = await fsp.mkdtemp(path.join(os.tmpdir(), 'git-root-watch-'));
   t.after(() => fsp.rm(container, { recursive: true, force: true }));
   const fixture = await changedRepository(t), dir = path.join(container, 'repo');
   await fsp.rename(fixture.dir, dir);
-  let notify;
-  const changed = new Promise(resolve => { notify = resolve; });
-  const provider = createGitStatusProvider({ onChange: notify }); t.after(() => provider.dispose());
+  const provider = createGitStatusProvider(); t.after(() => provider.dispose());
   const initial = await provider.inspect([container]);
   assert.equal(initial[container].statuses.repo, 'modified');
   await fsp.writeFile(path.join(dir, 'nested/deep.txt'), 'changed from parent view\n');
-  const timeout = setTimeout(() => notify('timeout'), 5000); t.after(() => clearTimeout(timeout));
-  assert.notEqual(await changed, 'timeout');
   assert.equal((await provider.inspect([container]))[container].statuses.repo, 'modified');
 });
 

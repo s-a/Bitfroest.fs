@@ -265,7 +265,7 @@ function activate(context) {
         try {
           const view = filesystemState;
           filesystemState = retainView(await loadView(view), view); await saveState(filesystemState);
-          if (panel) await panel.webview.postMessage({ type: 'filesystem-result', ok: true, state: filesystemState });
+          if (panel) await panel.webview.postMessage({ type: 'filesystem-result', ok: true, state: filesystemState, refreshGitDirectories: affectedViewDirectories(view, [reference.archive]) });
         } catch (error) { error.committedResult = result; throw error; }
         return result;
       }).finally(() => { filesystemRequests--; });
@@ -288,10 +288,18 @@ function activate(context) {
     } catch (error) { if (target) await zipEditor.close(target); if (error.name !== 'AbortError') vscode.window.showErrorMessage(t(error.message)); return { ok: false, cancelled: error.name === 'AbortError', error: t(error.message) }; }
   }
   function loadView(view) {
-    const directories = existingDirectories([...new Set((view?.panes || []).flatMap(pane => pane.tabs || []).filter(target => typeof target === 'string' && provider.canNavigate(target)))]);
-    const resultDirectories = (view?.panes || []).flatMap(p => (p.tabStates || []).flatMap(tab => tab.searchResult?.paths || [])).filter(target => typeof target === 'string' && provider.contains(target)).map(target => normalizePath(path.dirname(target)));
+    if (!view?.realFilesystem || !Array.isArray(view.panes) || !view.panes.length) return provider.load();
+    const activePaths = (view?.panes || []).map(pane => pane.tabs?.[pane.tab || 0]);
+    const directories = existingDirectories([...new Set(activePaths.filter(target => typeof target === 'string' && provider.canNavigate(target)))]);
+    const deferredDirectories = [...new Set((view?.panes || []).flatMap(pane => pane.tabs || []).filter(target => typeof target === 'string' && !activePaths.includes(target)))];
+    const resultDirectories = (view?.panes || []).flatMap(p => p.tabStates?.[p.tab || 0]?.searchResult?.paths || []).filter(target => typeof target === 'string' && provider.contains(target)).map(target => normalizePath(path.dirname(target)));
     directories.push(...resultDirectories.filter(target => !directories.includes(target) && fs.existsSync(target)));
-    return provider.load({ directories });
+    return provider.load({ directories, deferredDirectories, visibleOnly: true });
+  }
+  function affectedViewDirectories(view, targets) {
+    const identity = value => pathIdentity(normalizePath(value), { platform: process.platform }).replace(/\/$/, '');
+    const changed = targets.filter(target => typeof target === 'string' && path.isAbsolute(target)).map(identity);
+    return [...new Set((view?.panes || []).map(pane => pane.tabs?.[pane.tab || 0]).filter(directory => typeof directory === 'string' && !directory.startsWith('zip:') && changed.some(target => { const root = identity(directory); return target === root || target.startsWith(root + '/') || root.startsWith(target + '/'); })))];
   }
   function retainView(fresh, view) {
     if (!fresh || !view?.realFilesystem) return fresh;
@@ -425,40 +433,47 @@ function activate(context) {
     ];
     context.subscriptions.push(...auxiliaryTabSubscriptions);
     messagePanel.onDidDispose(() => auxiliaryTabSubscriptions.forEach(subscription => subscription.dispose()));
-    let gitQuery, gitDisposed = false, gitUpdating = false, gitDirty = false;
+    let gitQuery, gitDisposed = false;
+    const gitDirectoryQueries = new Map(), gitUpdating = new Set();
     const gitSettings = () => {
       const settings = vscode.workspace.getConfiguration('bitfroest');
       return Object.fromEntries(Object.entries({ enabled: true, showClean: true, showUntracked: true, showIgnored: true, recursive: true, untrackedAsModified: false, allowNetwork: false, includePaths: [], excludePaths: [] }).map(([key, fallback]) => [key, settings.get(`gitStatus.${key}`, fallback) ?? fallback]));
     };
     const validGitPath = directory => typeof directory === 'string' && directory.length <= 4096 && !directory.includes('\0') && !directory.includes('!') && !directory.startsWith('zip:') && provider.contains(directory) && Object.hasOwn(filesystemState?.folders || {}, directory) && !filesystemState.unloadedFolders?.includes(directory);
-    const gitService = createGitStatusProvider({ onChange: () => { if (messagePanel.visible) publishGit().catch(() => {}); } });
-    const closeGit = () => { if (gitDisposed) return; gitDisposed = true; gitQuery = undefined; gitService.dispose(); };
+    const gitService = createGitStatusProvider({});
+    const closeGit = () => { if (gitDisposed) return; gitDisposed = true; gitQuery = undefined; gitDirectoryQueries.clear(); gitService.dispose(); };
     messagePanel.onDidDispose(closeGit); context.subscriptions.push({ dispose: closeGit });
-    async function publishGit() {
-      if (gitDisposed || !gitQuery) return;
-      if (gitUpdating === gitQuery) { gitDirty = true; return; }
-      gitUpdating = gitQuery;
-      const query = gitQuery, settings = gitSettings();
+    function currentGitDirectory(query, directory) {
+      if (gitDisposed || panel !== messagePanel || gitDirectoryQueries.get(directory) !== query || !gitQuery?.visibleDirectories.includes(directory)) return false;
+      if (query.snapshotId === filesystemState?.snapshotId) return true;
+      if (query.retainedSnapshots.get(directory) === filesystemState?.snapshotId) return true;
+      if (query.signatures.get(directory) !== JSON.stringify(filesystemState?.folders[directory])) return false;
+      query.retainedSnapshots.set(directory, filesystemState.snapshotId);
+      return true;
+    }
+    async function publishGit(query = gitQuery) {
+      if (gitDisposed || !query || gitUpdating.has(query)) return;
+      gitUpdating.add(query);
+      const settings = gitSettings();
       try {
         const allowed = query.directories.filter(directory => validGitPath(directory) && allowedGitPath(directory, settings) && (settings.allowNetwork || !/^(?:\\\\|\/\/)/.test(directory)));
         let directories = {};
         if (settings.enabled && allowed.length) directories = await gitService.inspect(allowed, settings, updates => {
-          if (gitDisposed || panel !== messagePanel || gitQuery !== query || filesystemState?.snapshotId !== query.snapshotId) return;
-          const filtered = Object.fromEntries(Object.entries(updates).filter(([directory]) => allowed.includes(directory)).map(([directory, info]) => [directory, { ...info, statuses: Object.fromEntries(Object.entries(info.statuses || {}).filter(([, status]) => (settings.showClean || status !== 'clean') && (settings.showUntracked || status !== 'untracked'))) }]));
+          const filtered = Object.fromEntries(Object.entries(updates).filter(([directory]) => allowed.includes(directory) && currentGitDirectory(query, directory)).map(([directory, info]) => [directory, { ...info, statuses: Object.fromEntries(Object.entries(info.statuses || {}).filter(([, status]) => (settings.showClean || status !== 'clean') && (settings.showUntracked || status !== 'untracked'))) }]));
+          if (!Object.keys(filtered).length) return;
           messagePanel.webview.postMessage({ type: 'git-status-result', requestId: query.requestId, snapshotId: query.snapshotId, partial: true, directories: filtered }).then(undefined, () => {});
         });
         else gitService.suspend?.();
         for (const info of Object.values(directories)) if (info.statuses) {
           info.statuses = Object.fromEntries(Object.entries(info.statuses).filter(([, status]) => (settings.showClean || status !== 'clean') && (settings.showUntracked || status !== 'untracked')));
         }
-        if (!gitDisposed && panel === messagePanel && gitQuery === query && filesystemState?.snapshotId === query.snapshotId) await messagePanel.webview.postMessage({ type: 'git-status-result', requestId: query.requestId, snapshotId: query.snapshotId, directories });
+        directories = Object.fromEntries(Object.entries(directories).filter(([directory]) => currentGitDirectory(query, directory)));
+        if (query.directories.some(directory => currentGitDirectory(query, directory))) await messagePanel.webview.postMessage({ type: 'git-status-result', requestId: query.requestId, snapshotId: query.snapshotId, directories });
       } catch (error) {
-        if (!gitDisposed && panel === messagePanel && gitQuery === query && filesystemState?.snapshotId === query.snapshotId) await messagePanel.webview.postMessage({ type: 'git-status-result', requestId: query.requestId, snapshotId: query.snapshotId, directories: Object.fromEntries(query.directories.map(directory => [directory, { ok: false, error: error.message, statuses: {} }])) });
+        const directories = Object.fromEntries(query.directories.filter(directory => currentGitDirectory(query, directory)).map(directory => [directory, { ok: false, error: error.message, statuses: {} }]));
+        if (Object.keys(directories).length) await messagePanel.webview.postMessage({ type: 'git-status-result', requestId: query.requestId, snapshotId: query.snapshotId, directories });
       } finally {
-        if (gitUpdating === query) {
-          gitUpdating = false;
-          if (gitDirty) { gitDirty = false; publishGit().catch(() => {}); }
-        }
+        gitUpdating.delete(query);
       }
     }
     messagePanel.onDidDispose(() => provider.clear());
@@ -552,16 +567,20 @@ function activate(context) {
       if (!panelReady) return;
       if (message?.type === 'git-status') {
         if (typeof message.requestId !== 'string' || message.requestId.length > 100 || message.snapshotId !== filesystemState?.snapshotId || !Array.isArray(message.directories) || message.directories.length > 2 || message.directories.some(directory => !validGitPath(directory))) return;
-        gitQuery = { requestId: message.requestId, snapshotId: message.snapshotId, directories: [...new Set(message.directories)] };
+        const visibleDirectories = message.visibleDirectories || message.directories;
+        if (!Array.isArray(visibleDirectories) || visibleDirectories.length > 2 || visibleDirectories.some(directory => !validGitPath(directory)) || message.directories.some(directory => !visibleDirectories.includes(directory))) return;
+        gitQuery = { requestId: message.requestId, snapshotId: message.snapshotId, directories: [...new Set(message.directories)], visibleDirectories: [...new Set(visibleDirectories)], signatures: new Map(message.directories.map(directory => [directory, JSON.stringify(filesystemState.folders[directory])])), retainedSnapshots: new Map() };
+        for (const directory of gitDirectoryQueries.keys()) if (!visibleDirectories.includes(directory)) gitDirectoryQueries.delete(directory);
+        for (const directory of gitQuery.directories) gitDirectoryQueries.set(directory, gitQuery);
         await publishGit(); return;
       }
       if (message?.type === 'git-branches') {
         const settings = gitSettings();
-        if (!settings.enabled || message.snapshotId !== filesystemState?.snapshotId || !validGitPath(message.path) || !allowedGitPath(message.path, settings) || !gitQuery?.directories.includes(message.path) || !settings.allowNetwork && /^(?:\\\\|\/\/)/.test(message.path)) return;
-        const query = gitQuery;
+        const query = gitDirectoryQueries.get(message.path);
+        if (!settings.enabled || !query || !currentGitDirectory(query, message.path) || message.snapshotId !== filesystemState?.snapshotId || !validGitPath(message.path) || !allowedGitPath(message.path, settings) || !settings.allowNetwork && /^(?:\\\\|\/\/)/.test(message.path)) return;
         try {
           const result = await gitService.branches(message.path);
-          if (!gitDisposed && panel === messagePanel && gitQuery === query && filesystemState?.snapshotId === message.snapshotId) {
+          if (currentGitDirectory(query, message.path) && filesystemState?.snapshotId === message.snapshotId) {
             if (!result.ok) throw new Error(result.error);
             const names = [...new Set([...(result.branch ? [result.branch] : []), ...(result.names || [])])];
             const items = names.map(label => ({ label, description: t(label === result.branch ? 'Aktueller Branch' : 'Lokaler Branch') }));
@@ -569,7 +588,7 @@ function activate(context) {
             if (result.detached) items.unshift({ label: `Detached HEAD ${String(result.head || '').slice(0, 8)}`, description: t('Aktueller Stand') });
             await vscode.window.showQuickPick(items, { title: t('Verfügbare Branches'), placeHolder: t('Branchliste (nur Anzeige)'), matchOnDescription: true });
           }
-        } catch (error) { if (!gitDisposed && panel === messagePanel && gitQuery === query && filesystemState?.snapshotId === message.snapshotId) vscode.window.showWarningMessage(t('Git-Status nicht verfügbar: {error}', { error: error.message })); }
+        } catch (error) { if (currentGitDirectory(query, message.path) && filesystemState?.snapshotId === message.snapshotId) vscode.window.showWarningMessage(t('Git-Status nicht verfügbar: {error}', { error: error.message })); }
         return;
       }
       if (message?.type === 'configure-settings') { configurationEditor.open('settings'); return; }
@@ -791,7 +810,7 @@ function activate(context) {
           if (!fresh?.realFilesystem) throw new Error(t('Kein Dateisystem geladen.'));
           filesystemState = retainView(fresh, savedState);
           await saveState(filesystemState);
-          if (panel === messagePanel) await messagePanel.webview.postMessage({ type: 'restore', state: filesystemState });
+          if (panel === messagePanel) await messagePanel.webview.postMessage({ type: 'restore', state: filesystemState, preserveUnchanged: true, refreshGitDirectories: [message.directory] });
           return true;
         };
         if (shellMenuBusy || filesystemRequests || transferJobs.size) { await reply({ ok: false, error: t('Eine Dateisystemoperation läuft bereits.') }); return; }
@@ -979,7 +998,7 @@ function activate(context) {
               } else if (message.type === 'zip-unpack') await provider.unpackArchives(filesystemState, message, settings);
               else if (message.type === 'zip-test') await provider.testArchives(filesystemState, message, settings);
               else await provider.copyArchive(message, settings);
-              filesystemRevision++;
+              if (message.type !== 'zip-test') filesystemRevision++;
             }
           } catch (failure) {
             if (failure.committedResult) { archiveCommitted = true; filesystemRevision++; notice = t('ZIP wurde gespeichert; Nachprüfung oder Quellentfernung wurde nicht abgeschlossen.'); }
@@ -987,12 +1006,13 @@ function activate(context) {
           }
           finally {
             flushProgress();
-            if (copying && panel === current) { try { filesystemState = retainView(await loadView(view), view); } catch (failure) { ok = false; error ||= renderOperationError(failure, t); } }
+            if (copying && message.type !== 'zip-test' && panel === current) { try { filesystemState = retainView(await loadView(view), view); } catch (failure) { ok = false; error ||= renderOperationError(failure, t); } }
             if (job) transferJobs.delete(operationId);
           }
           if (panel === current) {
             await saveState(filesystemState);
-            await current.webview.postMessage({ type: 'filesystem-result', ok, state: filesystemState, ...(operationId ? { operationId } : {}), ...(navigation && ok ? { resumeNavigation: navigation } : {}), ...(cancelled ? { cancelled: true } : {}), ...(archiveCommitted ? { archiveCommitted, notice } : {}), ...(error ? { error } : {}) });
+            const refreshGitDirectories = copying && message.type !== 'zip-test' ? affectedViewDirectories(view, [writing ? message.archive || filesystemState?.archiveLocations?.[message.path]?.archive : message.target || message.sourcePath, ...(message.move ? [message.sourcePath] : [])]) : [];
+            await current.webview.postMessage({ type: 'filesystem-result', ok, state: filesystemState, ...(refreshGitDirectories.length ? { refreshGitDirectories } : {}), ...(operationId ? { operationId } : {}), ...(navigation && ok ? { resumeNavigation: navigation } : {}), ...(cancelled ? { cancelled: true } : {}), ...(archiveCommitted ? { archiveCommitted, notice } : {}), ...(error ? { error } : {}) });
           }
         }).finally(() => { filesystemRequests--; });
         await filesystemQueue; return;
@@ -1041,6 +1061,7 @@ function activate(context) {
           let cancelled = false;
           let operationError;
           let diagnostic;
+          let updatedDirectories;
           try {
             if (!filesystemState) throw new Error(t('Kein Dateisystem geladen.'));
             let fresh;
@@ -1050,9 +1071,17 @@ function activate(context) {
               const directories = message.type === 'filesystem-navigate' ? [message.path] : message.paths;
               if (!Array.isArray(directories) || directories.length > 128 || directories.some(target => typeof target !== 'string' || target.length > 4096 || !provider.canNavigate(target))) throw new Error(t('Ungültiger Datei- oder Ordnername.'));
               if (message.type === 'filesystem-navigate' && ![0, 1].includes(message.side)) throw new Error(t('Ungültiger Datei- oder Ordnername.'));
-              fresh = await provider.prepare(filesystemState, { directories, recursive: message.type === 'filesystem-prepare' && message.recursive !== false, ...(job ? { signal: job.controller.signal, onProgress } : {}) });
+              const visibleDirectories = (message.state || savedState)?.panes?.map((pane, side) => side === message.side ? message.path : pane.tabs[pane.tab]);
+              fresh = await provider.prepare(filesystemState, { directories, recursive: message.type === 'filesystem-prepare' && message.recursive !== false, ...(message.type === 'filesystem-navigate' ? { navigation: true, visibleDirectories } : {}), ...(job ? { signal: job.controller.signal, onProgress } : {}) });
             } else fresh = await loadView(message.state || savedState);
+            updatedDirectories = fresh.updatedDirectories;
             filesystemState = retainView(fresh, message.state || savedState);
+            if (message.type === 'filesystem-navigate') {
+              const panes = (message.state || savedState)?.panes;
+              const previousPath = panes?.[message.side]?.tabs[panes[message.side].tab];
+              const opposite = panes?.[1 - message.side];
+              if (previousPath && previousPath !== opposite?.tabs[opposite.tab]) gitDirectoryQueries.delete(previousPath);
+            }
             if (message.type === 'filesystem-apply') filesystemRevision++;
             await saveState(filesystemState);
           } catch (error) {
@@ -1062,13 +1091,13 @@ function activate(context) {
             diagnostic = operationDiagnostic(error, message, message.state || filesystemState);
             const detail = Number.isInteger(error.deletedCount) ? t('Löschen fehlgeschlagen nach {count} Einträgen: {error}', { count: error.deletedCount, error: renderOperationError(error.cause, t) }) : renderOperationError(error, t);
             operationError = detail;
-            if (message.type !== 'filesystem-prepare') {
+            if (message.type !== 'filesystem-prepare' && message.type !== 'filesystem-navigate') {
               try { filesystemState = retainView(await loadView(savedState), savedState); } catch { /* Preserve the last confirmed state. */ }
             }
             }
           }
           if (job) transferJobs.delete(operationId);
-          if (current && panel === current) await current.webview.postMessage({ type: 'filesystem-result', ok, state: filesystemState, ...(cancelled ? { cancelled: true } : {}), ...(operationId ? { operationId, operationOutcome: filesystemState?.operationOutcome } : {}), ...(!ok ? { error: operationError, diagnostic } : {}), ...(ok && !cancelled && message.type === 'filesystem-navigate' ? { resumeNavigation: { path: message.path, side: message.side } } : {}), ...(ok && !cancelled && message.type === 'filesystem-prepare' ? { resumeAction: message.action } : {}) });
+          if (current && panel === current) await current.webview.postMessage({ type: 'filesystem-result', ok, state: filesystemState, ...(updatedDirectories?.length ? { refreshGitDirectories: updatedDirectories } : {}), ...(cancelled ? { cancelled: true } : {}), ...(operationId ? { operationId, operationOutcome: filesystemState?.operationOutcome } : {}), ...(!ok ? { error: operationError, diagnostic } : {}), ...(ok && !cancelled && message.type === 'filesystem-navigate' ? { resumeNavigation: { path: message.path, side: message.side } } : {}), ...(ok && !cancelled && message.type === 'filesystem-prepare' ? { resumeAction: message.action } : {}) });
         }).finally(() => { filesystemRequests--; });
         await filesystemQueue;
         return;

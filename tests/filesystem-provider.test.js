@@ -23,6 +23,162 @@ async function setup(t, options = {}) {
 
 function row(state, directory, name) { return state.folders[directory].find(file => file.name === name); }
 
+test('navigation loads only the requested directory and preserves the opposite snapshot without accessing it', async t => {
+  const { left, right } = await setup(t);
+  const reads = []; let navigating = false;
+  const provider = createProvider({ roots: [left, right], fs: { ...fs,
+    readdir: async (directory, ...args) => { reads.push(slash(String(directory))); return fs.readdir(directory, ...args); },
+    lstat: async (target, ...args) => {
+      if (navigating && slash(String(target)).startsWith(right)) throw new Error('Opposite pane must not be accessed');
+      return fs.lstat(target, ...args);
+    }
+  } });
+  const before = await provider.load(); before.panes[1].selected = ['keep']; before.panes[1].cursor = 'keep';
+  reads.length = 0; navigating = true;
+  const after = await provider.prepare(before, { directories: [`${left}/docs`], recursive: false, navigation: true });
+  assert.deepEqual(reads, [`${left}/docs`]);
+  assert.deepEqual(after.folders[right], before.folders[right]);
+  assert.notEqual(after.snapshotId, before.snapshotId);
+  assert.ok(row(after, `${left}/docs`, 'nested.txt'));
+});
+
+test('visible-only refresh defers inactive tabs and activation rereads only the activated directory', async t => {
+  const { left, right } = await setup(t); const reads = [];
+  const provider = createProvider({ roots: [left, right], fs: { ...fs, readdir: async (directory, ...args) => { reads.push(slash(String(directory))); return fs.readdir(directory, ...args); } } });
+  await provider.load({ directories: [`${left}/docs`] });
+  reads.length = 0;
+  const before = await provider.load({ directories: [`${left}/docs`, right], deferredDirectories: [left], visibleOnly: true });
+  assert.deepEqual(reads.sort(), [`${left}/docs`, right].sort());
+  assert.ok(before.unloadedFolders.includes(left));
+  assert.ok(Object.hasOwn(before.folders, left));
+  await fs.writeFile(`${left}/on-activation.txt`, 'new'); reads.length = 0;
+  const after = await provider.prepare(before, { directories: [left], navigation: true, recursive: false });
+  assert.deepEqual(reads, [left]);
+  assert.ok(row(after, left, 'on-activation.txt'));
+  assert.equal(after.unloadedFolders.includes(left), false);
+});
+
+test('navigation removes disappeared child caches and keeps later operations valid', async t => {
+  const { provider, left } = await setup(t);
+  const before = await provider.load({ directories: [`${left}/docs`] });
+  await fs.rm(`${left}/docs`, { recursive: true });
+  const after = await provider.prepare(before, { directories: [left], recursive: false, navigation: true });
+  assert.equal(Object.hasOwn(after.folders, `${left}/docs`), false);
+  const desired = clone(after); desired.folders[left].push({ id: 'new-after-navigation', name: 'new.txt', type: 'text', content: 'new' });
+  await provider.apply(after, desired); assert.equal(await fs.readFile(`${left}/new.txt`, 'utf8'), 'new');
+});
+
+test('mutations after scoped navigation refresh visible paths without scanning inactive cached tabs', async t => {
+  const { left, right } = await setup(t), reads = [];
+  const provider = createProvider({ roots: [left, right], fs: { ...fs, readdir: async (directory, ...args) => { reads.push(slash(String(directory))); return fs.readdir(directory, ...args); } } });
+  const loaded = await provider.load({ directories: [left, right], visibleOnly: true });
+  const before = await provider.prepare(loaded, { directories: [`${left}/docs`], recursive: false, navigation: true, visibleDirectories: [`${left}/docs`, right] });
+  before.panes[0].tabs = [`${left}/docs`, left]; before.panes[0].tab = 0;
+  const after = clone(before); after.folders[right].push({ id: 'created-in-right', name: 'new.txt', type: 'text', content: 'new' });
+  reads.length = 0; const result = await provider.apply(before, after);
+  assert.equal(reads.includes(left), false);
+  assert.ok(row(result, right, 'new.txt'));
+  assert.ok(result.panes[0].tabs.includes(left));
+});
+
+test('post-operation reconciliation does not rescan invisible prepared subtrees', async t => {
+  const { left, right } = await setup(t), reads = [];
+  const provider = createProvider({ roots: [left, right], fs: { ...fs, readdir: async (directory, ...args) => { reads.push(slash(String(directory))); return fs.readdir(directory, ...args); } } });
+  const initial = await provider.load({ directories: [left, right], visibleOnly: true });
+  const before = await provider.prepare(initial, { directories: [`${left}/docs`], recursive: true });
+  const desired = clone(before); desired.folders[right].push({ id: 'after-preparation', name: 'new.txt', type: 'text', content: 'new' });
+  reads.length = 0; await provider.apply(before, desired);
+  assert.equal(reads.includes(`${left}/docs`), false);
+  assert.equal(await fs.readFile(`${right}/new.txt`, 'utf8'), 'new');
+});
+
+test('committed copy reports only its changed visible destination for status refresh', async t => {
+  const { provider, left, right } = await setup(t);
+  const before = await provider.load({ directories: [left, right], visibleOnly: true });
+  const after = clone(before), source = row(before, left, 'plain.txt');
+  after.folders[right].push({ ...source, id: 'copied-target', fsSource: `${left}/plain.txt` });
+  const result = await provider.apply(before, after);
+  assert.deepEqual(result.updatedDirectories, [right]);
+  assert.equal(await fs.readFile(`${right}/plain.txt`, 'utf8'), 'original text');
+});
+
+test('visible nested directories remain deletable after returning to their parent', async t => {
+  const { provider, left, right } = await setup(t, { deletePath: target => fs.rm(target, { recursive: true }) });
+  const initial = await provider.load({ directories: [left, `${left}/docs`], visibleOnly: true });
+  const navigated = await provider.prepare(initial, { directories: [`${left}/docs`], navigation: true, recursive: false, visibleDirectories: [`${left}/docs`, right] });
+  const parent = await provider.prepare(navigated, { directories: [left], navigation: true, recursive: false, visibleDirectories: [left, right] });
+  const prepared = await provider.prepare(parent, { directories: [`${left}/docs`], recursive: true });
+  await provider.remove(prepared, { paths: [`${left}/docs`], useTrash: false });
+  await assert.rejects(fs.stat(`${left}/docs`), { code: 'ENOENT' });
+});
+
+test('inactive tabs outside the allowed roots cannot block a visible refresh', async t => {
+  const { left, right, parent } = await setup(t);
+  const outside = slash(path.join(parent, 'outside'));
+  const provider = createProvider({ roots: [left, right] });
+  const state = await provider.load({ directories: [left, right], deferredDirectories: [outside], visibleOnly: true });
+  assert.equal(Object.hasOwn(state.folders, outside), false);
+});
+
+test('browsing a changing directory preserves navigation without requiring an atomic listing', async t => {
+  const { left, right } = await setup(t);
+  let inserted = false;
+  const provider = createProvider({ roots: [left, right], fs: { ...fs, readdir: async (directory, ...args) => {
+    const names = await fs.readdir(directory, ...args);
+    if (slash(String(directory)) === left && !inserted) { inserted = true; await fs.writeFile(`${left}/arrived.txt`, 'new'); }
+    return names;
+  } } });
+  const state = await provider.load();
+  assert.ok(row(state, left, 'plain.txt'));
+  assert.equal(state.panes[0].tabs[0], left);
+  const refreshed = await provider.load();
+  assert.ok(row(refreshed, left, 'arrived.txt'));
+});
+
+test('browsing skips an entry removed after listing while recursive preparation rejects it', async t => {
+  const { left, right } = await setup(t);
+  const provider = createProvider({ roots: [left, right], fs: { ...fs, readdir: async (directory, ...args) => {
+    const names = await fs.readdir(directory, ...args);
+    if (slash(String(directory)) === left && !args[0]?.withFileTypes) names.push('disappeared.txt');
+    return names;
+  } } });
+  const state = await provider.load();
+  assert.ok(row(state, left, 'plain.txt'));
+  assert.equal(row(state, left, 'disappeared.txt'), undefined);
+  await assert.rejects(provider.prepare(state, { directories: [left], recursive: true }), { code: 'ENOENT' });
+});
+
+test('directory identity changes and recursive scan mutations retain technical scan diagnostics', async t => {
+  const { left, right } = await setup(t);
+  for (const recursive of [false, true]) {
+    let reads = 0;
+    const provider = createProvider({ roots: [left, right], fs: { ...fs, lstat: async (directory, options) => {
+      const stat = await fs.lstat(directory, options);
+      if (slash(String(directory)) !== left || !options?.bigint || ++reads !== 2) return stat;
+      return Object.assign(Object.create(stat), recursive ? { mtimeNs: stat.mtimeNs + 1n } : { ino: stat.ino + 1n });
+    } } });
+    await assert.rejects(provider.load({ recursive }), error => {
+      assert.equal(error.code, 'DirectoryChangedDuringScan');
+      assert.equal(error.path, left);
+      assert.equal(error.scanPhase, 'directory-validation');
+      return true;
+    });
+  }
+});
+
+test('raw directory read failures retain their original cause and receive scan context', async t => {
+  const { left, right } = await setup(t);
+  const failure = Object.assign(new Error('Directory unavailable'), { code: 'EIO' });
+  const provider = createProvider({ roots: [left, right], fs: { ...fs, readdir: async () => { throw failure; } } });
+  await assert.rejects(provider.load(), error => {
+    assert.equal(error, failure);
+    assert.equal(error.code, 'EIO');
+    assert.equal(error.path, left);
+    assert.equal(error.scanPhase, 'directory-scan');
+    return true;
+  });
+});
+
 test('column catalog receives creation, access and modification timestamps from the existing metadata read', async t => {
   const { left, right } = await setup(t);
   const provider = createProvider({ roots: [left, right] });

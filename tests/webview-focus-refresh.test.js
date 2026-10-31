@@ -12,6 +12,44 @@ function result(app, state, ok = true) {
   app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-result', ok, state } }));
 }
 
+test('refresh patches changed cells and keyed rows without replacing the list or unchanged icons', t => {
+  const original = fixture(); original.folders['C:/tmp'].push({ id: 'second', name: 'second.txt', type: 'text', size: 2, fsSource: 'C:/tmp/second.txt' });
+  const app = createApp(t, original), list = app.document.querySelector('[data-pane="0"] .list');
+  const keep = app.row('keep.txt'), icon = keep.querySelector('.fileicon'), second = app.row('second.txt');
+  list.scrollTop = 81;
+  focus(app);
+  const next = structuredClone(refreshes(app).at(-1).state); next.snapshotId = 'rows-two';
+  next.folders['C:/tmp'][1].size = 20;
+  next.folders['C:/tmp'].push({ id: 'new', name: 'new.txt', type: 'text', size: 1, fsSource: 'C:/tmp/new.txt' });
+  result(app, next);
+  assert.equal(app.document.querySelector('[data-pane="0"] .list'), list);
+  assert.equal(app.row('keep.txt'), keep); assert.equal(keep.querySelector('.fileicon'), icon);
+  assert.equal(app.row('second.txt'), second);
+  assert.match(second.textContent, /20/);
+  assert.ok(app.row('new.txt'));
+  assert.equal(list.scrollTop, 81);
+  focus(app);
+  const removed = structuredClone(refreshes(app).at(-1).state); removed.snapshotId = 'rows-three';
+  removed.folders['C:/tmp'] = removed.folders['C:/tmp'].filter(file => file.id !== 'second'); result(app, removed);
+  assert.equal(app.row('second.txt'), undefined);
+  assert.equal(app.row('keep.txt'), keep);
+});
+
+test('returning window focus requests Git status once after the refreshed snapshot arrives', t => {
+  const app = createApp(t, fixture());
+  assert.equal(app.messages.filter(message => message.type === 'git-status').length, 1);
+  focus(app);
+  assert.equal(refreshes(app).length, 1);
+  assert.equal(app.messages.filter(message => message.type === 'git-status').length, 1);
+  const next = structuredClone(refreshes(app)[0].state); next.snapshotId = 'focus-snapshot';
+  result(app, next);
+  const git = app.messages.filter(message => message.type === 'git-status');
+  assert.equal(git.length, 2);
+  assert.equal(git[1].snapshotId, 'focus-snapshot');
+  assert.deepEqual(Array.from(git[1].directories), ['C:/tmp', 'C:/temp']);
+  assert.equal(refreshes(app).length, 1);
+});
+
 test('returning from an unconfirmed favorite keeps unchanged lists, rows, icons and scroll position', t => {
   const app = createApp(t, fixture());
   const lists = [...app.document.querySelectorAll('.list')];
@@ -50,7 +88,7 @@ test('focus refresh updates a changed directory while preserving the opposite li
   next.snapshotId = 'two';
   result(app, next);
   assert.ok(app.row('new.txt'));
-  assert.notEqual(app.document.querySelectorAll('.list')[0], lists[0]);
+  assert.equal(app.document.querySelectorAll('.list')[0], lists[0]);
   assert.equal(app.document.querySelectorAll('.list')[1], lists[1]);
   assert.equal(app.row('keep.txt').getAttribute('aria-selected'), 'true');
 });

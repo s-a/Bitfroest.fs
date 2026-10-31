@@ -164,14 +164,22 @@ function createGitStatusEngine(services = {}) {
         const statuses = {};
         try {
           for (const child of await repositories(directory, settings)) {
+            const name = path.basename(child);
+            if (onProgress && (await describe(child, settings)).repository) {
+              onProgress({ ok: true, repository: false, loading: true, loadingRepositories: [name], statuses: { ...statuses } });
+            }
             const result = await inspect(child, settings);
-            if (!result.ok) continue;
+            if (!result.ok) {
+              onProgress?.({ ok: true, repository: false, loading: true, loadingRepositories: [], statuses: { ...statuses } });
+              continue;
+            }
             let status = 'clean';
             for (const value of Object.values(result.statuses)) {
               const aggregate = ['added', 'deleted'].includes(value) || value === 'untracked' && settings.untrackedAsModified ? 'modified' : value;
               if (priority[aggregate] > priority[status]) status = aggregate;
             }
-            statuses[path.basename(child)] = status;
+            statuses[name] = status;
+            onProgress?.({ ok: true, repository: false, loading: true, loadingRepositories: [], statuses: { ...statuses } });
           }
           return { ok: true, repository: false, statuses };
         } catch (failure) { return { ok: false, repository: false, statuses: {}, error: failure.message }; }

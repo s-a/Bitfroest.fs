@@ -105,11 +105,30 @@ function createProvider(options = {}) {
   }
 
   async function readSnapshot(settings = {}) {
-    const folders = {}, entries = new Map();
-    const loadedDirectories = new Set();
-    let count = 0;
-    async function scan(directory, depth, root = false, recursive = false) {
+    const folders = settings.baseline ? clone(settings.baseline.folders) : {}, entries = new Map(settings.baseline?.entries);
+    const loadedDirectories = new Set(settings.baseline?.loadedDirectories);
+    function discardSubtree(directory, retainEntry = false) {
+      for (const key of Object.keys(folders)) if (below(key, directory)) delete folders[key];
+      for (const key of loadedDirectories) if (below(key, directory)) loadedDirectories.delete(key);
+      for (const [key, entry] of entries) if (below(entry.path, directory) && (!retainEntry || identity(entry.path) !== identity(directory))) entries.delete(key);
+      if (retainEntry) folders[directory] = [];
+    }
+    for (const directory of settings.refreshDirectories || []) {
+      loadedDirectories.delete(directory);
+      for (const [key, entry] of entries) if (identity(slash(path.dirname(entry.path))) === identity(directory)) entries.delete(key);
+    }
+    let count = settings.baseline ? [...entries.values()].filter(entry => !entry.root).length : 0;
+    async function scan(directory, ...args) {
+      try { return await scanDirectory(directory, ...args); }
+      catch (error) {
+        error.path ??= directory;
+        error.scanPhase ??= 'directory-scan';
+        throw error;
+      }
+    }
+    async function scanDirectory(directory, depth, root = false, recursive = false) {
       throwIfAborted(settings.signal);
+      const strict = recursive || (settings.recursiveDirectories || []).some(target => below(directory, target));
       if (depth > limits.depth) throw new Error('Die Tiefengrenze des Dateisystem-Scans wurde erreicht.');
       if (loadedDirectories.has(directory)) {
         if (recursive) for (const row of folders[directory]) {
@@ -123,7 +142,8 @@ function createProvider(options = {}) {
       const stat = await fs.lstat(directory, { bigint: true });
       if (!stat.isDirectory()) throw new Error('Ein Root- oder Ordnerpfad ist kein Verzeichnis.');
       const existing = entries.get(identity(directory));
-      entries.set(identity(directory), { path: directory, type: 'folder', signature: statSignature(stat), root, row: existing?.row });
+      if (existing?.signature && existing.signature.split(':').slice(0, 3).join(':') !== statSignature(stat).split(':').slice(0, 3).join(':')) discardSubtree(directory, true);
+      entries.set(identity(directory), { path: directory, type: 'folder', signature: statSignature(stat), root: root || existing?.root, row: existing?.row });
       const names = (await fs.readdir(directory)).sort();
       loadedDirectories.add(directory);
       folders[directory] = [];
@@ -138,11 +158,12 @@ function createProvider(options = {}) {
           if (!child.isSymbolicLink()) await assertComponents(absolute);
           if (child.isFile() && /\.(exe|dll)$/i.test(name)) {
             fileVersion = await getFileVersion(absolute, { fs });
-            if (statSignature(await fs.lstat(absolute, { bigint: true })) !== statSignature(child)) throw new Error('Datei während der Bestandsaufnahme geändert.');
+            if (statSignature(await fs.lstat(absolute, { bigint: true })) !== statSignature(child)) throw Object.assign(new Error('Datei während der Bestandsaufnahme geändert.'), { code: 'FileChangedDuringScan', path: absolute, scanPhase: 'file-metadata-validation' });
           }
         }
         catch (error) {
-          if (recursive || !['EPERM', 'EACCES'].includes(error.code)) throw error;
+          if (!strict && error.code === 'ENOENT' && (!error.path || identity(canonical(error.path)) === identity(absolute))) continue;
+          if (strict || !['EPERM', 'EACCES'].includes(error.code)) throw error;
           if (error.path && identity(canonical(error.path)) !== identity(absolute)) throw error;
           directoryEntries ||= await fs.readdir(directory, { withFileTypes: true });
           const listed = directoryEntries.find(entry => entry.name === name);
@@ -168,9 +189,12 @@ function createProvider(options = {}) {
           if (recursive) await scan(absolute, depth + 1, false, true);
         }
       }
-      if (statSignature(await fs.lstat(directory, { bigint: true })) !== statSignature(stat)) throw new Error('Ordner während der Bestandsaufnahme geändert.');
+      const finalStat = await fs.lstat(directory, { bigint: true });
+      if (!finalStat.isDirectory() || finalStat.isSymbolicLink() || finalStat.dev !== stat.dev || finalStat.ino !== stat.ino || finalStat.mode !== stat.mode || strict && statSignature(finalStat) !== statSignature(stat)) {
+        throw Object.assign(new Error('Ordner während der Bestandsaufnahme geändert.'), { code: 'DirectoryChangedDuringScan', path: directory, scanPhase: 'directory-validation' });
+      }
     }
-    for (const root of roots) await scan(root, 0, true, settings.recursive === true);
+    if (!settings.visibleOnly) for (const root of roots) await scan(root, 0, true, settings.recursive === true);
     async function scanAncestors(value, recursive) {
       const directory = allowed(value), root = roots.find(root => below(directory, root));
       if (!root) { await scan(directory, 0, true, recursive); return; }
@@ -181,8 +205,22 @@ function createProvider(options = {}) {
       }
       if (directory === root && recursive) await scan(root, 0, true, true);
     }
-    for (const directory of settings.directories || []) await scanAncestors(directory, false);
-    for (const directory of settings.recursiveDirectories || []) await scanAncestors(directory, true);
+    for (const directory of settings.directories || []) {
+      if (settings.visibleOnly) { const target = allowed(directory); await scan(target, 0, roots.includes(target) || !entries.get(identity(target))?.row, false); }
+      else await scanAncestors(directory, false);
+    }
+    for (const directory of settings.recursiveDirectories || []) {
+      if (settings.visibleOnly) { const target = allowed(directory); await scan(target, 0, roots.includes(target) || !entries.get(identity(target))?.row, true); }
+      else await scanAncestors(directory, true);
+    }
+    for (const directory of settings.refreshDirectories || []) {
+      for (const previous of settings.baseline?.entries.values() || []) {
+        if (previous.type !== 'folder' || identity(slash(path.dirname(previous.path))) !== identity(directory)) continue;
+        const current = entries.get(identity(previous.path));
+        if (current?.type !== 'folder' || current.row?.type === 'link') discardSubtree(previous.path);
+        else if (current.signature.split(':').slice(0, 3).join(':') !== previous.signature.split(':').slice(0, 3).join(':')) discardSubtree(previous.path, true);
+      }
+    }
     const unloadedFolders = [...entries.values()].filter(entry => entry.type === 'folder' && !loadedDirectories.has(entry.path)).map(entry => entry.path);
     settings.onProgress?.({ phase: settings.phase || 'preparing', filesScanned: count, done: true });
     throwIfAborted(settings.signal);
@@ -190,6 +228,8 @@ function createProvider(options = {}) {
   }
 
   function pane(directory) { return { tabs: [directory], tab: 0, selected: [], cursor: null, filter: '', sort: 'name', descending: false }; }
+  const activeDirectories = state => [...new Set((state.panes || []).map(pane => pane.tabs?.[pane.tab || 0]).filter(directory => typeof directory === 'string' && !directory.startsWith('zip:')))];
+  const deferredDirectories = state => [...new Set((state.panes || []).flatMap(pane => pane.tabs || []).filter(directory => !directory.startsWith('zip:') && !activeDirectories(state).includes(directory)))];
 
   async function availableViewDirectories(directories) {
     const available = await Promise.all(directories.map(async directory => {
@@ -201,11 +241,25 @@ function createProvider(options = {}) {
 
   async function load(settings = {}) {
     const left = allowed(settings.left || roots[0]), right = allowed(settings.right || roots[1] || roots[0]);
-    const result = await readSnapshot({ ...settings, directories: [...(settings.directories || []), left, right] });
+    const previous = snapshot;
+    const visibleOnly = settings.visibleOnly ?? previous?.visibleOnly ?? false;
+    const result = await readSnapshot({ ...settings, visibleOnly, directories: visibleOnly || settings.baseline ? settings.directories || [] : [...(settings.directories || []), left, right] });
+    const inactiveDirectories = settings.visibleDirectories ? result.loadedDirectories.filter(directory => !settings.visibleDirectories.includes(directory)) : [];
+    result.loadedDirectories = result.loadedDirectories.filter(directory => !inactiveDirectories.includes(directory));
+    const deferredDirectories = [...new Set([...(visibleOnly ? roots : []), ...inactiveDirectories, ...(settings.deferredDirectories || previous?.deferredDirectories || [])].flatMap(directory => { try { return [allowed(directory)]; } catch { return []; } }))].filter(directory => !result.loadedDirectories.includes(directory));
+    for (const directory of deferredDirectories) {
+      if (!settings.baseline) {
+        const refreshed = target => result.loadedDirectories.some(loaded => below(target, loaded));
+        for (const [key, entry] of previous?.entries || []) if (below(entry.path, directory) && !refreshed(entry.path) && !result.entries.has(key)) result.entries.set(key, entry);
+        for (const [key, rows] of Object.entries(previous?.folders || {})) if (below(key, directory) && !refreshed(key)) result.folders[key] = clone(rows);
+      }
+      result.folders[directory] ||= [];
+    }
+    result.unloadedFolders = [...new Set([...result.unloadedFolders, ...Object.keys(result.folders).filter(directory => !result.loadedDirectories.includes(directory))])];
     if (!Object.hasOwn(result.folders, left) || !Object.hasOwn(result.folders, right)) throw new Error('Der gewählte Ordner wurde nicht vollständig eingelesen.');
     for (const entry of result.entries.values()) if (entry.root) visitedRoots.add(entry.path);
     const state = { version: 1, active: 0, realFilesystem: true, snapshotId: crypto.randomUUID(), panes: [pane(left), pane(right)], folders: result.folders, unloadedFolders: result.unloadedFolders };
-    snapshot = { ...result, state: clone(state), digest: filesystemDigest(state) };
+    snapshot = { ...result, deferredDirectories, visibleOnly, state: clone(state), digest: filesystemDigest(state) };
     return state;
   }
 
@@ -227,7 +281,7 @@ function createProvider(options = {}) {
       }
     }
     for (const directory of Object.keys(state.folders)) {
-      if (!roots.some(root => identity(root) === identity(directory)) && !snapshot?.entries.get(identity(directory))?.root && entries.get(identity(directory))?.type !== 'folder') throw new Error('Ein virtueller Archiv- oder fremder Ordnerpfad ist nicht erlaubt.');
+      if (!roots.some(root => identity(root) === identity(directory)) && !snapshot?.deferredDirectories?.includes(directory) && !snapshot?.entries.get(identity(directory))?.root && entries.get(identity(directory))?.type !== 'folder') throw new Error('Ein virtueller Archiv- oder fremder Ordnerpfad ist nicht erlaubt.');
     }
     for (const root of roots) if (!Object.hasOwn(state.folders, root)) throw new Error('Root-Ordner dürfen nicht entfernt werden.');
     for (const item of entries.values()) if (item.type === 'folder' && !Object.hasOwn(state.folders, item.path)) throw new Error('Ein Ordner ist nicht vollständig im Zielzustand enthalten.');
@@ -292,10 +346,11 @@ function createProvider(options = {}) {
       transfer = { ...request, sourcePath, selected: selected.map(row => baseline.entries.get(identity(`${sourcePath}/${row.name}`))) };
     }
     const abortedState = async (completed = [], refresh = true) => {
-      const directories = [...new Set([transfer.sourcePath, ...before.panes.flatMap(pane => pane.tabs)])];
-      const fresh = inheritedPanes(refresh ? await load({ directories: directories.filter(directory => contains(directory) && nativeFs.existsSync(directory)) }) : clone(baseline.state), before);
+      const directories = baseline.visibleOnly ? activeDirectories(before) : [...new Set([transfer.sourcePath, ...before.panes.flatMap(pane => pane.tabs)])];
+      const fresh = inheritedPanes(refresh ? await load({ directories: directories.filter(directory => contains(directory) && nativeFs.existsSync(directory)), ...(baseline.visibleOnly ? { visibleOnly: true, deferredDirectories: deferredDirectories(before) } : {}) }) : clone(baseline.state), before);
       const completedSources = completed.filter(entry => transfer.mode === 'copy' || !nativeFs.existsSync(entry.path));
       fresh.operationOutcome = { cancelled: true, completedIds: completedSources.map(entry => entry.row.id), completedSourcePaths: completedSources.map(entry => entry.path) };
+      fresh.updatedDirectories = activeDirectories(before).filter(directory => completedSources.some(source => transfer.mode === 'move' && below(source.path, directory) || [...desired.values()].some(item => item.row.fsSource && below(item.row.fsSource, source.path) && identity(item.path) !== identity(item.row.fsSource) && below(item.path, directory))));
       snapshot.state = clone(fresh); return fresh;
     };
     if (operation.signal?.aborted) {
@@ -304,7 +359,8 @@ function createProvider(options = {}) {
     }
     for (const directory of baseline.unloadedFolders) {
       const untouched = desired.get(identity(directory));
-      if (!untouched || untouched.row.fsSource !== directory || after.folders[directory]?.length || [...desired.values()].some(item => item.type === 'folder' && item.row.fsSource === directory && identity(item.path) !== identity(directory))) throw new Error('Der Ordner muss vor der Dateioperation vollständig eingelesen und vorbereitet werden.');
+      const viewRoot = roots.includes(directory) || baseline.deferredDirectories?.includes(directory) || baseline.entries.get(identity(directory))?.root;
+      if ((untouched ? untouched.row.fsSource !== directory : !viewRoot) || JSON.stringify(after.folders[directory]) !== JSON.stringify(baseline.folders[directory]) || [...desired.values()].some(item => item.type === 'folder' && item.row.fsSource === directory && identity(item.path) !== identity(directory))) throw new Error('Der Ordner muss vor der Dateioperation vollständig eingelesen und vorbereitet werden.');
     }
     if (filesystemDigest(after) === baseline.digest) {
       const state = { ...clone(after), snapshotId: baseline.state.snapshotId };
@@ -664,7 +720,10 @@ function createProvider(options = {}) {
       snapshot = null;
       throw createOperationError('cleanup-failed', { cause: error, paths: [...backups.values()] });
     }
-    const next = inheritedPanes(await load({ directories: await availableViewDirectories([...baseline.loadedDirectories, ...newDirectories.map(item => item.path)].filter(directory => roots.includes(directory) || baseline.entries.get(identity(directory))?.root || desired.get(identity(directory))?.type === 'folder')) }), after);
+    const reloadDirectories = baseline.visibleOnly ? activeDirectories(after) : [...baseline.loadedDirectories, ...newDirectories.map(item => item.path)];
+    const next = inheritedPanes(await load({ directories: await availableViewDirectories(reloadDirectories.filter(directory => roots.includes(directory) || baseline.entries.get(identity(directory))?.root || desired.get(identity(directory))?.type === 'folder')), ...(baseline.visibleOnly ? { visibleOnly: true, deferredDirectories: deferredDirectories(after) } : {}) }), after);
+    const updatedPaths = [...staged.values(), ...removed, ...newDirectories].map(item => item.path).concat(caseChanges.flatMap(change => [change.original.path, change.target]));
+    next.updatedDirectories = activeDirectories(after).filter(directory => updatedPaths.some(target => below(target, directory)));
     snapshot.state = clone(next);
     return next;
   }
@@ -706,7 +765,7 @@ function createProvider(options = {}) {
     if (busy) throw new Error('Eine Dateisystemoperation läuft bereits.');
     if (!snapshot || before?.snapshotId !== snapshot.state.snapshotId || filesystemDigest(before) !== snapshot.digest) throw new Error('Der Dateisystem-Snapshot ist veraltet oder wurde verändert.');
     const directories = (settings.directories || []).map(allowed);
-    const fresh = await load({ directories: [...snapshot.loadedDirectories, ...directories], recursiveDirectories: settings.recursive ? directories : [], signal: settings.signal, onProgress: settings.onProgress });
+    const fresh = await load({ directories: settings.navigation ? directories : [...(snapshot.visibleOnly ? activeDirectories(before) : snapshot.loadedDirectories), ...directories], ...(settings.navigation ? { baseline: snapshot, refreshDirectories: directories, visibleDirectories: settings.visibleDirectories } : {}), recursiveDirectories: settings.recursive ? directories : [], signal: settings.signal, onProgress: settings.onProgress });
     const state = inheritedPanes(fresh, before);
     snapshot.state = clone(state);
     return state;
@@ -733,8 +792,9 @@ function createProvider(options = {}) {
         await options.deletePath(item.path, { recursive: true, useTrash: request.useTrash });
         completed++;
       }
-      const remainingDirectories = baseline.loadedDirectories.filter(directory => !targets.some(item => below(directory, item.path)));
-      const state = inheritedPanes(await load({ directories: await availableViewDirectories(remainingDirectories) }), before);
+      const remainingDirectories = (baseline.visibleOnly ? activeDirectories(before) : baseline.loadedDirectories).filter(directory => !targets.some(item => below(directory, item.path)));
+      const state = inheritedPanes(await load({ directories: await availableViewDirectories(remainingDirectories), ...(baseline.visibleOnly ? { visibleOnly: true, deferredDirectories: deferredDirectories(before) } : {}) }), before);
+      state.updatedDirectories = activeDirectories(before).filter(directory => targets.some(target => below(target.path, directory)));
       snapshot.state = clone(state);
       return state;
     } catch (error) {
