@@ -778,7 +778,7 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
       if (message?.type === 'selection-io') {
         if (typeof message.requestId !== 'string' || !/^selection-\d{1,15}$/.test(message.requestId)) return;
         let result;
-        try { result = await selectionIO(message.action, message.text, message.pathRanges); }
+        try { result = await selectionIO(message.action, message.text, message.pathRanges, message.pathStyle, process.platform); }
         catch (error) { result = { ok: false, error: t(error.message) }; }
         if (result.ok && !result.cancelled && message.action === 'copy' && panel === messagePanel) notifyClipboardChanged();
         if (panel === messagePanel && !listerDisposed) await messagePanel.webview.postMessage({ type: 'selection-io-result', requestId: message.requestId, ...result });
@@ -1591,7 +1591,7 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
   context.subscriptions.push(vscode.commands.registerCommand('bitfroest.transfer-name-parts', key => { if (panel && panelReady) panel.webview.postMessage({ type: 'action', action: 'transfer-name-parts', key }); }));
   context.subscriptions.push(vscode.commands.registerCommand('bitfroest.transfer-name-start', () => { if (panel && panelReady) panel.webview.postMessage({ type: 'action', action: 'transfer-name-start' }); }));
   context.subscriptions.push(vscode.commands.registerCommand('bitfroest.ignore-dialog-function-key', () => undefined));
-  for (const action of ['select-group', 'unselect-group', 'select-extension', 'unselect-extension', 'save-selection', 'restore-selection', 'save-selection-file', 'load-selection-file', 'copy-names', 'copy-full-names', 'copy-details', 'copy-full-details']) {
+  for (const action of ['select-group', 'unselect-group', 'select-extension', 'unselect-extension', 'save-selection', 'restore-selection', 'save-selection-file', 'load-selection-file', 'copy-names', 'copy-full-names', 'copy-full-names-slash', 'copy-details', 'copy-full-details']) {
     context.subscriptions.push(vscode.commands.registerCommand(`bitfroest.${action}`, options => { if (panel && panelReady) panel.webview.postMessage({ type: 'action', action, reverseDirectories: options?.reverseDirectories === true }); }));
   }
   context.subscriptions.push(vscode.commands.registerCommand('bitfroest.lister-action', action => { if (panel && panelReady && typeof action === 'string') panel.webview.postMessage({ type: 'action', action: `lister:${action}` }); }));

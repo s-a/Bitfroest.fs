@@ -9,13 +9,15 @@ function decode(bytes) {
 }
 function createSelectionIO(vscode, t = value => value, active = () => true, resolvePaths = async paths => paths) {
   let busy = false;
-  return async (action, text, pathRanges = []) => {
+  return async (action, text, pathRanges = [], pathStyle = 'native', platform = process.platform) => {
+    if (!['native', 'slash'].includes(pathStyle)) throw new Error(t('Ungültige Auswahlübertragung.'));
     if (!['copy', 'save', 'load'].includes(action) || action !== 'load' && (typeof text !== 'string' || Buffer.byteLength(text, 'utf16le') > limit)) throw new Error(t('Ungültige Auswahlübertragung.'));
     let end = 0;
     if (!Array.isArray(pathRanges) || pathRanges.some(range => {
       if (action !== 'copy' || !Number.isSafeInteger(range?.start) || !Number.isSafeInteger(range?.length) || range.length < 1 || range.start < end || range.start + range.length > text.length) return true;
       end = range.start + range.length; return false;
     })) throw new Error(t('Ungültige Auswahlübertragung.'));
+    if (pathStyle === 'slash' && (action !== 'copy' || !pathRanges.length)) throw new Error(t('Ungültige Auswahlübertragung.'));
     if (busy) throw new Error(t('Eine Auswahlübertragung läuft bereits.'));
     busy = true;
     try {
@@ -27,7 +29,8 @@ function createSelectionIO(vscode, t = value => value, active = () => true, reso
           try { resolved = await resolvePaths(originals); } catch { resolved = originals; }
           let copied = '', offset = 0;
           for (const [index, range] of pathRanges.entries()) {
-            const replacement = Array.isArray(resolved) && typeof resolved[index] === 'string' && !/[\r\n\t\0]/.test(resolved[index]) ? resolved[index] : originals[index];
+            let replacement = Array.isArray(resolved) && typeof resolved[index] === 'string' && !/[\r\n\t\0]/.test(resolved[index]) ? resolved[index] : originals[index];
+            if (pathStyle === 'slash' && platform === 'win32') replacement = replacement.replace(/\\/g, '/');
             copied += text.slice(offset, range.start) + replacement; offset = range.start + range.length;
           }
           text = copied + text.slice(offset);

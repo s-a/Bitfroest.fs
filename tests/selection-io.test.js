@@ -46,6 +46,37 @@ test('path copy resolves only structured path ranges and preserves detail cells 
   assert.equal(calls[0].text, '\\\\files\\team\\a.txt\t12 B\r\n\\\\files\\team\\b.txt\t20 B');
   await io('copy', 'Z:\\name.txt'); assert.equal(requests.length, 1, 'plain name copies are not resolved');
 });
+
+test('slash path copies format resolved UNC paths and resolver fallbacks on Windows only', async () => {
+  const resolved = harness({ resolvePaths: async () => ['\\\\files\\share\\a.txt'] });
+  await resolved.io('copy', 'Z:\\a.txt', [{ start: 0, length: 8 }], 'slash', 'win32');
+  assert.equal(resolved.calls[0].text, '//files/share/a.txt');
+  const fallback = harness({ resolvePaths: async () => { throw new Error('offline'); } });
+  await fallback.io('copy', 'Z:\\a.txt', [{ start: 0, length: 8 }], 'slash', 'win32');
+  assert.equal(fallback.calls[0].text, 'Z:/a.txt');
+  const posix = harness();
+  await posix.io('copy', '/tmp/a\\b.txt', [{ start: 0, length: 12 }], 'slash', 'linux');
+  assert.equal(posix.calls[0].text, '/tmp/a\\b.txt');
+  await assert.rejects(posix.io('copy', 'x', [], 'unknown', 'linux'));
+});
+
+test('slash path copies preserve non-path cells and apply every Windows separator after resolution', async () => {
+  const first = 'C:\\work\\Ä one.txt', second = '\\\\host\\share\\z.txt';
+  const text = `${first}\tkeep\\this\r\n${second}`;
+  const app = harness();
+  await app.io('copy', text, [{ start: 0, length: first.length }, { start: text.indexOf(second), length: second.length }], 'slash', 'win32');
+  assert.equal(app.calls[0].text, 'C:/work/Ä one.txt\tkeep\\this\r\n//host/share/z.txt');
+  await app.io('copy', text, [{ start: 0, length: first.length }]);
+  assert.equal(app.calls[1].text, text, 'the ordinary copy format remains unchanged');
+});
+
+test('slash formatting is restricted to text copies with explicit path ranges', async () => {
+  const app = harness();
+  await assert.rejects(app.io('save', 'C:\\a.txt', [], 'slash', 'win32'), /Ungültige/);
+  await assert.rejects(app.io('load', undefined, [], 'slash', 'win32'), /Ungültige/);
+  await assert.rejects(app.io('copy', 'C:\\a.txt', [], 'slash', 'win32'), /Ungültige/);
+  assert.equal(app.calls.length, 0);
+});
 test('invalid path ranges cannot write text and disposal during resolution cancels the copy', async () => {
   const app = harness();
   for (const ranges of [[{ start: -1, length: 2 }], [{ start: 2, length: 40 }], [{ start: 0, length: 3 }, { start: 1, length: 3 }], 'invalid']) {

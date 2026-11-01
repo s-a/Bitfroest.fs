@@ -1865,13 +1865,13 @@
     const path = currentPath(p), tab = p.tabStates?.[p.tab]?.id, snapshot = state.snapshotId;
     return () => state.panes.includes(p) && currentPath(p) === path && p.tabStates?.[p.tab]?.id === tab && state.snapshotId === snapshot;
   }
-  function selectionIO(action, text, pathRanges, successMessage) {
+  function selectionIO(action, text, pathRanges, successMessage, pathStyle = 'native') {
     if (!host) { toast(t('Diese Auswahlaktion benötigt den Erweiterungshost.')); return; }
     const requestId = `selection-${++selectionSequence}`;
     toast(t('Auswahl wird übertragen…'), 'info');
     selectionRequests.set(requestId, { p: pane(), valid: selectionContext(pane()), action, statusVersion: statusbar.version, successMessage });
     statusTask(requestId, t('Auswahl wird übertragen…') + ` · ${t('Hostbestätigung')}`);
-    host.postMessage({ type: 'selection-io', requestId, action, text, ...(pathRanges?.length ? { pathRanges } : {}) });
+    host.postMessage({ type: 'selection-io', requestId, action, text, ...(pathRanges?.length ? { pathRanges } : {}), ...(pathStyle !== 'native' ? { pathStyle } : {}) });
   }
   window.addEventListener('message', event => {
     const message = event.data;
@@ -1948,9 +1948,9 @@
       selectionIO(command === 'save-selection-file' ? 'save' : 'load', rows.filter(row => p.selected.includes(row.id)).map(row => row.name).join('\r\n'));
       return true;
     }
-    if (['copy-names', 'copy-full-names', 'copy-details', 'copy-full-details'].includes(command)) {
+    if (['copy-names', 'copy-full-names', 'copy-full-names-slash', 'copy-details', 'copy-full-details'].includes(command)) {
       const marked = rows.filter(row => p.selected.includes(row.id)), picked = marked.length ? marked : rows.filter(row => row.id === p.cursor);
-      const full = command.includes('full'), details = command.includes('details');
+      const full = command.includes('full'), details = command.includes('details'), slash = command === 'copy-full-names-slash';
       const pathRanges = [];
       let offset = 0;
       const text = picked.map(row => {
@@ -1966,7 +1966,7 @@
         }).join('\t');
         offset++; return line;
       }).join('\r\n');
-      if (picked.length) selectionIO('copy', text, pathRanges);
+      if (picked.length) selectionIO('copy', text, pathRanges, undefined, slash ? 'slash' : 'native');
       return true;
     }
     if (['select-all', 'clear', 'invert'].includes(command)) {
@@ -2851,7 +2851,7 @@
       if (pane().tabStates?.[pane().tab]?.searchResult) return;
       hostAction('open-terminal', { path: currentPath(pane()) }); return;
     }
-    const selectionAction = ['select-group', 'unselect-group', 'select-all', 'clear', 'invert', 'select-extension', 'unselect-extension', 'save-selection', 'restore-selection', 'save-selection-file', 'load-selection-file', 'copy-names', 'copy-full-names', 'copy-details', 'copy-full-details'].includes(command);
+    const selectionAction = ['select-group', 'unselect-group', 'select-all', 'clear', 'invert', 'select-extension', 'unselect-extension', 'save-selection', 'restore-selection', 'save-selection-file', 'load-selection-file', 'copy-names', 'copy-full-names', 'copy-full-names-slash', 'copy-details', 'copy-full-details'].includes(command);
     if (selectionAction && ($('#modal').open || document.activeElement?.matches('input,textarea,select,[contenteditable="true"]'))) return;
     if (command === 'git-branches') { if (gitInfo(currentPath(pane()))?.repository) host?.postMessage({ type: 'git-branches', path: currentPath(pane()), snapshotId: state.snapshotId }); return; }
     if (command === 'settings') { hostAction('configure-settings'); return; }
@@ -3294,6 +3294,7 @@
     }
     if ((event.ctrlKey || event.metaKey) && event.target.closest('.list')) {
       if (event.altKey) return;
+      if (event.shiftKey && event.key.toLowerCase() === 'y' && event.ctrlKey) { event.preventDefault(); run('copy-full-names-slash'); return; }
       if (!event.shiftKey && event.key.toLowerCase() === 'y' && (event.ctrlKey || event.metaKey && document.body.dataset.platform === 'darwin')) { event.preventDefault(); run('copy-full-names'); return; }
       if (!event.altKey && !event.shiftKey && ['c', 'x', 'v'].includes(event.key.toLowerCase())) { event.preventDefault(); run(({ c: 'clipboard-copy', x: 'clipboard-cut', v: 'clipboard-paste' })[event.key.toLowerCase()]); return; }
       if (event.key.toLowerCase() === 'u') { event.preventDefault(); run(event.shiftKey ? 'swap' : 'swap-paths'); return; }

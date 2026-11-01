@@ -3,6 +3,24 @@ const assert = require('node:assert/strict');
 const { createApp } = require('./support/webview.cjs');
 const { catalog } = require('../shortcut-settings');
 const copy = catalog.find(item => item.command === 'bitfroest.copy' && item.key === 'f5');
+
+test('custom slash path shortcut suppresses its default and updates the visible menu hint', t => {
+  const app = createApp(t, undefined, { platform: 'win32' });
+  const entry = catalog.find(item => item.command === 'bitfroest.copy-full-names-slash');
+  app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'shortcut-settings', catalog, bindings: { [entry.id]: 'ctrl+shift+k' } } }));
+  const item = app.document.querySelector('[data-menu-action="copy-full-names-slash"]');
+  assert.ok(item);
+  assert.match(item.getAttribute('aria-keyshortcuts'), /Control\+Shift\+K/);
+  app.document.querySelector('.list').focus();
+  app.key('Y', { ctrlKey: true, shiftKey: true });
+  assert.equal(app.messages.some(message => message.type === 'selection-io'), false);
+  app.key('k', { ctrlKey: true, shiftKey: true });
+  assert.equal(app.messages.filter(message => message.type === 'shortcut-execute').at(-1).id, entry.id);
+  app.document.querySelector('.path-input').focus();
+  const before = app.messages.filter(message => message.type === 'shortcut-execute').length;
+  app.key('k', { ctrlKey: true, shiftKey: true });
+  assert.equal(app.messages.filter(message => message.type === 'shortcut-execute').length, before);
+});
 test('custom shortcut replaces the old DOM binding and preserves text input', t => {
   const app = createApp(t);
   app.click(app.row('README.md').querySelector('[data-filename]'));

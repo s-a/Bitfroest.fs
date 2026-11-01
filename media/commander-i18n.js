@@ -111,6 +111,7 @@
     'Auswahl in Datei speichern': 'Save selection to file', 'Auswahl aus Datei laden': 'Load selection from file',
     'Kopiere markierte Namen in Zwischenablage': 'Copy selected names to clipboard',
     'Kopiere Namen mit Pfad in Zwischenablage': 'Copy names with path to clipboard',
+    'Vollständige Pfade mit Schrägstrichen kopieren': 'Copy full paths with forward slashes',
     'Kopiere Namen mit allen Details': 'Copy names with all details',
     'Kopiere Namen mit Pfad+Details': 'Copy names with path and details',
     'Dateitypen': 'File types',

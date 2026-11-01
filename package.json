@@ -55,6 +55,11 @@
         "when": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.k8uf8ir"
       },
       {
+        "command": "bitfroest.copy-full-names-slash",
+        "key": "ctrl+shift+y",
+        "when": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.k1lbpxmk"
+      },
+      {
         "command": "bitfroest.select-group",
         "key": "numpad_add",
         "when": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype && bitfroest.listFocus && !bitfroest.textInput && webviewFocus && !bitfroest.shortcutOverride.kye6hkb"
@@ -869,6 +874,12 @@
       {
         "command": "bitfroest.copy-full-names",
         "title": "%command.bitfroest.copy-full-names.title%",
+        "category": "Bitfroest.fs",
+        "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype && bitfroest.listFocus && !bitfroest.textInput"
+      },
+      {
+        "command": "bitfroest.copy-full-names-slash",
+        "title": "%command.bitfroest.copy-full-names-slash.title%",
         "category": "Bitfroest.fs",
         "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype && bitfroest.listFocus && !bitfroest.textInput"
       },

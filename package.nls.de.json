@@ -15,6 +15,7 @@
   "command.bitfroest.load-selection-file.title": "Auswahl aus Datei laden",
   "command.bitfroest.copy-names.title": "Markierte Namen kopieren",
   "command.bitfroest.copy-full-names.title": "Namen mit Pfad kopieren",
+  "command.bitfroest.copy-full-names-slash.title": "Vollständige Pfade mit Schrägstrichen kopieren",
   "command.bitfroest.copy-details.title": "Namen mit Details kopieren",
   "command.bitfroest.copy-full-details.title": "Namen mit Pfad und Details kopieren",
   "files.selectDirectories.description": "Ordner beim Markieren von Gruppen, beim Markieren aller Einträge und beim Umkehren der Auswahl einbeziehen. Umschalt mit dem Nummernblockkürzel kehrt diese Option um.",

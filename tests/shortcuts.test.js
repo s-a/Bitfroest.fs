@@ -1,6 +1,19 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const model = require('../media/commander-shortcuts');
+
+test('slash path shortcut has an editable guarded native binding limited to file list focus', () => {
+  const manifest = require('../package.json');
+  const entry = model.createCatalog(manifest).find(item => item.command === 'bitfroest.copy-full-names-slash');
+  assert.equal(entry.key, 'ctrl+shift+y');
+  assert.equal(entry.editable, true);
+  const binding = manifest.contributes.keybindings.find(item => item.command === entry.command);
+  assert.ok(binding.when.includes(`!bitfroest.shortcutOverride.${entry.id}`));
+  for (const platform of ['win32', 'linux']) {
+    assert.equal(model.active(entry, { listFocus: true }, platform), true);
+    for (const focus of [{}, { textInput: true }, { listFocus: true, textInput: true }, { listerFocus: true }]) assert.equal(model.active(entry, focus, platform), false);
+  }
+});
 const manifest = require('../package.json');
 const catalog = model.createCatalog(manifest);
 const find = (command, key) => catalog.find(item => item.command === `bitfroest.${command}` && item.key === key);

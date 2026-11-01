@@ -15,6 +15,7 @@
   "command.bitfroest.load-selection-file.title": "Load selection from file",
   "command.bitfroest.copy-names.title": "Copy selected names",
   "command.bitfroest.copy-full-names.title": "Copy names with paths",
+  "command.bitfroest.copy-full-names-slash.title": "Copy full paths with forward slashes",
   "command.bitfroest.copy-details.title": "Copy names with details",
   "command.bitfroest.copy-full-details.title": "Copy names with paths and details",
   "files.selectDirectories.description": "Include folders when selecting groups, selecting all entries and inverting the selection. Shift with the numeric keypad shortcut reverses this option.",

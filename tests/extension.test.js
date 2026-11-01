@@ -547,6 +547,38 @@ test('path clipboard resolves host path ranges from real HTML while preserving d
   panel.dispose();
 });
 
+test('slash path command reaches the public clipboard through actual host HTML and preserves native copies', async t => {
+  const initial = clipboardFixture(); initial.panes[0].selected = ['a'];
+  initial.panes.forEach(pane => { pane.filter = ''; pane.sort = 'name'; });
+  const app = harness(t, { filesystemLoad: async () => initial, resolveUncPaths: async () => ['\\\\files\\team\\a.txt'] });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  assert.match(panel.webview.html, /Content-Security-Policy/);
+  assert.match(panel.webview.html, /script-src 'nonce-[^']+'/);
+  const view = require('./support/webview.cjs').createApp(t, initial, { html: panel.webview.html });
+  await app.command('bitfroest.copy-full-names-slash');
+  const action = panel.messages.filter(message => message.type === 'action' && message.action === 'copy-full-names-slash').at(-1);
+  assert.ok(action);
+  view.window.dispatchEvent(new view.window.MessageEvent('message', { data: action }));
+  const request = view.messages.filter(message => message.type === 'selection-io').at(-1);
+  assert.equal(request.pathStyle, 'slash');
+  await panel.receive(request);
+  assert.equal(app.clipboardCalls.at(-1).text, process.platform === 'win32' ? '//files/team/a.txt' : '\\\\files\\team\\a.txt');
+  const reply = panel.messages.find(message => message.type === 'selection-io-result' && message.requestId === request.requestId);
+  assert.equal(reply.ok, true);
+  view.window.dispatchEvent(new view.window.MessageEvent('message', { data: reply }));
+  const before = app.clipboardCalls.length;
+  await panel.receive({ ...request, requestId: 'selection-991', pathStyle: 'invalid' });
+  assert.equal(app.clipboardCalls.length, before);
+  assert.equal(panel.messages.find(message => message.requestId === 'selection-991').ok, false);
+  await app.command('bitfroest.copy-full-names');
+  view.action('copy-full-names');
+  await panel.receive(view.messages.filter(message => message.type === 'selection-io').at(-1));
+  assert.equal(app.clipboardCalls.at(-1).text, '\\\\files\\team\\a.txt');
+  panel.dispose();
+  await app.command('bitfroest.copy-full-names-slash');
+  assert.equal(app.clipboardCalls.length, before + 1);
+});
+
 test('panel disposal during UNC resolution prevents delayed clipboard writes', async t => {
   const initial = clipboardFixture(); let finish;
   const app = harness(t, { filesystemLoad: async () => initial, resolveUncPaths: () => new Promise(resolve => { finish = resolve; }) });

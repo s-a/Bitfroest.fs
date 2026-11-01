@@ -8,7 +8,7 @@
     'select-group': 'checklist', 'unselect-group': 'checklist', 'select-all': 'check-all', clear: 'remove', invert: 'selection',
     'select-extension': 'symbol-key', 'save-selection': 'save', 'restore-selection': 'history',
     'save-selection-file': 'save', 'load-selection-file': 'folder-opened',
-    'copy-names': 'copy', 'copy-full-names': 'copy', 'copy-details': 'copy', 'copy-full-details': 'copy',
+    'copy-names': 'copy', 'copy-full-names': 'copy', 'copy-full-names-slash': 'copy', 'copy-details': 'copy', 'copy-full-details': 'copy',
     search: 'search', 'search-separate': 'search', back: 'arrow-left', swap: 'arrow-swap', 'swap-paths': 'arrow-swap',
     'sort:name': 'sort-precedence', 'sort:type': 'symbol-key', 'sort:date': 'calendar', 'sort:size': 'symbol-numeric',
     refresh: 'refresh', settings: 'settings-gear', licenses: 'law',

@@ -14,10 +14,78 @@ function submit(app, value) {
   app.document.querySelector('#value').value = value;
   app.document.querySelector('#modal-form').dispatchEvent(new app.window.Event('submit', { bubbles: true, cancelable: true }));
 }
-test('selection menu contains the fourteen reference commands and omits directory comparisons', t => {
+test('selection menu contains the reference commands and the requested slash path extension', t => {
   const app = createApp(t, fixture());
   const commands = [...app.document.querySelectorAll('[data-group="Markierung"][data-menu-action]')].map(row => row.dataset.menuAction);
-  assert.deepEqual(commands, ['select-group', 'unselect-group', 'select-all', 'clear', 'invert', 'select-extension', 'save-selection', 'restore-selection', 'save-selection-file', 'load-selection-file', 'copy-names', 'copy-full-names', 'copy-details', 'copy-full-details']);
+  assert.deepEqual(commands, ['select-group', 'unselect-group', 'select-all', 'clear', 'invert', 'select-extension', 'save-selection', 'restore-selection', 'save-selection-file', 'load-selection-file', 'copy-names', 'copy-full-names', 'copy-full-names-slash', 'copy-details', 'copy-full-details']);
+});
+
+test('slash path shortcut copies marked names in displayed order and preserves ordinary Ctrl+Y', t => {
+  const state = fixture(); state.panes[0].selected = ['b', 'a'];
+  const app = createApp(t, state, { platform: 'win32' });
+  app.key('Y', { ctrlKey: true, shiftKey: true });
+  const request = app.messages.filter(message => message.type === 'selection-io').at(-1);
+  assert.equal(request.pathStyle, 'slash');
+  assert.equal(request.text, '/left/a.TXT\r\n/left/b.txt');
+  assert.deepEqual(Array.from(request.pathRanges, range => request.text.slice(range.start, range.start + range.length)), ['/left/a.TXT', '/left/b.txt']);
+  assert.deepEqual(app.state().panes[0].selected, ['b', 'a']);
+  app.key('y', { ctrlKey: true });
+  assert.equal(app.messages.filter(message => message.type === 'selection-io').at(-1).pathStyle, undefined);
+});
+
+test('slash path menu is localized and uses the cursor fallback without intercepting text or dialogs', t => {
+  for (const [language, label] of [['de', 'Vollständige Pfade mit Schrägstrichen kopieren'], ['en', 'Copy full paths with forward slashes']]) {
+    const app = createApp(t, fixture(), { language, platform: 'linux' });
+    const item = app.document.querySelector('[data-menu-action="copy-full-names-slash"]');
+    assert.ok(item);
+    assert.ok(item.textContent.includes(label));
+    assert.match(item.getAttribute('aria-keyshortcuts'), /Control\+Shift\+Y/);
+    app.click(item);
+    assert.equal(app.messages.filter(message => message.type === 'selection-io').at(-1).text, '/left/a.TXT');
+    const before = app.messages.filter(message => message.type === 'selection-io').length;
+    app.action('path'); app.key('Y', { ctrlKey: true, shiftKey: true }, app.document.activeElement); app.action('copy-full-names-slash');
+    assert.equal(app.messages.filter(message => message.type === 'selection-io').length, before);
+  }
+  const app = createApp(t, fixture()); app.action('select-group');
+  app.key('Y', { ctrlKey: true, shiftKey: true }, app.document.querySelector('#value')); app.action('copy-full-names-slash');
+  assert.equal(app.messages.some(message => message.type === 'selection-io'), false);
+});
+
+test('slash path shortcut preserves POSIX backslash names and uses only the active pane', t => {
+  const state = fixture(); state.active = 1; state.panes[0].selected = ['b'];
+  state.folders['/right'] = [{ id: 'right-file', name: 'name\\part.txt', type: 'text' }]; state.panes[1].cursor = 'right-file';
+  const app = createApp(t, state, { platform: 'linux' });
+  app.key('Y', { ctrlKey: true, shiftKey: true });
+  const request = app.messages.filter(message => message.type === 'selection-io').at(-1);
+  assert.equal(request.text, '/right/name\\part.txt');
+  assert.equal(request.pathStyle, 'slash');
+  assert.deepEqual(app.state().panes[0].selected, ['b']);
+});
+
+test('slash path shortcut does not copy an empty list', t => {
+  const state = fixture(); state.folders['/left'] = []; state.panes[0].cursor = null;
+  const app = createApp(t, state);
+  app.key('Y', { ctrlKey: true, shiftKey: true });
+  app.action('copy-full-names-slash');
+  assert.equal(app.messages.some(message => message.type === 'selection-io'), false);
+});
+
+test('slash path copies retain search result source paths and opaque archive locations', t => {
+  const search = fixture(), source = 'C:/outside/project/hit.txt';
+  search.folders['/left'] = [{ id: 'hit', name: 'hit.txt', type: 'text', fsSource: source }]; search.panes[0].cursor = 'hit';
+  search.folders['C:/outside/project'] = search.folders['/left'];
+  search.panes[0].tabStates = [{ path: '/left', searchResult: { id: 'result', source: '/left', paths: [source] } }];
+  const results = createApp(t, search, { platform: 'win32' }); results.action('copy-full-names-slash');
+  assert.equal(results.messages.filter(message => message.type === 'selection-io').at(-1).text, 'C:\\outside\\project\\hit.txt');
+  const archive = fixture(), location = 'zip:C%3A%2Ftmp%2Fsample.zip!/nested';
+  archive.panes[0].tabs = [location]; archive.panes[0].cursor = 'note';
+  archive.folders[location] = [{ id: 'note', name: 'note.txt', type: 'text' }];
+  archive.archiveLocations = { [location]: { archive: 'C:/tmp/sample.zip', entry: 'nested', parent: 'zip:C%3A%2Ftmp%2Fsample.zip!' } };
+  const inside = createApp(t, archive, { platform: 'win32' }); inside.action('copy-full-names'); inside.action('copy-full-names-slash');
+  const requests = inside.messages.filter(message => message.type === 'selection-io');
+  assert.equal(requests[1].text, requests[0].text);
+  assert.ok(requests[1].text.endsWith('/nested/note.txt'));
+  assert.equal(requests[1].pathStyle, 'slash');
 });
 test('selection commands and keypad bindings use native focus contexts and localized settings', () => {
   const manifest = require('../package.json');
