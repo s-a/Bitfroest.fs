@@ -1561,9 +1561,7 @@
           if (forcedKey !== undefined ? key !== forcedKey : manual[key]) continue;
           const button = header.querySelector('[data-sort]'), headerStyle = getComputedStyle(button);
           context.font = headerStyle.font || `${headerStyle.fontSize || '12px'} ${headerStyle.fontFamily || 'sans-serif'}`;
-          const controls = header.querySelector('.history-controls');
-          const inset = controls ? [...controls.children].reduce((width, button) => width + (parseFloat(getComputedStyle(button).width) || 0), 0)
-            : header.classList.contains('filename-column') ? fileIconSize + grid.gap + markerWidth + (markerWidth ? grid.gap : 0) : 0;
+          const inset = header.classList.contains('filename-column') ? fileIconSize + grid.gap + markerWidth + (markerWidth ? grid.gap : 0) : 0;
           const padding = 10 + (button.querySelector('.column-sort') ? fileIconSize + grid.gap : 0);
           widths.set(key, context.measureText(button.querySelector('.column-caption').textContent).width + padding + inset);
         }

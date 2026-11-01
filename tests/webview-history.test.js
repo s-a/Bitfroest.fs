@@ -106,7 +106,20 @@ test('history icons switch from outline to fill on hover and focus, with disable
   assert.equal(button(app, 'back').querySelector('svg').dataset.iconReviewed, 'status:forward');
   assert.equal(button(app, 'back').querySelector('.history-filled svg').dataset.iconReviewed, 'status:forward-fill');
   assert.equal(app.window.getComputedStyle(button(app, 'back').querySelector('svg')).transform, 'scaleX(-1)');
-  assert.equal(app.window.getComputedStyle(button(app, 'back')).width, '20px');
+  assert.equal(app.window.getComputedStyle(button(app, 'back')).width, '8px');
+  assert.equal(app.window.getComputedStyle(button(app, 'back').querySelector('svg')).width, '8px');
+  assert.equal(app.window.getComputedStyle(button(app, 'back').querySelector('svg')).height, '8px');
+  const header = pane(app).querySelector('[data-column="name"]');
+  const controls = header.querySelector('.history-controls');
+  assert.equal(app.window.getComputedStyle(controls).position, 'absolute');
+  const rules = [...style.sheet.cssRules].filter(rule => rule.selectorText);
+  const padding = element => rules.filter(rule => element.matches(rule.selectorText) && rule.style.getPropertyValue('padding-left'))
+    .at(-1)?.style.getPropertyValue('padding-left');
+  assert.equal(padding(header.querySelector('[data-sort]')), padding(pane(app).querySelector('.parent-row .filename')));
+  const rule = selector => rules.find(rule => rule.selectorText === selector)?.style;
+  assert.equal(rule('.file-table th .history-controls button').getPropertyValue('max-width'), 'calc(var(--icon-base-size) / 2)');
+  assert.equal(rule('.history-controls svg').getPropertyValue('max-width'), 'calc(var(--icon-base-size) / 2)');
+  assert.equal(rule('.history-controls svg').getPropertyValue('max-height'), 'calc(var(--icon-base-size) / 2)');
 });
 
 test('history menu selects its own pane and supports keyboard selection without starting a column drag', t => {
