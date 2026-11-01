@@ -2,7 +2,7 @@
   "name": "bitfroest-fs-prototype",
   "displayName": "Bitfroest.fs (Beta)",
   "description": "%extension.description%",
-  "version": "0.0.29",
+  "version": "0.0.35",
   "preview": true,
   "publisher": "bitfroest",
   "author": "Stephan Ahlf",
@@ -137,7 +137,7 @@
       {
         "command": "bitfroest.shell-context-menu",
         "key": "shift+f10",
-        "when": "isWindows && bitfroest.ready && activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.k1opszch"
+        "when": "isWindows && bitfroest.ready && activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.k1opszch && config.bitfroest.files.useSystemContextMenu"
       },
       {
         "command": "bitfroest.rename-one",
@@ -196,12 +196,12 @@
       {
         "command": "bitfroest.next-tab",
         "key": "ctrl+tab",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.kqztrg3"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.tabFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.kqztrg3"
       },
       {
         "command": "bitfroest.previous-tab",
         "key": "ctrl+shift+tab",
-        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.k1o87ddq"
+        "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.tabFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.k1o87ddq"
       },
       {
         "command": "bitfroest.refresh",
@@ -802,6 +802,11 @@
     ],
     "commands": [
       {
+        "command": "bitfroest.gitDiff",
+        "title": "%git.diff.title%",
+        "category": "Git"
+      },
+      {
         "command": "bitfroest.open-terminal",
         "title": "%command.bitfroest.open-terminal.title%",
         "category": "Bitfroest.fs",
@@ -899,6 +904,16 @@
       {
         "command": "bitfroest.openPrototype",
         "title": "%command.bitfroest.openPrototype.title%"
+      },
+      {
+        "command": "bitfroest.show",
+        "title": "%command.bitfroest.show.title%",
+        "category": "Bitfroest.fs"
+      },
+      {
+        "command": "bitfroest.copyStartupLog",
+        "title": "%command.bitfroest.copyStartupLog.title%",
+        "category": "Bitfroest.fs"
       },
       {
         "command": "bitfroest.view",
@@ -1179,7 +1194,7 @@
         "command": "bitfroest.clipboard-paste",
         "title": "%commands.clipboard-paste.title%",
         "category": "Bitfroest.fs",
-        "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype"
+        "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype && bitfroest.canPasteFiles"
       },
       {
         "command": "bitfroest.shell-context-menu",
@@ -1235,12 +1250,22 @@
     ],
     "submenus": [
       {
+        "id": "bitfroest.git",
+        "label": "Git"
+      },
+      {
         "id": "bitfroest.menu",
         "label": "Bitfroest.fs",
         "icon": "$(menu)"
       }
     ],
     "menus": {
+      "bitfroest.git": [
+        {
+          "command": "bitfroest.gitDiff",
+          "group": "1_diff"
+        }
+      ],
       "editor/title": [
         {
           "command": "bitfroest.swap",
@@ -1307,14 +1332,6 @@
           "group": "5_layout@1"
         },
         {
-          "command": "bitfroest.reset",
-          "group": "6_demo@1"
-        },
-        {
-          "command": "bitfroest.help",
-          "group": "6_demo@2"
-        },
-        {
           "command": "bitfroest.licenses",
           "group": "7_help@1"
         },
@@ -1343,16 +1360,8 @@
           "group": "5_tabs@20"
         },
         {
-          "command": "bitfroest.filter",
-          "group": "5_tabs@21"
-        },
-        {
           "command": "bitfroest.path",
           "group": "5_tabs@22"
-        },
-        {
-          "command": "bitfroest.background-tab",
-          "group": "5_tabs@23"
         },
         {
           "command": "bitfroest.open-dir-tab",
@@ -1387,13 +1396,13 @@
         },
         {
           "command": "bitfroest.inspect-folder-locks",
-          "when": "!isWindows && (isLinux || isMac) && bitfroest.ready && webviewId == bitfroestPrototype && webviewSection == folder",
+          "when": "(isWindows || isLinux) && bitfroest.ready && webviewId == bitfroestPrototype && webviewSection == folder",
           "group": "2_inspection"
         },
         {
-          "submenu": "bitfroest.menu",
-          "when": "bitfroest.ready && webviewId == bitfroestPrototype && webviewSection != textInput",
-          "group": "navigation@1"
+          "submenu": "bitfroest.git",
+          "when": "bitfroest.ready && webviewId == bitfroestPrototype && webviewSection == files && webviewSection != textInput && webviewSection != address && gitFile",
+          "group": "2_git"
         },
         {
           "command": "bitfroest.configureColumns",
@@ -1402,21 +1411,25 @@
         },
         {
           "command": "bitfroest.clipboard-copy",
-          "when": "bitfroest.ready && webviewId == bitfroestPrototype && webviewSection != columns && webviewSection != textInput",
-          "group": "1_fileclipboard"
+          "when": "bitfroest.ready && webviewId == bitfroestPrototype && webviewSection != columns && webviewSection != textInput && webviewSection != address && webviewSection != fileBackground",
+          "group": "1_fileclipboard@1"
         },
         {
           "command": "bitfroest.clipboard-cut",
-          "when": "bitfroest.ready && webviewId == bitfroestPrototype && webviewSection != columns && webviewSection != textInput",
-          "group": "1_fileclipboard"
+          "when": "bitfroest.ready && webviewId == bitfroestPrototype && webviewSection != columns && webviewSection != textInput && webviewSection != address && webviewSection != fileBackground",
+          "group": "1_fileclipboard@2"
         },
         {
           "command": "bitfroest.clipboard-paste",
-          "when": "bitfroest.ready && webviewId == bitfroestPrototype && webviewSection != columns && webviewSection != textInput",
-          "group": "1_fileclipboard"
+          "when": "bitfroest.ready && webviewId == bitfroestPrototype && webviewSection != columns && webviewSection != textInput && webviewSection != address",
+          "group": "1_fileclipboard@3"
         }
       ],
       "commandPalette": [
+        {
+          "command": "bitfroest.gitDiff",
+          "when": "false"
+        },
         {
           "command": "bitfroest.select-group",
           "when": "activeWebviewPanelId == bitfroestPrototype"
@@ -1519,11 +1532,11 @@
         },
         {
           "command": "bitfroest.reset",
-          "when": "activeWebviewPanelId == bitfroestPrototype"
+          "when": "false"
         },
         {
           "command": "bitfroest.help",
-          "when": "activeWebviewPanelId == bitfroestPrototype"
+          "when": "false"
         },
         {
           "command": "bitfroest.chooseTabMode",
@@ -1667,6 +1680,34 @@
               "minLength": 1,
               "maxLength": 80
             }
+          },
+          "bitfroest.appearance.iconSize": {
+            "type": "integer",
+            "default": 16,
+            "minimum": 12,
+            "maximum": 48,
+            "scope": "window",
+            "description": "%appearance.iconSize%"
+          },
+          "bitfroest.files.useSystemContextMenu": {
+            "type": "boolean",
+            "default": false,
+            "scope": "resource",
+            "description": "%files.useSystemContextMenu.description%"
+          },
+          "bitfroest.files.commentEncoding": {
+            "type": "string",
+            "default": "windows-1252",
+            "scope": "resource",
+            "enum": [
+              "windows-1252",
+              "utf-8",
+              "utf-16le",
+              "windows-1251",
+              "ibm866",
+              "shift_jis"
+            ],
+            "description": "%files.commentEncoding.description%"
           }
         }
       },
@@ -1696,41 +1737,31 @@
                 "columns": [
                   {
                     "id": "name",
-                    "title": "%columns.standard.name%",
                     "field": "[=file.name]",
-                    "width": 260,
                     "align": "left",
                     "visible": true
                   },
                   {
                     "id": "type",
-                    "title": "%columns.standard.type%",
                     "field": "[=file.ext]",
-                    "width": 88,
                     "align": "left",
                     "visible": true
                   },
                   {
                     "id": "size",
-                    "title": "%columns.standard.size%",
                     "field": "[=file.size.auto]",
-                    "width": 96,
                     "align": "right",
                     "visible": true
                   },
                   {
                     "id": "date",
-                    "title": "%columns.standard.date%",
                     "field": "[=file.writedate]",
-                    "width": 154,
                     "align": "left",
                     "visible": true
                   },
                   {
                     "id": "attributes",
-                    "title": "%columns.standard.attributes%",
                     "field": "[=file.attributes]",
-                    "width": 72,
                     "align": "left",
                     "visible": true
                   }
@@ -1765,7 +1796,6 @@
                     "additionalProperties": false,
                     "required": [
                       "id",
-                      "title",
                       "field"
                     ],
                     "properties": {
@@ -1774,20 +1804,9 @@
                         "minLength": 1,
                         "description": "%columns.option.column.id%"
                       },
-                      "title": {
-                        "type": "string",
-                        "description": "%columns.option.column.title%"
-                      },
                       "field": {
                         "type": "string",
                         "description": "%configuration.properties.bitfroest.columns.sets.items.properties.columns.items.properties.field.description%"
-                      },
-                      "width": {
-                        "type": "number",
-                        "minimum": 32,
-                        "maximum": 1600,
-                        "default": 120,
-                        "description": "%columns.option.column.width%"
                       },
                       "align": {
                         "type": "string",
@@ -1887,54 +1906,6 @@
             "uniqueItems": true,
             "deprecationMessage": "%configuration.managedByEditor%"
           },
-          "bitfroest.columns.titles": {
-            "type": "object",
-            "scope": "window",
-            "default": {
-              "standard.name": "%columns.standard.name%",
-              "standard.type": "%columns.standard.type%",
-              "standard.size": "%columns.standard.size%",
-              "standard.date": "%columns.standard.date%",
-              "standard.attributes": "%columns.standard.attributes%"
-            },
-            "order": 14,
-            "tags": [
-              "columnSettings"
-            ],
-            "markdownDescription": "%columns.tables.titles.description%",
-            "additionalProperties": {
-              "type": "string"
-            },
-            "propertyNames": {
-              "pattern": "^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$"
-            },
-            "deprecationMessage": "%configuration.managedByEditor%"
-          },
-          "bitfroest.columns.widths": {
-            "type": "object",
-            "scope": "window",
-            "default": {
-              "standard.name": 260,
-              "standard.type": 88,
-              "standard.size": 96,
-              "standard.date": 154,
-              "standard.attributes": 72
-            },
-            "order": 15,
-            "tags": [
-              "columnSettings"
-            ],
-            "markdownDescription": "%columns.tables.widths.description%",
-            "additionalProperties": {
-              "type": "number",
-              "minimum": 32,
-              "maximum": 1600
-            },
-            "propertyNames": {
-              "pattern": "^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$"
-            },
-            "deprecationMessage": "%configuration.managedByEditor%"
-          },
           "bitfroest.columns.alignments": {
             "type": "object",
             "scope": "window",
@@ -2007,35 +1978,6 @@
             "description": "%columns.fixed.visible.name%",
             "deprecationMessage": "%configuration.managedByEditor%"
           },
-          "bitfroest.columns.width.name": {
-            "type": "number",
-            "default": 260,
-            "scope": "window",
-            "order": 100,
-            "tags": [
-              "columnSettings"
-            ],
-            "description": "%columns.fixed.width.name%",
-            "enum": [
-              64,
-              72,
-              80,
-              88,
-              96,
-              120,
-              154,
-              160,
-              200,
-              260,
-              320,
-              400,
-              600,
-              800,
-              1200,
-              1600
-            ],
-            "deprecationMessage": "%configuration.managedByEditor%"
-          },
           "bitfroest.columns.alignment.name": {
             "type": "string",
             "default": "left",
@@ -2083,17 +2025,6 @@
             ],
             "deprecationMessage": "%configuration.managedByEditor%"
           },
-          "bitfroest.columns.title.name": {
-            "type": "string",
-            "default": "",
-            "scope": "window",
-            "order": 400,
-            "tags": [
-              "columnSettings"
-            ],
-            "description": "%columns.fixed.title.name%",
-            "deprecationMessage": "%configuration.managedByEditor%"
-          },
           "bitfroest.columns.visible.type": {
             "type": "boolean",
             "default": true,
@@ -2103,35 +2034,6 @@
               "columnSettings"
             ],
             "description": "%columns.fixed.visible.type%",
-            "deprecationMessage": "%configuration.managedByEditor%"
-          },
-          "bitfroest.columns.width.type": {
-            "type": "number",
-            "default": 88,
-            "scope": "window",
-            "order": 101,
-            "tags": [
-              "columnSettings"
-            ],
-            "description": "%columns.fixed.width.type%",
-            "enum": [
-              64,
-              72,
-              80,
-              88,
-              96,
-              120,
-              154,
-              160,
-              200,
-              260,
-              320,
-              400,
-              600,
-              800,
-              1200,
-              1600
-            ],
             "deprecationMessage": "%configuration.managedByEditor%"
           },
           "bitfroest.columns.alignment.type": {
@@ -2181,17 +2083,6 @@
             ],
             "deprecationMessage": "%configuration.managedByEditor%"
           },
-          "bitfroest.columns.title.type": {
-            "type": "string",
-            "default": "",
-            "scope": "window",
-            "order": 401,
-            "tags": [
-              "columnSettings"
-            ],
-            "description": "%columns.fixed.title.type%",
-            "deprecationMessage": "%configuration.managedByEditor%"
-          },
           "bitfroest.columns.visible.size": {
             "type": "boolean",
             "default": true,
@@ -2201,35 +2092,6 @@
               "columnSettings"
             ],
             "description": "%columns.fixed.visible.size%",
-            "deprecationMessage": "%configuration.managedByEditor%"
-          },
-          "bitfroest.columns.width.size": {
-            "type": "number",
-            "default": 96,
-            "scope": "window",
-            "order": 102,
-            "tags": [
-              "columnSettings"
-            ],
-            "description": "%columns.fixed.width.size%",
-            "enum": [
-              64,
-              72,
-              80,
-              88,
-              96,
-              120,
-              154,
-              160,
-              200,
-              260,
-              320,
-              400,
-              600,
-              800,
-              1200,
-              1600
-            ],
             "deprecationMessage": "%configuration.managedByEditor%"
           },
           "bitfroest.columns.alignment.size": {
@@ -2279,17 +2141,6 @@
             ],
             "deprecationMessage": "%configuration.managedByEditor%"
           },
-          "bitfroest.columns.title.size": {
-            "type": "string",
-            "default": "",
-            "scope": "window",
-            "order": 402,
-            "tags": [
-              "columnSettings"
-            ],
-            "description": "%columns.fixed.title.size%",
-            "deprecationMessage": "%configuration.managedByEditor%"
-          },
           "bitfroest.columns.visible.date": {
             "type": "boolean",
             "default": true,
@@ -2299,35 +2150,6 @@
               "columnSettings"
             ],
             "description": "%columns.fixed.visible.date%",
-            "deprecationMessage": "%configuration.managedByEditor%"
-          },
-          "bitfroest.columns.width.date": {
-            "type": "number",
-            "default": 154,
-            "scope": "window",
-            "order": 103,
-            "tags": [
-              "columnSettings"
-            ],
-            "description": "%columns.fixed.width.date%",
-            "enum": [
-              64,
-              72,
-              80,
-              88,
-              96,
-              120,
-              154,
-              160,
-              200,
-              260,
-              320,
-              400,
-              600,
-              800,
-              1200,
-              1600
-            ],
             "deprecationMessage": "%configuration.managedByEditor%"
           },
           "bitfroest.columns.alignment.date": {
@@ -2377,17 +2199,6 @@
             ],
             "deprecationMessage": "%configuration.managedByEditor%"
           },
-          "bitfroest.columns.title.date": {
-            "type": "string",
-            "default": "",
-            "scope": "window",
-            "order": 403,
-            "tags": [
-              "columnSettings"
-            ],
-            "description": "%columns.fixed.title.date%",
-            "deprecationMessage": "%configuration.managedByEditor%"
-          },
           "bitfroest.columns.visible.attributes": {
             "type": "boolean",
             "default": true,
@@ -2397,35 +2208,6 @@
               "columnSettings"
             ],
             "description": "%columns.fixed.visible.attributes%",
-            "deprecationMessage": "%configuration.managedByEditor%"
-          },
-          "bitfroest.columns.width.attributes": {
-            "type": "number",
-            "default": 72,
-            "scope": "window",
-            "order": 104,
-            "tags": [
-              "columnSettings"
-            ],
-            "description": "%columns.fixed.width.attributes%",
-            "enum": [
-              64,
-              72,
-              80,
-              88,
-              96,
-              120,
-              154,
-              160,
-              200,
-              260,
-              320,
-              400,
-              600,
-              800,
-              1200,
-              1600
-            ],
             "deprecationMessage": "%configuration.managedByEditor%"
           },
           "bitfroest.columns.alignment.attributes": {
@@ -2475,17 +2257,6 @@
             ],
             "deprecationMessage": "%configuration.managedByEditor%"
           },
-          "bitfroest.columns.title.attributes": {
-            "type": "string",
-            "default": "",
-            "scope": "window",
-            "order": 404,
-            "tags": [
-              "columnSettings"
-            ],
-            "description": "%columns.fixed.title.attributes%",
-            "deprecationMessage": "%configuration.managedByEditor%"
-          },
           "bitfroest.columns.visible.fullName": {
             "type": "boolean",
             "default": false,
@@ -2495,35 +2266,6 @@
               "columnSettings"
             ],
             "description": "%columns.fixed.visible.fullName%",
-            "deprecationMessage": "%configuration.managedByEditor%"
-          },
-          "bitfroest.columns.width.fullName": {
-            "type": "number",
-            "default": 260,
-            "scope": "window",
-            "order": 105,
-            "tags": [
-              "columnSettings"
-            ],
-            "description": "%columns.fixed.width.fullName%",
-            "enum": [
-              64,
-              72,
-              80,
-              88,
-              96,
-              120,
-              154,
-              160,
-              200,
-              260,
-              320,
-              400,
-              600,
-              800,
-              1200,
-              1600
-            ],
             "deprecationMessage": "%configuration.managedByEditor%"
           },
           "bitfroest.columns.alignment.fullName": {
@@ -2573,17 +2315,6 @@
             ],
             "deprecationMessage": "%configuration.managedByEditor%"
           },
-          "bitfroest.columns.title.fullName": {
-            "type": "string",
-            "default": "",
-            "scope": "window",
-            "order": 405,
-            "tags": [
-              "columnSettings"
-            ],
-            "description": "%columns.fixed.title.fullName%",
-            "deprecationMessage": "%configuration.managedByEditor%"
-          },
           "bitfroest.columns.visible.path": {
             "type": "boolean",
             "default": false,
@@ -2593,35 +2324,6 @@
               "columnSettings"
             ],
             "description": "%columns.fixed.visible.path%",
-            "deprecationMessage": "%configuration.managedByEditor%"
-          },
-          "bitfroest.columns.width.path": {
-            "type": "number",
-            "default": 320,
-            "scope": "window",
-            "order": 106,
-            "tags": [
-              "columnSettings"
-            ],
-            "description": "%columns.fixed.width.path%",
-            "enum": [
-              64,
-              72,
-              80,
-              88,
-              96,
-              120,
-              154,
-              160,
-              200,
-              260,
-              320,
-              400,
-              600,
-              800,
-              1200,
-              1600
-            ],
             "deprecationMessage": "%configuration.managedByEditor%"
           },
           "bitfroest.columns.alignment.path": {
@@ -2671,17 +2373,6 @@
             ],
             "deprecationMessage": "%configuration.managedByEditor%"
           },
-          "bitfroest.columns.title.path": {
-            "type": "string",
-            "default": "",
-            "scope": "window",
-            "order": 406,
-            "tags": [
-              "columnSettings"
-            ],
-            "description": "%columns.fixed.title.path%",
-            "deprecationMessage": "%configuration.managedByEditor%"
-          },
           "bitfroest.columns.visible.fullPath": {
             "type": "boolean",
             "default": false,
@@ -2691,35 +2382,6 @@
               "columnSettings"
             ],
             "description": "%columns.fixed.visible.fullPath%",
-            "deprecationMessage": "%configuration.managedByEditor%"
-          },
-          "bitfroest.columns.width.fullPath": {
-            "type": "number",
-            "default": 400,
-            "scope": "window",
-            "order": 107,
-            "tags": [
-              "columnSettings"
-            ],
-            "description": "%columns.fixed.width.fullPath%",
-            "enum": [
-              64,
-              72,
-              80,
-              88,
-              96,
-              120,
-              154,
-              160,
-              200,
-              260,
-              320,
-              400,
-              600,
-              800,
-              1200,
-              1600
-            ],
             "deprecationMessage": "%configuration.managedByEditor%"
           },
           "bitfroest.columns.alignment.fullPath": {
@@ -2769,17 +2431,6 @@
             ],
             "deprecationMessage": "%configuration.managedByEditor%"
           },
-          "bitfroest.columns.title.fullPath": {
-            "type": "string",
-            "default": "",
-            "scope": "window",
-            "order": 407,
-            "tags": [
-              "columnSettings"
-            ],
-            "description": "%columns.fixed.title.fullPath%",
-            "deprecationMessage": "%configuration.managedByEditor%"
-          },
           "bitfroest.columns.visible.writeTime": {
             "type": "boolean",
             "default": false,
@@ -2789,35 +2440,6 @@
               "columnSettings"
             ],
             "description": "%columns.fixed.visible.writeTime%",
-            "deprecationMessage": "%configuration.managedByEditor%"
-          },
-          "bitfroest.columns.width.writeTime": {
-            "type": "number",
-            "default": 120,
-            "scope": "window",
-            "order": 108,
-            "tags": [
-              "columnSettings"
-            ],
-            "description": "%columns.fixed.width.writeTime%",
-            "enum": [
-              64,
-              72,
-              80,
-              88,
-              96,
-              120,
-              154,
-              160,
-              200,
-              260,
-              320,
-              400,
-              600,
-              800,
-              1200,
-              1600
-            ],
             "deprecationMessage": "%configuration.managedByEditor%"
           },
           "bitfroest.columns.alignment.writeTime": {
@@ -2867,17 +2489,6 @@
             ],
             "deprecationMessage": "%configuration.managedByEditor%"
           },
-          "bitfroest.columns.title.writeTime": {
-            "type": "string",
-            "default": "",
-            "scope": "window",
-            "order": 408,
-            "tags": [
-              "columnSettings"
-            ],
-            "description": "%columns.fixed.title.writeTime%",
-            "deprecationMessage": "%configuration.managedByEditor%"
-          },
           "bitfroest.columns.visible.creationDate": {
             "type": "boolean",
             "default": false,
@@ -2887,35 +2498,6 @@
               "columnSettings"
             ],
             "description": "%columns.fixed.visible.creationDate%",
-            "deprecationMessage": "%configuration.managedByEditor%"
-          },
-          "bitfroest.columns.width.creationDate": {
-            "type": "number",
-            "default": 154,
-            "scope": "window",
-            "order": 109,
-            "tags": [
-              "columnSettings"
-            ],
-            "description": "%columns.fixed.width.creationDate%",
-            "enum": [
-              64,
-              72,
-              80,
-              88,
-              96,
-              120,
-              154,
-              160,
-              200,
-              260,
-              320,
-              400,
-              600,
-              800,
-              1200,
-              1600
-            ],
             "deprecationMessage": "%configuration.managedByEditor%"
           },
           "bitfroest.columns.alignment.creationDate": {
@@ -2965,17 +2547,6 @@
             ],
             "deprecationMessage": "%configuration.managedByEditor%"
           },
-          "bitfroest.columns.title.creationDate": {
-            "type": "string",
-            "default": "",
-            "scope": "window",
-            "order": 409,
-            "tags": [
-              "columnSettings"
-            ],
-            "description": "%columns.fixed.title.creationDate%",
-            "deprecationMessage": "%configuration.managedByEditor%"
-          },
           "bitfroest.columns.visible.creationTime": {
             "type": "boolean",
             "default": false,
@@ -2985,35 +2556,6 @@
               "columnSettings"
             ],
             "description": "%columns.fixed.visible.creationTime%",
-            "deprecationMessage": "%configuration.managedByEditor%"
-          },
-          "bitfroest.columns.width.creationTime": {
-            "type": "number",
-            "default": 120,
-            "scope": "window",
-            "order": 110,
-            "tags": [
-              "columnSettings"
-            ],
-            "description": "%columns.fixed.width.creationTime%",
-            "enum": [
-              64,
-              72,
-              80,
-              88,
-              96,
-              120,
-              154,
-              160,
-              200,
-              260,
-              320,
-              400,
-              600,
-              800,
-              1200,
-              1600
-            ],
             "deprecationMessage": "%configuration.managedByEditor%"
           },
           "bitfroest.columns.alignment.creationTime": {
@@ -3063,17 +2605,6 @@
             ],
             "deprecationMessage": "%configuration.managedByEditor%"
           },
-          "bitfroest.columns.title.creationTime": {
-            "type": "string",
-            "default": "",
-            "scope": "window",
-            "order": 410,
-            "tags": [
-              "columnSettings"
-            ],
-            "description": "%columns.fixed.title.creationTime%",
-            "deprecationMessage": "%configuration.managedByEditor%"
-          },
           "bitfroest.columns.visible.accessDate": {
             "type": "boolean",
             "default": false,
@@ -3083,35 +2614,6 @@
               "columnSettings"
             ],
             "description": "%columns.fixed.visible.accessDate%",
-            "deprecationMessage": "%configuration.managedByEditor%"
-          },
-          "bitfroest.columns.width.accessDate": {
-            "type": "number",
-            "default": 154,
-            "scope": "window",
-            "order": 111,
-            "tags": [
-              "columnSettings"
-            ],
-            "description": "%columns.fixed.width.accessDate%",
-            "enum": [
-              64,
-              72,
-              80,
-              88,
-              96,
-              120,
-              154,
-              160,
-              200,
-              260,
-              320,
-              400,
-              600,
-              800,
-              1200,
-              1600
-            ],
             "deprecationMessage": "%configuration.managedByEditor%"
           },
           "bitfroest.columns.alignment.accessDate": {
@@ -3161,17 +2663,6 @@
             ],
             "deprecationMessage": "%configuration.managedByEditor%"
           },
-          "bitfroest.columns.title.accessDate": {
-            "type": "string",
-            "default": "",
-            "scope": "window",
-            "order": 411,
-            "tags": [
-              "columnSettings"
-            ],
-            "description": "%columns.fixed.title.accessDate%",
-            "deprecationMessage": "%configuration.managedByEditor%"
-          },
           "bitfroest.columns.visible.accessTime": {
             "type": "boolean",
             "default": false,
@@ -3181,35 +2672,6 @@
               "columnSettings"
             ],
             "description": "%columns.fixed.visible.accessTime%",
-            "deprecationMessage": "%configuration.managedByEditor%"
-          },
-          "bitfroest.columns.width.accessTime": {
-            "type": "number",
-            "default": 120,
-            "scope": "window",
-            "order": 112,
-            "tags": [
-              "columnSettings"
-            ],
-            "description": "%columns.fixed.width.accessTime%",
-            "enum": [
-              64,
-              72,
-              80,
-              88,
-              96,
-              120,
-              154,
-              160,
-              200,
-              260,
-              320,
-              400,
-              600,
-              800,
-              1200,
-              1600
-            ],
             "deprecationMessage": "%configuration.managedByEditor%"
           },
           "bitfroest.columns.alignment.accessTime": {
@@ -3259,17 +2721,6 @@
             ],
             "deprecationMessage": "%configuration.managedByEditor%"
           },
-          "bitfroest.columns.title.accessTime": {
-            "type": "string",
-            "default": "",
-            "scope": "window",
-            "order": 412,
-            "tags": [
-              "columnSettings"
-            ],
-            "description": "%columns.fixed.title.accessTime%",
-            "deprecationMessage": "%configuration.managedByEditor%"
-          },
           "bitfroest.columns.layout": {
             "type": "array",
             "default": [],
@@ -3280,22 +2731,12 @@
               "additionalProperties": false,
               "required": [
                 "id",
-                "title",
-                "width",
                 "align",
                 "visible"
               ],
               "properties": {
                 "id": {
                   "type": "string"
-                },
-                "title": {
-                  "type": "string"
-                },
-                "width": {
-                  "type": "integer",
-                  "minimum": 32,
-                  "maximum": 1600
                 },
                 "align": {
                   "type": "string",
@@ -3553,7 +2994,7 @@
             "type": "integer",
             "minimum": 25,
             "maximum": 100,
-            "default": 66,
+            "default": 50,
             "scope": "window",
             "description": "%gitStatus.iconSizePercent%"
           }
@@ -4093,6 +3534,76 @@
               "*.eps": "#d7ba7d",
               "*.emf": "#d7ba7d",
               "*.wmf": "#d7ba7d",
+              "*.heif": "#d7ba7d",
+              "*.jxl": "#d7ba7d",
+              "*.apng": "#d7ba7d",
+              "*.psd": "#d7ba7d",
+              "*.psb": "#d7ba7d",
+              "*.xcf": "#d7ba7d",
+              "*.dng": "#d7ba7d",
+              "*.cr2": "#d7ba7d",
+              "*.cr3": "#d7ba7d",
+              "*.nef": "#d7ba7d",
+              "*.nrw": "#d7ba7d",
+              "*.arw": "#d7ba7d",
+              "*.orf": "#d7ba7d",
+              "*.rw2": "#d7ba7d",
+              "*.raf": "#d7ba7d",
+              "*.mp3": "#4ec9b0",
+              "*.wav": "#4ec9b0",
+              "*.flac": "#4ec9b0",
+              "*.aac": "#4ec9b0",
+              "*.m4a": "#4ec9b0",
+              "*.m4b": "#4ec9b0",
+              "*.ogg": "#4ec9b0",
+              "*.oga": "#4ec9b0",
+              "*.opus": "#4ec9b0",
+              "*.wma": "#4ec9b0",
+              "*.aif": "#4ec9b0",
+              "*.aiff": "#4ec9b0",
+              "*.alac": "#4ec9b0",
+              "*.ape": "#4ec9b0",
+              "*.amr": "#4ec9b0",
+              "*.ac3": "#4ec9b0",
+              "*.aiffc": "#4ec9b0",
+              "*.aifc": "#4ec9b0",
+              "*.mid": "#4ec9b0",
+              "*.midi": "#4ec9b0",
+              "*.mp4": "#ce9178",
+              "*.mkv": "#ce9178",
+              "*.mov": "#ce9178",
+              "*.avi": "#ce9178",
+              "*.webm": "#ce9178",
+              "*.m4v": "#ce9178",
+              "*.wmv": "#ce9178",
+              "*.mpeg": "#ce9178",
+              "*.mpg": "#ce9178",
+              "*.mpe": "#ce9178",
+              "*.mpv": "#ce9178",
+              "*.flv": "#ce9178",
+              "*.ogv": "#ce9178",
+              "*.3gp": "#ce9178",
+              "*.3g2": "#ce9178",
+              "*.m2ts": "#ce9178",
+              "*.vob": "#ce9178",
+              "*.srt": "#dcdcaa",
+              "*.vtt": "#dcdcaa",
+              "*.ass": "#dcdcaa",
+              "*.ssa": "#dcdcaa",
+              "*.sub": "#dcdcaa",
+              "*.sbv": "#dcdcaa",
+              "*.ttml": "#dcdcaa",
+              "*.m3u": "#c586c0",
+              "*.m3u8": "#c586c0",
+              "*.xspf": "#c586c0",
+              "*.wpl": "#c586c0",
+              "*.asx": "#c586c0",
+              "*.mobi": "#569cd6",
+              "*.azw": "#569cd6",
+              "*.azw3": "#569cd6",
+              "*.fb2": "#569cd6",
+              "*.cbz": "#569cd6",
+              "*.cbr": "#569cd6",
               "*.ttf": "#c586c0",
               "*.otf": "#c586c0",
               "*.woff": "#c586c0",
@@ -4113,6 +3624,11 @@
               "*.bz2": "#c586c0",
               "*.xz": "#c586c0",
               "*.zst": "#c586c0",
+              "*.cab": "#c586c0",
+              "*.lz": "#c586c0",
+              "*.lzma": "#c586c0",
+              "*.br": "#c586c0",
+              "*.lz4": "#c586c0",
               "*.jar": "#c8c8c8",
               "*.war": "#c8c8c8",
               "*.ear": "#c8c8c8",
@@ -4126,6 +3642,13 @@
               "*.deb": "#c8c8c8",
               "*.rpm": "#c8c8c8",
               "*.iso": "#c8c8c8",
+              "*.img": "#c8c8c8",
+              "*.dmg": "#c8c8c8",
+              "*.vhdx": "#c8c8c8",
+              "*.vmdk": "#c8c8c8",
+              "*.vdi": "#c8c8c8",
+              "*.qcow": "#c8c8c8",
+              "*.qcow2": "#c8c8c8",
               "*.exe": "#9a9a9a",
               "*.dll": "#9a9a9a",
               "*.so": "#9a9a9a",
@@ -4178,23 +3701,28 @@
     "package:beta": "npx --yes --package @vscode/vsce -- vsce package --pre-release --baseContentUrl https://github.com/s-a/Bitfroest.fs/blob/main/ --baseImagesUrl https://raw.githubusercontent.com/s-a/Bitfroest.fs/main/",
     "publish:beta": "npx --yes --package @vscode/vsce -- vsce publish --pre-release --baseContentUrl https://github.com/s-a/Bitfroest.fs/blob/main/ --baseImagesUrl https://raw.githubusercontent.com/s-a/Bitfroest.fs/main/",
     "preview": "node scripts/preview.cjs",
-    "check": "npm run check:zip && node --check network-paths.js && node --check selection-io.js && node --check license-information.js && node --check extension.js && node --check icon-theme.js && node --check filesystem-icons.js && node --check media/app.js && node --check media/webview-bootstrap.js && node --check media/commander-paths.js && node --check media/commander-file-names.js && node --check media/commander-tabs.js && node --check media/commander-columns.js && node --check media/commander-search.js && node --check scripts/preview.cjs && node --check filesystem-provider.js && node --check zip-provider.js && node --check zip-filesystem.js && node --check pe-file-version.js && node --check readonly-files.js && node --check clipboard-provider.js && node --check media/commander-clipboard.js && node --check native-copy.js && node --check native-rename.js && node --check operation-errors.js && node --check open-trash.js && node --check native-shell-menu.js && node --check media/commander-statusbar.js && node --check media/workbench-vendor.js && node --check media/workbench-icons.js && node --check lister-provider.js && node --check lister-codepages.js && node --check lister-search-worker.js && node --check media/commander-lister.js && node --check media/lister-view.js && node --check configuration-editor.js && node --check configuration-settings.js && node --check media/configuration-model.js && node --check media/configuration-view.js && node --check file-search.js && node --check file-search-worker.js && node --check search-provider.js && node --check search-metadata.js && node --check search-archives.js && node --check media/file-search-view.js && node --check media/search-duplicates.js && node --check git-status-engine.js && node --check git-status-paths.js && node --check git-status-provider.js && node --check git-status-worker.js && node --check folder-locks-posix.js && node --check folder-locks.js && node --check lock-inspector.js && node --check media/lock-inspector.js && node --check media/commander-file-colors.js && node --check scripts/generate-file-color-defaults.cjs && node --check media/git-status-icons.js && node --check startup-paths.js && node --check shortcut-settings.js && node --check media/commander-shortcuts.js && node --check media/shortcut-configuration.js && node --check media/shortcut-runtime.js",
+    "check": "npm run check:progress && npm run check:operations && npm run check:icons && npm run check:zip && node --check network-paths.js && node --check selection-io.js && node --check license-information.js && node --check extension.js && node --check icon-theme.js && node --check filesystem-icons.js && node --check media/app.js && node --check media/webview-bootstrap.js && node --check media/commander-jobs.js && node --check media/commander-paths.js && node --check media/commander-file-names.js && node --check media/commander-tabs.js && node --check media/commander-columns.js && node --check media/commander-search.js && node --check scripts/preview.cjs && node --check filesystem-provider.js && node --check zip-provider.js && node --check zip-filesystem.js && node --check pe-file-version.js && node --check content-comments.js && node --check readonly-files.js && node --check clipboard-provider.js && node --check media/commander-clipboard.js && node --check native-copy.js && node --check native-rename.js && node --check operation-errors.js && node --check open-trash.js && node --check native-shell-menu.js && node --check media/commander-statusbar.js && node --check media/workbench-vendor.js && node --check media/workbench-icons.js && node --check lister-provider.js && node --check lister-codepages.js && node --check lister-search-worker.js && node --check media/commander-lister.js && node --check media/lister-view.js && node --check configuration-editor.js && node --check configuration-settings.js && node --check media/configuration-model.js && node --check media/configuration-view.js && node --check file-search.js && node --check file-search-worker.js && node --check search-provider.js && node --check search-metadata.js && node --check search-archives.js && node --check media/file-search-view.js && node --check media/search-duplicates.js && node --check git-status-engine.js && node --check git-status-paths.js && node --check git-status-provider.js && node --check git-status-worker.js && node --check folder-locks-posix.js && node --check folder-locks.js && node --check lock-inspector.js && node --check media/lock-inspector.js && node --check media/commander-file-colors.js && node --check scripts/generate-file-color-defaults.cjs && node --check media/git-status-icons.js && node --check startup-paths.js && node --check shortcut-settings.js && node --check media/commander-shortcuts.js && node --check media/icon-layout.js && node --check media/commander-menu.js && node --check media/shortcut-configuration.js && node --check media/shortcut-runtime.js",
     "test": "node --test",
-    "test:architecture": "node --test tests/runtime-architecture-policy.test.js tests/product-runtime-architecture.test.js",
+    "test:architecture": "node --test tests/runtime-architecture-policy.test.js tests/product-runtime-architecture.test.js tests/icon-architecture.test.js tests/product-icons.test.js",
     "test:native": "node --test tests/native-terminal.test.js tests/native-api.test.js tests/native-binding.test.js tests/native-windows-queries.test.js tests/native-case-rename.test.js tests/native-network-direct.test.js tests/native-icons-api.test.js tests/native-desktop-api.test.js tests/native-window-actions.test.js tests/native-window.test.js tests/native-locks-api.test.js tests/native-async-lifecycle.test.js tests/native-clipboard-direct.test.js tests/native-copy.test.js tests/native-copy-session.test.js tests/native-copy-progress.test.js tests/native-copy-contract.test.js tests/native-copy-windows.test.js tests/native-default-routing.test.js tests/native-transfer-integration.test.js tests/git-status-native.test.js",
     "test:native:linux": "node --test tests/native-api.test.js tests/native-locks-linux-api.test.js tests/native-desktop-linux-api.test.js tests/folder-locks-linux-routing.test.js tests/folder-locks-posix.test.js tests/folder-locks-posix-native.test.js tests/open-file.test.js tests/open-trash.test.js",
-    "vscode:prepublish": "npm run test:architecture",
-    "coverage": "c8 --check-coverage --lines=95 --statements=95 --functions=95 --branches=90 --all --include=zip-*.js --include=search-archives.js --include=search-metadata.js --include=search-provider.js --include=file-search-worker.js --include=file-search.js --include=lister-provider.js --include=lister-codepages.js --include=lister-search-worker.js --include=git-status-engine.js --include=git-status-paths.js --include=git-status-provider.js --include=git-status-worker.js --include=network-paths.js --include=selection-io.js --include=startup-paths.js --include=extension.js --include=operation-errors.js --include=open-trash.js --include=native-copy.js --include=native-shell-menu.js --include=folder-locks.js --include=folder-locks-posix.js --include=lock-inspector.js --include=native-rename.js --include=clipboard-provider.js --include=icon-theme.js --include=filesystem-icons.js --include=filesystem-provider.js --include=pe-file-version.js --include=readonly-files.js --include=media/*.js --reporter=text --reporter=html --reporter=lcov --reporter=json-summary --reports-dir=coverage npm test",
+    "vscode:prepublish": "npm run check:progress && npm run check:operations && npm run check:icons && npm run test:architecture",
+    "coverage": "c8 --check-coverage --lines=95 --statements=95 --functions=95 --branches=90 --all --include=zip-*.js --include=search-archives.js --include=search-metadata.js --include=search-provider.js --include=file-search-worker.js --include=file-search.js --include=lister-provider.js --include=lister-codepages.js --include=lister-search-worker.js --include=git-status-engine.js --include=git-status-paths.js --include=git-status-provider.js --include=git-status-worker.js --include=network-paths.js --include=selection-io.js --include=startup-paths.js --include=extension.js --include=operation-errors.js --include=open-trash.js --include=native-copy.js --include=native-shell-menu.js --include=folder-locks.js --include=folder-locks-posix.js --include=lock-inspector.js --include=native-rename.js --include=clipboard-provider.js --include=icon-theme.js --include=filesystem-icons.js --include=filesystem-provider.js --include=pe-file-version.js --include=content-comments.js --include=readonly-files.js --include=media/*.js --reporter=text --reporter=html --reporter=lcov --reporter=json-summary --reports-dir=coverage npm test",
     "lint": "eslint . --max-warnings=0",
+    "check:operations": "node scripts/check-operations.cjs",
+    "check:progress": "node scripts/check-progress.cjs",
     "check:zip": "node --check zip-codecs.js && node --check zip-editor.js && node --check zip-filter.js && node --check zip-io.js && node --check zip-operations.js && node --check zip-password.js && node --check zip-provider.js && node --check zip-filesystem.js",
-    "generate:file-colors": "node scripts/generate-file-color-defaults.cjs"
+    "generate:file-colors": "node scripts/generate-file-color-defaults.cjs",
+    "generate:icons": "node scripts/generate-icon-metrics.cjs",
+    "check:icons": "node scripts/generate-icon-metrics.cjs --check && node scripts/check-icons.cjs && node --test tests/icon-layout.test.js tests/icon-spinner.test.js tests/icon-metrics.test.js tests/commander-icons.test.js tests/product-icons.test.js tests/icon-architecture.test.js"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "c8": "^12.0.0",
     "eslint": "^10.13.0",
     "globals": "^17.13.0",
-    "jsdom": "^30.1.3"
+    "jsdom": "^30.1.3",
+    "typescript": "5.9.3"
   },
   "extensionKind": [
     "ui"

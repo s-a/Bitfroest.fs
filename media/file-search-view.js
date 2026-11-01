@@ -1,7 +1,9 @@
 (function (root) {
   'use strict';
   root.CommanderFileSearch = { create };
-  function create({ host, context, apply, navigate, preview, restoreFocus, t, escape, report = () => {} }) {
+  function create({ host, context, apply, navigate, preview, restoreFocus, t, escape, report = () => {}, task = () => {} }) {
+    /** @type {typeof import('./commander-progress')} */
+    const Progress = root.CommanderProgress;
     const paths = root.CommanderPaths;
     const displaySearchPaths = value => String(value).split(';').map(item => item.trim().startsWith('@') ? '@' + paths.displayPath(item.trim().slice(1)) : paths.displayPath(item.trim())).join('; ');
     const sessions = new Set(), filtering = new Map(), presetWaiters = []; let sequence = 0, generation = 0;
@@ -9,7 +11,11 @@
     const defaults = { name: '*', depth: -1, encodings: ['ansi', 'utf-8'], size: 1, sizeUnit: 1, sizeOperator: '=', younger: 1, older: 1, youngerUnit: 'days', olderUnit: 'days', sameName: true, sameSize: true, attributes: {} };
     let lastSettings = null, presets = {};
     const labels = ['Allgemeines', 'Erweitert', 'Laden/Speichern'];
-    const send = message => host?.postMessage(message);
+    const send = message => {
+      if (message.type === 'search-start') task(message.searchId, t('Suche wird ausgeführt…'), Progress.event({ phase: 'searching', overall: Progress.unknown('items', 0, 'enumerating'), current: Progress.unknown('items', 0, 'enumerating') }));
+      if (message.type === 'search-release') for (const id of message.ids || []) task(id, null);
+      host?.postMessage(message);
+    };
     function active() { return [...sessions].find(s => s.dialog.contains(document.activeElement)) || [...sessions].at(-1); }
     function label(text) {
       const i = text.indexOf('&'), translated = t(text.replace('&', ''));
@@ -27,7 +33,7 @@
       const check = (name, caption, extra = '') => `<label class="search-check"><input ${attrs(name, caption)} type="checkbox" ${extra}><span>${label(caption)}</span></label>`;
       const select = (name, caption, entries) => `<label class="search-field" for="${prefix}-${name}"><span>${label(caption)}</span><select ${attrs(name, caption)}>${entries.map(([value, caption]) => `<option value="${value}">${escape(t(caption))}</option>`).join('')}</select></label>`;
       const units = [['hours', 'Stunde(n)'], ['days', 'Tag(e)'], ['weeks', 'Woche(n)'], ['months', 'Monat(e)'], ['years', 'Jahr(e)']];
-      dialog.innerHTML = `<form><header><h2>${escape(t(separate ? 'Dateien suchen (separat)' : 'Dateien suchen'))}</h2><button type="button" data-search-close aria-label="${escape(t('Dialog schließen'))}">×</button></header><div role="tablist">${labels.map((text, i) => `<button type="button" role="tab" data-page="${i}" id="${prefix}-tab-${i}" aria-controls="${prefix}-page-${i}" aria-selected="${i === 0}" tabindex="${i === 0 ? 0 : -1}">${escape(t(text))}</button>`).join('')}</div>
+      dialog.innerHTML = `<form><header><h2>${escape(t(separate ? 'Dateien suchen (separat)' : 'Dateien suchen'))}</h2><button type="button" data-search-close aria-label="${escape(t('Dialog schließen'))}">${window.CommanderIcons.font('close')}</button></header><div role="tablist">${labels.map((text, i) => `<button type="button" role="tab" data-page="${i}" id="${prefix}-tab-${i}" aria-controls="${prefix}-page-${i}" aria-selected="${i === 0}" tabindex="${i === 0 ? 0 : -1}">${escape(t(text))}</button>`).join('')}</div>
         <fieldset data-search-settings><section role="tabpanel" id="${prefix}-page-0" aria-labelledby="${prefix}-tab-0" data-search-page="0">
         ${input('name', 'Such&en nach:')}${input('searchIn', 'Suchen &in:')}<div class="search-inline"><button type="button" data-browse>${t('Verzeichnis wählen')}…</button><button type="button" data-drives data-access-key="l">${label('&Laufwerke')}</button></div>
         <div class="search-grid">${check('nameRegex', 'RegE&x')}${check('selectedOnly', 'Nur in &markierten Verzeichnissen/Dateien suchen')}${check('archives', 'A&rchive durchsuchen')}${select('depth', 'Unter&verzeichnisse durchsuchen:', [[-1, 'Alle Unterverzeichnisse (unbegrenzt)'], [0, 'Nur aktuelles Verzeichnis'], [1, '1 Ebene'], [2, '2 Ebenen'], [3, '3 Ebenen'], [5, '5 Ebenen'], [10, '10 Ebenen'], ['custom', 'Eigene Tiefe festlegen']])}<div data-custom-depth hidden>${input('depthCustom', 'Anzahl der Ebenen', 'number')}</div></div>
@@ -95,6 +101,7 @@
         const settings = s.settings(); s.currentSettings = structuredClone(settings); lastSettings = structuredClone(settings);
         s.id = `search-${instance}-${++sequence}`; s.results = []; s.errors = []; s.cancelled = false; s.setBusy(true); s.renderResults();
         s.statusVersion = report(t('Suche wird ausgeführt…'), 'info');
+        task(s.id, t('Suche wird ausgeführt…'), Progress.event({ phase: 'searching', overall: Progress.unknown('items', 0, 'enumerating'), current: Progress.unknown('items', 0, 'enumerating') }));
         $('[data-search-status]').textContent = t('Suche läuft…'); $('[data-search-errors]').hidden = true;
         send({ type: 'search-start', searchId: s.id, settings });
       };
@@ -154,14 +161,16 @@
     }
     window.addEventListener('message', event => {
       const m = event.data; if (!m?.type?.startsWith('search-')) return;
+      if (m.type === 'search-progress' && filtering.has(m.searchId) && m.version === 1) task(m.searchId, t('Suche wird ausgeführt…') + ` · ${paths.displayPath(m.path || '')}`, Progress.read(m));
       if (m.type === 'search-presets') { presets = m.values || {}; for (const waiter of presetWaiters.splice(0)) waiter.resolve(); for (const s of sessions) { const select = s.$('[name=preset]'); select.replaceChildren(...Object.keys(presets).sort().map(name => { const option = document.createElement('option'); option.textContent = name; option.value = name; return option; })); for (const field of ['name', 'searchIn', 'text']) s.$(`[data-search-history="${field}"]`).replaceChildren(...(m.histories?.[field] || []).map(value => { const option = document.createElement('option'); option.value = field === 'searchIn' ? displaySearchPaths(value) : value; return option; })); } return; }
       if (m.type === 'search-complete' && filtering.has(m.searchId)) { const request = filtering.get(m.searchId); filtering.delete(m.searchId); send({ type: 'search-release', ids: [m.searchId] }); if (m.error) request.reject(new Error(m.error)); else request.resolve(m.results); return; }
       for (const s of sessions) {
         if (m.type === 'search-browsed' && m.dialogId === s.prefix) { if (m.paths?.length) s.$('[name=searchIn]').value = m.paths.map(value => paths.displayPath(value)).join('; '); s.$('[name=searchIn]').focus(); continue; }
         if (m.searchId !== s.id) continue;
-        if (m.type === 'search-error') { s.$('[data-search-status]').textContent = m.error; report(m.error, 'error', s.statusVersion); }
-        if (m.type === 'search-progress' && s.running) { s.currentPath = m.path; s.$('[data-search-status]').textContent = `${paths.displayPath(m.path || '')} · ${m.count || 0}`; }
+        if (m.type === 'search-error') { task(s.id, null); s.$('[data-search-status]').textContent = m.error; report(m.error, 'error', s.statusVersion); }
+        if (m.type === 'search-progress' && s.running) { s.currentPath = m.path; s.$('[data-search-status]').textContent = `${paths.displayPath(m.path || '')} · ${m.count || 0}`; if (m.version === 1) task(s.id, t('Suche wird ausgeführt…') + ` · ${paths.displayPath(m.path || '')}`, Progress.read(m)); }
         if (m.type === 'search-complete' && s.running) {
+          task(s.id, null);
           s.setBusy(false); s.results = m.results || []; const removed = s.history.splice(s.historyIndex + 1); if (removed.length) send({ type: 'search-release', ids: removed.map(item => item.id) }); s.history.push({ id: s.id, results: s.results, settings: s.currentSettings }); s.historyIndex = s.history.length - 1; s.renderResults();
           s.$('[data-search-status]').textContent = m.error || `${t(m.cancelled ? 'Suche abgebrochen' : 'Suche abgeschlossen')} · ${s.results.length}`;
           s.$('[data-search-errors]').hidden = !m.errors?.length; s.$('[data-search-errors] pre').textContent = (m.errors || []).map(item => `${paths.displayPath(item.path)}: ${item.error}`).join('\n');
@@ -190,7 +199,7 @@
         if (version !== generation) throw new Error(t('Suche abgebrochen'));
         return rows.filter(row => results.some(found => found.fsSource === row.fsSource)).map(row => row.id);
       },
-      dispose() { generation++; for (const waiter of presetWaiters.splice(0)) waiter.reject(new Error(t('Suche abgebrochen'))); for (const [id, request] of filtering) { send({ type: 'search-cancel', searchId: id }); request.reject(new Error(t('Suche abgebrochen'))); } filtering.clear(); for (const s of sessions) { send({ type: 'search-cancel', searchId: s.id }); s.running = false; s.applying = false; s.close(); } }
+      dispose() { generation++; for (const waiter of presetWaiters.splice(0)) waiter.reject(new Error(t('Suche abgebrochen'))); for (const [id, request] of filtering) { task(id, null); send({ type: 'search-cancel', searchId: id }); request.reject(new Error(t('Suche abgebrochen'))); } filtering.clear(); for (const s of sessions) { task(s.id, null); send({ type: 'search-cancel', searchId: s.id }); s.running = false; s.applying = false; s.close(); } }
     };
   }
 })(typeof globalThis === 'object' ? globalThis : this);

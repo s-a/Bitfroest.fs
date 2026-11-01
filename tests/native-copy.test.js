@@ -2,6 +2,14 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const nativeFs = require('node:fs');
 const { copyFileCancellable, createCopySession } = require('../native-copy');
+
+test('portable copying without a known source size cannot report an empty determinate transfer', async () => {
+  const session = createCopySession({ platform: 'linux', copyFile: async () => {} }), events = [];
+  await session.copy({ source: '/source', target: '/target', roots: ['/'] }, { onProgress: event => events.push(event) });
+  assert.equal(events[0].overall.kind, 'indeterminate');
+  assert.equal(events[0].current.kind, 'indeterminate');
+  await session.dispose();
+});
 const input = { roots: ['C:/tmp', 'C:/temp'], source: 'C:/tmp/a.bin', target: 'C:/temp/.stage/content', expected: { dev: '1', ino: '2', size: '100', mtimeNs: '10', ctimeNs: '11' } };
 
 test('already aborted jobs do not open a native session or copy any byte', async () => {
@@ -43,7 +51,9 @@ test('native API session copies through one native session without starting the 
   assert.equal(opened.length, 1);
   assert.deepEqual(calls.map(call => call.operation), ['files.copy', 'files.copy']);
   assert.deepEqual(calls.map(call => call.request.target), ['C:\\temp\\.stage\\content', 'C:\\temp\\.stage\\second']);
-  assert.deepEqual(events, [{ transferred: 100, total: 100, granular: true }]);
+  assert.deepEqual(events.map(({ transferred, total, granular }) => ({ transferred, total, granular })), [{ transferred: 100, total: 100, granular: true }]);
+  assert.equal(events[0].version, 1);
+  assert.deepEqual(events[0].overall, { kind: 'determinate', unit: 'bytes', completed: 100, total: 100 });
   await session.dispose();
   assert.deepEqual(closed, [1]);
 });

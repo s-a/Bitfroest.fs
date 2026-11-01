@@ -4,6 +4,7 @@ const crypto = require('node:crypto');
 const { Readable } = require('node:stream');
 const { WritableStream, TransformStream } = require('node:stream/web');
 const zip = require('@zip.js/zip.js');
+const Progress = require('./media/commander-progress');
 const { signature, stop, noLinks, safeName, publish } = require('./zip-io');
 const { resolvePassword } = require('./zip-password');
 require('./zip-codecs');
@@ -38,13 +39,14 @@ function createZipOperations(options = {}) {
   };
   async function collect(request, archive, settings) {
     const { signal } = settings;
-    const files = [], roots = [], names = new Set();
+    const files = [], roots = [], names = new Set(); let filesScanned = 0;
     const inside = request.inside ? normalize(request.inside) : '';
     const add = item => { const key = normalize(item.name); if (names.has(key)) throw new Error('Doppelte Namen im ZIP-Auftrag.'); names.add(key); files.push(item); };
     async function visit(source, relative, root) {
-      stop(signal); allowed(source); settings.onProgress?.({ phase: 'preparing', currentPath: source }); stop(signal);
+      stop(signal); allowed(source); settings.onProgress?.(Progress.event({ phase: 'preparing', currentPath: source, filesScanned, overall: Progress.unknown('items', filesScanned, 'enumerating'), current: Progress.unknown('items', 0, 'enumerating') })); stop(signal);
       await noLinks(source);
       const stat = await fs.lstat(source, { bigint: true });
+      settings.onProgress?.(Progress.event({ phase: 'preparing', currentPath: source, filesScanned: ++filesScanned, overall: Progress.unknown('items', filesScanned, 'enumerating'), current: Progress.known('items', 1, 1) })); stop(signal);
       if (path.resolve(source) === archive || stat.isFile() && (await exists(archive))?.ino === stat.ino && (await exists(archive))?.dev === stat.dev) throw new Error('Das Quellarchiv kann nicht in sich selbst gepackt werden.');
       if (!stat.isDirectory() && !stat.isFile()) throw new Error('Nur gewöhnliche Dateien und Verzeichnisse können gepackt werden.');
       const name = [inside, request.paths === false ? path.basename(relative) : relative].filter(Boolean).join('/');
@@ -105,8 +107,15 @@ function createZipOperations(options = {}) {
     const { files, roots } = await collect(request, archive, settings);
     const stage = path.join(path.dirname(archive), `.zip-write-${crypto.randomUUID()}.tmp`);
     let input, source, output, writer, backup, originalComment, committedResult, publishedStat;
-    const skipped = new Set(); let completed = 0;
-    const progress = (phase, currentPath, transferred = 0, total) => settings.onProgress?.({ phase, currentPath, completed, transferred, total });
+    const skipped = new Set(); let completed = 0, packedBytes = 0, packingTotal, plannedEntries = 0, processedEntries = 0;
+    const itemSize = item => {
+      const size = item.directory ? 0 : item.stat ? Number(item.stat.size) : typeof item.data === 'string' ? Buffer.byteLength(item.data) : Buffer.isBuffer(item.data) || item.data instanceof Uint8Array ? item.data.byteLength : undefined;
+      return Number.isSafeInteger(size) && size >= 0 ? size : undefined;
+    };
+    const progress = (phase, currentPath, transferred = 0, total) => settings.onProgress?.(Progress.event({ phase, currentPath, completed, transferred, total,
+      overall: phase === 'packing' && packingTotal !== undefined ? Progress.known('bytes', Math.min(packingTotal, packedBytes + transferred), packingTotal) : ['packing', 'retaining'].includes(phase) ? Progress.known('items', processedEntries, plannedEntries) : Progress.unknown('requests', 0, 'native-operation'),
+      current: Number.isSafeInteger(total) && total >= transferred ? Progress.known('bytes', transferred, total) : Progress.unknown('bytes', transferred, phase === 'packing' ? 'stream-size-unknown' : 'native-operation'),
+      ...(phase === 'packing' && packingTotal !== undefined ? { completedBytes: Math.min(packingTotal, packedBytes + transferred), totalBytes: packingTotal } : {}) }));
     async function cleanup() {
       const beforeCleanup = committedResult && await fs.stat(archive, { bigint: true }).catch(() => null);
       try {
@@ -155,28 +164,34 @@ function createZipOperations(options = {}) {
         const parts = name.split('/'); parts.pop();
         while (parts.length) { if (planned.get(parts.join('/')) === false) throw new Error('Eine Datei kann kein übergeordnetes Archivverzeichnis sein.'); parts.pop(); }
       }
+      const sizes = files.filter(item => !skipped.has(normalize(item.name))).map(itemSize);
+      plannedEntries = keep.length + files.filter(item => !skipped.has(normalize(item.name)) && !(item.directory && seen.has(normalize(item.name)))).length;
+      const bytes = sizes.reduce((sum, size) => sum + size, 0);
+      if (!keep.length && sizes.every(size => size !== undefined) && Number.isSafeInteger(bytes)) packingTotal = bytes;
       stop(signal); await noLinks(archive);
       output = await fs.open(stage, 'wx', 0o600);
       const writable = new WritableStream({ async write(bytes) { stop(signal); let offset = 0; while (offset < bytes.length) { const result = await output.write(bytes, offset, bytes.length - offset); if (!result.bytesWritten) throw new Error('ZIP-Ausgabe konnte nicht geschrieben werden.'); offset += result.bytesWritten; } } });
       writer = new zip.ZipWriter(writable, { useWebWorkers: false, level: request.level ?? 6, zip64: request.zip64 });
       const unchanged = new Set(keep.filter(item => item.name === item.entry.filename).map(item => item.name));
       progress('packing', archive);
-      if (unchanged.size) await writer.appendZip(readFile(input, Number(original.size), signal), { filter: entry => unchanged.has(entry.filename), readerOptions: { strictness: 'strict' } });
+      if (unchanged.size) { progress('retaining', archive); await writer.appendZip(readFile(input, Number(original.size), signal), { filter: entry => unchanged.has(entry.filename), readerOptions: { strictness: 'strict' } }); processedEntries += unchanged.size; progress('retaining', archive); }
       for (const { entry, name } of keep) {
         if (unchanged.has(name)) continue;
-        stop(signal); progress('packing', name);
+        stop(signal); progress('retaining', name);
         const localExtraField = await localFields(readFile(input, Number(original.size), signal), entry);
         if (entry.directory) await writer.add(name, null, { entry, localExtraField, directory: true, passThrough: true, signal });
         else {
           const stream = new TransformStream();
           await Promise.all([entry.getData(stream.writable, { passThrough: true, signal }), writer.add(name, stream.readable, { entry, localExtraField, passThrough: true, signal })]);
         }
+        processedEntries++; progress('retaining', name);
       }
       for (const item of files) {
         stop(signal); const name = normalize(item.name);
         if (skipped.has(name) || item.directory && seen.has(name)) continue;
         if (seen.has(name)) throw new Error('Doppelte Namen im ZIP-Auftrag.'); seen.add(name);
-        progress('packing', item.name);
+        const size = itemSize(item);
+        progress('packing', item.name, 0, size);
         let stream, handle;
         try {
           if (item.source && !item.directory) {
@@ -185,14 +200,17 @@ function createZipOperations(options = {}) {
             stream = Readable.toWeb(handle.createReadStream({ autoClose: false }));
           }
           const data = item.directory ? null : stream || (item.data?.[Symbol.asyncIterator] ? Readable.toWeb(Readable.from(item.data)) : new zip.Uint8ArrayReader(Buffer.from(item.data)));
-          await writer.add(item.name, data, { entry: item.metadata, localExtraField: item.localExtraField, ...encryption, directory: item.directory, lastModDate: item.stat?.mtime || item.date || new Date(), signal, onprogress: (loaded, total) => progress('packing', item.name, loaded, total) });
+          await writer.add(item.name, data, { entry: item.metadata, localExtraField: item.localExtraField, ...encryption, directory: item.directory, lastModDate: item.stat?.mtime || item.date || new Date(), ...(size !== undefined ? { uncompressedSize: size } : {}), signal, onprogress: (loaded, total) => progress('packing', item.name, loaded, size ?? total) });
           if (handle && signature(await handle.stat({ bigint: true })) !== signature(item.stat)) throw new Error('Die Quelldatei wurde geändert.');
           completed++;
+          processedEntries++;
+          if (size !== undefined) { progress('packing', item.name, size, size); packedBytes += size; }
         } finally { await handle?.close(); }
       }
+      progress('finalizing', archive); stop(signal);
       await writer.close(request.comment === undefined ? originalComment : new TextEncoder().encode(request.comment)); writer = null;
       await output.close(); output = null; await source?.close(); source = null; await input?.close(); input = null;
-      stop(signal);
+      progress('publishing', archive); stop(signal);
       await noLinks(archive);
       const current = await exists(archive);
       if (original ? !current || signature(current) !== signature(original) : current) throw new Error('Das ZIP-Archiv wurde geändert.');
@@ -211,7 +229,7 @@ function createZipOperations(options = {}) {
       if (request.verify !== false) await testArchive(archive, { ...settings, password: request.password });
       if (request.move) {
         for (const item of files.filter(item => item.source && !item.directory && !skipped.has(normalize(item.name)))) {
-          stop(signal);
+          progress('removing-sources', item.source); stop(signal);
           await noLinks(item.source);
           if (signature(await fs.lstat(item.source, { bigint: true })) !== signature(item.stat)) throw new Error('Archiv gespeichert; geänderte Quelldatei wurde nicht entfernt.');
           await fs.unlink(item.source);
@@ -233,11 +251,11 @@ function createZipOperations(options = {}) {
     let files = 0, bytes = 0;
     try {
       const entries = await reader.getEntries(), totalBytes = entries.reduce((sum, entry) => sum + (entry.directory ? 0 : entry.uncompressedSize), 0);
-      settings.onProgress?.({ phase: 'verifying', currentPath: archive, completedBytes: 0, totalBytes });
+      settings.onProgress?.(Progress.event({ phase: 'verifying', currentPath: archive, completedBytes: 0, totalBytes, overall: Progress.known('bytes', 0, totalBytes), current: Progress.unknown('bytes', 0, 'enumerating') }));
       for (const entry of entries) {
         stop(settings.signal); if (entry.directory) continue;
         let transferred = 0;
-        const report = () => settings.onProgress?.({ phase: 'verifying', currentPath: entry.filename, transferred, total: entry.uncompressedSize, completedBytes: bytes, totalBytes });
+        const report = () => settings.onProgress?.(Progress.event({ phase: 'verifying', currentPath: entry.filename, transferred, total: entry.uncompressedSize, completedBytes: bytes, totalBytes, overall: Progress.known('bytes', bytes, totalBytes), current: Progress.known('bytes', transferred, entry.uncompressedSize) }));
         report(); stop(settings.signal);
         const password = await resolvePassword(entry, settings);
         await entry.getData(new WritableStream({ write(chunk) { stop(settings.signal); bytes += chunk.length; transferred += chunk.length; report(); } }), { password, signal: settings.signal }); files++;

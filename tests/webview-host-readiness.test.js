@@ -5,6 +5,91 @@ const path = require('node:path');
 const vm = require('node:vm');
 const { JSDOM } = require('jsdom');
 
+test('startup log becomes visible while stylesheets have not reported completion', async t => {
+  const media = path.join(__dirname, '../media');
+  const dom = new JSDOM(fs.readFileSync(path.join(media, 'index.html'), 'utf8'), { runScripts: 'outside-only' });
+  t.after(() => dom.window.close());
+  const { window } = dom, { document } = window;
+  const body = document.body; body.remove();
+  window.acquireVsCodeApi = () => ({ postMessage() {} });
+  new vm.Script(fs.readFileSync(path.join(media, 'webview-bootstrap.js'), 'utf8')).runInContext(dom.getInternalVMContext());
+  document.documentElement.append(body);
+  await Promise.resolve();
+  assert.match(document.querySelector('#startup-log').textContent, /Waiting for stylesheet: app\.css/);
+  assert.match(document.querySelector('#startup-log').textContent, /Webview/);
+});
+
+test('startup status reports resources only after they load and stops after readiness', t => {
+  const media = path.join(__dirname, '../media');
+  const dom = new JSDOM(fs.readFileSync(path.join(media, 'index.html'), 'utf8'), { runScripts: 'outside-only' });
+  t.after(() => dom.window.close());
+  const { window } = dom, { document } = window;
+  window.acquireVsCodeApi = () => ({ postMessage() {} });
+  document.body.dataset.startupResource = encodeURIComponent('Ressource geladen: {resource}');
+  new vm.Script(fs.readFileSync(path.join(media, 'webview-bootstrap.js'), 'utf8')).runInContext(dom.getInternalVMContext());
+  const status = document.querySelector('#startup-message');
+  assert.equal(status.textContent, 'Loading file manager…');
+  document.querySelector('script[src="commander-paths.js"]').dispatchEvent(new window.Event('load'));
+  assert.equal(status.textContent, 'Loading file manager…');
+  assert.equal(document.querySelector('#startup-detail').textContent, 'Ressource geladen: commander-paths.js');
+  window.dispatchEvent(new window.Event('commander-started'));
+  document.querySelector('script[src="app.js"]').dispatchEvent(new window.Event('load'));
+  assert.equal(document.querySelector('#startup-detail').textContent, 'Ressource geladen: commander-paths.js');
+});
+
+test('an early stylesheet failure is reported before the body exists and rendered when it becomes available', t => {
+  const media = path.join(__dirname, '../media');
+  const dom = new JSDOM(fs.readFileSync(path.join(media, 'index.html'), 'utf8'), { runScripts: 'outside-only' });
+  t.after(() => dom.window.close());
+  const { window } = dom, { document } = window, messages = [];
+  const body = document.body; body.remove();
+  window.acquireVsCodeApi = () => ({ postMessage: message => messages.push(message) });
+  window.HTMLDialogElement.prototype.showModal = function () { this.open = true; };
+  new vm.Script(fs.readFileSync(path.join(media, 'webview-bootstrap.js'), 'utf8')).runInContext(dom.getInternalVMContext());
+  document.querySelector('link[href="app.css"]').dispatchEvent(new window.Event('error'));
+  assert.match(messages[0]?.diagnostic?.message, /app\.css/);
+  document.documentElement.append(body);
+  document.dispatchEvent(new window.Event('DOMContentLoaded'));
+  assert.match(document.querySelector('#startup-log').textContent, /Stylesheet failed to load: app\.css/);
+  assert.equal(document.querySelector('#modal').open, true);
+  assert.equal(document.querySelector('#startup-progress').hidden, true, 'a failed start is no longer in progress');
+  assert.match(document.querySelector('#modal textarea').value, /app\.css/);
+});
+
+for (const failure of ['exception', 'rejection', 'resource']) test(`startup ${failure} opens the existing error dialog without depending on application initialization`, async t => {
+  const media = path.join(__dirname, '../media');
+  const dom = new JSDOM(fs.readFileSync(path.join(media, 'index.html'), 'utf8'), { runScripts: 'outside-only' });
+  t.after(() => dom.window.close());
+  const { window } = dom, { document } = window, messages = [];
+  window.acquireVsCodeApi = () => ({ postMessage: message => messages.push(message) });
+  window.HTMLDialogElement.prototype.showModal = function () { this.open = true; };
+  window.HTMLDialogElement.prototype.close = function () { this.open = false; };
+  new vm.Script(fs.readFileSync(path.join(media, 'webview-bootstrap.js'), 'utf8')).runInContext(dom.getInternalVMContext());
+  const image = document.createElement('img'); document.body.append(image);
+  image.dispatchEvent(new window.Event('error'));
+  assert.equal(messages.length, 0, 'an optional image failure must not prevent application startup');
+  if (failure === 'exception') window.dispatchEvent(new window.ErrorEvent('error', { message: '<broken startup>', filename: 'app.js', lineno: 42, colno: 7, error: new window.Error('<broken startup>') }));
+  if (failure === 'rejection') {
+    const event = new window.Event('unhandledrejection');
+    Object.defineProperty(event, 'reason', { value: new window.Error('<broken startup>') });
+    window.dispatchEvent(event);
+  }
+  if (failure === 'resource') document.querySelector('script[src="app.js"]').dispatchEvent(new window.Event('error'));
+  assert.equal(document.querySelector('#modal').open, true);
+  assert.ok(document.querySelector('#modal .operation-error-art'));
+  assert.match(document.querySelector('#modal textarea').value, failure === 'resource' ? /app\.js/ : /<broken startup>/);
+  assert.equal(document.querySelector('#modal broken'), null, 'diagnostics are text, not markup');
+  assert.equal(document.querySelector('#panes').inert, true);
+  assert.equal(document.querySelector('#functionbar')?.inert ?? true, true);
+  const report = messages.find(message => message.type === 'app-startup-error');
+  assert.ok(report?.diagnostic?.message);
+  if (failure === 'exception') { assert.equal(report.diagnostic.source, 'app.js'); assert.equal(report.diagnostic.line, 42); }
+  window.dispatchEvent(new window.ErrorEvent('error', { message: 'duplicate' }));
+  assert.equal(messages.filter(message => message.type === 'app-startup-error').length, 1);
+  document.querySelector('#modal-cancel').click();
+  assert.equal(document.querySelector('#modal').open, false);
+});
+
 test('the actual startup script sequence acquires the host once and announces readiness after both lists render', t => {
   const media = path.join(__dirname, '../media');
   const dom = new JSDOM(fs.readFileSync(path.join(media, 'index.html'), 'utf8'), { runScripts: 'outside-only', url: 'https://prototype.invalid/' });
@@ -31,6 +116,7 @@ test('the actual startup script sequence acquires the host once and announces re
   }
   assert.equal(acquisitions, 1);
   assert.equal(messages.filter(message => message.type === 'app-ready').length, 1);
+  assert.equal(document.querySelector('#startup-progress'), null, 'successful rendering removes the startup indicator');
   assert.equal(messages.some(message => message.type === 'app-startup-error'), false);
   const readyIndex = messages.findIndex(message => message.type === 'app-ready');
   assert.ok(messages.slice(readyIndex + 1).some(message => message.type === 'inputFocus' && message.list));
@@ -61,6 +147,8 @@ test('window focus during initial rendering defers refresh until host readiness 
     if (this.matches('.list') && !earlyFocus) {
       earlyFocus = true;
       window.dispatchEvent(new window.Event('focus')); window.dispatchEvent(new window.Event('focus'));
+      window.dispatchEvent(new window.MessageEvent('message', { data: { type: 'window-focus' } }));
+      window.dispatchEvent(new window.MessageEvent('message', { data: { type: 'window-focus' } }));
     }
   };
   window.HTMLElement.prototype.scrollIntoView = function () {};

@@ -104,7 +104,7 @@ test('native production build and package contain no executable helpers', () => 
 
 test('extension packaging and publishing enforce the runtime architecture gate', () => {
   const manifest = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
-  assert.equal(manifest.scripts['vscode:prepublish'], 'npm run test:architecture');
+  assert.equal(manifest.scripts['vscode:prepublish'], 'npm run check:progress && npm run check:operations && npm run check:icons && npm run test:architecture');
 });
 
 test('distribution contains a loadable precompiled binding and excludes its build sources', () => {

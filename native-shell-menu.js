@@ -45,6 +45,7 @@ function createShellMenuProvider(options = {}) {
       const chosen = await selection(paths);
       if (disposed) throw failure('EDISPOSED', 'Der Anbieter für das Systemmenü wurde geschlossen.');
       const request = { ...chosen, mode, ...anchor };
+      if (settings.gitDiff === true) request.gitDiff = true;
       let raw;
       if (options.invokeNative) raw = await options.invokeNative(request);
       else {
@@ -66,7 +67,9 @@ function createShellMenuProvider(options = {}) {
       if (disposed) throw failure('EDISPOSED', 'Der Anbieter für das Systemmenü wurde geschlossen.');
       const result = raw;
       if (!result || result.ok !== true) throw failure('ESHELLMENU', result?.message || 'Das native Systemmenü konnte nicht geöffnet werden.');
-      if (result.action != null && (result.action !== 'inspect-locks' || chosen.paths.length !== 1 || !(await fs.lstat(chosen.paths[0])).isDirectory())) throw failure('EPROTOCOL', 'Die Sperrenuntersuchung benötigt genau einen Ordner.');
+      if (result.action === 'git-diff') {
+        if (settings.gitDiff !== true || chosen.paths.length !== 1 || !(await fs.lstat(chosen.paths[0])).isFile()) throw failure('EPROTOCOL', 'Die Antwort des Systemmenüs ist ungültig.');
+      } else if (result.action != null && (result.action !== 'inspect-locks' || chosen.paths.length !== 1 || !(await fs.lstat(chosen.paths[0])).isDirectory())) throw failure('EPROTOCOL', 'Die Sperrenuntersuchung benötigt genau einen Ordner.');
       if (mode === 'inspect' && (result.displayed !== false || result.invoked !== false || !Array.isArray(result.entries)) || mode === 'show' && (result.displayed !== true || typeof result.invoked !== 'boolean' || typeof result.cancelled !== 'boolean' || result.invoked === result.cancelled)) throw failure('EPROTOCOL', 'Die Antwort des Systemmenüs ist ungültig.');
       return { ...result, timing: { ...result.timing, totalMilliseconds: Math.round(performance.now() - started) } };
     } catch (error) {

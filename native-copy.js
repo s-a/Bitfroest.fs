@@ -1,6 +1,7 @@
 const path = require('node:path');
 const fs = require('node:fs/promises');
 const nativeFs = require('node:fs');
+const Progress = require('./media/commander-progress');
 const { loadNativeApi } = require('./native-api');
 
 function abortError() { const error = new Error('Dateiübertragung abgebrochen.'); error.name = 'AbortError'; error.code = 'ABORT_ERR'; return error; }
@@ -58,7 +59,7 @@ function createCopySession(options = {}) {
         onProgress: event => {
           if (activeNative !== current || !Number.isSafeInteger(event?.transferred) || !Number.isSafeInteger(event?.total) || event.transferred < 0 || event.total < event.transferred || event.transferred < current.transferred) return;
           current.transferred = event.transferred;
-          perCopy.onProgress?.({ transferred: event.transferred, total: event.total, granular: true });
+          perCopy.onProgress?.(Progress.event({ phase: 'copying', transferred: event.transferred, total: event.total, granular: true, overall: Progress.known('bytes', event.transferred, event.total), current: Progress.known('bytes', event.transferred, event.total) }));
         }
       });
       let outcome, operationError;
@@ -81,7 +82,9 @@ function createCopySession(options = {}) {
       if (disposed || broken) throw new Error('Die Kopiersitzung wurde beendet.');
       if ((options.platform || process.platform) !== 'win32') {
         if (!input || typeof input.source !== 'string' || typeof input.target !== 'string' || !Array.isArray(input.roots) || !input.roots.length) throw new Error('Ungültige Kopieranfrage.');
-        perCopy.onProgress?.({ transferred: 0, total: Number(input.expected?.size) || 0, granular: false });
+        const size = Number(input.expected?.size), known = Number.isSafeInteger(size) && size >= 0;
+        const measurement = known ? Progress.known('bytes', 0, size) : Progress.unknown('bytes', 0, 'native-operation');
+        perCopy.onProgress?.(Progress.event({ phase: 'copying', transferred: 0, total: known ? size : undefined, granular: false, overall: measurement, current: measurement }));
         await (options.copyFile || fs.copyFile)(input.source, input.target, nativeFs.constants.COPYFILE_EXCL);
         return { copied: true, granular: false };
       }

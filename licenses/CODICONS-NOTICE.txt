@@ -1,0 +1,9 @@
+Codicons icon font and glyph mappings
+Copyright (c) Microsoft Corporation and contributors.
+Source: https://github.com/microsoft/vscode-codicons
+License: Creative Commons Attribution 4.0 International.
+See CODICONS-CC-BY-4.0.txt for the license text.
+
+The font is distributed without modification. The stylesheets include selected
+glyph mappings, the loading animation, fixed-size layout rules, and generated
+per-glyph scaling and positioning metrics. The font outlines remain unchanged.

@@ -6,12 +6,20 @@
   let data = null, scope = 'user', revision, section = 'favorites', selected = null, dirty = false, saving = false, pendingBrowse = null;
   const expanded = new Set();
   const clone = value => JSON.parse(JSON.stringify(value));
+  let draggedColumn = null;
+  const columnDragType = 'application/x-commander-column';
+  function clearColumnDrag() {
+    draggedColumn = null;
+    for (const row of document.querySelectorAll('[data-drop-position]')) delete row.dataset.dropPosition;
+  }
   const error = value => { $('#configuration-error').textContent = value ? t(value) : ''; };
   const status = value => { $('#configuration-status').textContent = value ? t(value) : ''; };
   const current = () => data?.favorites.find(item => item.id === selected);
   let shortcutConflict = false, settings = [];
+  let platform = '';
   const shortcuts = window.createShortcutConfiguration({ t: value => t(value), changed: modified, blocked(value) { shortcutConflict = value; $('[data-save]').disabled = saving || value; } });
   function setSaving(value) {
+    clearColumnDrag();
     saving = value; $('main').inert = value; $('#scope').disabled = value;
     $('[data-save]').disabled = value || shortcutConflict; $('[data-discard]').disabled = value;
   }
@@ -19,6 +27,7 @@
   for (const type of ['click', 'input', 'change', 'dragstart', 'drop', 'keydown']) document.addEventListener(type, event => { if ((saving || !data) && event.target.closest('main')) { event.preventDefault(); event.stopImmediatePropagation(); } }, true);
   function modified() { dirty = true; status('Ungespeicherte Änderungen'); error(''); }
   function setSection(value) {
+    clearColumnDrag();
     shortcuts.close();
     section = ['columns', 'shortcuts', 'settings'].includes(value) ? value : 'favorites';
     for (const button of document.querySelectorAll('[data-section]')) { button.setAttribute('aria-selected', String(button.dataset.section === section)); button.tabIndex = button.dataset.section === section ? 0 : -1; }
@@ -52,7 +61,9 @@
     function append(parent, list) {
       for (const node of data.favorites.filter(item => item.parent === parent)) {
         const item = document.createElement('li'); item.dataset.node = node.id; item.setAttribute('role', 'treeitem'); item.setAttribute('aria-selected', String(selected === node.id)); item.tabIndex = selected === node.id ? 0 : -1; item.draggable = true;
-        const row = document.createElement('span'); row.className = 'tree-row'; row.textContent = `${node.type === 'group' ? expanded.has(node.id) ? '▾ ' : '▸ ' : '☆ '}${node.name}`; item.append(row);
+        const row = document.createElement('span'); row.className = 'tree-row';
+        const label = document.createElement('span'); label.textContent = node.name;
+        row.append(window.CommanderIcons.element(node.type === 'group' ? expanded.has(node.id) ? 'chevron-down' : 'chevron-right' : 'star-empty'), label); item.append(row);
         if (node.type === 'group') {
           item.setAttribute('aria-expanded', String(expanded.has(node.id)));
           if (expanded.has(node.id)) { const children = document.createElement('ul'); children.setAttribute('role', 'group'); append(node.id, children); item.append(children); }
@@ -80,28 +91,65 @@
     append(null, 0); select.value = node.parent || '';
   }
   function renderColumns() {
+    clearColumnDrag();
     const body = $('#column-rows'); body.replaceChildren();
     data.columns.forEach((column, index) => {
       const definition = window.CommanderColumnSettings.catalog.find(item => item.id === column.id);
-      const row = document.createElement('tr'); row.dataset.columnRow = column.id;
+      const row = document.createElement('tr'); row.dataset.columnRow = column.id; row.draggable = true; row.tabIndex = 0;
+      row.setAttribute('aria-label', t(definition.title)); row.setAttribute('aria-describedby', 'column-reorder-help');
+      row.onkeydown = event => {
+        if (event.target !== row || saving) return;
+        const direction = event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey ? { ArrowUp: -1, ArrowDown: 1 }[event.key] : event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey ? { PageUp: -1, PageDown: 1 }[event.key] : undefined;
+        if (!direction) return;
+        event.preventDefault();
+        if (index + direction < 0 || index + direction >= data.columns.length) return;
+        [data.columns[index], data.columns[index + direction]] = [data.columns[index + direction], data.columns[index]];
+        modified(); renderColumns(); $(`[data-column-row="${column.id}"]`).focus();
+      };
       const cell = element => { const td = document.createElement('td'); if (typeof element === 'string') td.textContent = element; else td.append(element); row.append(td); };
-      const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.dataset.visible = ''; checkbox.checked = column.visible; checkbox.setAttribute('aria-label', `${t('Sichtbar')}: ${t(definition.title)}`); checkbox.onchange = () => { column.visible = checkbox.checked; modified(); }; cell(checkbox);
+      const available = window.CommanderColumnSettings.isColumnAvailable(definition, platform);
+      const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.dataset.visible = ''; checkbox.checked = available && column.visible; checkbox.disabled = !available; checkbox.setAttribute('aria-label', `${t('Sichtbar')}: ${t(definition.title)}`); checkbox.onchange = () => { if (!available) { checkbox.checked = false; return; } column.visible = checkbox.checked; modified(); }; cell(checkbox);
+      if (!available) row.title = t('Auf diesem Betriebssystem nicht verfügbar.');
       cell(t(definition.title));
-      const title = document.createElement('input'); title.type = 'text'; title.dataset.title = ''; title.value = column.title; title.placeholder = t(definition.title); title.setAttribute('aria-label', `${t('Überschrift')}: ${t(definition.title)}`); title.oninput = () => { column.title = title.value; modified(); }; cell(title);
-      const widths = document.createElement('select'); widths.dataset.width = ''; widths.setAttribute('aria-label', `${t('Breite (Pixel)')}: ${t(definition.title)}`);
-      for (const width of [...new Set([64, 72, 80, 88, 96, 120, 154, 160, 200, 260, 320, 400, 600, 800, 1200, 1600, column.width])].sort((a, b) => a - b)) widths.add(new Option(String(width), String(width)));
-      widths.value = String(column.width); widths.onchange = () => { column.width = Number(widths.value); modified(); }; cell(widths);
       const alignment = document.createElement('select'); alignment.dataset.alignment = ''; alignment.setAttribute('aria-label', `${t('Ausrichtung')}: ${t(definition.title)}`);
       for (const [value, label] of [['left', 'Linksbündig'], ['right', 'Rechtsbündig'], ['center', 'Zentriert']]) alignment.add(new Option(t(label), value));
-      alignment.value = column.align; alignment.onchange = () => { column.align = alignment.value; modified(); }; cell(alignment);
-      const actions = document.createElement('span');
-      for (const direction of [-1, 1]) {
-        const button = document.createElement('button'); button.type = 'button'; button.textContent = direction < 0 ? '↑' : '↓'; button.setAttribute('aria-label', `${t(direction < 0 ? 'Nach oben' : 'Nach unten')}: ${t(definition.title)}`); button.disabled = index + direction < 0 || index + direction >= data.columns.length;
-        button.onclick = () => { [data.columns[index], data.columns[index + direction]] = [data.columns[index + direction], data.columns[index]]; modified(); renderColumns(); document.querySelectorAll(`[data-column-row="${column.id}"] button`)[direction < 0 ? 0 : 1]?.focus(); }; actions.append(button);
-      }
-      cell(actions); body.append(row);
+      alignment.disabled = !available; alignment.value = column.align; alignment.onchange = () => { if (available) { column.align = alignment.value; modified(); } }; cell(alignment);
+      body.append(row);
     });
   }
+  const columnRows = $('#column-rows');
+  columnRows.ondragstart = event => {
+    clearColumnDrag();
+    const row = event.target.closest('[data-column-row]');
+    if (!row || event.target.closest('input,select,button') || !event.dataTransfer) { event.preventDefault(); return; }
+    draggedColumn = row.dataset.columnRow; event.dataTransfer.setData(columnDragType, draggedColumn); event.dataTransfer.effectAllowed = 'move';
+  };
+  function columnDropTarget(event) {
+    if (saving || !draggedColumn || ![...event.dataTransfer?.types || []].includes(columnDragType)) return null;
+    const row = event.target.closest('[data-column-row]');
+    if (!row || row.dataset.columnRow === draggedColumn) return null;
+    const bounds = row.getBoundingClientRect();
+    return { row, after: event.clientY >= bounds.top + bounds.height / 2 };
+  }
+  columnRows.ondragover = event => {
+    for (const row of columnRows.querySelectorAll('[data-drop-position]')) delete row.dataset.dropPosition;
+    const target = columnDropTarget(event); if (!target) return;
+    event.preventDefault(); event.dataTransfer.dropEffect = 'move'; target.row.dataset.dropPosition = target.after ? 'after' : 'before';
+  };
+  columnRows.ondragleave = event => { if (!columnRows.contains(event.relatedTarget)) for (const row of columnRows.querySelectorAll('[data-drop-position]')) delete row.dataset.dropPosition; };
+  columnRows.ondragend = clearColumnDrag;
+  columnRows.ondrop = event => {
+    const target = columnDropTarget(event), id = draggedColumn;
+    clearColumnDrag();
+    if (!target || event.dataTransfer.getData(columnDragType) !== id) return;
+    event.preventDefault();
+    const from = data.columns.findIndex(column => column.id === id);
+    if (from < 0) return;
+    const [column] = data.columns.splice(from, 1);
+    const to = data.columns.findIndex(column => column.id === target.row.dataset.columnRow);
+    data.columns.splice(to + Number(target.after), 0, column);
+    modified(); renderColumns(); $(`[data-column-row="${id}"]`).focus();
+  };
   function render() { renderTree(); renderDetails(); renderColumns(); setSection(section); }
   function select(id, focus = false) { selected = id; renderTree(); renderDetails(); if (focus) [...document.querySelectorAll('[data-node]')].find(item => item.dataset.node === id)?.focus(); }
   function add(type) {
@@ -160,6 +208,7 @@
   window.addEventListener('message', event => {
     const message = event.data;
     if (message?.type === 'configuration-state') {
+      platform = message.platform;
       data = clone(message.data); scope = message.scope; revision = message.revision; t = window.CommanderI18n.create(message.language).t; section = message.section; dirty = false; pendingBrowse = null; setSaving(false);
       settings = message.settings || []; shortcuts.setState(message, data); renderSettings();
       for (const element of document.querySelectorAll('[data-text]')) element.textContent = t(element.dataset.text);

@@ -9,9 +9,12 @@ test('real worker reports status and branches with an empty executable search pa
   const provider = createGitStatusProvider({ workerEnv: { ...process.env, PATH: '', Path: '' } }); t.after(() => provider.dispose());
   const progress = [];
   const result = await provider.inspect([dir], {}, update => progress.push(update));
-  assert.equal(progress[0][dir].branch, 'main');
-  assert.equal(progress[0][dir].loading, true);
-  assert.equal(Object.keys(progress[0][dir].statuses).length, 0);
+  const branch = progress.findIndex(update => update[dir].branch === 'main');
+  const worktree = progress.findIndex(update => update[dir].phase === 'git-read-worktree');
+  assert.ok(branch >= 0 && branch < worktree, 'branch identity precedes native status inspection');
+  assert.equal(progress[branch][dir].loading, true);
+  assert.equal(Object.keys(progress[branch][dir].statuses).length, 0);
+  assert.equal(progress[0][dir].phase, 'git-locate');
   assert.ok(progress.some(update => update[dir].incremental && update[dir].statuses['modified.txt'] === 'modified'));
   assert.equal(result[dir].branch, 'main'); assert.equal(result[dir].statuses['modified.txt'], 'modified');
   assert.equal((await provider.branches(dir)).count, 3);

@@ -2,13 +2,34 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const { Worker } = require('node:worker_threads');
+
+test('Windows content metadata reports sparse and offline flags and actual short names', { skip: process.platform !== 'win32' }, async () => {
+  const session = require(binary).openSession();
+  try {
+    const result = await session.invoke('metadata.query', { path: __filename, shortName: true });
+    assert.equal(typeof result.attributes.sparse, 'boolean');
+    assert.equal(typeof result.attributes.offline, 'boolean');
+    assert.equal(typeof result.dosName, 'string');
+    assert.ok(result.dosName.length <= 12);
+    assert.throws(() => session.invoke('metadata.query', { path: __filename, shortName: 'yes' }), { code: 'InvalidRequest' });
+  } finally { session.close(); }
+});
+
+test('Windows DOS names retain an existing short filename without generating an alias', { skip: process.platform !== 'win32' }, async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'content-shortname-'));
+  const target = path.join(directory, 'short.txt'); await fs.writeFile(target, 'same');
+  const session = require(binary).openSession();
+  try { assert.equal((await session.invoke('metadata.query', { path: target, shortName: true })).dosName.toLowerCase(), 'short.txt'); }
+  finally { session.close(); await fs.rm(directory, { recursive: true, force: true }); }
+});
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const binary = process.env.NATIVE_BINDING_TEST_PATH || path.join(__dirname, '../native/binding.node');
 
 test('compiled binding exposes an honest versioned capability contract', () => {
   const binding = require(binary);
-  assert.deepEqual(binding.apiVersion, { major: 1, minor: 0 });
+  assert.deepEqual(binding.apiVersion, { major: 1, minor: 2 });
+  assert.equal(binding.capabilities['git.status'].dirtySummary, true);
   assert.ok(Object.keys(binding.capabilities).length >= 20);
   for (const [operation, capability] of Object.entries(binding.capabilities)) {
     if (process.platform === 'win32' && process.arch === 'x64' && ['locks.scan', 'locks.releaseHandles', 'locks.unloadModules', 'locks.rename', 'processes.terminate', 'restartDeletion.prepare', 'restartDeletion.commit'].includes(operation)) {
@@ -20,7 +41,7 @@ test('compiled binding exposes an honest versioned capability contract', () => {
     } else if (process.platform === 'win32' && ['encoding.decodeBlock', 'encoding.decodeChunk'].includes(operation)) {
       assert.equal(capability.status, 'conditional');
       assert.equal(capability.reason, 'SingleDoubleByteUtf8AndGB18030Codepages');
-    } else if (['git.status', 'git.info'].includes(operation) || (process.platform === 'win32' && ['metadata.query', 'paths.resolveNetwork', 'encoding.describe', 'icons.resolve', 'files.copy', 'shell.openAssociated', 'shell.openTrash', 'shell.openTerminal', 'shell.showContextMenu', 'windows.maximize', 'clipboard.readFiles', 'clipboard.writeFiles', 'clipboard.acknowledge'].includes(operation))) {
+    } else if (['git.status', 'git.info'].includes(operation) || (process.platform === 'win32' && ['metadata.query', 'paths.resolveNetwork', 'encoding.describe', 'icons.resolve', 'files.copy', 'shell.openAssociated', 'shell.openTrash', 'shell.openTerminal', 'shell.showContextMenu', 'windows.maximize', 'clipboard.readFiles', 'clipboard.writeFiles', 'clipboard.acknowledge', 'clipboard.cancelFiles'].includes(operation))) {
       assert.equal(capability.status, 'supported');
     } else {
       assert.equal(capability.status, 'unsupported');

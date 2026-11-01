@@ -76,3 +76,24 @@ test('dispatch changes only overridden bindings and suppresses the replaced defa
   assert.equal(model.resolve(catalog, {}, 'f5', focus, 'win32'), null);
   assert.equal(model.resolve(catalog, values, 'ctrl+shift+k', { textInput: true }, 'win32'), null);
 });
+
+test('system menu setting preserves the existing shortcut identity and limits the default binding', () => {
+  const { createCatalog } = require('../media/commander-shortcuts');
+  const manifest = require('../package.json');
+  const entry = createCatalog(manifest).find(item => item.command === 'bitfroest.shell-context-menu');
+  assert.equal(entry.id, 'k1opszch');
+  assert.match(manifest.contributes.keybindings.find(item => item.command === entry.command).when, /config\.bitfroest\.files\.useSystemContextMenu/);
+  assert.equal(require('../media/commander-shortcuts').active(entry, { listFocus: true }, 'win32'), true);
+});
+
+test('folder tab shortcuts retain their stored identities and accept only pane navigation focus', () => {
+  for (const [command, id] of [['next-tab', 'kqztrg3'], ['previous-tab', 'k1o87ddq']]) {
+    const entry = catalog.find(item => item.command === `bitfroest.${command}`);
+    assert.equal(entry.id, id);
+    assert.equal(model.active(entry, { tabFocus: true }, 'win32'), true);
+    assert.equal(model.active(entry, { listFocus: true }, 'win32'), true);
+    assert.equal(model.active(entry, { tabFocus: true, textInput: true }, 'win32'), false);
+    assert.equal(model.active(entry, { listerFocus: true }, 'win32'), false);
+    assert.equal(model.active(entry, {}, 'win32'), false);
+  }
+});

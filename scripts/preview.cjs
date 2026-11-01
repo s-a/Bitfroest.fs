@@ -3,12 +3,21 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const files = {
+  '/icon-layout.js': ['icon-layout.js', 'text/javascript; charset=utf-8'],
+  '/commander-icons.js': ['commander-icons.js', 'text/javascript; charset=utf-8'],
+  '/icon-font-metrics.js': ['icon-font-metrics.js', 'text/javascript; charset=utf-8'],
+  '/icon-metrics.css': ['icon-metrics.css', 'text/css; charset=utf-8'],
+  '/codicons.css': ['codicons.css', 'text/css; charset=utf-8'],
+  '/codicon.ttf': ['codicon.ttf', 'font/ttf'],
+  '/commander-menu.js': ['commander-menu.js', 'text/javascript; charset=utf-8'],
   '/commander-lister.js': ['commander-lister.js', 'text/javascript; charset=utf-8'],
   '/lister-view.js': ['lister-view.js', 'text/javascript; charset=utf-8'],
   '/workbench-vendor.js': ['workbench-vendor.js', 'text/javascript; charset=utf-8'],
   '/workbench-vendor.css': ['workbench-vendor.css', 'text/css; charset=utf-8'],
   '/workbench-icons.js': ['workbench-icons.js', 'text/javascript; charset=utf-8'],
+  '/commander-jobs.js': ['commander-jobs.js', 'text/javascript; charset=utf-8'],
   '/commander-statusbar.js': ['commander-statusbar.js', 'text/javascript; charset=utf-8'],
+  '/commander-progress.js': ['commander-progress.js', 'text/javascript; charset=utf-8'],
   '/webview-bootstrap.js': ['webview-bootstrap.js', 'text/javascript; charset=utf-8'],
   '/commander-clipboard.js': ['commander-clipboard.js', 'text/javascript; charset=utf-8'],
   '/': ['index.html', 'text/html; charset=utf-8'],

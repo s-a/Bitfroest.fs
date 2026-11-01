@@ -35,7 +35,7 @@
 namespace {
 constexpr const char* operations[] = {
   "files.copy", "files.rename", "clipboard.readFiles", "clipboard.writeFiles",
-  "clipboard.acknowledge", "shell.showContextMenu", "shell.openAssociated",
+  "clipboard.acknowledge", "clipboard.cancelFiles", "shell.showContextMenu", "shell.openAssociated",
   "shell.openTrash", "shell.openTerminal", "icons.resolve", "metadata.query", "paths.resolveNetwork",
   "encoding.describe", "encoding.decodeBlock", "encoding.decodeChunk", "windows.resolveOwner",
   "windows.maximize", "locks.scan", "locks.releaseHandles", "locks.unloadModules", "locks.rename",
@@ -151,12 +151,26 @@ struct MetadataJob {
   napi_deferred deferred = nullptr;
   DWORD attributes = INVALID_FILE_ATTRIBUTES;
   DWORD error = ERROR_SUCCESS;
+  bool short_name = false;
+  std::wstring dos_name;
 };
 
 void ReadMetadata(napi_env, void* data) {
   auto* job = static_cast<MetadataJob*>(data);
   job->attributes = GetFileAttributesW(job->path.c_str());
   if (job->attributes == INVALID_FILE_ATTRIBUTES) job->error = GetLastError();
+  else if (job->short_name) {
+    WIN32_FIND_DATAW found{};
+    const HANDLE search = FindFirstFileW(job->path.c_str(), &found);
+    if (search != INVALID_HANDLE_VALUE) {
+      job->dos_name = found.cAlternateFileName;
+      if (job->dos_name.empty()) {
+        BOOL legal = FALSE, spaces = FALSE;
+        if (CheckNameLegalDOS8Dot3W(found.cFileName, nullptr, 0, &spaces, &legal) && legal && !spaces) job->dos_name = found.cFileName;
+      }
+      FindClose(search);
+    }
+  }
 }
 
 napi_value MetadataResult(napi_env env, MetadataJob* job) {
@@ -168,7 +182,8 @@ napi_value MetadataResult(napi_env env, MetadataJob* job) {
     {"readonly", FILE_ATTRIBUTE_READONLY}, {"hidden", FILE_ATTRIBUTE_HIDDEN},
     {"system", FILE_ATTRIBUTE_SYSTEM}, {"directory", FILE_ATTRIBUTE_DIRECTORY},
     {"archive", FILE_ATTRIBUTE_ARCHIVE}, {"compressed", FILE_ATTRIBUTE_COMPRESSED},
-    {"encrypted", FILE_ATTRIBUTE_ENCRYPTED}
+    {"encrypted", FILE_ATTRIBUTE_ENCRYPTED}, {"sparse", FILE_ATTRIBUTE_SPARSE_FILE},
+    {"offline", FILE_ATTRIBUTE_OFFLINE}
   };
   for (const auto& flag : flags) {
     napi_value value;
@@ -177,6 +192,11 @@ napi_value MetadataResult(napi_env env, MetadataJob* job) {
   }
   CHECK(napi_set_named_property(env, result, "attributes", attributes));
   CHECK(napi_set_named_property(env, result, "provenance", Text(env, "win32.fileAttributes")));
+  if (job->short_name) {
+    napi_value name;
+    CHECK(napi_create_string_utf16(env, reinterpret_cast<const char16_t*>(job->dos_name.data()), job->dos_name.size(), &name));
+    CHECK(napi_set_named_property(env, result, "dosName", name));
+  }
   return result;
 }
 
@@ -219,6 +239,12 @@ napi_value QueryMetadata(napi_env env, Session* session, napi_value request) {
   const bool unc = length > 4 && target[0] == u'\\' && target[1] == u'\\' && target[2] != u'.';
   if ((!drive && !unc) || target.find(u'\0') != std::u16string::npos) return Fail(env, "InvalidRequest", "An absolute path without embedded nulls is required.");
   auto job = std::make_unique<MetadataJob>();
+  bool has_short_name = false;
+  CHECK(napi_has_named_property(env, request, "shortName", &has_short_name));
+  if (has_short_name) {
+    CHECK(napi_get_named_property(env, request, "shortName", &value));
+    if (napi_get_value_bool(env, value, &job->short_name) != napi_ok) return Fail(env, "InvalidRequest", "shortName must be a boolean.");
+  }
   job->state = session->state;
   job->path.assign(target.begin(), target.end());
   std::replace(job->path.begin(), job->path.end(), L'/', L'\\');
@@ -372,7 +398,7 @@ napi_value Init(napi_env env, napi_value exports) {
   napi_value version, major, minor, capabilities;
   CHECK(napi_create_object(env, &version));
   CHECK(napi_create_uint32(env, 1, &major));
-  CHECK(napi_create_uint32(env, 0, &minor));
+  CHECK(napi_create_uint32(env, 2, &minor));
   CHECK(napi_set_named_property(env, version, "major", major));
   CHECK(napi_set_named_property(env, version, "minor", minor));
   CHECK(napi_object_freeze(env, version));
@@ -411,6 +437,11 @@ napi_value Init(napi_env env, napi_value exports) {
       napi_value max_bytes;
       CHECK(napi_create_uint32(env, 1048576, &max_bytes));
       CHECK(napi_set_named_property(env, entry, "maxBytes", max_bytes));
+    }
+    if (std::strcmp(operation, "git.status") == 0) {
+      napi_value dirty_summary;
+      CHECK(napi_get_boolean(env, true, &dirty_summary));
+      CHECK(napi_set_named_property(env, entry, "dirtySummary", dirty_summary));
     }
     if (!supported) {
       const char* reason = "NotImplemented";

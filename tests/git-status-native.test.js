@@ -9,6 +9,57 @@ const { createNativeApi } = require('../native-api');
 
 const binary = process.env.NATIVE_BINDING_TEST_PATH || path.join(__dirname, '../native/binding.node');
 
+test('native dirty summary stops after a proven change without producing file status entries', async t => {
+  const directory = await fixture(t), visited = [];
+  await fs.mkdir(path.join(directory, 'late', 'deep'), { recursive: true });
+  for (let i = 0; i < 32; i++) await fs.writeFile(path.join(directory, 'late', 'deep', `file-${i}.txt`), 'new');
+  const api = createNativeApi(require(binary)), session = api.openSession(); t.after(() => api.shutdown());
+  const before = await fs.readFile(path.join(directory, '.git/index'));
+  const result = await session.invoke('git.status', { directory, scope: '.', summary: true }, { onProgress: event => visited.push(event.path) });
+  assert.equal(result.summary, true); assert.equal(result.dirty, true); assert.deepEqual(result.entries, []);
+  assert.equal(visited.some(path => path.includes('late/')), false);
+  assert.deepEqual(await fs.readFile(path.join(directory, '.git/index')), before);
+});
+
+test('native dirty summary distinguishes a clean repository, ignored files, and an actual untracked directory', async t => {
+  const directory = await fixture(t); git(directory, 'add', '--', '.'); git(directory, 'commit', '-m', 'Clean summary fixture');
+  const api = createNativeApi(require(binary)), session = api.openSession(); t.after(() => api.shutdown());
+  const read = () => session.invoke('git.status', { directory, scope: '.', summary: true, showIgnored: true });
+  const clean = await read(); assert.equal(clean.dirty, false, clean.dirtyPath);
+  await fs.mkdir(path.join(directory, 'new-dir')); await fs.writeFile(path.join(directory, 'new-dir', 'new.txt'), 'new');
+  assert.equal((await read()).dirty, true);
+});
+
+test('native dirty summary respects excluded changes and rejects an invalid summary option', async t => {
+  const directory = await fixture(t), api = createNativeApi(require(binary)), session = api.openSession(); t.after(() => api.shutdown());
+  const clean = await session.invoke('git.status', { directory, scope: '.', summary: true, excludeScopes: ['changed[1].txt', 'untracked.txt'] });
+  assert.equal(clean.dirty, false, clean.dirtyPath);
+  const raw = require(binary).openSession();
+  try { assert.throws(() => raw.invoke('git.status', { directory, scope: '.', summary: 'yes' }), { code: 'InvalidRequest' }); }
+  finally { raw.close(); }
+});
+
+test('native Git reads long tracked and untracked paths without changing repository configuration or index', { skip: process.platform !== 'win32' }, async t => {
+  const directory = await fixture(t), relative = ['long-' + 'a'.repeat(60), 'b'.repeat(60), 'c'.repeat(60), 'tracked.txt'].join('/');
+  const target = path.join(directory, relative);
+  await fs.mkdir(path.dirname(target), { recursive: true }); await fs.writeFile(target, 'before\n');
+  git(directory, '-c', 'core.longpaths=true', 'add', '--', relative);
+  git(directory, '-c', 'core.longpaths=true', 'commit', '-m', 'Long path fixture');
+  git(directory, 'config', '--local', 'core.longpaths', 'false');
+  git(directory, 'config', '--local', 'core.trustctime', 'false');
+  const original = await fs.stat(target);
+  await fs.writeFile(target, 'after!\n'); await fs.utimes(target, original.atime, original.mtime);
+  await fs.writeFile(path.join(path.dirname(target), 'new.txt'), 'new\n');
+  const config = await fs.readFile(path.join(directory, '.git/config')), index = await fs.readFile(path.join(directory, '.git/index'));
+  const api = createNativeApi(require(binary)), session = api.openSession(); t.after(() => api.shutdown());
+  const result = await session.invoke('git.status', { directory, scope: '.', recursive: true });
+  assert.equal(result.repository, true);
+  assert.equal(result.entries.find(entry => entry.path === relative)?.workdir, 2);
+  assert.equal(result.entries.find(entry => entry.path === relative.replace('tracked.txt', 'new.txt'))?.head, 0);
+  assert.deepEqual(await fs.readFile(path.join(directory, '.git/config')), config);
+  assert.deepEqual(await fs.readFile(path.join(directory, '.git/index')), index);
+});
+
 function git(directory, ...args) {
   return execFileSync('git', ['-c', `core.hooksPath=${path.join(directory, '.hooks')}`, ...args], {
     cwd: directory,
@@ -177,6 +228,7 @@ test('native Git status corrects same-size changes with an unchanged write times
     const result = await session.invoke('git.status', { directory, scope: '.', recursive: true });
     const entry = result.entries.find(value => value.path.replaceAll('\\', '/') === 'clean.txt');
     assert.deepEqual([entry.head, entry.workdir, entry.stage], [1, 2, 1]);
+    assert.equal((await session.invoke('git.status', { directory, scope: 'clean.txt', summary: true })).dirty, true);
   } finally { api.shutdown(); }
 });
 
@@ -192,6 +244,7 @@ test('native Git status applies core.autocrlf when checking a clean entry', asyn
     const result = await session.invoke('git.status', { directory, scope: '.', recursive: true });
     const entry = result.entries.find(value => value.path.replaceAll('\\', '/') === 'clean.txt');
     assert.deepEqual([entry.head, entry.workdir, entry.stage], [1, 1, 1]);
+    assert.equal((await session.invoke('git.status', { directory, scope: 'clean.txt', summary: true })).dirty, false);
   } finally { api.shutdown(); }
 });
 

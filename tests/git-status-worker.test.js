@@ -19,7 +19,7 @@ function fixture() {
     }
   };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../git-status-worker.js'), 'utf8'), {
-    require: name => name === 'node:worker_threads' ? { parentPort: port } : name === 'node:fs' ? {
+    require: name => name === './media/commander-progress' ? require('../media/commander-progress') : name === 'node:worker_threads' ? { parentPort: port } : name === 'node:fs' ? {
       watch(directory) { watches.push(directory); const watcher = new EventEmitter(); watcher.close = () => {}; return watcher; }
     } : name === 'node:path' ? path.posix : { createGitStatusEngine: () => engine },
     setTimeout: callback => { timers.push(callback); return timers.length; }, clearTimeout() {},
@@ -56,7 +56,7 @@ test('worker publishes branch identities before any status inspection', async t 
     branches: async () => ({ ok: true, names: ['main'] }),
     inspect: async directory => { scanned.push(directory); await blocked; return { ok: true, repository: true, branch: 'main', statuses: {} }; } };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../git-status-worker.js'), 'utf8'), {
-    require: name => name === 'node:worker_threads' ? { parentPort: port } : name === 'node:fs' ? { watch() { const watcher = new EventEmitter(); watcher.close = () => {}; return watcher; } } : name === 'node:path' ? path : { createGitStatusEngine: () => engine },
+    require: name => name === './media/commander-progress' ? require('../media/commander-progress') : name === 'node:worker_threads' ? { parentPort: port } : name === 'node:fs' ? { watch() { const watcher = new EventEmitter(); watcher.close = () => {}; return watcher; } } : name === 'node:path' ? path : { createGitStatusEngine: () => engine },
     setTimeout, clearTimeout, setInterval, clearInterval
   });
   port.emit('message', { id: 1, type: 'inspect', directories: ['/first', '/second'], settings: {} });
@@ -72,4 +72,19 @@ test('worker publishes branch identities before any status inspection', async t 
   release(); await new Promise(resolve => setImmediate(resolve));
   assert.equal(scanned.length, 2);
   assert.equal(messages.filter(message => message.type === 'progress').length, 4);
+});
+
+
+test('a failed branch description does not complete the directory before status inspection', async t => {
+  const port = new EventEmitter(), messages = [];
+  let release; const blocked = new Promise(resolve => { release = resolve; }); t.after(() => release());
+  port.postMessage = message => messages.push(message);
+  const engine = { invalidate() {}, describe: async () => ({ ok: false, error: 'unavailable', statuses: {} }), inspect: async () => { await blocked; return { ok: true, repository: false, statuses: {} }; } };
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../git-status-worker.js'), 'utf8'), {
+    require: name => name === './media/commander-progress' ? require('../media/commander-progress') : name === 'node:worker_threads' ? { parentPort: port } : { createGitStatusEngine: () => engine }
+  });
+  port.emit('message', { id: 1, type: 'inspect', directories: ['/repo'], settings: {} });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(messages[0].result['/repo'].loading, true);
+  assert.equal(messages.some(message => !message.type), false);
 });

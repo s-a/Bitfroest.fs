@@ -38,6 +38,37 @@ test('source preparation reports the file being examined before packing starts',
   assert.ok(events.some(event => event.phase === 'preparing' && event.currentPath === source));
   assert.equal(events[0].phase, 'preparing');
 });
+
+test('packing filesystem streams reports known file and aggregate byte progress without reading another inventory', async t => {
+  const { root, archive, operations } = await fixture(t), events = [];
+  const first = path.join(root, 'first.bin'), second = path.join(root, 'second.txt');
+  await fs.writeFile(first, Buffer.alloc(1024 * 1024, 41)); await fs.writeFile(second, 'second');
+  await operations.write({ archive, sources: [first, second] }, { onProgress: event => events.push(event) });
+  const packing = events.filter(event => event.phase === 'packing');
+  const total = 1024 * 1024 + 6;
+  assert.equal(packing[0].totalBytes, total); assert.equal(packing[0].completedBytes, 0);
+  assert.ok(packing.some(event => event.currentPath === 'first.bin' && event.transferred > 0 && event.total === 1024 * 1024));
+  assert.ok(packing.some(event => event.currentPath === 'second.txt' && event.transferred === 0 && event.completedBytes === 1024 * 1024));
+  assert.equal(packing.at(-1).completedBytes, total); assert.equal(packing.at(-1).totalBytes, total);
+  assert.ok(packing.every((event, index) => !index || event.completedBytes >= packing[index - 1].completedBytes));
+  const preparation = events.filter(event => event.phase === 'preparing');
+  assert.equal(preparation.at(-1).filesScanned, 2);
+  assert.ok(events.some(event => event.phase === 'finalizing'));
+  assert.ok(events.some(event => event.phase === 'publishing'));
+});
+
+test('unknown input streams and retained archive data do not receive invented aggregate totals', async t => {
+  const { archive, operations } = await fixture(t), events = [];
+  const { Readable } = require('node:stream');
+  await operations.write({ archive, additions: [{ name: 'stream.txt', data: Readable.from([Buffer.from('content')]) }] }, { onProgress: event => events.push(event) });
+  assert.ok(events.some(event => event.phase === 'packing'));
+  assert.ok(events.filter(event => event.phase === 'packing').every(event => event.totalBytes === undefined));
+  events.length = 0;
+  await operations.write({ archive, additions: [{ name: 'next.txt', data: 'next' }] }, { onProgress: event => events.push(event) });
+  assert.ok(events.some(event => event.phase === 'retaining'));
+  assert.ok(events.filter(event => event.phase === 'packing').every(event => event.totalBytes === undefined));
+  assert.deepEqual((await contents(archive)).map(entry => entry.text), ['content', 'next']);
+});
 test('packing into an existing archive requires confirmation and retains unrelated entries', async t => {
   const { root, archive, operations } = await fixture(t);
   await operations.write({ archive, additions: [{ name: 'keep.txt', data: 'keep' }] });

@@ -152,25 +152,43 @@ test('late folder results retain model values without replacing a newer clipboar
   }
 });
 
-test('one bottom statusbar contains version, compact function actions and a final notification button', t => {
+test('header retains direct file actions while bottom bar reserves progress and typed status', t => {
+  const app = createApp(t), doc = app.document;
+  const bar = doc.querySelector('#statusbar'), header = doc.querySelector('.commander-header');
+  assert.ok(header);
+  assert.equal(bar.querySelector('#functionbar'), null);
+  assert.ok(header.querySelector('#functionbar'));
+  assert.ok(header.querySelector('#language-toggle'));
+  assert.ok(header.querySelector('#notifications-toggle'));
+  const labels = ['F2 Umbenennen', 'F3 Anzeigen', 'F4 Bearbeiten', 'F5 Kopieren', 'F6 Verschieben', 'F7 Neuer Ordner', 'F8 Löschen'];
+  assert.deepEqual([...header.querySelectorAll('#functionbar button')].map(button => button.textContent), labels);
+  app.click(app.row('README.md'));
+  app.click(header.querySelector('[data-action="rename-one"]'));
+  assert.ok(doc.querySelector('.inline-rename'));
+  app.key('Escape', {}, doc.querySelector('.inline-rename'));
+  for (const target of [bar, bar.querySelector('#status-message'), bar.querySelector('#status-progress-track')]) {
+    const event = new app.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 });
+    target.dispatchEvent(event); assert.equal(event.defaultPrevented, true);
+  }
+  assert.ok(doc.querySelector('[data-menu-action="open-trash"]'));
+  assert.equal(bar.querySelector('#status-progress-track').getAttribute('aria-hidden'), 'true');
+});
+
+test('every status level and background activity includes an icon and explicit type', t => {
   const app = createApp(t);
-  const style = app.document.createElement('style'); style.textContent = fs.readFileSync(path.resolve(__dirname, '../media/app.css'), 'utf8'); app.document.head.append(style);
-  const bar = app.document.querySelector('#statusbar'); assert.ok(bar);
-  assert.equal(bar.querySelector('#status-version'), null);
-  assert.ok(bar.querySelector('#status-message'));
-  assert.ok(bar.querySelector('#status-progress-area'));
-  assert.ok(bar.querySelector('#status-cancel'));
-  assert.equal(bar.querySelector('#status-cancel').hidden, true);
-  assert.equal(bar.querySelector('.status-cancel-slot').nextElementSibling.id, 'functionbar');
-  assert.equal(bar.querySelector('#status-progress-area').classList.contains('is-idle'), true);
-  assert.equal(app.window.getComputedStyle(bar.querySelector('.status-cancel-slot')).display, 'none', 'idle cancel slot reserves no width');
-  assert.equal(bar.lastElementChild.id, 'notifications-toggle');
-  const buttons = bar.querySelectorAll('#functionbar button'); assert.equal(buttons.length, 6);
-  const labels = ['F3 Anzeigen', 'F4 Bearbeiten', 'F5 Kopieren', 'F6 Verschieben', 'F7 Neuer Ordner', 'F8 Löschen'];
-  for (const [index, button] of buttons.entries()) { assert.equal(button.querySelector('svg'), null); assert.equal(button.textContent, labels[index]); assert.equal(button.getAttribute('aria-label'), labels[index]); }
-  app.click(bar.querySelector('[data-action="mkdir"]'));
-  assert.equal(app.document.querySelector('#modal').open, true);
-  assert.equal(app.document.querySelector('#modal-title').textContent, 'Neuer Ordner');
+  const bar = app.window.CommanderStatusbar.create({ t: value => value, actions: [], focusList() {} });
+  for (const level of ['info', 'success', 'warning', 'error', 'cancelled']) {
+    bar.setStatus('Literal <message>', level);
+    const message = app.document.querySelector('#status-message');
+    assert.equal(message.dataset.outcome, level);
+    assert.ok(message.querySelector('[data-status-icon]'));
+    assert.equal(message.textContent, 'Literal <message>');
+    assert.equal(message.querySelector('message'), null);
+  }
+  const plan = app.window.CommanderProgress.statusPlan({ id: 'reading', startedAt: 0, steps: ['read'] });
+  plan.start('read'); bar.setActivity('Reading', plan.snapshot());
+  assert.equal(app.document.querySelector('#status-activity').dataset.outcome, 'info');
+  assert.ok(app.document.querySelector('#status-activity [data-status-icon]'));
 });
 
 test('notification center retains literal failures, supports dismissal and restores keyboard focus', t => {
@@ -200,31 +218,29 @@ test('running transfer shows aligned overall and current-file tracks without ope
   const cancelSlot = cancel.closest('.status-cancel-slot');
   assert.notEqual(app.window.getComputedStyle(cancelSlot).display, 'none', 'active cancel slot stays visible');
   assert.notEqual(app.window.getComputedStyle(cancel).display, 'none', 'active cancel button stays visible');
-  assert.equal(cancel.textContent, 'Cancel');
+  assert.equal(cancel.textContent, ''); assert.ok(cancel.querySelector('svg'));
   assert.equal(cancel.title, 'Cancel');
   const overall = track.querySelector('#status-progress-overall'), current = track.querySelector('#status-progress-file');
   send(app, { type: 'filesystem-progress', operationId: request.operationId, progress: { path: '/left/a.txt', transferred: 3, total: 12, completedBytes: 3, totalBytes: 12 } });
   assert.equal(overall.getAttribute('aria-valuenow'), '3'); assert.equal(current.getAttribute('aria-valuenow'), '3');
   assert.equal(overall.style.width, '25%'); assert.equal(current.style.width, '25%');
   assert.equal(overall.parentElement, current.parentElement, 'both values render as overlapping fills in one track');
-  const trackStyle = () => track.style;
-  assert.equal(trackStyle().getPropertyValue('--status-progress-overlap'), '25%');
-  assert.equal(trackStyle().getPropertyValue('--status-progress-extent'), '25%');
-  assert.match(trackStyle().getPropertyValue('--status-progress-unique'), /progressBar-background/);
+  assert.equal(app.document.querySelector('#status-percent').textContent, '25%/25%');
+  assert.equal(app.document.querySelector('#status-percent').title, 'Overall progress / Current step progress');
+  assert.equal(app.document.querySelector('#status-eta').title, 'Estimated time remaining');
+  assert.equal(app.document.querySelector('#status-elapsed').title, 'Elapsed time');
   send(app, { type: 'filesystem-progress', operationId: request.operationId, progress: { path: '/left/b.txt', transferred: 1, total: 4, completedBytes: 7, totalBytes: 12 } });
   assert.equal(overall.getAttribute('aria-valuenow'), '7'); assert.equal(current.getAttribute('aria-valuenow'), '1');
   assert.equal(overall.style.width, '58.333333333333336%'); assert.equal(current.style.width, '25%');
-  assert.equal(trackStyle().getPropertyValue('--status-progress-overlap'), '25%');
-  assert.equal(trackStyle().getPropertyValue('--status-progress-extent'), '58.333333333333336%');
-  assert.match(trackStyle().getPropertyValue('--status-progress-unique'), /progressBar-background/);
-  assert.equal(app.document.querySelector('#status-message').textContent, 'Copying: b.txt');
+  assert.equal(app.document.querySelector('#status-percent').textContent, '58%/25%');
+  assert.equal(app.document.querySelector('#status-message').textContent, 'Copy · /left/b.txt');
   assert.equal(app.document.querySelector('#status-message').title, 'Copying: b.txt\n/left/b.txt');
   assert.match(overall.getAttribute('aria-valuetext'), /7 B \/ 12 B/); assert.match(current.getAttribute('aria-valuetext'), /1 B \/ 4 B/);
   assert.equal(app.document.querySelector('#notifications-center').hidden, true);
   assert.doesNotMatch(app.document.querySelector('#notifications-list').textContent, /File system updated/);
   send(app, { type: 'filesystem-progress', operationId: 'foreign', progress: { completedBytes: 12, totalBytes: 12 } });
   assert.equal(overall.getAttribute('aria-valuenow'), '7');
-  assert.equal(app.document.querySelector('#status-message').textContent, 'Copying: b.txt');
+  assert.equal(app.document.querySelector('#status-message').textContent, 'Copy · /left/b.txt');
   assert.ok(app.document.querySelector('#notifications-toggle').title.includes(`v${require('../package.json').version}`));
   app.click(app.document.querySelector('#notifications-clear'));
   assert.ok(app.document.querySelector('[data-cancel-transfer]'), 'clear all retains running operations');
@@ -236,7 +252,7 @@ test('running transfer shows aligned overall and current-file tracks without ope
   assert.equal(overall.getAttribute('aria-valuenow'), '7'); assert.equal(current.getAttribute('aria-valuenow'), '1');
   send(app, { type: 'filesystem-result', operationId: request.operationId, ok: true, state, operationOutcome: { cancelled: true, completedIds: [] } });
   assert.equal(cancel.hidden, true);
-  assert.equal(status.classList.contains('is-idle'), true); assert.equal(app.document.querySelector('.transfer-progress'), null);
+  assert.equal(app.document.querySelector('#statusbar').dataset.statusProgressOwner, 'background'); assert.equal(app.document.querySelector('.transfer-progress'), null);
   assert.match(app.document.querySelector('#notifications-center').textContent, /cancelled|Cancelled/);
 });
 
@@ -272,7 +288,7 @@ test('Escape during modal transfer preparation requests cancellation without clo
   assert.equal(app.document.querySelector('[data-cancel-transfer]').disabled, true);
 });
 
-test('same statusbar track distinguishes overlap and unique progress for either endpoint order', async t => {
+test('same statusbar track retains independent overall and file extents in either endpoint order', async t => {
   const state = fixture(), app = createApp(t, state), request = await start(app);
   const track = app.document.querySelector('#status-progress-track');
   const progress = (completedBytes, totalBytes, transferred, total, path = '/left/a.txt') => send(app, {
@@ -280,70 +296,57 @@ test('same statusbar track distinguishes overlap and unique progress for either 
     progress: { path, transferred, total, completedBytes, totalBytes }
   });
   progress(70, 100, 45, 100);
-  assert.equal(track.style.getPropertyValue('--status-progress-overlap'), '45%');
-  assert.equal(track.style.getPropertyValue('--status-progress-extent'), '70%');
-  assert.match(track.style.getPropertyValue('--status-progress-unique'), /progressBar-background/);
+  assert.equal(track.querySelector('#status-progress-overall').style.width, '70%');
+  assert.equal(track.querySelector('#status-progress-file').style.width, '45%');
   progress(45, 100, 70, 100);
-  assert.equal(track.style.getPropertyValue('--status-progress-overlap'), '45%');
-  assert.equal(track.style.getPropertyValue('--status-progress-extent'), '70%');
-  assert.match(track.style.getPropertyValue('--status-progress-unique'), /charts-green/);
+  assert.equal(track.querySelector('#status-progress-overall').style.width, '45%');
+  assert.equal(track.querySelector('#status-progress-file').style.width, '70%');
   progress(45, 100, 45, 100, '/left/b.txt');
-  assert.equal(track.style.getPropertyValue('--status-progress-overlap'), '45%');
-  assert.equal(track.style.getPropertyValue('--status-progress-extent'), '45%');
+  assert.equal(track.querySelector('#status-progress-overall').style.width, '45%');
+  assert.equal(track.querySelector('#status-progress-file').style.width, '45%');
   progress(45, 100, 0, 100, '/left/c.txt');
-  assert.equal(track.style.getPropertyValue('--status-progress-overlap'), '0%');
-  assert.equal(track.style.getPropertyValue('--status-progress-extent'), '45%');
-  assert.equal(track.style.getPropertyValue('--status-progress-unique'), 'var(--vscode-progressBar-background, var(--vscode-focusBorder))');
+  assert.equal(track.querySelector('#status-progress-overall').style.width, '45%');
+  assert.equal(track.querySelector('#status-progress-file').style.width, '0%');
 });
 
-test('statusbar styles paint overlap once and retain separate theme-colored endpoint markers', () => {
+test('statusbar styles distinguish overall area and current file line using theme colors', () => {
   const css = fs.readFileSync(path.resolve(__dirname, '../media/app.css'), 'utf8');
-  assert.match(css, /#status-progress-track\s*\{[^}]*color-mix\(in srgb/);
+  assert.match(css, /#status-progress-overall\s*\{[^}]*color-mix\(in srgb/);
   assert.match(css, /#status-progress-overall\s*\{[^}]*border-right:\s*1px solid var\(--vscode-progressBar-background/);
-  assert.match(css, /#status-progress-file\s*\{[^}]*border-right:\s*1px solid var\(--vscode-charts-green/);
+  assert.match(css, /#status-progress-file\s*\{[^}]*height:\s*3px[^}]*--vscode-charts-cyan/);
   assert.match(css, /#status-progress-track \[role="progressbar"\]\s*\{[^}]*transition:\s*none/);
   assert.doesNotMatch(css, /#status-progress-file\s*\{[^}]*opacity:/);
 });
 
-test('status text expands into free statusbar space and idle progress controls reserve no width', () => {
+test('statusbar shares its width and keeps idle progress out of the foreground layout', () => {
   const css = fs.readFileSync(path.resolve(__dirname, '../media/app.css'), 'utf8');
-  const rule = selector => css.match(new RegExp(`${selector}\\s*\\{([^}]*)\\}`))?.[1] || '';
-  const status = rule('#status-message');
-  const progress = rule('#status-progress-area');
-  assert.match(status, /flex:\s*1 1 auto/);
-  assert.match(status, /min-width:\s*0/);
-  assert.match(rule('#status-message \\[data-status-text\\]'), /text-overflow:\s*ellipsis/);
-  assert.match(rule('#status-message \\[data-status-icon\\]'), /flex:\s*0 0 auto/);
-  assert.match(progress, /flex:\s*1 1 0(?:px)?/);
-  assert.match(progress, /min-width:\s*0/);
-  assert.match(css, /#status-progress-area\.is-idle, \.status-cancel-slot:has\(> #status-cancel\[hidden\]\), \.statusbar #status-cancel\[hidden\]\s*\{\s*display:\s*none;\s*\}/);
-  assert.match(css, /\.functionbar\s*\{[^}]*flex:\s*0 0 auto;[^}]*flex-shrink:\s*0/);
+  assert.match(css, /#status-progress-area\s*\{[^}]*position:\s*absolute; inset:\s*0/);
+  assert.match(css, /#status-progress-area\.is-idle #status-progress-track[^}]*visibility:\s*hidden/);
+  assert.match(css, /#status-message \[data-status-text\][^}]*text-overflow:\s*ellipsis/);
 });
 
-test('active progress gets remaining width with a stable bounded text column', async t => {
+test('active progress retains its shared full-width region regardless of path length', async t => {
   const app = createApp(t, fixture()), request = await start(app);
   const style = app.document.createElement('style'); style.textContent = fs.readFileSync(path.resolve(__dirname, '../media/app.css'), 'utf8'); app.document.head.append(style);
-  const message = app.document.querySelector('#status-message'), area = app.document.querySelector('#status-progress-area');
-  const basis = () => app.window.getComputedStyle(message).flexBasis;
-  const initial = basis(); assert.ok(Number.parseFloat(initial) > 0);
-  assert.match(style.textContent, /#statusbar:has\(> #status-progress-area:not\(\.is-idle\)\) > #status-message\s*\{[^}]*clamp\(18ch, 30vw, 48ch\)/);
-  assert.equal(app.window.getComputedStyle(message).flexGrow, '0');
-  assert.equal(app.window.getComputedStyle(area).flexGrow, '1');
+  const area = app.document.querySelector('#status-progress-area');
+  const basis = () => app.window.getComputedStyle(area).position;
+  const initial = basis(); assert.equal(initial, 'absolute');
   for (const name of ['a.txt', 'very long name '.repeat(20) + '.txt']) {
     send(app, { type: 'filesystem-progress', operationId: request.operationId, progress: { path: '/left/' + name, transferred: 1, total: 2 } });
     assert.equal(basis(), initial);
     assert.equal(app.document.querySelector('#status-progress-area'), area);
-    assert.equal(app.window.getComputedStyle(area).paddingLeft, '0px');
+    assert.equal(area.parentElement.contains(app.document.querySelector('#status-text-region')), true);
   }
   send(app, { type: 'filesystem-result', ok: true, operationId: request.operationId, state: fixture() });
-  assert.equal(app.window.getComputedStyle(message).flexGrow, '1');
-  assert.equal(app.window.getComputedStyle(area).display, 'none');
+  assert.equal(basis(), initial);
+  assert.notEqual(app.window.getComputedStyle(area).display, 'none');
+  assert.equal(app.document.querySelector('#statusbar').dataset.statusProgressOwner, 'background');
 });
 
-test('routine filesystem updates appear as status text without creating notifications', async t => {
+test('routine filesystem updates do not add status text or notifications', async t => {
   const state = fixture(), app = createApp(t, state);
   send(app, { type: 'filesystem-result', ok: true, state });
-  assert.equal(app.document.querySelector('#status-message').textContent, 'Dateisystem aktualisiert');
+  assert.equal(app.document.querySelector('#status-message').textContent, '');
   assert.equal(app.document.querySelector('#notifications-list').textContent, '');
 });
 
@@ -395,7 +398,7 @@ test('completed transfer stays in notification history and does not steal focus 
   const request = await start(app);
   assert.equal(app.document.activeElement.classList.contains('list'), true);
   send(app, { type: 'filesystem-result', operationId: request.operationId, ok: true, state, operationOutcome: { completedIds: ['a'] } });
-  assert.equal(app.document.querySelector('#status-progress-area')?.classList.contains('is-idle'), true);
+  assert.equal(app.document.querySelector('#statusbar').dataset.statusProgressOwner, 'background');
   const center = app.document.querySelector('#notifications-center'); assert.match(center.textContent, /copied/);
   assert.equal(app.document.activeElement.classList.contains('list'), true);
   app.click(app.document.querySelector('#notifications-toggle'));
@@ -406,9 +409,30 @@ test('completed transfer stays in notification history and does not steal focus 
 test('workspace restore clears notification history and active progress without mutating filesystem state', async t => {
   const state = fixture(), app = createApp(t, state); await start(app);
   send(app, { type: 'restore', state });
-  assert.equal(app.document.querySelector('#status-progress-area')?.classList.contains('is-idle'), true);
+  assert.equal(app.document.querySelector('#statusbar').dataset.statusProgressOwner, 'background');
   assert.equal(app.document.querySelector('.transfer-progress'), null);
   app.click(app.document.querySelector('#notifications-toggle'));
   assert.match(app.document.querySelector('#notifications-center').textContent, /Keine neuen Benachrichtigungen/);
   assert.equal(app.state().folders['/left'][0].name, 'Source <literal>.txt');
+});
+
+test('header controls activate by keyboard and keep wrapping groups bounded', t => {
+  const app = createApp(t); app.click(app.row('README.md'));
+  const rename = app.document.querySelector('#functionbar [data-action="rename-one"]');
+  rename.focus(); app.key('Enter', {}, rename);
+  assert.ok(app.document.querySelector('.inline-rename'));
+  const css = fs.readFileSync(path.resolve(__dirname, '../media/app.css'), 'utf8');
+  assert.match(css, /#header-actions \.functionbar[^}]*max-width:\s*100%/);
+  assert.match(css, /\.commander-header > \[data-main-menu\][^}]*max-width:\s*100%/);
+});
+
+test('notification height budget follows the wrapped header on open and resize', t => {
+  const app = createApp(t), header = app.document.querySelector('.commander-header');
+  header.getBoundingClientRect = () => ({ bottom: 88 });
+  app.click(app.document.querySelector('#notifications-toggle'));
+  const center = app.document.querySelector('#notifications-center');
+  assert.equal(center.style.getPropertyValue('--notification-top'), '88px');
+  header.getBoundingClientRect = () => ({ bottom: 110 });
+  app.window.dispatchEvent(new app.window.Event('resize'));
+  assert.equal(center.style.getPropertyValue('--notification-top'), '110px');
 });

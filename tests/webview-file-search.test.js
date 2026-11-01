@@ -126,6 +126,7 @@ test('opening an applied file and returning focus refreshes without dropping its
   app.click(app.row('hit.txt')); app.row('hit.txt').dispatchEvent(new app.window.MouseEvent('dblclick', { bubbles: true }));
   assert.equal(app.messages.filter(message => message.type === 'open').at(-1).path, row.fsSource);
   app.window.dispatchEvent(new app.window.Event('blur')); app.window.dispatchEvent(new app.window.Event('focus'));
+  app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'window-focus' } }));
   assert.equal(app.state().panes[0].tabStates[1].searchResult.id, request.searchId);
   const refresh = app.messages.filter(message => message.type === 'filesystem-refresh').at(-1); assert.ok(refresh);
   respond(app, { type: 'filesystem-result', ok: true, state: structuredClone(refresh.state) });

@@ -143,11 +143,14 @@ class FakeBackend final : public ClipboardBackend {
     return S_OK;
   }
   HRESULT Replace(const std::vector<std::wstring>& paths, const std::wstring& mode,
-                  bool check_sequence, DWORD expected_sequence) override {
+                  bool check_sequence, DWORD expected_sequence, DWORD* published_sequence = nullptr) override {
+    if (check_sequence && replace_race) { ++sequence_; replace_race = false; }
     if (check_sequence && sequence_ != expected_sequence) return HRESULT_FROM_WIN32(ERROR_RETRY);
     replacements.emplace_back(paths, mode);
     ++sequence_;
     SetCurrent(paths, mode);
+    if (published_sequence) *published_sequence = sequence_;
+    if (!check_sequence && publication_race) ++sequence_;
     return S_OK;
   }
   HRESULT GetIdentity(const std::wstring& path, ClipboardFileIdentity* output) override {
@@ -185,6 +188,8 @@ class FakeBackend final : public ClipboardBackend {
   }
   FakeDataObject* current() const { return current_; }
   std::vector<std::pair<std::vector<std::wstring>, std::wstring>> replacements;
+  bool replace_race = false;
+  bool publication_race = false;
  private:
   DWORD sequence_ = 7;
   FakeDataObject* current_ = nullptr;
@@ -340,6 +345,57 @@ int Run() {
     std::vector<std::string> errors;
     HRESULT status = engine.Acknowledge(selection.token, selection.paths, selection.mode, {}, &matched, &errors);
     if (!Check(status == E_ACCESSDENIED && !matched && backend.replacements.empty(), "unexpected callback failure is not reported as successful acknowledgement")) ++failures;
+  }
+  {
+    FakeBackend backend;
+    ClipboardOleEngine engine(&backend);
+    ClipboardSelection original, repeated, changed;
+    engine.Read(&original); engine.Read(&repeated);
+    if (!Check(original.token == repeated.token, "an unchanged clipboard read preserves the original cancellation identity")) ++failures;
+    backend.Replace(original.paths, original.mode, false, 0);
+    engine.Read(&changed);
+    if (!Check(original.token != changed.token, "new clipboard data gets a new identity even for identical paths and effect")) ++failures;
+  }
+  {
+    FakeBackend backend;
+    ClipboardOleEngine engine(&backend);
+    backend.publication_race = true;
+    ClipboardSelection selection;
+    const HRESULT status = engine.Write({L"C:/tmp/Größe.txt", L"C:/tmp/second.txt"}, L"move", &selection);
+    if (!Check(FAILED(status), "write must not authorize a newer identical publication between publishing and reading")) ++failures;
+  }
+  for (const auto& mode : {L"copy", L"move"}) {
+    FakeBackend backend;
+    backend.SetCurrent({L"C:/tmp/Größe.txt", L"C:/tmp/second.txt"}, mode);
+    ClipboardOleEngine engine(&backend);
+    ClipboardSelection selection;
+    engine.Read(&selection);
+    FakeDataObject* retained = backend.current(); retained->AddRef();
+    bool matched = false;
+    HRESULT status = engine.Cancel(L"stale", selection.paths, mode, &matched);
+    if (!Check(SUCCEEDED(status) && !matched && backend.replacements.empty(), "cancellation rejects an obsolete token")) ++failures;
+    status = engine.Cancel(selection.token, selection.paths, mode, &matched);
+    if (!Check(SUCCEEDED(status) && matched && backend.replacements.size() == 1 && backend.replacements[0].first.empty(), "cancellation clears an unchanged copy or cut while the sources still exist")) ++failures;
+    if (!Check(retained->notifications.empty(), "cancellation never notifies the source of a successful file drop")) ++failures;
+    retained->Release();
+  }
+  {
+    FakeBackend backend;
+    ClipboardOleEngine engine(&backend);
+    ClipboardSelection selection; engine.Read(&selection);
+    backend.Replace({L"C:/tmp/other.txt"}, L"copy", false, 0);
+    bool matched = false;
+    const HRESULT status = engine.Cancel(selection.token, selection.paths, selection.mode, &matched);
+    if (!Check(SUCCEEDED(status) && !matched && backend.replacements.size() == 1, "cancellation preserves a newer external selection")) ++failures;
+  }
+  {
+    FakeBackend backend;
+    ClipboardOleEngine engine(&backend);
+    ClipboardSelection selection; engine.Read(&selection);
+    backend.replace_race = true;
+    bool matched = false;
+    const HRESULT status = engine.Cancel(selection.token, selection.paths, selection.mode, &matched);
+    if (!Check(SUCCEEDED(status) && !matched && backend.replacements.empty(), "cancellation preserves a clipboard sequence changed at publication")) ++failures;
   }
   OleUninitialize();
   return failures ? 1 : 0;

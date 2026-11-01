@@ -5,6 +5,56 @@ const os = require('node:os');
 const path = require('node:path');
 const { createProvider } = require('../filesystem-provider');
 
+test('cold startup retains explicitly saved inactive tabs without reading their directories', async t => {
+  const { left, right } = await setup(t), inactive = `${left}/docs/archive`, reads = [], inspected = [];
+  await fs.mkdir(inactive, { recursive: true });
+  const provider = createProvider({ roots: [left, right], fs: { ...fs, readdir: async (directory, ...args) => { reads.push(slash(String(directory))); return fs.readdir(directory, ...args); }, lstat: async (target, ...args) => { inspected.push(slash(String(target))); return fs.lstat(target, ...args); } } });
+  const state = await provider.load({ directories: [left, right], deferredDirectories: [inactive], visibleOnly: true });
+  assert.ok(Object.hasOwn(state.folders, inactive)); assert.ok(state.unloadedFolders.includes(inactive));
+  assert.deepEqual(reads.sort(), [left, right].sort());
+  assert.equal(inspected.some(target => target === inactive || target.startsWith(inactive + '/')), false);
+  reads.length = 0;
+  await provider.prepare(state, { directories: [inactive], recursive: false, navigation: true, visibleDirectories: [inactive, right] });
+  assert.deepEqual(reads, [inactive]);
+});
+
+test('directory rows keep hidden folders and carry actual supplied hidden attributes', async t => {
+  const { left, right } = await setup(t);
+  const calls = [];
+  const provider = createProvider({ roots: [left, right], readAttributes: async target => { calls.push(target); return { hidden: path.basename(target) === 'docs' }; } });
+  const state = await provider.load();
+  const folder = state.folders[left].find(row => row.name === 'docs');
+  assert.equal(folder.type, 'folder'); assert.match(folder.attributes, /h/);
+  assert.ok(calls.includes(folder.fsSource));
+  assert.equal(state.folders[left].find(row => row.name === 'plain.txt').attributes.includes('h'), false);
+});
+
+for (const code of ['NotFound', 'Denied']) test(`native attribute ${code} preserves readable directory entries`, async t => {
+  const { left, right } = await setup(t);
+  const failure = Object.assign(new Error('Native attributes failed'), { code });
+  const provider = createProvider({ roots: [left, right], readAttributes: async target => {
+    if (path.basename(target) === 'plain.txt') throw failure;
+    return { hidden: false };
+  } });
+  const state = await provider.load();
+  assert.ok(state.folders[left].some(row => row.name === 'docs'));
+  const denied = state.folders[left].find(row => row.name === 'plain.txt');
+  if (code === 'NotFound') assert.equal(denied, undefined);
+  else { assert.ok(denied); assert.equal(denied.size, undefined); }
+  await assert.rejects(provider.load({ recursive: true }), error => error.cause === failure || error === failure);
+});
+
+test('hidden links use their own attributes without traversing their target', async t => {
+  const { left, right } = await setup(t);
+  const provider = createProvider({ roots: [left, right], fs: { ...fs, lstat: async (target, ...args) => {
+    const stat = await fs.lstat(target, ...args);
+    return path.basename(target) === 'plain.txt' ? Object.assign(Object.create(stat), { isSymbolicLink: () => true, isFile: () => false, isDirectory: () => false }) : stat;
+  } }, readAttributes: async target => ({ hidden: path.basename(target) === 'plain.txt' }) });
+  const state = await provider.load();
+  const link = state.folders[left].find(row => row.name === 'plain.txt');
+  assert.equal(link.type, 'link'); assert.match(link.attributes, /h/);
+});
+
 const slash = value => value.replace(/\\/g, '/');
 const clone = value => JSON.parse(JSON.stringify(value));
 
@@ -22,6 +72,58 @@ async function setup(t, options = {}) {
 }
 
 function row(state, directory, name) { return state.folders[directory].find(file => file.name === name); }
+
+test('shallow navigation publishes complete names before metadata and bounded row batches before completion', async t => {
+  const { provider, left, right } = await setup(t);
+  const before = await provider.load(); const chunks = [];
+  const fresh = await provider.prepare(before, { directories: [left], navigation: true, recursive: false, visibleDirectories: [left, right], onDirectory: update => {
+    chunks.push(structuredClone(update));
+    assert.equal(update.path, left); assert.ok(update.rows.length <= 64);
+  } });
+  assert.ok(chunks.length >= 2);
+  assert.deepEqual(chunks[0].names, ['binary.bin', 'docs', 'plain.txt']);
+  assert.deepEqual(chunks[0].rows, []);
+  assert.deepEqual(chunks.filter(chunk => chunk.phase).map(chunk => chunk.phase), ['comments', 'validation', 'publication']);
+  assert.ok(chunks.findIndex(chunk => chunk.phase === 'comments') < chunks.findIndex(chunk => chunk.phase === 'validation'));
+  assert.deepEqual(chunks.slice(1).flatMap(chunk => chunk.rows).map(row => row.name), fresh.folders[left].map(row => row.name));
+});
+
+test('navigation releases historical snapshot rows when the directory cache budget is exhausted', async t => {
+  const { left, right } = await setup(t);
+  const provider = createProvider({ roots: [left, right], directoryCacheBytes: 64 });
+  const before = await provider.load();
+  const fresh = await provider.prepare(before, { directories: [`${left}/docs`], recursive: false, navigation: true, visibleDirectories: [`${left}/docs`, right] });
+  assert.deepEqual(fresh.folders[left], []);
+  assert.ok(fresh.unloadedFolders.includes(left));
+  const returned = await provider.prepare(fresh, { directories: [left], recursive: false, navigation: true, visibleDirectories: [left, right] });
+  assert.ok(row(returned, left, 'plain.txt'));
+});
+
+test('read-only navigation recovers a stale view while stale writes remain rejected', async t => {
+  const { provider, left, right } = await setup(t);
+  const stale = await provider.load();
+  const current = await provider.prepare(stale, { directories: [left], navigation: true, visibleDirectories: [left, right] });
+  const tampered = clone(stale); tampered.folders[right].push({ id: 'invented', name: 'invented.txt', type: 'text', content: 'invalid' });
+  const navigated = await provider.prepare(tampered, { directories: [`${left}/docs`], navigation: true, visibleDirectories: [`${left}/docs`, right] });
+  assert.ok(row(navigated, `${left}/docs`, 'nested.txt'));
+  assert.equal(row(navigated, right, 'invented.txt'), undefined);
+  await assert.rejects(provider.apply(current, current), /Snapshot/);
+  await assert.rejects(provider.prepare(tampered, { directories: [left], recursive: true }), /Snapshot/);
+  assert.equal(await fs.readFile(path.join(left, 'plain.txt'), 'utf8'), 'original text');
+});
+
+test('evicted parent lists do not invalidate operations or force ancestor directory reads', async t => {
+  const { left, right } = await setup(t), reads = [];
+  const provider = createProvider({ roots: [left, right], directoryCacheBytes: 64, fs: { ...fs, readdir: async (directory, ...args) => { reads.push(slash(String(directory))); return fs.readdir(directory, ...args); } } });
+  const loaded = await provider.load();
+  const before = await provider.prepare(loaded, { directories: [`${left}/docs`], recursive: false, navigation: true, visibleDirectories: [`${left}/docs`, right] });
+  before.panes[0].tabs = [`${left}/docs`];
+  const desired = clone(before); desired.folders[right].push({ id: 'new-after-eviction', name: 'new.txt', type: 'text', content: 'new' });
+  reads.length = 0;
+  const applied = await provider.apply(before, desired);
+  assert.ok(row(applied, right, 'new.txt'));
+  assert.equal(reads.includes(left), false);
+});
 
 test('navigation loads only the requested directory and preserves the opposite snapshot without accessing it', async t => {
   const { left, right } = await setup(t);

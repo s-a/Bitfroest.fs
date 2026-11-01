@@ -9,6 +9,360 @@ const root = path.resolve(__dirname, '..');
 const extensionPath = path.join(root, 'extension.js');
 const manifest = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
 const tick = () => new Promise(resolve => setImmediate(resolve));
+const Progress = require('../media/commander-progress');
+function progressSample(fields) {
+  return Progress.event({ ...fields, phase: fields.phase || 'preparing',
+    overall: Number.isSafeInteger(fields.totalBytes) ? Progress.known('bytes', fields.completedBytes || 0, fields.totalBytes) : Progress.unknown('items', 0, 'enumerating'),
+    current: Number.isSafeInteger(fields.total) ? Progress.known('bytes', fields.transferred || 0, fields.total) : Progress.unknown('items', 0, 'enumerating') });
+}
+
+test('generated host HTML suppresses file-action context menus while retaining native text editing', async t => {
+  const initial = clipboardFixture();
+  initial.panes.forEach(pane => { pane.filter = ''; pane.sort = 'name'; });
+  const app = harness(t, { filesystemLoad: async () => initial });
+  await app.command('bitfroest.openPrototype');
+  const panel = app.panels[0];
+  const view = require('./support/webview.cjs').createApp(t, initial, { html: panel.webview.html });
+  assert.match(panel.webview.html, /Content-Security-Policy/);
+  assert.match(panel.webview.html, /script-src 'nonce-[^']+'/);
+  for (const button of view.document.querySelectorAll('#functionbar button')) {
+    const event = new view.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 });
+    button.dispatchEvent(event);
+    assert.equal(event.defaultPrevented, true);
+    assert.deepEqual(JSON.parse(button.closest('[data-vscode-context]').dataset.vscodeContext), { webviewSection: 'fileActions', preventDefaultContextMenuItems: true });
+    assert.equal(view.document.querySelector('[data-context-menu]'), null);
+  }
+  const input = view.document.querySelector('.path-input');
+  const edit = new view.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 });
+  input.dispatchEvent(edit);
+  assert.equal(edit.defaultPrevented, false);
+  assert.equal(JSON.parse(input.dataset.vscodeContext).preventDefaultContextMenuItems, false);
+  for (const pane of view.document.querySelectorAll('.pane')) {
+    assert.equal(pane.querySelector('[data-parent] .filename').textContent, '…');
+    assert.equal(pane.querySelector('[data-parent] [data-icon-reviewed]'), null);
+  }
+  panel.dispose();
+});
+
+test('Git location menu accepts a trusted ordinary folder containing an exclamation mark', async t => {
+  const directory = 'C:/tmp/release!old', initial = clipboardFixture();
+  initial.panes[0].tabs[0] = directory; initial.folders[directory] = [];
+  const inspected = [];
+  const app = harness(t, { filesystemLoad: async () => initial,
+    gitInspect: async directories => { inspected.push(...directories); return Object.fromEntries(directories.map(path => [path, { ok: true, repository: true, branch: 'main', statuses: {} }])); } });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  const view = require('./support/webview.cjs').createApp(t, initial, { html: panel.webview.html });
+  await panel.receive(view.messages.find(message => message.type === 'git-status'));
+  assert.ok(inspected.includes(directory));
+  const result = panel.messages.find(message => message.type === 'git-status-result');
+  view.window.dispatchEvent(new view.window.MessageEvent('message', { data: result }));
+  assert.ok(view.document.querySelector('[data-favorites] svg.bi-git'));
+  panel.dispose();
+});
+
+test('generated host HTML supplies compact hover menus and cascading favorites with its CSP', async t => {
+  const initial = clipboardFixture(); initial.panes.forEach(pane => { pane.filter = ''; pane.sort = 'name'; });
+  const app = harness(t, { filesystemLoad: async () => initial });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  assert.match(panel.webview.html, /<script[^>]*nonce="[^"]+"[^>]*src="[^"]*commander-menu\.js"|<script[^>]*src="[^"]*commander-menu\.js"[^>]*nonce="[^"]+"/);
+  const view = require('./support/webview.cjs').createApp(t, initial, { html: panel.webview.html });
+  const heads = view.document.querySelectorAll('[data-main-menu] > button'); view.click(heads[0]);
+  heads[1].dispatchEvent(new view.window.MouseEvent('mouseenter'));
+  assert.equal(heads[1].getAttribute('aria-expanded'), 'true');
+  assert.ok(view.document.querySelector('[data-menu-action="select-all"] [data-menu-icon]'));
+  view.window.dispatchEvent(new view.window.MessageEvent('message', { data: { type: 'favorite-settings', settings: { entries: { work: 'C:/tmp' }, groups: { work: 'Projects' } } } }));
+  view.click(view.document.querySelector('[data-favorites]'));
+  const group = view.document.querySelector('[data-favorite-group]'); group.dispatchEvent(new view.window.MouseEvent('mouseenter'));
+  const child = view.document.getElementById(group.getAttribute('aria-controls')); assert.ok(child);
+  assert.equal(child.getAttribute('aria-label'), 'Projects');
+  view.click(child.querySelector('[data-favorite-entry]'));
+  assert.equal(view.messages.filter(message => message.type === 'filesystem-navigate').at(-1).path, 'C:/tmp');
+  assert.match(panel.webview.html, /Content-Security-Policy/);
+});
+
+test('generated host HTML preserves complete column captions and accessible sorting', async t => {
+  const initial = clipboardFixture();
+  initial.panes.forEach(pane => { pane.filter = ''; pane.sort = 'name'; pane.descending = false; });
+  const app = harness(t, { filesystemLoad: async () => initial });
+  await app.command('bitfroest.openPrototype');
+  const panel = app.panels[0];
+  const view = require('./support/webview.cjs').createApp(t, initial, { html: panel.webview.html });
+  assert.match(panel.webview.html, /Content-Security-Policy/);
+  for (const pane of view.document.querySelectorAll('.pane')) {
+    const tab = pane.querySelector('.tab');
+    assert.equal(tab.firstElementChild.getAttribute('data-icon-reviewed'), 'font:folder');
+    assert.equal(tab.firstElementChild.getAttribute('aria-hidden'), 'true');
+    assert.ok(tab.querySelector('[data-tab-label]').textContent);
+    const button = pane.querySelector('[data-sort="name"]');
+    assert.equal(button.getAttribute('aria-label'), button.querySelector('.column-caption').textContent);
+    button.focus();
+    assert.equal(view.document.activeElement, button);
+    view.click(button.querySelector('.column-caption'));
+    assert.equal(pane.querySelector('[data-column="name"]').getAttribute('aria-sort'), 'descending');
+    assert.ok(pane.querySelector('.column-sort[aria-hidden="true"]'));
+  }
+  assert.equal(view.messages.some(message => message.type === 'filesystem-apply'), false);
+});
+
+test('Escape in generated host HTML resets the native clipboard selection without a file operation', async t => {
+  const initial = clipboardFixture(); initial.panes.forEach(pane => { pane.filter = ''; pane.sort = 'name'; });
+  const app = harness(t, { filesystemLoad: async () => initial });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  const view = require('./support/webview.cjs').createApp(t, initial, { html: panel.webview.html });
+  view.click(view.row('a.txt')); view.action('clipboard-cut');
+  const write = view.messages.find(message => message.type === 'clipboard-write'); await panel.receive(write);
+  view.window.dispatchEvent(new view.window.MessageEvent('message', { data: panel.messages.find(message => message.requestId === write.requestId) }));
+  assert.ok(view.row('a.txt').classList.contains('is-cut'));
+  view.key('Escape');
+  const reset = view.messages.find(message => message.type === 'clipboard-reset'); assert.ok(reset);
+  await panel.receive(reset);
+  assert.equal(view.document.querySelectorAll('.is-cut,.is-copied').length, 0);
+  assert.equal(app.clipboardCalls.filter(call => call.action === 'reset').length, 1);
+  assert.equal(app.clipboardCalls.some(call => call.action === 'ack'), false);
+  assert.equal(view.messages.some(message => message.type === 'filesystem-apply'), false);
+  assert.match(panel.webview.html, /Content-Security-Policy/);
+});
+
+test('a pending read cannot authorize clearing a newer identical foreign clipboard selection', async t => {
+  const calls = [], paths = ['C:/tmp/a.txt'];
+  const app = harness(t, { filesystemLoad: async () => clipboardFixture(), clipboardFactory: () => ({
+    write: async () => ({ paths, mode: 'move', token: 'own', source: 'system' }),
+    read: async () => ({ paths, mode: 'move', token: 'foreign', source: 'system' }),
+    reset: async selection => { calls.push(selection); return true; }, dispose() {}
+  }) });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  await panel.receive({ type: 'clipboard-write', requestId: 'write-own', paths, mode: 'move' });
+  await panel.receive({ type: 'clipboard-read', requestId: 'read-new' });
+  await panel.receive({ type: 'clipboard-reset', requestId: 'reset-stale', sourceRequestId: 'read-new', paths, mode: 'move' });
+  assert.equal(calls.length, 0);
+});
+
+test('a queued own write stays cancellable after reading the same native clipboard identity', async t => {
+  const calls = [], paths = ['C:/tmp/a.txt'];
+  const selection = { paths, mode: 'move', token: 'same-identity', source: 'system' };
+  const app = harness(t, { filesystemLoad: async () => clipboardFixture(), clipboardFactory: () => ({
+    write: async () => selection, read: async () => selection,
+    reset: async value => { calls.push(value); return true; }, dispose() {}
+  }) });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  await panel.receive({ type: 'clipboard-write', requestId: 'write-own', paths, mode: 'move' });
+  await panel.receive({ type: 'clipboard-read', requestId: 'read-same' });
+  await panel.receive({ type: 'clipboard-reset', requestId: 'cancel-own', sourceRequestId: 'write-own', paths, mode: 'move' });
+  assert.equal(calls.length, 1); assert.equal(calls[0].token, 'same-identity');
+});
+
+test('Escape reset is bound to its issued clipboard request and never acknowledges file deletion', async t => {
+  const app = harness(t, { filesystemLoad: async () => clipboardFixture() });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  for (const mode of ['copy', 'move']) {
+    await panel.receive({ type: 'clipboard-write', requestId: `write-${mode}`, paths: ['C:/tmp/a.txt'], mode });
+    await panel.receive({ type: 'clipboard-reset', requestId: `stale-${mode}`, sourceRequestId: 'stale-write', paths: ['C:/tmp/a.txt'], mode });
+    assert.equal(app.clipboardCalls.filter(call => call.action === 'reset').length, mode === 'copy' ? 0 : 1);
+    await panel.receive({ type: 'clipboard-reset', requestId: `reset-${mode}`, sourceRequestId: `write-${mode}`, paths: ['C:/tmp/a.txt'], mode });
+    const result = panel.messages.find(message => message.requestId === `reset-${mode}`);
+    assert.equal(result.ok, true); assert.equal(result.matched, true);
+  }
+  assert.equal(app.clipboardCalls.filter(call => call.action === 'reset').length, 2);
+  assert.equal(app.clipboardCalls.some(call => call.action === 'ack'), false);
+});
+
+test('generated host HTML displays optional executable versions in both panels and reads older layouts', async t => {
+  const { catalog } = require('../media/commander-column-settings');
+  const initial = clipboardFixture();
+  initial.folders['C:/tmp'] = [{ id: 'dll', name: 'library.dll', type: 'binary', fsSource: 'C:/tmp/library.dll', fileVersion: [4, 3, 2, 1], fileVersionString: '4.3 beta', comment: '<notes>', attributeFlags: { system: true } }];
+  initial.folders['C:/temp'] = [{ id: 'exe', name: 'program.exe', type: 'binary', fsSource: 'C:/temp/program.exe', fileVersion: [0, 0, 0, 0] }];
+  for (const legacy of [false, true]) {
+    const layout = (legacy ? catalog.slice(0, 13) : catalog).map(column => ({ id: column.id, align: column.align, visible: ['name', 'version', 'versionString', 'comment', 'system'].includes(column.id) }));
+    const configuration = { 'columns.layout': layout };
+    const app = harness(t, { configuration, filesystemLoad: async () => initial });
+    await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+    assert.match(panel.webview.html, /Content-Security-Policy/);
+    const view = require('./support/webview.cjs').createApp(t, initial, { html: panel.webview.html });
+    const panes = view.document.querySelectorAll('.pane');
+    for (const [index, expected] of ['4.3.2.1', '0.0.0.0'].entries()) {
+      const heading = panes[index].querySelector('[data-column="version"]');
+      if (legacy) assert.equal(heading, null);
+      else { assert.equal(heading.textContent.trim(), 'Version'); assert.ok(panes[index].textContent.includes(expected)); }
+    }
+    assert.equal(configuration['columns.layout'].length, legacy ? 13 : catalog.length);
+    if (!legacy) {
+      assert.ok(panes[0].textContent.includes('4.3 beta'));
+      assert.ok(panes[0].textContent.includes('<notes>'));
+      assert.equal(panes[0].querySelector('notes'), null);
+    }
+    panel.dispose();
+  }
+});
+
+test('status log copy adds runtime metadata and confirms the clipboard write', async t => {
+  const app = harness(t, { filesystemLoad: async () => clipboardFixture() });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  await panel.receive({ type: 'status-log-copy', requestId: 'status-log-1', text: JSON.stringify({ formatVersion: 1, currentMessage: 'Read directory', operations: [] }) });
+  const report = JSON.parse(app.clipboardCalls.at(-1).text);
+  assert.equal(report.runtime.extensionVersion, require('../package.json').version);
+  assert.equal(report.runtime.platform, process.platform);
+  assert.equal(report.runtime.runtimeVersion, process.version);
+  assert.equal(report.currentMessage, 'Read directory');
+  assert.equal(panel.messages.findLast(message => message.type === 'status-log-copy-result').ok, true);
+});
+
+test('status log copy reports clipboard errors without a success acknowledgement', async t => {
+  const app = harness(t, { filesystemLoad: async () => clipboardFixture(), writeClipboardText: async () => { throw new Error('Clipboard unavailable'); } });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  await panel.receive({ type: 'status-log-copy', requestId: 'status-log-2', text: JSON.stringify({ formatVersion: 1 }) });
+  const result = panel.messages.findLast(message => message.type === 'status-log-copy-result');
+  assert.equal(result.ok, false); assert.match(result.error, /Clipboard unavailable/);
+});
+
+test('refresh reports the actual pending state save before its final response', async t => {
+  const initial = clipboardFixture(), gate = deferred(); let hold = false;
+  const app = harness(t, { filesystemLoad: async () => initial, update: async (_store, key) => { if (hold && key === 'fileManagerState') await gate.promise; } });
+  t.after(() => gate.resolve());
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  hold = true;
+  const result = panel.receive({ type: 'filesystem-refresh', refreshRequestId: 'refresh-save', state: initial });
+  await tick();
+  assert.ok(panel.messages.some(message => message.type === 'filesystem-refresh-step' && message.phase === 'state-save' && message.refreshRequestId === 'refresh-save'));
+  assert.equal(panel.messages.some(message => message.type === 'filesystem-result' && message.refreshRequestId === 'refresh-save'), false);
+  gate.resolve(); await result;
+  assert.ok(panel.messages.some(message => message.type === 'filesystem-result' && message.refreshRequestId === 'refresh-save'));
+});
+
+test('generated host HTML receives correlated metadata progress during an explicit refresh', async t => {
+  const initial = clipboardFixture();
+  const Progress = require('../media/commander-progress');
+  const bytes = Progress.event({ phase: 'directory-comments', overall: Progress.unknown('bytes', 4, 'enumerating'), current: Progress.known('bytes', 4, 10) });
+  initial.panes.forEach(pane => { pane.filter = ''; pane.sort = 'name'; });
+  const app = harness(t, { filesystemLoad: async settings => {
+    await settings?.onDirectory?.({ path: 'C:/tmp', names: ['a.txt'], rows: [] });
+    await settings?.onDirectory?.({ path: 'C:/tmp', phase: 'comments', completed: 1, total: 1, rows: [], progress: bytes });
+    await settings?.onDirectory?.({ path: 'C:/tmp', phase: 'validation', completed: 1, total: 1, rows: [] });
+    await settings?.onDirectory?.({ path: 'C:/tmp', done: true, rows: [] });
+    return initial;
+  } });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  const view = require('./support/webview.cjs').createApp(t, initial, { html: panel.webview.html });
+  view.action('refresh');
+  const request = view.messages.find(message => message.type === 'filesystem-refresh');
+  await panel.receive(request);
+  const steps = panel.messages.filter(message => message.type === 'filesystem-refresh-step');
+  assert.equal(panel.messages.findLast(message => message.type === 'filesystem-result').refreshRequestId, request.refreshRequestId);
+  assert.deepEqual(steps.map(message => message.phase), ['metadata', 'comments', 'validation', 'done', 'state-save']);
+  assert.deepEqual(steps[1].progress, bytes);
+  assert.ok(steps.every(message => message.refreshRequestId === request.refreshRequestId));
+  view.window.dispatchEvent(new view.window.MessageEvent('message', { data: steps[0] }));
+  assert.match(view.document.querySelector('#status-activity').textContent, /Dateieigenschaften lesen|Read file properties/);
+  assert.match(panel.webview.html, /Content-Security-Policy/);
+});
+
+test('generated context popup routes columns and exposes scoped folder tab focus', async t => {
+  const app = harness(t); await app.command('bitfroest.openPrototype');
+  const panel = app.panels[0];
+  const { createApp } = require('./support/webview.cjs');
+  const view = createApp(t, undefined, { html: panel.webview.html });
+  const crumb = view.document.querySelector('[data-breadcrumb]'); crumb.focus();
+  await panel.receive(view.messages.filter(message => message.type === 'inputFocus').at(-1));
+  assert.equal(app.contexts.get('bitfroest.tabFocus'), true);
+  view.document.querySelector('th').dispatchEvent(new view.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }));
+  view.click(view.document.querySelector('[data-context-action="configure-columns"]'));
+  await panel.receive(view.messages.find(message => message.type === 'configure-columns'));
+  await app.panels[1].receive({ type: 'configuration-ready' });
+  assert.equal(app.panels[1].messages.at(-1).section, 'columns');
+  await panel.receive({ type: 'inputFocus', tabs: true, value: true });
+  assert.equal(app.contexts.get('bitfroest.tabFocus'), false);
+  await panel.receive({ type: 'inputFocus', tabs: true, dialog: true });
+  assert.equal(app.contexts.get('bitfroest.tabFocus'), false);
+  await panel.receive({ type: 'inputFocus', tabs: true }); panel.dispose();
+  assert.equal(app.contexts.get('bitfroest.tabFocus'), false);
+});
+
+test('only a real window focus transition requests a filesystem focus refresh', async t => {
+  const app = harness(t); await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  const count = () => panel.messages.filter(message => message.type === 'window-focus').length;
+  app.windowFocus(true); assert.equal(count(), 0);
+  app.windowFocus(false); assert.equal(count(), 0);
+  app.windowFocus(true); assert.equal(count(), 1);
+  app.windowFocus(true); assert.equal(count(), 1);
+  panel.dispose(); app.windowFocus(false); app.windowFocus(true); assert.equal(count(), 1);
+});
+
+test('system-menu Git Diff uses confirmed repository status and shares the captured Git action', async t => {
+  const initial = clipboardFixture(); let loads = 0;
+  const repository = { status: async () => {}, state: { indexChanges: [{ uri: { fsPath: 'C:/tmp/a.txt' } }] } };
+  const app = harness(t, { filesystemLoad: async () => { loads++; return initial; },
+    gitInspect: async directories => Object.fromEntries(directories.map(directory => [directory, { ok: true, repository: true, statuses: {} }])),
+    gitExtension: { enabled: true, getAPI: () => ({ getRepository: () => repository }) },
+    shellMenuShow: async (_paths, settings) => { assert.equal(settings.gitDiff, true); return { ok: true, displayed: true, invoked: true, cancelled: false, action: 'git-diff' }; } });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0]; await panel.receive({ type: 'app-ready' });
+  await panel.receive({ type: 'git-status', requestId: 'git-1', snapshotId: 'clipboard', directories: ['C:/tmp'] });
+  await panel.receive({ type: 'shell-context-menu', requestId: 'shell-menu-1', directory: 'C:/tmp', ids: ['a'], snapshotId: 'clipboard' });
+  assert.equal(app.calls.find(call => call.id === 'git.openChange')?.args[0].fsPath, 'C:/tmp/a.txt');
+  assert.equal(loads, 1); assert.equal(panel.messages.at(-1).action, 'git-diff');
+  assert.equal(panel.messages.at(-1).refreshed, false);
+});
+
+test('system-menu Git Diff is absent after repository inspection fails', async t => {
+  const app = harness(t, { filesystemLoad: async () => clipboardFixture(),
+    gitInspect: async (_directories, _settings, _creation, onProgress) => { onProgress({ 'C:/tmp': { ok: true, repository: true, statuses: {} } }); throw new Error('Status unavailable'); },
+    shellMenuShow: async (_paths, settings) => { assert.equal(settings.gitDiff, false); return { ok: true, displayed: true, invoked: false, cancelled: true }; } });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0]; await panel.receive({ type: 'app-ready' });
+  await panel.receive({ type: 'git-status', requestId: 'git-1', snapshotId: 'clipboard', directories: ['C:/tmp'] });
+  await panel.receive({ type: 'shell-context-menu', requestId: 'shell-menu-1', directory: 'C:/tmp', ids: ['a'], snapshotId: 'clipboard' });
+  assert.equal(panel.messages.at(-1).ok, true);
+  assert.equal(app.calls.some(call => call.id === 'git.openChange'), false);
+});
+
+test('Git Diff validates captured selection and delegates to the built-in Git change editor', async t => {
+  const initial = clipboardFixture(); let statusCalls = 0;
+  const repository = { status: async () => { statusCalls++; }, state: { workingTreeChanges: [{ uri: { fsPath: 'C:/tmp/a.txt' } }], indexChanges: [], untrackedChanges: [], mergeChanges: [] } };
+  const app = harness(t, { filesystemLoad: async () => initial, gitExtension: { enabled: true, getAPI: version => { assert.equal(version, 1); return { getRepository: () => repository }; } } });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  await panel.receive({ type: 'app-ready' });
+  const request = { type: 'git-diff', requestId: 'ui-action-1', directory: 'C:/tmp', ids: ['a'], snapshotId: 'clipboard' };
+  await panel.receive(request);
+  const call = app.calls.find(call => call.id === 'git.openChange');
+  assert.ok(call); assert.equal(call.args[0].fsPath, 'C:/tmp/a.txt'); assert.equal(statusCalls, 1);
+  await panel.receive({ ...request, snapshotId: 'old' });
+  await panel.receive({ ...request, ids: ['missing'] });
+  assert.equal(app.calls.filter(call => call.id === 'git.openChange').length, 1);
+});
+
+test('Git Diff opens clean files against HEAD through the public diff command', async t => {
+  const initial = clipboardFixture(); let opened;
+  initial.panes.forEach(pane => { pane.filter = ''; pane.sort = 'name'; });
+  const repository = { status: async () => {}, state: {} };
+  const api = { getRepository: () => null, openRepository: async uri => { opened = uri.fsPath; return repository; }, toGitUri: (uri, ref) => ({ scheme: 'git', fsPath: uri.fsPath, ref }) };
+  const app = harness(t, { filesystemLoad: async () => initial, gitExtension: { enabled: true, getAPI: () => api } });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  await panel.receive({ type: 'app-ready' });
+  const selection = { webviewSection: 'files', gitFile: true, directory: 'C:/tmp', ids: ['a'], snapshotId: 'clipboard' };
+  await app.command('bitfroest.gitDiff', selection);
+  const action = panel.messages.at(-1); assert.equal(action.action, 'git-diff');
+  const view = require('./support/webview.cjs').createApp(t, initial, { html: panel.webview.html });
+  view.window.dispatchEvent(new view.window.MessageEvent('message', { data: action }));
+  const request = view.messages.find(message => message.type === 'git-diff'); assert.ok(request);
+  await panel.receive(request);
+  const call = app.calls.find(call => call.id === 'vscode.diff'); assert.ok(call);
+  assert.equal(opened, 'C:/tmp'); assert.equal(call.args[0].ref, 'HEAD'); assert.equal(call.args[1].fsPath, 'C:/tmp/a.txt');
+  assert.equal(call.args[3].preview, false);
+  assert.equal(panel.messages.at(-1).ok, true);
+  view.window.dispatchEvent(new view.window.MessageEvent('message', { data: panel.messages.at(-1) }));
+  assert.equal(view.document.querySelector('#status-message').textContent, 'Git-Diff geöffnet.');
+});
+
+test('Git Diff reports unavailable integration and command errors in the existing status protocol', async t => {
+  for (const mode of ['missing', 'disabled', 'repository', 'command']) {
+    const initial = clipboardFixture();
+    const repository = { status: async () => {}, state: { indexChanges: [{ uri: { fsPath: 'C:/tmp/a.txt' } }] } };
+    const app = harness(t, { filesystemLoad: async () => initial, commandError: mode === 'command' ? 'git.openChange' : undefined,
+      gitExtension: mode === 'missing' ? undefined : { enabled: mode !== 'disabled', getAPI: () => ({ getRepository: () => mode === 'repository' ? null : repository, openRepository: async () => null }) } });
+    await app.command('bitfroest.openPrototype'); const panel = app.panels[0]; await panel.receive({ type: 'app-ready' });
+    await panel.receive({ type: 'git-diff', requestId: 'ui-action-1', directory: 'C:/tmp', ids: ['a'], snapshotId: 'clipboard' });
+    const result = panel.messages.find(message => message.type === 'ui-action-result');
+    assert.equal(result?.ok, false, mode); assert.ok(result.error, mode); assert.equal(app.errors.length, 0, mode);
+    if (mode !== 'command') assert.equal(app.calls.some(call => call.id === 'git.openChange'), false, mode);
+  }
+});
 
 test('settings and shortcut commands share the existing configuration panel', async t => {
   const app = harness(t);
@@ -248,6 +602,60 @@ test('Git host uses generated HTML, deduplicates trusted directories and opens a
   assert.deepEqual(inspected, ['C:/tmp']); panel.dispose(); assert.equal(disposed, 1);
 });
 
+for (const reason of ['stale snapshot', 'unloaded opposite directory']) test(`rejected Git reads finish the matching visible activity: ${reason}`, async t => {
+  const initial = clipboardFixture(); initial.panes.forEach(pane => { pane.filter = ''; pane.sort = 'name'; });
+  let inspections = 0;
+  const app = harness(t, { filesystemLoad: async () => initial, gitInspect: async () => { inspections++; return {}; } });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  const view = require('./support/webview.cjs').createApp(t, initial, { html: panel.webview.html });
+  const request = view.messages.find(message => message.type === 'git-status');
+  assert.ok(view.document.querySelector('[data-location-icon][aria-busy="true"]'));
+  if (reason === 'stale snapshot') initial.snapshotId = 'new-snapshot';
+  else initial.unloadedFolders = ['C:/temp'];
+  await panel.receive({ type: 'filesystem-refresh', state: initial });
+  await panel.receive(request);
+  const reply = panel.messages.find(message => message.type === 'git-status-result' && message.requestId === request.requestId && !message.partial);
+  assert.ok(reply, 'a rejected read must terminate its activity');
+  assert.equal(reply.snapshotId, request.snapshotId);
+  view.window.dispatchEvent(new view.window.MessageEvent('message', { data: reply }));
+  assert.equal(view.document.querySelector('[data-location-icon][aria-busy="true"]'), null);
+  assert.equal(inspections, 0);
+  panel.dispose();
+});
+
+test('a Git read invalidated during its calculation still ends the original loading indicator', async t => {
+  let initial = clipboardFixture(); initial.panes.forEach(pane => { pane.filter = ''; pane.sort = 'name'; });
+  const work = deferred();
+  const app = harness(t, { filesystemLoad: async () => initial, gitInspect: () => work.promise });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  const view = require('./support/webview.cjs').createApp(t, initial, { html: panel.webview.html });
+  const request = view.messages.find(message => message.type === 'git-status');
+  const pending = panel.receive(request);
+  initial = structuredClone(initial); initial.snapshotId = 'changed'; initial.folders['C:/tmp'] = []; initial.folders['C:/temp'] = [{ id: 'external', name: 'external.txt', type: 'text' }];
+  await panel.receive({ type: 'filesystem-refresh', state: initial });
+  work.resolve({ 'C:/tmp': { ok: true, repository: true, branch: 'old', statuses: {} } }); await pending;
+  const reply = panel.messages.find(message => message.type === 'git-status-result' && !message.partial && message.requestId === request.requestId);
+  assert.ok(reply, 'invalidating a running query must still finish it');
+  assert.deepEqual(reply.directories, {});
+  view.window.dispatchEvent(new view.window.MessageEvent('message', { data: reply }));
+  assert.equal(view.document.querySelector('[data-location-icon][aria-busy="true"]'), null);
+  panel.dispose();
+});
+
+test('navigation rejected by an open native menu preserves its request identity', async t => {
+  const initial = clipboardFixture(), choice = deferred();
+  const app = harness(t, { filesystemLoad: async () => initial, shellMenuShow: () => choice.promise });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  const menu = panel.receive({ type: 'shell-context-menu', requestId: 'shell-menu-1', directory: 'C:/tmp', ids: ['a'], snapshotId: initial.snapshotId });
+  await tick();
+  try {
+    await panel.receive({ type: 'filesystem-navigate', navigationRequestId: 'directory-1', path: 'C:/temp', side: 0, state: initial });
+    const result = panel.messages.filter(message => message.type === 'filesystem-result').at(-1);
+    assert.equal(result?.ok, false);
+    assert.equal(result.navigationRequestId, 'directory-1');
+  } finally { choice.resolve({ ok: true, invoked: false, cancelled: true }); await menu; panel.dispose(); }
+});
+
 test('Git host ignores status work completed after panel disposal', async t => {
   const work = deferred(); let started = false;
   const initial = clipboardFixture(), app = harness(t, { filesystemLoad: async () => initial, gitInspect: () => { started = true; return work.promise; } });
@@ -267,7 +675,44 @@ test('Git host never queues navigation behind a pending status calculation', asy
   await panel.receive({ type: 'filesystem-navigate', path: 'C:/tmp/next', side: 0, state: initial });
   assert.equal(panel.messages.find(message => message.type === 'filesystem-result')?.resumeNavigation.path, 'C:/tmp/next');
   work.resolve({}); await pending;
-  assert.equal(panel.messages.some(message => message.type === 'git-status-result'), false); panel.dispose();
+  assert.deepEqual(panel.messages.find(message => message.type === 'git-status-result')?.directories, {}); panel.dispose();
+});
+
+test('directory navigation streams display batches and binds the final snapshot to the request', async t => {
+  const initial = clipboardFixture(); initial.folders['C:/tmp/next'] = [];
+  const app = harness(t, { filesystemLoad: async () => initial, filesystemPrepare: async (before, options) => {
+    await options.onDirectory({ path: 'C:/tmp/next', names: ['fresh.txt'], rows: [] });
+    await options.onDirectory({ path: 'C:/tmp/next', rows: [{ id: 'fresh', name: 'fresh.txt', type: 'text' }] });
+    return { ...before, snapshotId: 'streamed', folders: { ...before.folders, 'C:/tmp/next': [{ id: 'fresh', name: 'fresh.txt', type: 'text' }] } };
+  } });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  assert.match(panel.webview.html, /commander-directory-cache\.js/);
+  assert.match(panel.webview.html, /href="webview-resource:[^"]*codicons\.css"/);
+  assert.match(panel.webview.html, /font-src webview-resource:/);
+  assert.match(panel.webview.html, /Content-Security-Policy/);
+  await panel.receive({ type: 'filesystem-navigate', navigationRequestId: 'directory-1', path: 'C:/tmp/next', side: 0, state: initial });
+  const messages = panel.messages.filter(message => message.navigationRequestId === 'directory-1');
+  assert.deepEqual(messages.map(message => message.type), ['filesystem-directory', 'filesystem-directory', 'filesystem-result']);
+  assert.equal(messages.at(-1).state.snapshotId, 'streamed'); assert.equal(messages.at(-1).ok, true);
+});
+
+test('newer navigation aborts obsolete same-panel reads before processing its destination', async t => {
+  const initial = clipboardFixture(), started = deferred(); let firstSignal;
+  initial.folders['C:/tmp/first'] = []; initial.folders['C:/tmp/last'] = [];
+  const app = harness(t, { filesystemLoad: async () => initial, filesystemPrepare: async (before, options) => {
+    if (options.directories[0].endsWith('/first')) {
+      firstSignal = options.signal; started.resolve();
+      await new Promise((resolve, reject) => { if (!firstSignal) { resolve(); return; } firstSignal.addEventListener('abort', () => reject(Object.assign(new Error('Cancelled'), { name: 'AbortError' })), { once: true }); });
+    }
+    return { ...before, snapshotId: 'latest' };
+  } });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  const first = panel.receive({ type: 'filesystem-navigate', navigationRequestId: 'directory-1', path: 'C:/tmp/first', side: 0, state: initial });
+  await started.promise;
+  await panel.receive({ type: 'filesystem-navigate', navigationRequestId: 'directory-2', path: 'C:/tmp/last', side: 0, state: initial }); await first;
+  assert.equal(firstSignal?.aborted, true);
+  assert.equal(panel.messages.find(m => m.navigationRequestId === 'directory-1' && m.type === 'filesystem-result').cancelled, true);
+  assert.equal(panel.messages.at(-1).resumeNavigation.path, 'C:/tmp/last');
 });
 
 test('Git host keeps the unchanged right status pending across left navigation without querying it again', async t => {
@@ -371,11 +816,12 @@ function harness(t, options = {}) {
     workspaceState: memento('workspace', options.workspaceState),
     globalState: memento('global', options.globalState)
   };
-  let configurationListener, saveDocumentListener, closeDocumentListener;
+  let configurationListener, saveDocumentListener, closeDocumentListener, windowStateListener;
   let status, serializer;
   const tabGroups = [], tabListeners = new Set(), groupListeners = new Set();
   const vscode = {
-    env: { language: options.language || 'de', remoteName: options.remoteName, openExternal: async uri => { calls.push({ id: 'openExternal', args: [uri.toString()] }); return true; }, clipboard: { writeText: async text => { clipboardCalls.push({ action: 'writeText', text }); }, readText: async () => { clipboardCalls.push({ action: 'readText' }); if (options.readClipboardText) return options.readClipboardText(); return options.clipboardText || ''; } } },
+    extensions: { getExtension: id => id === 'vscode.git' && options.gitExtension ? { activate: async () => options.gitExtension } : undefined },
+    env: { language: options.language || 'de', remoteName: options.remoteName, openExternal: async uri => { calls.push({ id: 'openExternal', args: [uri.toString()] }); return true; }, clipboard: { writeText: async text => { clipboardCalls.push({ action: 'writeText', text }); await options.writeClipboardText?.(text); }, readText: async () => { clipboardCalls.push({ action: 'readText' }); if (options.readClipboardText) return options.readClipboardText(); return options.clipboardText || ''; } } },
     ExtensionKind: { UI: 1, Workspace: 2 },
     Uri: { parse: value => ({ toString: () => value }), file: uri, joinPath: (base, ...parts) => uri(path.resolve(base.fsPath, ...parts)) },
     ConfigurationTarget: { Global: 1, Workspace: 2, WorkspaceFolder: 3 },
@@ -408,6 +854,9 @@ function harness(t, options = {}) {
       }
     },
     window: {
+      createOutputChannel: (name, config) => ({ info(message) { options.onInfoLog?.(message); }, error(message) { options.onLog?.(name, config, message); }, dispose() {} }),
+      state: { focused: true },
+      onDidChangeWindowState(listener) { windowStateListener = listener; return disposable(); },
       tabGroups: {
         all: tabGroups,
         onDidChangeTabs(listener) { tabListeners.add(listener); return { dispose: () => tabListeners.delete(listener) }; },
@@ -422,7 +871,7 @@ function harness(t, options = {}) {
       },
       createWebviewPanel(viewType, title, column, panelOptions) {
         const disposeListeners = [];
-        let viewListener, messageListener;
+        let viewListener, messageListener, html = '';
         const panel = {
           viewType, title, viewColumn: 3, column, panelOptions, visible: true, disposed: false, reveals: 0, messages: [],
           reveal() { this.reveals++; this.visible = true; viewListener?.(); },
@@ -432,7 +881,7 @@ function harness(t, options = {}) {
           changeVisibility(value) { this.visible = value; viewListener?.(); },
           receive(message) { return messageListener(message); },
           webview: {
-            cspSource: 'webview-resource:', html: '',
+            cspSource: 'webview-resource:', get html() { return html; }, set html(value) { html = value; options.onHtml?.(panel); },
             asWebviewUri: value => ({ toString: () => `webview-resource:${value.fsPath}` }),
             onDidReceiveMessage(listener) { messageListener = listener; return disposable(); },
             async postMessage(message) { panel.messages.push(message); return true; }
@@ -442,7 +891,7 @@ function harness(t, options = {}) {
         panels.push(panel); return panel;
       },
       async showErrorMessage(message) { errors.push(message); if (options.showErrorMessage) return options.showErrorMessage(message); },
-      async showWarningMessage(message) { errors.push(message); },
+      async showWarningMessage(message, ...items) { errors.push(message); return options.showWarningMessage?.(message, ...items); },
       async showInformationMessage(message) { information.push(message); },
       async showInputBox() { return options.inputResults?.shift(); },
       async showTextDocument(document, editorOptions) { textEditors.push({ document, options: editorOptions }); return {}; },
@@ -488,13 +937,14 @@ function harness(t, options = {}) {
         dispose() { shellDisposals.push(true); }
       }) };
       if (request === './readonly-files') return { createReadonlyResources: () => ({ async createUri(original) { if (options.readonlyError) throw new Error(options.readonlyError); readonlyPaths.push(original); return { scheme: 'bitfroest-conflict', path: `/snapshot-${readonlyPaths.length}/${path.posix.basename(original)}`, toString() { return `bitfroest-conflict:${this.path}`; } }; }, dispose() {} }) };
-      if (request === './clipboard-provider') return { createClipboardProvider: () => ({
+      if (request === './clipboard-provider') return { createClipboardProvider: options.clipboardFactory || (() => ({
         read: async () => { clipboardCalls.push({ action: 'read' }); return options.clipboardSelection || null; },
         write: async selection => { clipboardCalls.push({ action: 'write', selection }); if (options.clipboardError) throw new Error(options.clipboardError); return { ...selection, token: 'clip-1', source: 'system' }; },
-        ack: async selection => { clipboardCalls.push({ action: 'ack', selection }); return true; }
-      }) };
+        ack: async selection => { clipboardCalls.push({ action: 'ack', selection }); return true; },
+        reset: async selection => { clipboardCalls.push({ action: 'reset', selection }); return true; }, dispose() {}
+      })) };
       if (request === './startup-paths') return { selectStartupRoots: preferred => options.startupRoots || preferred, existingDirectories: directories => directories.filter(value => !options.missingDirectories?.includes(value)) };
-      if (request === './filesystem-provider') return { createProvider: creation => { providerOptions = creation; return ({
+      if (request === './filesystem-provider') return { createProvider: creation => { providerOptions = creation; return options.providerFactory ? options.providerFactory(creation) : ({
         load: async optionsForLoad => options.filesystemLoad ? options.filesystemLoad(optionsForLoad) : null,
         prepare: async (before, preparation) => options.filesystemPrepare ? options.filesystemPrepare(before, preparation) : before,
         measureFolder: async (before, directory, settings) => options.measureFolder(before, directory, settings),
@@ -515,16 +965,19 @@ function harness(t, options = {}) {
   return {
     context, commands, calls, panels, errors, information, contexts, textDocuments, textEditors, quickPicks, nativeCalls, updateCalls, deleteCalls, clipboardCalls, readonlyPaths, trashCalls, shellCalls, shellDisposals, openCalls, documentProviders,
     get status() { return status; },
+    deactivate: () => extension.deactivate(),
     get serializer() { return serializer; },
+    restore: (...args) => { serializer.deserializeWebviewPanel(...args); return vscode.commands.executeCommand('bitfroest.show'); },
     tabGroups,
     tabsChanged: () => { for (const listener of tabListeners) listener({}); },
     groupsChanged: () => { for (const listener of groupListeners) listener({}); },
     restoredPanel: () => vscode.window.createWebviewPanel('bitfroestPrototype', 'Restored', 3, {}),
     get providerOptions() { return providerOptions; },
-    command: async (id, ...args) => { const result = await vscode.commands.executeCommand(id, ...args); if (id === 'bitfroest.openPrototype' && !options.manualReadiness && panels.at(-1) && !panels.at(-1).disposed) await panels.at(-1).receive({ type: 'app-ready' }); return result; },
+    command: async (id, ...args) => { const result = await vscode.commands.executeCommand(id, ...args); if (['bitfroest.openPrototype', 'bitfroest.show'].includes(id) && !options.manualReadiness && panels.at(-1) && !panels.at(-1).disposed) await panels.at(-1).receive({ type: 'app-ready' }); return result; },
     configuration: affects => configurationListener({ affectsConfiguration: key => Array.isArray(affects) ? affects.includes(key) : key === affects }),
     saveDocument: document => saveDocumentListener(document),
-    closeDocument: document => closeDocumentListener(document)
+    closeDocument: document => closeDocumentListener(document),
+    windowFocus: focused => windowStateListener({ focused })
   };
 }
 
@@ -578,7 +1031,7 @@ test('ZIP host bounds intermediate progress, forwards phase changes and flushes 
   let report;
   zipFilesystem.createZipFilesystem = base => ({ ...original(base), writeArchive: async (_state, _request, settings) => {
     report = settings.onProgress;
-    for (const phase of ['packing', 'verifying']) for (let n = 0; n < 1000; n++) report({ phase, currentPath: `${n}.txt`, completedBytes: n, totalBytes: 2000 });
+    for (const phase of ['packing', 'verifying']) for (let n = 0; n < 1000; n++) report(progressSample({ phase, currentPath: `${n}.txt`, completedBytes: n, totalBytes: 2000 }));
   } });
   t.after(() => { zipFilesystem.createZipFilesystem = original; });
   const initial = clipboardFixture();
@@ -599,11 +1052,11 @@ test('ZIP host bounds intermediate progress, forwards phase changes and flushes 
   assert.equal(refreshed?.length, 1);
   assert.ok(request.archive.startsWith(refreshed[0] + '/'));
   for (const message of messages) view.window.dispatchEvent(new view.window.MessageEvent('message', { data: message }));
-  assert.equal(view.document.querySelector('#status-message').textContent, 'Archiv prüfen: 999.txt');
+  assert.equal(view.document.querySelector('#status-message').textContent, 'Archiv prüfen · 999.txt');
   const lastProgress = panel.messages.lastIndexOf(messages.at(-1));
   assert.ok(panel.messages.findIndex((message, index) => index > lastProgress && message.type === 'filesystem-result' && message.ok) > lastProgress, JSON.stringify(panel.messages.at(-1)));
   view.window.dispatchEvent(new view.window.MessageEvent('message', { data: panel.messages.find(message => message.type === 'filesystem-result' && message.operationId === request.operationId) }));
-  assert.equal(view.document.querySelector('#status-progress-area').classList.contains('is-idle'), true);
+  assert.equal(view.document.querySelector('#statusbar').dataset.statusProgressOwner, 'background');
   const count = panel.messages.length; report({ phase: 'packing', currentPath: 'late.txt' });
   assert.equal(panel.messages.length, count);
 });
@@ -879,7 +1332,7 @@ test('fixed settings reach generated host HTML and replace columns without losin
   await app.command('bitfroest.openPrototype');
   const view = require('./support/webview.cjs').createApp(t, undefined, { html: app.panels[0].webview.html });
   assert.ok(view.document.querySelector('th[data-column="path"]'));
-  assert.equal(view.document.querySelector('col[data-col="path"]').width, '320');
+  assert.notEqual(view.document.querySelector('col[data-col="path"]').width, '320');
   const properties = Object.assign({}, ...manifest.contributes.configuration.map(item => item.properties));
   assert.equal(properties['bitfroest.columns.visible.path'].type, 'boolean');
   assert.doesNotMatch(manifest.contributes.menus['webview/context'].find(item => item.command === 'bitfroest.configureColumns').when, /bitfroest.ready/);
@@ -983,7 +1436,7 @@ test('cancelled favorite input returns through the real host refresh protocol wi
   await panel.receive(view.messages.find(message => message.type === 'favorite-toggle'));
   assert.equal(app.updateCalls.length, 0);
   view.click(row);
-  view.window.dispatchEvent(new view.window.Event('focus'));
+  view.window.dispatchEvent(new view.window.MessageEvent('message', { data: { type: 'window-focus' } }));
   const request = view.messages.find(message => message.type === 'filesystem-refresh');
   assert.ok(request);
   await panel.receive(request);
@@ -1077,12 +1530,12 @@ test('lister host protocol opens only known files, renders generated HTML, copie
   panel.dispose();
 });
 
-test('activation registers a right-aligned toggle entry without opening a production window', t => {
+test('activation registers a right-aligned show entry without opening a production window', t => {
   const app = harness(t);
   assert.equal(app.status.alignment, 2);
   assert.equal(app.status.priority, 101);
   assert.equal(app.status.shown, true);
-  assert.equal(app.status.command, 'bitfroest.openPrototype');
+  assert.equal(app.status.command, 'bitfroest.show');
   assert.equal(app.panels.length, 0);
   assert.ok(app.commands.has('bitfroest.chooseTabMode'));
 });
@@ -1215,15 +1668,127 @@ test('generated webview HTML authorizes and resolves every startup script includ
   const policy = document.querySelector('meta[http-equiv="Content-Security-Policy"]').content;
   const nonce = /script-src 'nonce-([^']+)'/.exec(policy)?.[1];
   assert.ok(nonce);
+  const bootstrap = document.querySelector('head script:not([src])');
+  assert.ok(bootstrap, 'the error handler must not depend on loading an external script');
+  assert.equal(bootstrap.getAttribute('nonce'), nonce);
+  assert.ok(bootstrap.compareDocumentPosition(document.querySelector('link[rel="stylesheet"]')) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING);
+  assert.match(bootstrap.textContent, /app-startup-error/);
   const scripts = [...document.querySelectorAll('script[src]')];
   const template = new JSDOM(fs.readFileSync(path.join(root, 'media/index.html'), 'utf8')); t.after(() => template.window.close());
-  const templateScripts = [...template.window.document.querySelectorAll('script[src]')].map(script => script.getAttribute('src'));
+  const templateScripts = [...template.window.document.querySelectorAll('script[src]')].map(script => script.getAttribute('src')).filter(name => name !== 'webview-bootstrap.js');
   assert.equal(scripts.length, templateScripts.length);
   for (const [index, script] of scripts.entries()) {
     assert.equal(script.getAttribute('nonce'), nonce, `${templateScripts[index]} must be authorized by the actual startup CSP`);
     assert.equal(script.getAttribute('src'), `webview-resource:${path.join(root, 'media', templateScripts[index])}`, `${templateScripts[index]} must use a webview resource URI`);
     assert.equal(fs.existsSync(path.join(root, 'media', templateScripts[index])), true, 'the referenced startup asset exists');
   }
+});
+
+for (const language of ['de', 'en']) test(`generated startup status displays a loaded resource in ${language}`, async t => {
+  const app = harness(t, { language, manualReadiness: true });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  const { JSDOM } = require('jsdom');
+  const dom = new JSDOM(panel.webview.html, { runScripts: 'outside-only' });
+  t.after(() => dom.window.close());
+  const { window } = dom;
+  window.acquireVsCodeApi = () => ({ postMessage() {} });
+  require('node:vm').runInContext(window.document.querySelector('head script:not([src])').textContent, dom.getInternalVMContext());
+  window.document.querySelector('script[src$="commander-paths.js"]').dispatchEvent(new window.Event('load'));
+  const status = window.document.querySelector('#startup-detail').textContent;
+  assert.match(status, language === 'de' ? /Ressource geladen: commander-paths\.js/ : /Loaded resource: commander-paths\.js/);
+  panel.dispose();
+});
+
+for (const language of ['de', 'en']) test(`generated startup shows indeterminate progress before any resource event in ${language}`, async t => {
+  const app = harness(t, { language, manualReadiness: true });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  const { JSDOM } = require('jsdom');
+  const dom = new JSDOM(panel.webview.html, { runScripts: 'outside-only' });
+  t.after(() => dom.window.close());
+  const document = dom.window.document;
+  const progress = document.querySelector('#startup-progress');
+  assert.ok(progress, 'progress must exist in the initial HTML before scripts or stylesheets load');
+  assert.equal(progress.hasAttribute('value'), false, 'startup progress has no known total');
+  assert.match(progress.getAttribute('aria-label'), language === 'de' ? /Dateiverwaltung/ : /file manager/i);
+  assert.equal(document.querySelector('#startup-progress-reason'), null);
+  const window = dom.window;
+  window.acquireVsCodeApi = () => ({ postMessage() {} });
+  require('node:vm').runInContext(document.querySelector('head script:not([src])').textContent, dom.getInternalVMContext());
+  document.querySelector('script[src$="commander-paths.js"]').dispatchEvent(new window.Event('load'));
+  assert.equal(document.querySelector('#startup-progress'), progress, 'resource updates must preserve the indicator');
+  panel.dispose();
+});
+
+test('initial HTML contains timed host startup stages and real directory progress even before webview scripts execute', async t => {
+  const app = harness(t, { manualReadiness: true, filesystemLoad: async settings => {
+    await settings.onDirectory({ path: 'C:/work/<test>', completed: 2, total: 5, rows: [] });
+    return null;
+  } });
+  await app.command('bitfroest.openPrototype');
+  const { JSDOM } = require('jsdom');
+  const dom = new JSDOM(app.panels[0].webview.html); t.after(() => dom.window.close());
+  const log = dom.window.document.querySelector('#startup-log');
+  assert.match(log.textContent, /Startverzeichnisse/);
+  assert.match(log.textContent, /C:\/work\/<test>/);
+  assert.match(log.textContent, /2\/5/);
+  assert.match(log.textContent, /Webview/);
+  assert.equal(log.querySelector('test'), null, 'directory names are rendered as text');
+  assert.ok([...log.querySelectorAll('li')].every(row => /^\[\d+\.\d{3} s\]/.test(row.textContent)));
+  app.panels[0].dispose();
+});
+
+for (const language of ['de', 'en']) test(`startup log reports actual requests and outcomes in ${language}`, async t => {
+  const app = harness(t, { language, manualReadiness: true });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  const { JSDOM } = require('jsdom');
+  const dom = new JSDOM(panel.webview.html, { runScripts: 'outside-only' });
+  t.after(() => dom.window.close());
+  const { window } = dom, document = window.document;
+  window.acquireVsCodeApi = () => ({ postMessage() {} });
+  const context = dom.getInternalVMContext(), vm = require('node:vm');
+  const scripts = [...document.querySelectorAll('script:not([src])')];
+  vm.runInContext(scripts.find(script => script.textContent.includes('app-startup-error')).textContent, context);
+  const marker = scripts.find(script => script.textContent.includes('CommanderStartupResource.start') && script.textContent.includes('commander-paths.js'));
+  assert.ok(marker, 'the actual HTML records the request before its script');
+  const resource = document.querySelector('script[src$="commander-paths.js"]');
+  assert.ok(marker.compareDocumentPosition(resource) & window.Node.DOCUMENT_POSITION_FOLLOWING);
+  vm.runInContext(marker.textContent, context);
+  const log = document.querySelector('#startup-log');
+  assert.match(log.textContent, language === 'de' ? /Skript angefordert: commander-paths\.js/ : /Script requested: commander-paths\.js/);
+  assert.match(log.querySelector('li').textContent, /^\[\d+\.\d{3} s\] /);
+  assert.doesNotMatch(log.textContent, language === 'de' ? /Skript geladen/ : /Script loaded/);
+  resource.dispatchEvent(new window.Event('load'));
+  assert.match(log.textContent, language === 'de' ? /Skript geladen: commander-paths\.js/ : /Script loaded: commander-paths\.js/);
+  panel.dispose();
+});
+
+test('the generated HTML executes its complete startup sequence with the log enabled', async t => {
+  const app = harness(t, { manualReadiness: true });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  const { JSDOM } = require('jsdom'), vm = require('node:vm');
+  const dom = new JSDOM(panel.webview.html, { runScripts: 'outside-only', url: 'https://prototype.invalid/' });
+  t.after(() => dom.window.close());
+  const { window } = dom, messages = [];
+  window.acquireVsCodeApi = () => ({ getState: () => null, setState() {}, postMessage: message => messages.push(message) });
+  window.HTMLElement.prototype.scrollIntoView = function () {};
+  window.HTMLCanvasElement.prototype.getContext = () => ({ measureText: text => ({ width: String(text).length * 8 }) });
+  window.TextEncoder = TextEncoder;
+  const steps = [];
+  for (const script of window.document.querySelectorAll('script')) {
+    const src = script.getAttribute('src');
+    const source = src ? fs.readFileSync(path.join(root, 'media', path.win32.basename(src)), 'utf8') : script.textContent;
+    new vm.Script(source).runInContext(dom.getInternalVMContext());
+    if (script.textContent.includes('app-startup-error')) {
+      const original = window.CommanderStartupResource.step;
+      window.CommanderStartupResource.step = name => { steps.push(name); original(name); };
+    }
+    if (src) script.dispatchEvent(new window.Event('load'));
+  }
+  assert.equal(messages.filter(message => message.type === 'app-ready').length, 1);
+  assert.deepEqual(steps, ['initializing', 'settings', 'restore', 'controls', 'rendering']);
+  assert.equal(messages.some(message => message.type === 'app-startup-error'), false);
+  assert.equal(window.document.querySelector('#startup-progress'), null);
+  panel.dispose();
 });
 
 test('declared text select-all command delegates to the native action without selecting files', async t => {
@@ -1246,7 +1811,7 @@ test('fresh and restored views authorize existing stylesheets inside their resou
     let panel;
     if (restoring) {
       panel = app.restoredPanel();
-      await app.serializer.deserializeWebviewPanel(panel, null);
+      await app.restore(panel, null);
     } else {
       await app.command('bitfroest.openPrototype'); panel = app.panels[0];
     }
@@ -1255,16 +1820,19 @@ test('fresh and restored views authorize existing stylesheets inside their resou
     const policy = dom.window.document.querySelector('meta[http-equiv="Content-Security-Policy"]').content;
     const stylePolicy = /(?:^|;)\s*style-src ([^;]+)/.exec(policy)?.[1];
     assert.ok(stylePolicy?.split(/\s+/).includes(panel.webview.cspSource));
-    const options = restoring ? panel.webview.options : panel.panelOptions;
+    const options = panel.webview.options;
     assert.equal(options.enableScripts, true);
     const mediaRoot = path.join(root, 'media');
     assert.ok(options.localResourceRoots.some(uri => uri.fsPath === mediaRoot));
     const links = [...dom.window.document.querySelectorAll('link[rel="stylesheet"]')];
-    assert.equal(links.length, 3);
-    for (const name of ['workbench-vendor.css', 'app.css', 'file-search.css']) {
+    assert.equal(links.length, 4);
+    for (const name of ['workbench-vendor.css', 'codicons.css', 'app.css', 'file-search.css']) {
       assert.ok(links.some(link => link.getAttribute('href') === `webview-resource:${path.join(mediaRoot, name)}`));
       assert.ok(fs.statSync(path.join(mediaRoot, name)).size > 0);
     }
+    assert.match(fs.readFileSync(path.join(mediaRoot, 'codicons.css'), 'utf8'), /@import url\('\.\/icon-metrics\.css'\)/);
+    assert.ok(fs.statSync(path.join(mediaRoot, 'icon-metrics.css')).size > 0);
+    assert.match(policy, new RegExp(`font-src ${panel.webview.cspSource}`));
     panel.dispose();
   }
 });
@@ -1274,7 +1842,7 @@ test('uninitialized or failed panels cannot run file commands or accept file mes
   await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
   assert.equal(app.contexts.get('bitfroest.ready'), false);
   await app.command('bitfroest.delete'); await panel.receive({ type: 'inputFocus', list: true });
-  assert.equal(panel.messages.length, 0); assert.notEqual(app.contexts.get('bitfroest.listFocus'), true);
+  assert.equal(panel.messages.filter(message => message.type !== 'host-startup').length, 0); assert.notEqual(app.contexts.get('bitfroest.listFocus'), true);
   await panel.receive({ type: 'app-ready' });
   assert.equal(app.contexts.get('bitfroest.ready'), true);
   await app.command('bitfroest.delete'); assert.equal(panel.messages.at(-1).action, 'delete');
@@ -1287,6 +1855,282 @@ test('uninitialized or failed panels cannot run file commands or accept file mes
   await panel.receive({ type: 'app-ready' }); assert.equal(app.contexts.get('bitfroest.ready'), false);
   await app.panels[1].receive({ type: 'app-ready' }); assert.equal(app.contexts.get('bitfroest.ready'), true);
   app.panels[1].dispose(); assert.equal(app.contexts.get('bitfroest.ready'), false);
+});
+
+test('startup failures notify VS Code once without waiting for notification dismissal', async t => {
+  const logs = [];
+  const app = harness(t, { manualReadiness: true, showErrorMessage: () => new Promise(() => {}), onLog: (...args) => logs.push(args) });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  const diagnostic = { message: 'startup fixture failed', source: 'app.js', line: 42, column: 7, stack: 'fixture stack' };
+  await panel.receive({ type: 'app-startup-error', diagnostic });
+  assert.equal(app.errors.length, 1);
+  assert.match(app.errors[0], /startup fixture failed/);
+  assert.equal(logs[0][0], 'Bitfroest.fs');
+  assert.equal(logs[0][1].log, true);
+  assert.match(logs[0][2], /fixture stack/);
+  assert.match(logs[0][2], /app\.js/);
+  assert.equal(app.contexts.get('bitfroest.ready'), false);
+  await panel.receive({ type: 'app-startup-error', diagnostic });
+  await panel.receive({ type: 'app-ready' });
+  assert.equal(app.errors.length, 1);
+  assert.equal(app.contexts.get('bitfroest.ready'), false);
+  panel.dispose();
+});
+
+test('the host receives a startup error as soon as the webview HTML is assigned', async t => {
+  let delivery;
+  const app = harness(t, { manualReadiness: true, onHtml: panel => {
+    delivery = panel.receive({ type: 'app-startup-error', diagnostic: { message: 'early stylesheet failure' } });
+  } });
+  await app.command('bitfroest.openPrototype');
+  await delivery;
+  assert.match(app.errors[0], /early stylesheet failure/);
+  assert.equal(app.contexts.get('bitfroest.ready'), false);
+  app.panels[0].dispose();
+});
+
+for (const language of ['de', 'en']) test(`generated startup failure dialog remains localized before application initialization (${language})`, async t => {
+  const app = harness(t, { language, manualReadiness: true });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  const { JSDOM } = require('jsdom');
+  const dom = new JSDOM(panel.webview.html, { runScripts: 'outside-only' });
+  t.after(() => dom.window.close());
+  const { window } = dom, messages = [];
+  window.acquireVsCodeApi = () => ({ postMessage: message => messages.push(message) });
+  window.HTMLDialogElement.prototype.showModal = function () { this.open = true; };
+  require('node:vm').runInContext(fs.readFileSync(path.join(root, 'media/webview-bootstrap.js'), 'utf8'), dom.getInternalVMContext());
+  window.dispatchEvent(new window.ErrorEvent('error', { message: 'startup fixture failed' }));
+  assert.equal(window.document.querySelector('#modal').open, true);
+  assert.equal(window.document.querySelector('#modal-cancel').textContent, language === 'de' ? 'Schließen' : 'Close');
+  assert.match(window.document.querySelector('#modal-title').textContent, language === 'de' ? /nicht gestartet/ : /Unable to start/);
+  await panel.receive(messages[0]);
+  assert.match(app.errors[0], language === 'de' ? /nicht gestartet/ : /Unable to start/);
+  panel.dispose();
+});
+
+test('directory navigation completes while a file mutation is still running', async t => {
+  const initial = clipboardFixture(); let release;
+  const barrier = new Promise(resolve => { release = resolve; });
+  const app = harness(t, { filesystemLoad: async () => initial,
+    filesystemApply: async () => { await barrier; return initial; },
+    filesystemPrepare: async before => before });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  const mutation = panel.receive({ type: 'filesystem-apply', state: initial, operationId: 'background-copy', transfer: { mode: 'copy', sourcePath: 'C:/tmp', ids: ['a'], sourceSide: 0 } });
+  await tick();
+  const navigation = panel.receive({ type: 'filesystem-navigate', state: initial, path: 'C:/temp', side: 0, navigationRequestId: 'directory-1' });
+  await tick();
+  try { assert.ok(panel.messages.some(message => message.navigationRequestId === 'directory-1' && message.type === 'filesystem-result')); }
+  finally { release(); await Promise.all([mutation, navigation]); panel.dispose(); }
+});
+
+test('ZIP navigation completes while packing remains active', async t => {
+  const zipFilesystem = require('../zip-filesystem'), original = zipFilesystem.createZipFilesystem;
+  let release, entered; const barrier = new Promise(resolve => { release = resolve; }), started = new Promise(resolve => { entered = resolve; });
+  zipFilesystem.createZipFilesystem = base => ({ ...original(base), writeArchive: async state => { entered(); await barrier; return state; } });
+  t.after(() => { zipFilesystem.createZipFilesystem = original; });
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'zip-parallel-')); t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const archive = path.join(dir, 'existing.zip').replaceAll('\\', '/'); fs.writeFileSync(archive, require('./support/search-archives.cjs').zip({ 'file.txt': 'data' }));
+  const initial = clipboardFixture(); initial.folders['C:/tmp'].push({ id: 'zip', name: 'existing.zip', type: 'archive', fsSource: archive });
+  const app = harness(t, { filesystemLoad: async () => structuredClone(initial), containsPath: value => value.replaceAll('\\', '/').startsWith(dir.replaceAll('\\', '/') + '/') || /^C:\/(tmp|temp)$/.test(value) });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  const packing = panel.receive({ type: 'zip-write', action: 'pack', sourcePath: 'C:/tmp', ids: ['a'], archive: `${dir.replaceAll('\\', '/')}/out.zip`, operationId: 'pack-parallel', state: initial });
+  await started;
+  const navigation = panel.receive({ type: 'zip-open', path: archive, side: 0, navigationRequestId: 'directory-1', state: initial });
+  try { assert.equal(await Promise.race([navigation.then(() => 'done'), new Promise(resolve => setTimeout(() => resolve('blocked'), 500))]), 'done'); assert.ok(panel.messages.some(message => message.type === 'filesystem-result' && message.navigationRequestId === 'directory-1' && message.ok), JSON.stringify(panel.messages.at(-1))); }
+  finally { release(); await Promise.all([packing, navigation]); panel.dispose(); }
+});
+
+test('navigation publishes the exact authoritative folders after cache eviction and allows the next write', async t => {
+  const { createProvider } = require('../filesystem-provider');
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'bitfroest-navigation-'));
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const left = path.join(directory, 'left').replace(/\\/g, '/'), right = path.join(directory, 'right').replace(/\\/g, '/');
+  fs.mkdirSync(left); fs.mkdirSync(right); fs.mkdirSync(`${left}/docs`); fs.writeFileSync(`${left}/docs/nested.txt`, 'nested');
+  let authoritative;
+  const app = harness(t, { startupRoots: [left, right], providerFactory: () => {
+    const provider = createProvider({ roots: [left, right], directoryCacheBytes: 64 });
+    return { ...provider,
+      async load(settings) { const result = await provider.load(settings); authoritative = structuredClone(result); return result; },
+      async prepare(before, settings) { const result = await provider.prepare(before, settings); authoritative = structuredClone(result); return result; } };
+  } });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  for (const [index, target] of [`${left}/docs`, left, `${left}/docs`, left].entries()) {
+    await panel.receive({ type: 'filesystem-navigate', state: authoritative, path: target, side: 0, navigationRequestId: `directory-${index + 1}` });
+    const result = panel.messages.filter(message => message.type === 'filesystem-result').at(-1);
+    assert.equal(result.ok, true, result.error);
+    assert.deepEqual(result.state.folders, authoritative.folders);
+  }
+  await panel.receive({ type: 'filesystem-apply', state: authoritative });
+  assert.equal(panel.messages.at(-1).ok, true, panel.messages.at(-1).error);
+  panel.dispose();
+});
+
+test('concurrent directory reads serialize the authoritative provider without blocking later navigation', async t => {
+  let entered, release;
+  const started = new Promise(resolve => { entered = resolve; });
+  const barrier = new Promise(resolve => { release = resolve; });
+  let reads = 0, concurrent = 0, maximum = 0;
+  const initial = clipboardFixture();
+  const app = harness(t, { filesystemLoad: async () => initial, filesystemPrepare: async before => {
+    maximum = Math.max(maximum, ++concurrent);
+    if (++reads === 1) { entered(); await barrier; }
+    concurrent--; return before;
+  } });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  const first = panel.receive({ type: 'filesystem-navigate', state: initial, path: 'C:/temp', side: 0, navigationRequestId: 'directory-1' });
+  await started;
+  const second = panel.receive({ type: 'filesystem-navigate', state: initial, path: 'C:/tmp', side: 1, navigationRequestId: 'directory-2' });
+  await tick(); release(); await Promise.all([first, second]);
+  assert.equal(maximum, 1);
+  for (const id of ['directory-1', 'directory-2']) assert.equal(panel.messages.find(message => message.type === 'filesystem-result' && message.navigationRequestId === id)?.ok, true);
+  panel.dispose();
+});
+
+test('navigation in another tab does not cancel a pending read of the same pane', async t => {
+  const initial = clipboardFixture(), reading = deferred(), entered = deferred();
+  const aborted = [];
+  let count = 0;
+  const app = harness(t, { filesystemLoad: async () => initial, filesystemPrepare: async (before, settings) => {
+    settings.signal.addEventListener('abort', () => aborted.push(count), { once: true });
+    if (++count === 1) { entered.resolve(); await reading.promise; }
+    return before;
+  } });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  const first = panel.receive({ type: 'filesystem-navigate', state: initial, navigationRequestId: 'directory-1', navigationTabId: 'tab-a', path: 'C:/temp', side: 0 }); await entered.promise;
+  const second = panel.receive({ type: 'filesystem-navigate', state: initial, navigationRequestId: 'directory-2', navigationTabId: 'tab-b', path: 'C:/tmp', side: 0 });
+  await tick(); reading.resolve(); await Promise.all([first, second]);
+  assert.deepEqual(aborted, []);
+  assert.equal(panel.messages.filter(message => message.type === 'filesystem-result' && message.cancelled).length, 0);
+  panel.dispose();
+});
+
+test('a completed directory read preserves tabs switched while it was pending', async t => {
+  const initial = clipboardFixture(), reading = deferred(), entered = deferred();
+  initial.panes[0].tabs = ['C:/tmp', 'C:/temp'];
+  initial.panes[0].tabStates = [{ id: 'tab-a', path: 'C:/tmp' }, { id: 'tab-b', path: 'C:/temp' }];
+  const app = harness(t, { filesystemLoad: async () => initial, filesystemPrepare: async before => { entered.resolve(); await reading.promise; return before; } });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  const pending = panel.receive({ type: 'filesystem-navigate', navigationRequestId: 'directory-1', navigationTabId: 'tab-a', state: initial, side: 0, path: 'C:/tmp' }); await entered.promise;
+  const switched = structuredClone(initial); switched.panes[0].tab = 1; switched.active = 1;
+  await panel.receive({ type: 'state', state: switched });
+  reading.resolve(); await pending;
+  const result = panel.messages.find(message => message.type === 'filesystem-result' && message.navigationRequestId === 'directory-1');
+  assert.equal(result.ok, true, result.error);
+  assert.equal(result.state.panes[0].tab, 1);
+  assert.equal(result.state.panes[0].tabs[1], 'C:/temp');
+  assert.equal(result.state.active, 1);
+  panel.dispose();
+});
+
+test('closing a tab cancels its pending directory read without restoring the closed tab', async t => {
+  const initial = clipboardFixture(), reading = deferred(), entered = deferred();
+  initial.panes[0].tabs = ['C:/tmp', 'C:/temp'];
+  initial.panes[0].tabStates = [{ id: 'tab-a', path: 'C:/tmp' }, { id: 'tab-b', path: 'C:/temp' }];
+  const app = harness(t, { filesystemLoad: async () => initial, filesystemPrepare: async (before, settings) => { entered.resolve(settings.signal); await reading.promise; return before; } });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  const pending = panel.receive({ type: 'filesystem-navigate', navigationRequestId: 'directory-1', navigationTabId: 'tab-a', state: initial, side: 0, path: 'C:/tmp' });
+  const signal = await entered.promise;
+  const closed = structuredClone(initial); closed.panes[0].tabs = ['C:/temp']; closed.panes[0].tabStates.splice(0, 1);
+  await panel.receive({ type: 'state', state: closed });
+  try { assert.equal(signal.aborted, true); }
+  finally { reading.resolve(); await pending; }
+  const result = panel.messages.find(message => message.type === 'filesystem-result' && message.navigationRequestId === 'directory-1');
+  assert.equal(result.cancelled, true); assert.equal(result.resumeNavigation, undefined);
+  assert.deepEqual(app.context.workspaceState.get('fileManagerState').panes[0].tabs, ['C:/temp']);
+  panel.dispose();
+});
+
+test('an isolated navigation finishing after a mutation cannot replace the authoritative snapshot', async t => {
+  let providerCount = 0, releaseWrite, releaseRead, authoritative;
+  const writing = new Promise(resolve => { releaseWrite = resolve; });
+  const reading = new Promise(resolve => { releaseRead = resolve; });
+  const app = harness(t, { providerFactory: () => {
+    const isolated = providerCount++ > 0; let sequence = 0;
+    return { contains: path => /^C:\/(tmp|temp)/.test(path),
+      async load() { if (isolated) await reading; const state = { ...clipboardFixture(), snapshotId: `${isolated ? 'read' : 'main'}-${++sequence}` }; if (!isolated) authoritative = state.snapshotId; return state; },
+      async apply(before, after) { assert.equal(before.snapshotId, authoritative); await writing; return { ...after, snapshotId: authoritative }; },
+      async prepare(before) { assert.equal(before.snapshotId, authoritative); return before; } };
+  } });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  const initial = { ...clipboardFixture(), snapshotId: authoritative };
+  const write = panel.receive({ type: 'filesystem-apply', state: initial, operationId: 'write-1', transfer: { mode: 'copy', sourcePath: 'C:/tmp', ids: ['a'], sourceSide: 0 } }); await tick();
+  const read = panel.receive({ type: 'filesystem-navigate', state: initial, path: 'C:/temp', side: 0, navigationRequestId: 'directory-1' }); await tick();
+  releaseWrite(); await write; releaseRead(); await read;
+  const result = panel.messages.filter(message => message.navigationRequestId === 'directory-1' && message.type === 'filesystem-result').at(-1);
+  assert.equal(result.ok, true, JSON.stringify(result));
+  assert.equal(result.state.snapshotId, authoritative, JSON.stringify(panel.messages.map(m => ({type:m.type, request:m.navigationRequestId, id:m.state?.snapshotId, error:m.error}))));
+  assert.match(authoritative, /^main-/);
+  await panel.receive({ type: 'filesystem-apply', state: result.state, operationId: 'write-2' });
+  assert.equal(panel.messages.at(-1).ok, true); panel.dispose();
+});
+
+test('late isolated navigation serializes its authoritative rebase with a running refresh', async t => {
+  let count = 0, sequence = 0, concurrent = 0, maximum = 0, authoritative;
+  const writing = deferred(), reading = deferred(), refreshing = deferred(), refreshStarted = deferred();
+  const app = harness(t, { providerFactory: () => {
+    const isolated = count++ > 0;
+    return { contains: target => /^C:\/(tmp|temp)/.test(target),
+      async load() {
+        if (isolated) { await reading.promise; return { ...clipboardFixture(), snapshotId: 'isolated' }; }
+        maximum = Math.max(maximum, ++concurrent);
+        const id = ++sequence;
+        if (id === 2) { refreshStarted.resolve(); await refreshing.promise; }
+        concurrent--; authoritative = `main-${id}`;
+        return { ...clipboardFixture(), snapshotId: authoritative };
+      },
+      async apply(before) { assert.equal(before.snapshotId, authoritative); await writing.promise; return before; },
+      async prepare(before) { assert.equal(before.snapshotId, authoritative); return before; }
+    };
+  } });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0], initial = { ...clipboardFixture(), snapshotId: authoritative };
+  const write = panel.receive({ type: 'filesystem-apply', state: initial, operationId: 'write-1', transfer: { mode: 'copy' } }); await tick();
+  const read = panel.receive({ type: 'filesystem-navigate', state: initial, path: 'C:/temp', side: 0, navigationRequestId: 'directory-1' }); await tick();
+  writing.resolve(); await write;
+  const refresh = panel.receive({ type: 'filesystem-refresh', state: initial }); await refreshStarted.promise;
+  reading.resolve(); await tick(); refreshing.resolve(); await Promise.all([read, refresh]);
+  assert.equal(maximum, 1, 'rebase must not overlap another authoritative load');
+  const result = panel.messages.find(message => message.type === 'filesystem-result' && message.navigationRequestId === 'directory-1');
+  assert.equal(result.ok, true, result.error); assert.equal(result.state.snapshotId, authoritative);
+  await panel.receive({ type: 'filesystem-apply', state: result.state });
+  assert.equal(panel.messages.at(-1).ok, true, panel.messages.at(-1).error);
+  panel.dispose();
+});
+
+test('a superseded isolated rebase is cancelled without publishing its obsolete view', async t => {
+  const writing = deferred(), reading = deferred(), rebasing = deferred(), releaseRebase = deferred();
+  let count = 0, loads = 0, authoritative = 'main-1';
+  const app = harness(t, { providerFactory: () => {
+    const isolated = count++ > 0;
+    return { contains: target => /^C:\/(tmp|temp)/.test(target),
+      async load(settings) {
+        if (isolated) { await reading.promise; return { ...clipboardFixture(), snapshotId: 'isolated' }; }
+        if (++loads === 2) {
+          rebasing.resolve(settings.signal); await releaseRebase.promise;
+          if (settings.signal?.aborted) throw Object.assign(new Error('Cancelled'), { name: 'AbortError' });
+          authoritative = 'obsolete';
+        }
+        return { ...clipboardFixture(), snapshotId: authoritative };
+      },
+      async apply(before) { assert.equal(before.snapshotId, authoritative); await writing.promise; return before; },
+      async prepare(before) { assert.equal(before.snapshotId, authoritative); return before; }
+    };
+  } });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0], initial = { ...clipboardFixture(), snapshotId: authoritative };
+  const write = panel.receive({ type: 'filesystem-apply', state: initial, operationId: 'write-1', transfer: { mode: 'copy' } }); await tick();
+  const read = panel.receive({ type: 'filesystem-navigate', state: initial, side: 0, path: 'C:/temp', navigationRequestId: 'directory-1', navigationTabId: 'tab-a' }); await tick();
+  writing.resolve(); await write; reading.resolve();
+  const signal = await rebasing.promise;
+  const newer = panel.receive({ type: 'filesystem-navigate', state: initial, side: 0, path: 'C:/tmp', navigationRequestId: 'directory-2', navigationTabId: 'tab-a' });
+  assert.ok(signal); assert.equal(signal.aborted, true);
+  releaseRebase.resolve(); await Promise.all([read, newer]);
+  const old = panel.messages.find(message => message.type === 'filesystem-result' && message.navigationRequestId === 'directory-1');
+  const current = panel.messages.find(message => message.type === 'filesystem-result' && message.navigationRequestId === 'directory-2');
+  assert.equal(old.cancelled, true); assert.equal(old.resumeNavigation, undefined);
+  assert.equal(current.ok, true, current.error); assert.equal(current.state.snapshotId, authoritative);
+  assert.equal(authoritative, 'main-1');
+  await panel.receive({ type: 'filesystem-apply', state: current.state });
+  assert.equal(panel.messages.at(-1).ok, true, panel.messages.at(-1).error);
+  panel.dispose();
 });
 
 test('native webview file menus require a rendered ready application', () => {
@@ -1310,7 +2154,7 @@ test('file shortcuts require this webview, list focus and absence of text input'
       assert.ok(clauses.some(clause => /^bitfroest\.(listerFocus|searchFocus|searchResultsFocus)$/.test(clause)));
       continue;
     }
-    const guards = binding.when.includes('bitfroest.inlineRenameInput') ? ['activeWebviewPanelId == bitfroestPrototype', 'webviewFocus', 'bitfroest.inlineRenameInput', 'bitfroest.textInput'] : binding.command === 'bitfroest.ignore-dialog-function-key' ? ['activeWebviewPanelId == bitfroestPrototype', 'webviewFocus', 'bitfroest.fileDialog', '!bitfroest.transferNameInput'] : binding.command.startsWith('bitfroest.transfer-name-') ? ['activeWebviewPanelId == bitfroestPrototype', 'webviewFocus', 'bitfroest.transferNameInput', 'bitfroest.textInput'] : binding.command.startsWith('bitfroest.conflict-') ? ['activeWebviewPanelId == bitfroestPrototype', 'webviewFocus', 'bitfroest.conflictDialog'] : ['activeWebviewPanelId == bitfroestPrototype', 'webviewFocus', 'bitfroest.listFocus', '!bitfroest.textInput'];
+    const guards = ['bitfroest.next-tab', 'bitfroest.previous-tab'].includes(binding.command) ? ['activeWebviewPanelId == bitfroestPrototype', 'webviewFocus', 'bitfroest.tabFocus', '!bitfroest.textInput'] : binding.when.includes('bitfroest.inlineRenameInput') ? ['activeWebviewPanelId == bitfroestPrototype', 'webviewFocus', 'bitfroest.inlineRenameInput', 'bitfroest.textInput'] : binding.command === 'bitfroest.ignore-dialog-function-key' ? ['activeWebviewPanelId == bitfroestPrototype', 'webviewFocus', 'bitfroest.fileDialog', '!bitfroest.transferNameInput'] : binding.command.startsWith('bitfroest.transfer-name-') ? ['activeWebviewPanelId == bitfroestPrototype', 'webviewFocus', 'bitfroest.transferNameInput', 'bitfroest.textInput'] : binding.command.startsWith('bitfroest.conflict-') ? ['activeWebviewPanelId == bitfroestPrototype', 'webviewFocus', 'bitfroest.conflictDialog'] : ['activeWebviewPanelId == bitfroestPrototype', 'webviewFocus', 'bitfroest.listFocus', '!bitfroest.textInput'];
     for (const guard of guards) assert.ok(clauses.includes(guard), `${binding.command} lacks ${guard}`);
   }
 });
@@ -1364,6 +2208,29 @@ test('list focus does not reconfigure the window or start a focus refresh feedba
   assert.equal(app.panels[0].messages.at(-1).action, 'copy');
 });
 
+test('new auxiliary windows preserve native window controls after focused readiness', async t => {
+  for (const platform of ['win32', 'linux']) {
+    const app = harness(t, { platform, manualReadiness: true });
+    await app.command('bitfroest.openPrototype');
+    const panel = app.panels[0];
+    const fullscreen = () => app.calls.filter(call => call.id === 'workbench.action.toggleFullScreen').length;
+    assert.equal(fullscreen(), 0);
+    await panel.receive({ type: 'app-ready' });
+    const check = panel.messages.find(message => message.type === 'auxiliary-compact-check');
+    assert.ok(check);
+    await panel.receive({ type: 'auxiliary-compact-ready', requestId: 'stale' });
+    assert.equal(fullscreen(), 0);
+    await panel.receive({ type: 'auxiliary-compact-ready', requestId: check.requestId });
+    assert.equal(fullscreen(), 0);
+    await panel.receive({ type: 'auxiliary-compact-ready', requestId: check.requestId });
+    await app.command('bitfroest.show');
+    assert.equal(fullscreen(), 0);
+    panel.dispose();
+    await panel.receive({ type: 'auxiliary-compact-ready', requestId: check.requestId });
+    assert.equal(fullscreen(), 0);
+  }
+});
+
 test('native window setup uses only the marked window and restores a stable title', async t => {
   const app = harness(t);
   await app.command('bitfroest.openPrototype');
@@ -1373,13 +2240,32 @@ test('native window setup uses only the marked window and restores a stable titl
   assert.ok(panel.webview.html.includes('Content-Security-Policy'));
   assert.ok(panel.webview.html.includes('data-icon-theme='));
   assert.ok(panel.webview.html.includes('nonce='));
-  assert.ok(panel.panelOptions.localResourceRoots.length >= 2);
+  assert.ok(panel.webview.options.localResourceRoots.length >= 2);
   const setup = app.calls.filter(call => call.id.startsWith('workbench.action.')).map(call => call.id);
   assert.deepEqual(setup, ['workbench.action.moveEditorToNewWindow']);
   assert.equal(app.nativeCalls.length, 1);
   assert.equal(app.nativeCalls[0].operation, 'windows.maximize');
   assert.match(app.nativeCalls[0].titleToken, /^[a-f0-9-]{36}$/);
   assert.equal(app.errors.length, 0);
+});
+
+test('compact readiness waits until native setup finishes without entering fullscreen', async t => {
+  let finish;
+  const app = harness(t, { manualReadiness: true, native: callback => { finish = callback; }, commandError: 'workbench.action.toggleFullScreen' });
+  const opening = app.command('bitfroest.openPrototype');
+  await tick();
+  const panel = app.panels[0];
+  await panel.receive({ type: 'app-ready' });
+  assert.equal(panel.messages.some(message => message.type === 'auxiliary-compact-check'), false);
+  finish(null);
+  await opening;
+  const check = panel.messages.find(message => message.type === 'auxiliary-compact-check');
+  assert.ok(check);
+  await panel.receive({ type: 'auxiliary-compact-ready', requestId: check.requestId });
+  await tick();
+  assert.equal(app.errors.length, 0);
+  assert.equal(panel.disposed, false);
+  assert.equal(app.calls.filter(call => call.id === 'workbench.action.enableCompactAuxiliaryWindow').length, 1);
 });
 
 test('compact auxiliary mode waits for webview readiness after the move and ignores stale replies', async t => {
@@ -1421,8 +2307,10 @@ test('compact auxiliary readiness requested after move handles app-ready later a
 
 test('focused file list hides the auxiliary status strip through generated host HTML without a window focus event', async t => {
   let activeWindow = 'main';
+  const fullscreenWindows = [];
   const strips = { main: true, auxiliary: true };
   const app = harness(t, { manualReadiness: true, commandEffect: async id => {
+    if (id === 'workbench.action.toggleFullScreen') fullscreenWindows.push(activeWindow);
     if (id === 'workbench.action.enableCompactAuxiliaryWindow' && activeWindow === 'auxiliary') strips.auxiliary = false;
   } });
   await app.commands.get('bitfroest.openPrototype')();
@@ -1445,6 +2333,7 @@ test('focused file list hides the auxiliary status strip through generated host 
   await panel.receive(replies[0]);
   assert.equal(strips.auxiliary, false);
   assert.equal(strips.main, true);
+  assert.deepEqual(fullscreenWindows, []);
   const before = app.calls.length;
   list.dispatchEvent(new view.window.FocusEvent('focusin', { bubbles: true }));
   view.window.dispatchEvent(new view.window.Event('focus'));
@@ -1456,7 +2345,7 @@ test('focused file list hides the auxiliary status strip through generated host 
 test('restored single editor hides native tabs and status strip through generated host readiness', async t => {
   const app = harness(t, { manualReadiness: true });
   const panel = app.restoredPanel();
-  await app.serializer.deserializeWebviewPanel(panel);
+  await app.restore(panel);
   const view = require('./support/webview.cjs').createApp(t, undefined, { html: panel.webview.html });
   view.document.hasFocus = () => true;
   Object.defineProperty(view.document, 'visibilityState', { configurable: true, value: 'visible' });
@@ -1467,6 +2356,7 @@ test('restored single editor hides native tabs and status strip through generate
   await panel.receive(view.messages.find(message => message.type === 'auxiliary-compact-ready'));
   assert.equal(app.calls.filter(call => call.id === 'workbench.action.enableCompactAuxiliaryWindow').length, 1);
   assert.equal(app.calls.some(call => call.id === 'workbench.action.moveEditorToNewWindow'), false);
+  assert.equal(app.calls.some(call => call.id === 'workbench.action.toggleFullScreen'), false);
   assert.equal(app.updateCalls.length, 0);
 });
 
@@ -1503,7 +2393,7 @@ test('restored companion editors keep native tabs until the last companion close
   const app = harness(t, { manualReadiness: true });
   const panel = app.restoredPanel(), group = app.tabGroups[0];
   group.tabs.push({ input: { viewType: 'volume-details' } });
-  await app.serializer.deserializeWebviewPanel(panel);
+  await app.restore(panel);
   await panel.receive({ type: 'app-ready' });
   assert.equal(panel.messages.some(message => message.type === 'auxiliary-compact-check'), false);
   group.tabs.pop(); app.groupsChanged();
@@ -1525,6 +2415,87 @@ test('preview and comparison editors do not force compact mode over their additi
   }
 });
 
+test('the labelled status button opens or reveals the application without toggling it closed', async t => {
+  const app = harness(t);
+  assert.match(app.status.text, /Bitfroest\.fs/);
+  await app.command(app.status.command); const panel = app.panels[0];
+  await app.command(app.status.command);
+  assert.equal(panel.disposed, false); assert.equal(app.panels.length, 1); assert.equal(panel.reveals, 1);
+  panel.changeVisibility(false); await app.command(app.status.command);
+  assert.equal(panel.disposed, false); assert.equal(panel.reveals, 2);
+});
+
+test('concurrent status button opens share the pending startup until the first panel is available', async t => {
+  const gate = deferred(), app = harness(t, { theme: async (_count, icons) => { await gate.promise; return icons; } });
+  const first = app.command('bitfroest.show'); let secondFinished = false;
+  const second = app.command('bitfroest.show').then(() => { secondFinished = true; });
+  await tick(); assert.equal(secondFinished, false); assert.equal(app.panels.length, 1);
+  gate.resolve(); await Promise.all([first, second]); assert.equal(app.panels.length, 1);
+});
+
+test('folder tabs and their active positions survive a fresh extension instance and provider', async t => {
+  const fs = require('node:fs/promises'), os = require('node:os'), { createProvider } = require('../filesystem-provider');
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'tab-restart-')), left = path.join(root, 'left').replaceAll('\\', '/'), right = path.join(root, 'right').replaceAll('\\', '/'), inactive = `${left}/nested/archive`;
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  await fs.mkdir(inactive, { recursive: true }); await fs.mkdir(right);
+  const options = { startupRoots: [left, right], providerFactory: creation => createProvider({ ...creation, roots: [left, right], readAttributes: undefined }) };
+  const first = harness(t, options); await first.command('bitfroest.openPrototype');
+  const panel = first.panels[0], view = require('./support/webview.cjs').createApp(t, undefined, { html: panel.webview.html });
+  const panes = view.state().panes; panes[0].tabs.push(inactive); panes[1].tabs.unshift(left); panes[1].tab = 1;
+  await panel.receive({ type: 'view-state', panes, active: 1 });
+  const saved = JSON.parse(JSON.stringify(first.context.workspaceState.get('fileManagerState')));
+  panel.dispose();
+  const second = harness(t, { ...options, workspaceState: { fileManagerState: saved } }); await second.command('bitfroest.openPrototype');
+  const restarted = require('./support/webview.cjs').createApp(t, undefined, { html: second.panels[0].webview.html }).state();
+  assert.deepEqual(Array.from(restarted.panes[0].tabs), [left, inactive]);
+  assert.deepEqual(Array.from(restarted.panes[1].tabs), [left, right]);
+  assert.equal(restarted.panes[0].tab, 0); assert.equal(restarted.panes[1].tab, 1); assert.equal(restarted.active, 1);
+});
+
+test('restart preserves the active tab when multiple tabs have the same directory path', async t => {
+  const saved = clipboardFixture(); saved.panes[0].tabs.push('C:/tmp'); saved.panes[0].tab = 1;
+  for (const pane of saved.panes) Object.assign(pane, { filter: '', sort: 'name' });
+  const app = harness(t, { workspaceState: { fileManagerState: saved }, filesystemLoad: async () => clipboardFixture() });
+  await app.command('bitfroest.show');
+  const state = require('./support/webview.cjs').createApp(t, undefined, { html: app.panels[0].webview.html }).state();
+  assert.deepEqual(Array.from(state.panes[0].tabs), ['C:/tmp', 'C:/tmp']); assert.equal(state.panes[0].tab, 1);
+});
+
+test('a late refresh result cannot overwrite newer durably saved folder tabs', async t => {
+  const initial = clipboardFixture(), gate = deferred(), started = deferred(); let loads = 0;
+  const app = harness(t, { filesystemLoad: async () => { if (++loads > 1) { started.resolve(); await gate.promise; } return structuredClone(initial); } });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  const refresh = panel.receive({ type: 'filesystem-refresh', refreshRequestId: 'refresh-tabs', state: structuredClone(initial) });
+  await started.promise;
+  const panes = structuredClone(initial.panes); panes[0].tabs.push('C:/temp'); panes[0].tab = 1;
+  await panel.receive({ type: 'view-state', panes, active: 1 });
+  assert.equal(app.context.workspaceState.get('fileManagerState').panes[0].tab, 1);
+  gate.resolve(); await refresh;
+  assert.equal(panel.messages.findLast(message => message.type === 'filesystem-result').ok, true);
+  const saved = app.context.workspaceState.get('fileManagerState');
+  assert.deepEqual(saved.panes[0].tabs, ['C:/tmp', 'C:/temp']); assert.equal(saved.panes[0].tab, 1); assert.equal(saved.active, 1);
+});
+
+test('extension shutdown waits for queued folder-tab storage writes', async t => {
+  const gate = deferred(), app = harness(t, { update: async (_store, key) => { if (key === 'fileManagerState') await gate.promise; } });
+  t.after(() => gate.resolve());
+  await app.command('bitfroest.show');
+  const state = clipboardFixture(), write = app.panels[0].receive({ type: 'state', state }); await tick();
+  let stopped = false; const shutdown = app.deactivate().then(() => { stopped = true; });
+  await tick(); assert.equal(stopped, false);
+  gate.resolve(); await Promise.all([write, shutdown]);
+  assert.deepEqual(app.context.workspaceState.get('fileManagerState').panes, state.panes);
+});
+
+test('a folder-tab storage error does not make shutdown wait for dismissal of its notification', async t => {
+  const notice = deferred(), app = harness(t, { update: async (_store, key) => { if (key === 'fileManagerState') throw new Error('Storage unavailable'); }, showErrorMessage: () => notice.promise });
+  t.after(() => notice.resolve()); await app.command('bitfroest.show');
+  const write = app.panels[0].receive({ type: 'state', state: clipboardFixture() }); await tick();
+  let stopped = false; const shutdown = app.deactivate().then(() => { stopped = true; });
+  await tick(); assert.equal(stopped, true); assert.ok(app.errors.some(error => error.includes('Storage unavailable')));
+  notice.resolve(); await Promise.all([write, shutdown]);
+});
+
 test('a second toggle disposes the panel and clears focus contexts', async t => {
   const app = harness(t);
   await app.command('bitfroest.openPrototype');
@@ -1534,7 +2505,7 @@ test('a second toggle disposes the panel and clears focus contexts', async t => 
   assert.equal(app.panels[0].disposed, true);
   assert.equal(app.contexts.get('bitfroest.textInput'), false);
   assert.equal(app.contexts.get('bitfroest.listFocus'), false);
-  assert.equal(app.status.text, '$(folder)');
+  assert.equal(app.status.text, '$(folder) Bitfroest.fs');
 });
 
 test('a hidden existing panel is revealed without moving another editor into a new window', async t => {
@@ -1542,12 +2513,12 @@ test('a hidden existing panel is revealed without moving another editor into a n
   await app.command('bitfroest.openPrototype');
   const panel = app.panels[0];
   panel.changeVisibility(false);
-  assert.equal(app.status.text, '$(folder)');
+  assert.equal(app.status.text, '$(folder) Bitfroest.fs');
   await app.command('bitfroest.openPrototype');
   assert.equal(panel.reveals, 1);
   assert.equal(app.panels.length, 1);
   assert.equal(app.nativeCalls.length, 1);
-  assert.equal(app.status.text, '$(folder-opened)');
+  assert.equal(app.status.text, '$(folder-opened) Bitfroest.fs');
 });
 
 test('overlapping opens wait for the first theme load rather than creating duplicate windows', async t => {
@@ -1555,16 +2526,16 @@ test('overlapping opens wait for the first theme load rather than creating dupli
   const app = harness(t, { theme: async (_, icons) => { await barrier.promise; return icons; } });
   const first = app.command('bitfroest.openPrototype');
   await app.command('bitfroest.openPrototype');
-  assert.equal(app.panels.length, 0);
-  barrier.resolve(); await first;
   assert.equal(app.panels.length, 1);
+  barrier.resolve(); await first;
+  assert.equal(app.panels.filter(panel => !panel.disposed).length, 1);
 });
 
 test('the opening guard resets when theme acquisition fails', async t => {
   const app = harness(t, { theme: (count, icons) => { if (count === 1) throw new Error('Theme unavailable'); return icons; } });
   await assert.rejects(app.command('bitfroest.openPrototype'), /Theme unavailable/);
   await app.command('bitfroest.openPrototype');
-  assert.equal(app.panels.length, 1);
+  assert.equal(app.panels.filter(panel => !panel.disposed).length, 1);
 });
 
 test('native maximization failures are reported without abandoning the usable panel', async t => {
@@ -1597,7 +2568,7 @@ test('disposing a panel during native setup does not revive its title or entry',
   app.panels[0].dispose();
   complete(null, '', '');
   await pending;
-  assert.equal(app.status.text, '$(folder)');
+  assert.equal(app.status.text, '$(folder) Bitfroest.fs');
   assert.equal(app.panels[0].disposed, true);
 });
 
@@ -1901,7 +2872,7 @@ test('restart rehydrates the existing panel with fresh lists and working host ev
   const app = harness(t, { manualReadiness: true, workspaceState: { fileManagerState: saved }, filesystemLoad: async () => fresh });
   const panel = app.restoredPanel();
   assert.ok(app.serializer, 'restart requires a registered serializer');
-  await app.serializer.deserializeWebviewPanel(panel, saved);
+  await app.restore(panel, saved);
   assert.equal(app.panels.length, 1);
   assert.equal(panel.webview.options.enableScripts, true);
   assert.ok(panel.webview.options.localResourceRoots.length >= 1);
@@ -1921,15 +2892,158 @@ test('restart rehydrates the existing panel with fresh lists and working host ev
   assert.equal(panel.disposed, true);
 });
 
+test('restoration renders before directory and theme loading and then initializes the same panel', async t => {
+  const loading = deferred(), theme = deferred();
+  const app = harness(t, { manualReadiness: true, filesystemLoad: () => loading.promise, theme: async (_attempt, icons) => { await theme.promise; return icons; } });
+  const panel = app.restoredPanel();
+  const restoring = app.restore(panel, null);
+  assert.match(panel.webview.html, /id="host-startup"/);
+  assert.equal(panel.webview.options.enableScripts, true);
+  const { JSDOM } = require('jsdom'), vm = require('node:vm');
+  const shell = new JSDOM(panel.webview.html, { runScripts: 'outside-only' });
+  t.after(() => shell.window.close());
+  const shellMessages = [];
+  shell.window.acquireVsCodeApi = () => ({ postMessage: message => shellMessages.push(message) });
+  const script = shell.window.document.querySelector('script');
+  assert.ok(shell.window.document.querySelector('meta[http-equiv="Content-Security-Policy"]').content.includes(`'nonce-${script.nonce}'`));
+  new vm.Script(script.textContent).runInContext(shell.getInternalVMContext());
+  await tick();
+  assert.ok(shellMessages.some(message => message.type === 'startup-diagnostic' && message.event.name === 'document-start'));
+  const shellReady = shellMessages.find(message => message.type === 'host-startup-ready');
+  assert.ok(shellReady);
+  await panel.receive(shellReady);
+  assert.match(panel.messages.at(-1).message, /Startverzeichnisse werden eingelesen/);
+  shell.window.dispatchEvent(new shell.window.MessageEvent('message', { data: panel.messages.at(-1) }));
+  assert.match(shell.window.document.querySelector('[role="status"]').textContent, /Startverzeichnisse werden eingelesen/);
+  shell.window.document.getElementById('host-startup-copy').click();
+  assert.equal(shellMessages.at(-1).type, 'startup-log-copy');
+  await panel.receive(shellMessages.at(-1));
+  assert.ok(app.clipboardCalls.some(call => call.action === 'writeText'));
+  loading.resolve(clipboardFixture()); await tick();
+  assert.match(panel.messages.at(-1).message, /Datei-Icon-Theme wird geladen/);
+  theme.resolve(); await restoring;
+  assert.equal(app.panels.length, 1);
+  assert.doesNotMatch(panel.webview.html, /id="host-startup"/);
+  const view = require('./support/webview.cjs').createApp(t, undefined, { html: panel.webview.html });
+  assert.equal(view.messages.filter(message => message.type === 'app-ready').length, 1);
+  panel.dispose();
+});
+
+test('restoration releases the editor attachment before directory loading finishes', async t => {
+  const loading = deferred();
+  const app = harness(t, { manualReadiness: true, filesystemLoad: () => loading.promise });
+  const panel = app.restoredPanel();
+  let attached = false;
+  Promise.resolve(app.serializer.deserializeWebviewPanel(panel, null)).then(() => { attached = true; });
+  await tick();
+  assert.equal(attached, true, 'the editor cannot attach its webview until deserialization returns');
+  assert.match(panel.webview.html, /id="host-startup"/);
+  loading.resolve(clipboardFixture()); await app.command('bitfroest.show');
+  panel.dispose();
+});
+
+test('host startup diagnostics can be copied while directory loading blocks the webview', async t => {
+  const loading = deferred(), info = [];
+  const app = harness(t, { manualReadiness: true, filesystemLoad: () => loading.promise, onInfoLog: message => info.push(message) });
+  const panel = app.restoredPanel();
+  const opening = app.restore(panel, null);
+  await tick();
+  assert.ok(app.commands.has('bitfroest.copyStartupLog'));
+  const contribution = manifest.contributes.commands.find(command => command.command === 'bitfroest.copyStartupLog');
+  assert.ok(contribution);
+  assert.equal(contribution.enablement, undefined, 'diagnostics remain available before readiness');
+  await app.command('bitfroest.copyStartupLog');
+  const report = JSON.parse(app.clipboardCalls.find(call => call.action === 'writeText').text);
+  assert.equal(report.extensionVersion, manifest.version);
+  assert.equal(report.webviewReady, false);
+  assert.equal(report.startup.restored, true);
+  assert.match(report.events.at(-1).message, /Startverzeichnisse werden eingelesen/);
+  assert.ok(report.runtime.node);
+  assert.ok(info.some(message => message.includes('Startverzeichnisse werden eingelesen')));
+  assert.ok(app.information.some(message => /kopiert/.test(message)));
+  loading.resolve(clipboardFixture()); await opening; await app.command('bitfroest.show'); panel.dispose();
+});
+
+test('startup document events persist with identity and reject stale or oversized messages', async t => {
+  const logs = [], loading = deferred();
+  const app = harness(t, { manualReadiness: true, filesystemLoad: () => loading.promise, onInfoLog: line => logs.push(JSON.parse(line)) });
+  const panel = app.restoredPanel(); const opening = app.restore(panel, null);
+  const { JSDOM } = require('jsdom');
+  const dom = new JSDOM(panel.webview.html); t.after(() => dom.window.close());
+  const { startupId, documentId } = dom.window.document.documentElement.dataset;
+  assert.ok(documentId);
+  const message = { type: 'startup-diagnostic', version: 1, startupId, documentId, sequence: 1, event: { name: 'document-start', elapsed: 3, readyState: 'loading', visibility: 'visible' } };
+  await panel.receive(message);
+  assert.equal(logs.filter(row => row.kind === 'webview-event').length, 1);
+  await panel.receive(message);
+  await panel.receive({ ...message, sequence: 2, documentId: 'old' });
+  await panel.receive({ ...message, sequence: 2, event: { ...message.event, message: 'x'.repeat(40000) } });
+  assert.equal(logs.filter(row => row.kind === 'webview-event').length, 1);
+  assert.ok(logs.every(row => row.startupId && Number.isSafeInteger(row.sequence) && Number.isFinite(row.elapsed)));
+  loading.resolve(clipboardFixture()); await opening; await app.command('bitfroest.show'); panel.dispose();
+});
+
+test('the full startup view copies host diagnostics before readiness and after failure', async t => {
+  const app = harness(t, { manualReadiness: true });
+  await app.command('bitfroest.openPrototype');
+  const panel = app.panels[0];
+  const { JSDOM } = require('jsdom');
+  const dom = new JSDOM(panel.webview.html, { runScripts: 'outside-only' });
+  t.after(() => dom.window.close());
+  const messages = [];
+  dom.window.acquireVsCodeApi = () => ({ postMessage: message => messages.push(message) });
+  dom.window.eval(dom.window.document.querySelector('script').textContent);
+  const copy = dom.window.document.querySelector('#startup-log-copy');
+  assert.ok(copy);
+  copy.click();
+  assert.equal(messages.at(-1).type, 'startup-log-copy');
+  await panel.receive({ type: 'app-startup-error', diagnostic: { message: 'render failed' } });
+  await panel.receive({ type: 'startup-log-copy' });
+  const report = JSON.parse(app.clipboardCalls.find(call => call.action === 'writeText').text);
+  assert.ok(report.events.some(event => event.message === 'render failed'));
+  panel.dispose();
+});
+
+test('a startup without readiness offers host diagnostics even when no webview message arrives', async t => {
+  const loading = deferred(); let watchdog;
+  const original = global.setTimeout;
+  t.mock.method(global, 'setTimeout', (callback, delay, ...args) => {
+    if (delay === 15000) { watchdog = callback; return { unref() {} }; }
+    return original(callback, delay, ...args);
+  });
+  const app = harness(t, { manualReadiness: true, filesystemLoad: () => loading.promise, showWarningMessage: (_message, action) => action });
+  const panel = app.restoredPanel();
+  app.serializer.deserializeWebviewPanel(panel, null);
+  await tick(); watchdog(); await tick();
+  assert.ok(app.errors.some(message => /noch keine Bereitschaft/.test(message)));
+  const report = JSON.parse(app.clipboardCalls.find(call => call.action === 'writeText').text);
+  assert.equal(report.webviewReady, false);
+  assert.ok(report.events.some(event => /Startverzeichnisse werden eingelesen/.test(event.message)));
+  loading.resolve(clipboardFixture()); await app.command('bitfroest.show'); panel.dispose();
+});
+
+test('startup diagnostics retain host failures and clipboard rejection never reports success', async t => {
+  const app = harness(t, { theme: async () => { throw new Error('Theme fixture failed'); } });
+  const panel = app.restoredPanel();
+  await assert.rejects(app.restore(panel, null), /Theme fixture failed/);
+  await app.command('bitfroest.copyStartupLog');
+  const report = JSON.parse(app.clipboardCalls.find(call => call.action === 'writeText').text);
+  assert.ok(report.events.some(event => event.kind === 'error' && event.message === 'Theme fixture failed' && event.stack));
+  const failure = harness(t, { writeClipboardText: async () => { throw new Error('Clipboard busy'); } });
+  assert.equal(await failure.command('bitfroest.copyStartupLog'), false);
+  assert.equal(failure.information.length, 0);
+  assert.match(failure.errors.at(-1), /Clipboard busy/);
+});
+
 test('closing a restored panel while directories load does not reopen it', async t => {
   const loading = deferred();
   const app = harness(t, { filesystemLoad: () => loading.promise });
   const panel = app.restoredPanel();
   assert.ok(app.serializer);
-  const restoring = app.serializer.deserializeWebviewPanel(panel, clipboardFixture());
-  await tick(); panel.dispose(); loading.resolve(clipboardFixture()); await restoring;
+  const restoring = app.restore(panel, clipboardFixture());
+  await tick(); const loadingHtml = panel.webview.html; panel.dispose(); loading.resolve(clipboardFixture()); await restoring;
   assert.equal(app.panels.length, 1);
-  assert.equal(panel.webview.html, '');
+  assert.equal(panel.webview.html, loadingHtml);
   assert.equal(app.calls.some(call => call.id === 'workbench.action.moveEditorToNewWindow'), false);
   await app.command('bitfroest.openPrototype');
   assert.equal(app.panels.length, 2);
@@ -1940,7 +3054,7 @@ test('failed restoration closes the unusable panel and permits a manual retry', 
   const app = harness(t, { filesystemLoad: async () => { if (++loads === 1) throw new Error('Unavailable'); return clipboardFixture(); } });
   const panel = app.restoredPanel();
   assert.ok(app.serializer);
-  await app.serializer.deserializeWebviewPanel(panel, null);
+  await app.restore(panel, null);
   assert.equal(panel.disposed, true);
   assert.equal(app.errors.length, 1);
   await app.command('bitfroest.openPrototype');
@@ -1953,7 +3067,7 @@ test('a restore delivered during manual opening leaves one initialized owner', a
   const app = harness(t, { filesystemLoad: () => loading.promise });
   const opening = app.command('bitfroest.openPrototype');
   const restored = app.restoredPanel();
-  const restoring = app.serializer.deserializeWebviewPanel(restored, null);
+  const restoring = app.restore(restored, null);
   loading.resolve(clipboardFixture()); await opening; await restoring;
   const remaining = app.panels.filter(panel => !panel.disposed);
   assert.equal(remaining.length, 1);
@@ -1963,7 +3077,7 @@ test('a restore delivered during manual opening leaves one initialized owner', a
 test('a resource initialization failure releases the restored panel and opening guard', async t => {
   const app = harness(t, { theme: async (attempt, icons) => { if (attempt === 1) throw new Error('Theme unavailable'); return icons; } });
   const panel = app.restoredPanel();
-  await assert.rejects(app.serializer.deserializeWebviewPanel(panel, null), /Theme unavailable/);
+  await assert.rejects(app.restore(panel, null), /Theme unavailable/);
   assert.equal(panel.disposed, true);
   await app.command('bitfroest.openPrototype');
   assert.equal(app.panels.length, 2);
@@ -2048,7 +3162,7 @@ test('column settings and UI language are injected and settings changes are broa
   const html = app.panels[0].webview.html;
   assert.match(html, /data-language="en-US"/);
   assert.match(html, /data-column-settings=/);
-  assert.match(html, /Filename/);
+  assert.equal(JSON.parse(decodeURIComponent(/data-column-settings="([^"]+)"/.exec(html)[1])).sets[0].columns[0].title, 'Full filename');
   await app.configuration('bitfroest.columns');
   assert.equal(app.panels[0].messages.at(-1).type, 'column-settings');
   assert.equal(app.panels[0].messages.at(-1).settings.activeSet, 'custom');
@@ -2060,21 +3174,34 @@ test('native column tables reach the webview on startup and after configuration 
   await app.command('bitfroest.openPrototype');
   const encoded = /data-column-settings="([^"]+)"/.exec(app.panels[0].webview.html)[1];
   const settings = JSON.parse(decodeURIComponent(encoded));
-  assert.equal(settings.sets[0].columns[0].title, 'My heading');
-  assert.equal(settings.sets[0].columns[0].width, 350);
+  assert.equal(settings.sets[0].columns[0].title, 'Full filename');
+  assert.equal(settings.sets[0].columns[0].width, 120);
   const { createApp } = require('./support/webview.cjs');
   const view = createApp(t, null, { html: app.panels[0].webview.html });
-  assert.equal(view.document.querySelector('[data-sort="file"]').textContent, 'My heading');
-  assert.equal(view.document.querySelector('[data-col="file"]').getAttribute('width'), '350');
+  assert.equal(view.document.querySelector('[data-sort="file"]').textContent, 'Full filename');
+  const automaticWidth = view.document.querySelector('[data-col="file"]').getAttribute('width');
+  assert.notEqual(automaticWidth, '350');
   configuration['columns.widths']['reports.file'] = 450;
   await app.configuration('bitfroest.columns');
-  assert.equal(app.panels[0].messages.at(-1).settings.sets[0].columns[0].width, 450);
+  assert.equal(app.panels[0].messages.at(-1).settings.sets[0].columns[0].width, 120);
   view.window.dispatchEvent(new view.window.MessageEvent('message', { data: app.panels[0].messages.at(-1) }));
-  assert.equal(view.document.querySelector('[data-col="file"]').getAttribute('width'), '450');
+  assert.equal(view.document.querySelector('[data-col="file"]').getAttribute('width'), automaticWidth);
   assert.equal(app.updateCalls.filter(call => call.store === 'configuration').length, 0);
 });
 
-test('default column tables follow the extension language without changing user headings', async t => {
+test('short default column headers reach generated host HTML in both settings paths', async t => {
+  const layout = require('../media/commander-column-settings').catalog.map(column => ({ id: column.id, title: 'Old custom title', align: column.align, visible: column.visible }));
+  for (const configuration of [{}, { 'columns.visibility': { 'standard.name': true } }, { 'columns.layout': layout }]) {
+    const app = harness(t, { language: 'en', configuration });
+    await app.command('bitfroest.openPrototype');
+    const { createApp } = require('./support/webview.cjs');
+    const view = createApp(t, null, { html: app.panels[0].webview.html });
+    assert.equal(view.document.querySelector('[data-sort="type"]').textContent, 'Ext.');
+    assert.equal(view.document.querySelector('[data-sort="attributes"]').textContent, 'Attr.');
+  }
+});
+
+test('default column tables follow the extension language and ignore saved headings', async t => {
   for (const [language, expected] of [['de', 'Größe'], ['en', 'Size']]) {
     const app = harness(t, { language: 'en', configuration: { language } });
     await app.command('bitfroest.openPrototype');
@@ -2084,7 +3211,7 @@ test('default column tables follow the extension language without changing user 
   const app = harness(t, { language: 'en', configuration: { 'columns.titles': { 'standard.size': 'Eigene Größe' } } });
   await app.command('bitfroest.openPrototype');
   const encoded = /data-column-settings="([^"]+)"/.exec(app.panels[0].webview.html)[1];
-  assert.equal(JSON.parse(decodeURIComponent(encoded)).sets[0].columns.find(column => column.id === 'size').title, 'Eigene Größe');
+  assert.equal(JSON.parse(decodeURIComponent(encoded)).sets[0].columns.find(column => column.id === 'size').title, 'Size');
 });
 
 test('default tables do not replace saved legacy sets until a new table is explicitly configured', async t => {
@@ -2149,10 +3276,14 @@ test('initial view without saved tabs loads the configured roots instead of defe
 });
 test('lazy navigation prepares only its requested directory and resumes the original pane', async t => {
   const state = lazyState(), preparations=[];
-  const app = harness(t,{filesystemLoad:async()=>state,filesystemPrepare:async(before,options)=>{preparations.push({before,options});return {...state,snapshotId:'two',unloadedFolders:[],folders:{...state.folders,'C:/tmp/docs':[{id:'a',name:'a.txt'}]}};}});
+  const app = harness(t,{filesystemLoad:async()=>state,filesystemPrepare:async(before,options)=>{preparations.push({before,options});await options.onDirectory({path:'C:/tmp/docs',names:['a.txt'],rows:[],completed:0,total:1});await options.onDirectory({path:'C:/tmp/docs',rows:[{id:'a',name:'a.txt'}],completed:1,total:1});return {...state,snapshotId:'two',unloadedFolders:[],folders:{...state.folders,'C:/tmp/docs':[{id:'a',name:'a.txt'}]}};}});
   await app.command('bitfroest.openPrototype');
-  await app.panels[0].receive({type:'filesystem-navigate',path:'C:/tmp/docs',side:0,state});
-  assert.deepEqual(preparations[0].options,{directories:['C:/tmp/docs'],recursive:false,navigation:true,visibleDirectories:['C:/tmp/docs','C:/temp']});
+  await app.panels[0].receive({type:'filesystem-navigate',navigationRequestId:'directory-progress-1',path:'C:/tmp/docs',side:0,state});
+  const {onDirectory,...settings}=preparations[0].options;
+  assert.equal(typeof onDirectory,'function');
+  assert.deepEqual(settings,{directories:['C:/tmp/docs'],recursive:false,navigation:true,visibleDirectories:['C:/tmp/docs','C:/temp']});
+  const progress=app.panels[0].messages.filter(message=>message.type==='filesystem-directory');
+  assert.deepEqual(progress.map(message=>[message.completed,message.total]),[[0,1],[1,1]]);
   assert.equal(preparations[0].before.snapshotId,'one');
   const response=app.panels[0].messages.at(-1); assert.equal(response.ok,true); assert.deepEqual(response.resumeNavigation,{path:'C:/tmp/docs',side:0}); assert.equal(response.state.snapshotId,'two');
 });
@@ -2180,7 +3311,7 @@ test('reopening waits for an in-flight preparation before loading the replacemen
  const state=lazyState(),pending=deferred();let loads=0;
  const app=harness(t,{filesystemLoad:async()=>({...state,snapshotId:`load-${++loads}`}),filesystemPrepare:()=>pending.promise});
  await app.command('bitfroest.openPrototype');const old=app.panels[0];const preparing=old.receive({type:'filesystem-prepare',paths:['C:/tmp/docs'],action:'copy',state});await tick();old.dispose();
- const reopening=app.command('bitfroest.openPrototype');await tick();assert.equal(loads,1);assert.equal(app.panels.length,1);
+ const reopening=app.command('bitfroest.openPrototype');await tick();assert.equal(loads,1);assert.equal(app.panels.length,2);assert.match(app.panels[1].webview.html,/host-startup/);
  pending.resolve({...state,snapshotId:'prepared',unloadedFolders:[]});await preparing;await reopening;
  assert.equal(loads,2);assert.equal(old.messages.some(message=>message.type==='filesystem-result'),false);assert.match(app.panels[1].webview.html,/load-2/);
 });
@@ -2349,7 +3480,7 @@ test('transfer cancellation interrupts the running job and forwards only its act
   const real = { version: 1, realFilesystem: true, snapshotId: 'one', folders: { 'C:/tmp': [], 'C:/temp': [] }, panes: [{ tabs: ['C:/tmp'], tab: 0 }, { tabs: ['C:/temp'], tab: 0 }] };
   let operation, release;
   const outcome = { cancelled: true, completedIds: ['one'], completedSourcePaths: ['C:/tmp/a'] };
-  const app = harness(t, { filesystemLoad: async () => real, filesystemApply: async (_before, after, options) => { operation = options; options?.onProgress?.({ completedBytes: 3, totalBytes: 10 }); await new Promise(resolve => { release = resolve; }); return { ...after, operationOutcome: outcome }; } });
+  const app = harness(t, { filesystemLoad: async () => real, filesystemApply: async (_before, after, options) => { operation = options; options?.onProgress?.(progressSample({ completedBytes: 3, totalBytes: 10 })); await new Promise(resolve => { release = resolve; }); return { ...after, operationOutcome: outcome }; } });
   await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
   const pending = panel.receive({ type: 'filesystem-apply', operationId: 'job-1', transfer: { mode: 'copy', sourcePath: 'C:/tmp', ids: ['one'], sourceSide: 0 }, state: real });
   await new Promise(resolve => setImmediate(resolve));
@@ -2366,7 +3497,7 @@ test('preparation has progress and a cancellable job before applying any mutatio
   let operation;
   const app = harness(t, { filesystemLoad: async () => clipboardFixture(), filesystemPrepare: async (_before, settings) => {
     operation = settings;
-    settings.onProgress?.({ phase: 'preparing', filesScanned: 3 });
+    settings.onProgress?.(progressSample({ phase: 'preparing', filesScanned: 3 }));
     await new Promise((resolve, reject) => settings.signal?.addEventListener('abort', () => { const error = new Error('Cancelled'); error.name = 'AbortError'; reject(error); }, { once: true }));
   } });
   await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
@@ -2409,8 +3540,8 @@ test('failed preparation acknowledges and releases the filesystem queue without 
 
 test('host progress bounds intermediate messages and always forwards the completed byte count', async t => {
   const app = harness(t, { filesystemLoad: async () => clipboardFixture(), filesystemApply: async (_before, after, operation) => {
-    for (let completedBytes = 0; completedBytes < 1000; completedBytes++) operation.onProgress({ phase: 'copying', completedBytes, totalBytes: 1000 });
-    operation.onProgress({ phase: 'published', completedBytes: 1000, totalBytes: 1000 });
+    for (let completedBytes = 0; completedBytes < 1000; completedBytes++) operation.onProgress(progressSample({ phase: 'copying', completedBytes, totalBytes: 1000 }));
+    operation.onProgress(progressSample({ phase: 'published', completedBytes: 1000, totalBytes: 1000 }));
     return after;
   } });
   await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
@@ -2456,12 +3587,49 @@ test('native shell menus resolve only a current frozen selection and refresh aft
   panel.dispose(); assert.equal(app.shellDisposals.length, 1);
 });
 
+test('native shell menus accept root children and reject mismatched source paths', async t => {
+  const initial = clipboardFixture();
+  initial.panes[0].tabs = ['C:/'];
+  initial.folders['C:/'] = [
+    { id: 'dell', name: 'Dell', type: 'folder', fsSource: 'C:/Dell' },
+    { id: 'file', name: 'file.txt', type: 'text', fsSource: 'C:/file.txt' },
+    { id: 'foreign', name: 'other', type: 'folder', fsSource: 'C:/private/other' }
+  ];
+  const app = harness(t, { filesystemLoad: async () => initial, containsPath: target => target.startsWith('C:/') });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  const message = { type: 'shell-context-menu', requestId: 'shell-menu-1', directory: 'C:/', snapshotId: 'clipboard' };
+  await panel.receive({ ...message, ids: ['dell', 'file'] });
+  assert.equal(panel.messages.at(-1).ok, true);
+  assert.deepEqual(app.shellCalls[0].paths, ['C:/Dell', 'C:/file.txt']);
+  await panel.receive({ ...message, requestId: 'shell-menu-2', ids: ['foreign'] });
+  assert.equal(panel.messages.at(-1).ok, false);
+  const diagnostic = panel.messages.at(-1).diagnostic;
+  assert.equal(diagnostic.request.directory, 'C:/');
+  assert.deepEqual(diagnostic.request.ids, ['foreign']);
+  assert.equal(diagnostic.request.requestId, 'shell-menu-2');
+  assert.equal(diagnostic.request.snapshotId, 'clipboard');
+  assert.deepEqual(diagnostic.request.paths, ['C:/private/other']);
+  assert.equal(diagnostic.platform, 'win32');
+  assert.ok(diagnostic.failure.stack);
+  assert.equal(app.shellCalls.length, 1);
+});
+
+test('native shell menus classify archive entries as unavailable without calling a native popup', async t => {
+  const app = harness(t, { language: 'en', filesystemLoad: async () => clipboardFixture() });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  await panel.receive({ type: 'shell-context-menu', requestId: 'shell-menu-1', directory: 'zip:C%3A%2Ftmp%2Fsample.zip!/folder', ids: ['zip-entry'], snapshotId: 'clipboard' });
+  assert.equal(panel.messages.at(-1).ok, false);
+  assert.equal(panel.messages.at(-1).unsupported, true);
+  assert.equal(panel.messages.at(-1).error, 'This action is unavailable inside a ZIP archive.');
+  assert.equal(app.shellCalls.length, 0);
+});
+
 test('native shell menus reject invalid, stale and busy requests without calling a native popup', async t => {
   const pending = deferred();
   const app = harness(t, { filesystemLoad: async () => clipboardFixture(), filesystemApply: () => pending.promise });
   await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
   const message = { type: 'shell-context-menu', requestId: 'shell-menu-1', directory: 'C:/tmp', ids: ['a'], snapshotId: 'clipboard' };
-  for (const patch of [{ ids: [] }, { ids: ['a', 'a'] }, { ids: ['foreign'] }, { ids: Array.from({ length: 257 }, (_, index) => String(index)) }, { directory: 'C:/private' }, { snapshotId: 'stale' }]) {
+  for (const patch of [{ ids: null }, { ids: {} }, { ids: [] }, { ids: ['a', 'a'] }, { ids: ['foreign'] }, { ids: Array.from({ length: 257 }, (_, index) => String(index)) }, { directory: 'C:/private' }, { snapshotId: 'stale' }]) {
     await panel.receive({ ...message, ...patch }); assert.equal(panel.messages.at(-1).ok, false);
   }
   assert.equal(app.shellCalls.length, 0);
@@ -2521,15 +3689,51 @@ test('an uncertain native menu failure refreshes metadata and cannot report an i
   assert.match(panel.messages.at(-1).error, /Native process failed/);
 });
 
+test('a cancelled native command refreshes possible partial changes without reporting failure', async t => {
+  let loads = 0;
+  const app = harness(t, { filesystemLoad: async () => { loads++; return clipboardFixture(); }, shellMenuShow: async () => ({ ok: true, displayed: true, invoked: false, cancelled: true, refreshRequired: true }) });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  await panel.receive({ type: 'shell-context-menu', requestId: 'shell-menu-2', directory: 'C:/tmp', ids: ['a'], snapshotId: 'clipboard' });
+  const reply = panel.messages.at(-1);
+  assert.equal(loads, 2);
+  assert.equal(reply.ok, true);
+  assert.equal(reply.cancelled, true);
+  assert.equal(reply.invoked, false);
+  assert.equal(reply.refreshed, true);
+  assert.equal(reply.clipboardInvalidated, true);
+  assert.equal(reply.error, undefined);
+});
+
+test('native menu diagnostics retain system codes and native request identities through causes', async t => {
+  const cause = Object.assign(new Error('Native shell context menu failed.'), { code: 'NativeFailure', nativeCode: 31, nativeStage: 'IContextMenu.InvokeCommand', hresult: '0x80004005', nativeCommand: 'delete', nativeCommandId: 0 });
+  const failure = Object.assign(new Error(cause.message), { code: cause.code, nativeCode: 31, operation: 'shell.showContextMenu', requestId: 2n, generation: 7n, cause });
+  const app = harness(t, { filesystemLoad: async () => clipboardFixture(), shellMenuShow: async () => { throw failure; } });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  await panel.receive({ type: 'shell-context-menu', requestId: 'shell-menu-2', directory: 'C:/tmp', ids: ['a'], snapshotId: 'clipboard' });
+  const diagnostic = panel.messages.at(-1).diagnostic;
+  assert.equal(diagnostic.failure.nativeCode, '31');
+  assert.equal(diagnostic.failure.operation, 'shell.showContextMenu');
+  assert.equal(diagnostic.failure.requestId, '2');
+  assert.equal(diagnostic.failure.generation, '7');
+  assert.equal(diagnostic.failure.cause.nativeCode, '31');
+  assert.equal(diagnostic.failure.cause.nativeStage, 'IContextMenu.InvokeCommand');
+  assert.equal(diagnostic.failure.cause.hresult, '0x80004005');
+  assert.equal(diagnostic.failure.cause.nativeCommand, 'delete');
+  assert.equal(diagnostic.failure.cause.nativeCommandId, '0');
+  assert.doesNotThrow(() => JSON.stringify(diagnostic));
+});
+
 test('delayed startup creates one initialized panel and allows retry after a loading failure', async t => {
   const loading = deferred(); let attempts = 0;
   const app = harness(t, { filesystemLoad: async () => { attempts++; if (attempts === 1) return loading.promise; return clipboardFixture(); } });
   const opening = app.command('bitfroest.openPrototype'); await tick();
-  await app.command('bitfroest.openPrototype'); assert.equal(app.panels.length, 0);
+  await app.command('bitfroest.openPrototype'); assert.equal(app.panels.length, 1);
+  assert.match(app.panels[0].webview.html, /id="host-startup"/);
+  assert.match(app.panels[0].webview.html, /id="host-startup-copy"/);
   loading.reject(new Error('Temporary load failure')); await opening;
-  assert.equal(app.panels.length, 0); assert.equal(app.errors.length, 1);
+  assert.equal(app.panels[0].disposed, true); assert.equal(app.errors.length, 1);
   await app.command('bitfroest.openPrototype');
-  assert.equal(app.panels.length, 1); assert.match(app.panels[0].webview.html, /a.txt/);
+  assert.equal(app.panels.length, 2); assert.match(app.panels[1].webview.html, /a.txt/);
   assert.equal(app.contexts.get('bitfroest.ready'), true);
 });
 
@@ -2741,4 +3945,241 @@ test('terminal launch failure replies without a notification dialog', async t =>
   assert.equal(app.panels[0].messages.at(-1).ok, false);
   assert.match(app.panels[0].messages.at(-1).error, /Terminal unavailable/);
   assert.equal(app.errors.length, 0);
+});
+
+test('system context menu setting reaches host HTML, live updates and frozen clipboard commands', async t => {
+  const configuration = {};
+  const app = harness(t, { configuration });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  const encoded = /data-file-settings="([^"]+)"/.exec(panel.webview.html)[1];
+  assert.equal(JSON.parse(decodeURIComponent(encoded)).useSystemContextMenu, false);
+  configuration['files.useSystemContextMenu'] = true;
+  await app.configuration('bitfroest.files');
+  assert.equal(panel.messages.filter(message => message.type === 'file-settings').at(-1).settings.useSystemContextMenu, true);
+  await panel.receive({ type: 'app-ready' });
+  const selection = { webviewSection: 'files', directory: 'C:/tmp', ids: ['a'], snapshotId: 'frozen' };
+  await app.command('bitfroest.clipboard-copy', selection);
+  assert.deepEqual(panel.messages.at(-1).contextSelection, { directory: 'C:/tmp', ids: ['a'], snapshotId: 'frozen' });
+  panel.dispose();
+});
+
+test('switching from English restores German column headings across saved layouts and both panels', async t => {
+  const { createApp } = require('./support/webview.cjs');
+  const columns = require('../media/commander-column-settings').catalog.slice(0, 5).map(column => ({ ...column, title: ({ name: 'Name', type: 'Extension', size: 'Size', date: 'Date', attributes: 'Attributes' })[column.id] }));
+  const savedLayout = columns.map(({ id, title, width, align, visible }) => ({ id, title, width, align, visible }));
+  const savedTables = { 'columns.names': { standard: 'Standard' }, 'columns.fields': Object.fromEntries(columns.map(column => [`standard.${column.id}`, column.field])), 'columns.titles': Object.fromEntries(columns.map(column => [`standard.${column.id}`, column.title])) };
+  for (const source of [{}, { 'columns.layout': columns }, { 'columns.layout': savedLayout }, savedTables, { 'columns.sets': [{ id: 'legacy', name: 'Legacy', columns }], 'columns.activeSet': 'legacy' }]) {
+    const configuration = { ...source, language: 'en' };
+    const app = harness(t, { language: 'en', configuration });
+    await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+    const before = createApp(t, undefined, { html: panel.webview.html });
+    assert.equal(before.document.querySelector('[data-sort="size"]').textContent, 'Size');
+    const saved = before.state();
+    configuration.language = 'de';
+    await app.configuration('bitfroest.language');
+    await panel.receive({ type: 'language-reload', state: saved });
+    assert.match(panel.webview.html, /Content-Security-Policy/);
+    const after = createApp(t, saved, { html: panel.webview.html });
+    assert.equal(after.document.documentElement.lang, 'de');
+    for (const pane of after.document.querySelectorAll('.pane')) {
+      assert.deepEqual([...pane.querySelectorAll('thead button')].map(button => button.textContent.replace(/ [↑↓]$/, '')), ['Name', 'Erw.', 'Größe', 'Datum', 'Attr.']);
+    }
+    assert.equal(configuration.language, 'de');
+    if (source['columns.layout']) assert.deepEqual(configuration['columns.layout'], source['columns.layout']);
+    if (source['columns.titles']) assert.deepEqual(configuration['columns.titles'], source['columns.titles']);
+    panel.dispose();
+  }
+});
+
+test('address breadcrumbs and flat editing operate in generated host HTML with its CSP', async t => {
+  const initial = clipboardFixture();
+  initial.panes.forEach(pane => { pane.filter = ''; pane.sort = 'name'; });
+  const app = harness(t, { filesystemLoad: async () => initial });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  assert.match(panel.webview.html, /Content-Security-Policy/);
+  const view = require('./support/webview.cjs').createApp(t, initial, { html: panel.webview.html });
+  const section = view.document.querySelector('[data-pane="1"]');
+  assert.ok(section.querySelector('[data-refresh][aria-busy="true"] .codicon-loading.codicon-modifier-spin'));
+  view.click(section.querySelector('[data-path-edit]'));
+  const input = view.document.activeElement;
+  assert.equal(input.value, 'C:\\temp');
+  assert.ok(input.closest('.path-address').classList.contains('is-editing'));
+  view.key('Escape', {}, input);
+  view.click(section.querySelector('[data-breadcrumb="C:/"]'), { ctrlKey: true });
+  const request = view.messages.find(message => message.type === 'filesystem-navigate');
+  assert.equal(request.path, 'C:/'); assert.equal(request.side, 1);
+  assert.equal(view.state().panes[1].tabs.length, 1);
+  panel.dispose();
+});
+
+test('column separator double-click fits the filename in generated host HTML without navigation', async t => {
+  const initial = clipboardFixture(); initial.panes.forEach(pane => { pane.filter = ''; pane.sort = 'name'; });
+  const app = harness(t, { filesystemLoad: async () => initial });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  assert.match(panel.webview.html, /Content-Security-Policy/);
+  const view = require('./support/webview.cjs').createApp(t, initial, { html: panel.webview.html });
+  const section = view.document.querySelector('[data-pane="0"]'), list = section.querySelector('.list');
+  const desired = Number(section.querySelector('[data-col="name"]').width);
+  Object.defineProperty(list, 'clientWidth', { value: 1200 }); view.window.dispatchEvent(new view.window.Event('resize'));
+  assert.ok(Number(section.querySelector('[data-col="name"]').width) > desired);
+  section.querySelector('[data-resize="name"]').dispatchEvent(new view.window.MouseEvent('dblclick', { bubbles: true, detail: 2 }));
+  assert.equal(Number(section.querySelector('[data-col="name"]').width), desired);
+  assert.equal(view.messages.some(message => message.type === 'filesystem-navigate'), false);
+  assert.equal(view.state().panes[0].tabs[0], 'C:/tmp');
+  panel.dispose();
+});
+
+test('clipboard status uses a separate provider and preserves the active cut acknowledgement', async t => {
+  const state = clipboardFixture(), instances = [];
+  const app = harness(t, { filesystemLoad: async () => state, filesystemApply: async (before, after) => after,
+    clipboardFactory: () => {
+      const instance = { token: null, reads: 0,
+        async read() { this.token = `provider-${instances.indexOf(this)}-${++this.reads}`; return { paths: ['C:/tmp/a.txt'], mode: 'move', token: this.token, source: 'system' }; },
+        async ack(request) { assert.equal(request.token, this.token); return true; }, dispose() { this.disposed = true; } };
+      instances.push(instance); return instance;
+    } });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  await panel.receive({ type: 'clipboard-read', requestId: 'read' });
+  const ticket = panel.messages.at(-1).selection;
+  await panel.receive({ type: 'clipboard-status', requestId: 'status' });
+  assert.deepEqual(panel.messages.at(-1), { type: 'clipboard-result', requestId: 'status', ok: true, available: true });
+  assert.equal(instances.length, 2); assert.equal(instances[0].reads, 1); assert.equal(instances[1].reads, 1);
+  assert.equal(instances[1].disposed, true); assert.equal(instances[0].disposed, undefined);
+  const after = structuredClone(state); after.folders['C:/tmp'] = []; after.folders['C:/temp'] = [{ id: 'copy', name: 'a.txt', type: 'text', fsSource: 'C:/temp/a.txt' }];
+  await panel.receive({ type: 'filesystem-apply', state: after });
+  await panel.receive({ type: 'clipboard-ack', requestId: 'ack', ...ticket, remainingPaths: [] });
+  assert.equal(panel.messages.at(-1).matched, true);
+});
+
+test('clipboard status reports an empty clipboard without a notification or command activation', async t => {
+  const app = harness(t, { filesystemLoad: async () => clipboardFixture() });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  await panel.receive({ type: 'clipboard-status', requestId: 'empty' });
+  assert.deepEqual(panel.messages.at(-1), { type: 'clipboard-result', requestId: 'empty', ok: true, available: false });
+  assert.deepEqual(app.errors, []);
+  await panel.receive({ type: 'inputFocus', list: true, paste: false });
+  assert.equal(app.contexts.get('bitfroest.canPasteFiles'), false);
+  await panel.receive({ type: 'inputFocus', list: true, paste: true });
+  assert.equal(app.contexts.get('bitfroest.canPasteFiles'), true);
+  panel.dispose(); assert.equal(app.contexts.get('bitfroest.canPasteFiles'), false);
+});
+
+test('writing copied names as text invalidates file paste availability in the existing view', async t => {
+  const app = harness(t);
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  await panel.receive({ type: 'selection-io', requestId: 'selection-1', action: 'copy', text: 'plain text' });
+  assert.ok(panel.messages.some(message => message.type === 'clipboard-changed'));
+});
+
+test('right copy and left paste retain native command availability through focus and a late status reply', async t => {
+  const initial = clipboardFixture();
+  initial.panes.forEach(pane => { pane.filter = ''; pane.sort = 'name'; });
+  initial.folders['C:/temp'] = [{ id: 'b', name: 'right.txt', type: 'text', size: 5, content: 'right', fsSource: 'C:/temp/right.txt' }];
+  const options = { filesystemLoad: async () => structuredClone(initial) };
+  const app = harness(t, options);
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  const view = require('./support/webview.cjs').createApp(t, structuredClone(initial), { html: panel.webview.html });
+  const deliver = data => view.window.dispatchEvent(new view.window.MessageEvent('message', { data }));
+  const startup = view.messages.find(message => message.type === 'clipboard-status');
+  await panel.receive(startup);
+  const oldStatus = panel.messages.find(message => message.type === 'clipboard-result' && message.requestId === startup.requestId);
+  view.click(view.document.querySelector('[data-pane="1"] tr[data-id="b"] [data-filename]'));
+  view.action('clipboard-copy');
+  const write = view.messages.find(message => message.type === 'clipboard-write');
+  await panel.receive(write);
+  const written = panel.messages.find(message => message.type === 'clipboard-result' && message.requestId === write.requestId);
+  options.clipboardSelection = written.selection;
+  deliver(written);
+  view.window.dispatchEvent(new view.window.Event('focus'));
+  deliver({ type: 'filesystem-result', ok: true, state: structuredClone(initial) });
+  const target = view.document.querySelector('[data-pane="0"] .list');
+  target.dispatchEvent(new view.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }));
+  await panel.receive(view.messages.filter(message => message.type === 'inputFocus').at(-1));
+  assert.equal(app.contexts.get('bitfroest.canPasteFiles'), true);
+  deliver(oldStatus);
+  await panel.receive(view.messages.filter(message => message.type === 'inputFocus').at(-1));
+  assert.equal(app.contexts.get('bitfroest.canPasteFiles'), true);
+  const refreshed = view.messages.filter(message => message.type === 'clipboard-status').at(-1);
+  assert.notEqual(refreshed.requestId, startup.requestId);
+  await panel.receive(refreshed);
+  deliver(panel.messages.find(message => message.type === 'clipboard-result' && message.requestId === refreshed.requestId));
+  await app.command('bitfroest.clipboard-paste', JSON.parse(target.dataset.vscodeContext));
+  deliver(panel.messages.filter(message => message.type === 'action').at(-1));
+  const read = view.messages.find(message => message.type === 'clipboard-read'); assert.ok(read);
+  await panel.receive(read);
+  const focusRefresh = view.messages.filter(message => message.type === 'filesystem-refresh').at(-1);
+  if (view.document.querySelector('#panes').inert && focusRefresh) { await panel.receive(focusRefresh); deliver(panel.messages.filter(message => message.type === 'filesystem-result').at(-1)); }
+  deliver(panel.messages.find(message => message.type === 'clipboard-result' && message.requestId === read.requestId));
+  assert.equal(view.document.querySelector('#modal').open, false);
+  await tick();
+  const apply = view.messages.find(message => message.type === 'filesystem-apply'); assert.ok(apply, JSON.stringify({ messages: view.messages.slice(-5), status: view.document.querySelector('#status-message').textContent, dialog: view.document.querySelector('#modal-body').textContent }));
+  assert.ok(apply.state.folders['C:/tmp'].some(file => file.name === 'right.txt'));
+  await panel.receive(apply);
+  deliver(panel.messages.filter(message => message.type === 'filesystem-result').at(-1)); await tick();
+  assert.ok(view.state().folders['C:/tmp'].some(file => file.name === 'right.txt'));
+  assert.equal(view.document.querySelector('#modal').open, false);
+  assert.match(panel.webview.html, /Content-Security-Policy/);
+  assert.deepEqual(app.errors, []);
+  panel.dispose();
+});
+
+test('header actions and typed status operate in generated host HTML with its CSP', async t => {
+  const initial = clipboardFixture();
+  initial.panes.forEach(pane => { pane.filter = ''; pane.sort = 'name'; });
+  const app = harness(t, { filesystemLoad: async () => initial });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  assert.match(panel.webview.html, /Content-Security-Policy/);
+  const view = require('./support/webview.cjs').createApp(t, initial, { html: panel.webview.html });
+  const header = view.document.querySelector('.commander-header');
+  assert.equal(header.querySelectorAll('#functionbar button').length, 7);
+  assert.equal(header.querySelector('#functionbar').closest('[role="menubar"]'), null);
+  const language = header.querySelector('#language-toggle'); language.focus(); view.key('Enter', {}, language);
+  assert.equal(view.messages.at(-1).type, 'choose-language');
+  const toggle = header.querySelector('#notifications-toggle'); view.click(toggle);
+  assert.equal(toggle.getAttribute('aria-expanded'), 'true');
+  view.key('Escape', {}, view.document.activeElement);
+  assert.equal(view.document.activeElement, toggle);
+  const status = view.document.querySelector('#statusbar');
+  assert.equal(status.querySelector('#functionbar'), null);
+  view.action('select-all');
+  assert.ok(status.querySelector('[data-outcome="success"] [data-status-icon]'));
+  view.action('copy');
+  view.document.querySelector('#modal-form').dispatchEvent(new view.window.Event('submit', { bubbles: true, cancelable: true }));
+  await tick();
+  const request = view.messages.find(message => message.type === 'filesystem-apply'); assert.ok(request);
+  view.window.dispatchEvent(new view.window.MessageEvent('message', { data: { type: 'filesystem-progress', operationId: request.operationId,
+    progress: { path: 'C:/left/archive.zip', completedBytes: 42, totalBytes: 100, transferred: 68, total: 100 } } }));
+  assert.equal(status.querySelector('#status-percent').textContent, '42%/68%');
+  assert.equal(status.querySelector('#status-progress-overall').style.width, '42%');
+  assert.equal(status.querySelector('#status-progress-file').style.width, '68%');
+  assert.match(status.querySelector('#status-message').textContent, /archive\.zip/);
+  assert.equal(status.querySelector('#status-elapsed').textContent, '00:00');
+  view.click(status.querySelector('#status-cancel'));
+  assert.equal(view.messages.filter(message => message.type === 'filesystem-cancel').length, 1);
+  assert.equal(status.querySelector('#status-metrics').hidden, false);
+  view.window.dispatchEvent(new view.window.MessageEvent('message', { data: { type: 'restore', state: initial } }));
+  assert.equal(status.dataset.statusProgressOwner, 'background');
+  assert.equal(status.querySelector('#status-cancel').hidden, false);
+  panel.dispose();
+});
+
+test('shared icon size reaches generated host HTML and changes live without navigating or restarting', async t => {
+  const configuration = { 'appearance.iconSize': 28 };
+  const initial = clipboardFixture();
+  initial.panes.forEach(pane => { pane.filter = ''; pane.sort = 'name'; });
+  const app = harness(t, { configuration, filesystemLoad: async () => initial });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  assert.match(panel.webview.html, /Content-Security-Policy/);
+  assert.match(panel.webview.html, /nonce="[^"]+" src="[^"]*icon-layout.js"/);
+  const view = require('./support/webview.cjs').createApp(t, initial, { html: panel.webview.html });
+  assert.equal(view.document.body.style.getPropertyValue('--icon-base-size'), '28px');
+  configuration['appearance.iconSize'] = 16;
+  await app.configuration(['bitfroest.appearance.iconSize']);
+  const update = panel.messages.filter(message => message.type === 'file-settings').at(-1);
+  assert.equal(update.settings.iconSize, 16);
+  const before = JSON.stringify(view.state().panes.map(p => p.tabs));
+  view.window.dispatchEvent(new view.window.MessageEvent('message', { data: update }));
+  assert.equal(view.document.body.style.getPropertyValue('--icon-base-size'), '16px');
+  assert.equal(JSON.stringify(view.state().panes.map(p => p.tabs)), before);
+  panel.dispose();
 });

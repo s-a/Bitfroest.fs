@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="de">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><!--POLICY--><title>Konfiguration</title><link rel="stylesheet" href="configuration.css"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><!--POLICY--><title>Konfiguration</title><link rel="stylesheet" href="configuration.css"><link rel="stylesheet" href="codicons.css"></head>
 <body>
   <header><h1 data-text="Dateiverwaltung konfigurieren"></h1><label><span data-text="Speicherort"></span> <select id="scope"><option value="user" data-text="Benutzer"></option><option value="workspace" data-text="Arbeitsbereich"></option></select></label></header>
   <p role="alert" id="configuration-error"></p><div class="settings-layout">
@@ -10,7 +10,7 @@
     <section id="shortcuts-section" role="tabpanel" aria-labelledby="shortcuts-tab" hidden>
       <h2 data-text="Tastenkürzel"></h2><p data-text="Belegungen gelten nur im angegebenen Bereich. Externe und reservierte Systemtasten sind ungeprüft."></p>
       <div class="toolbar"><label><span data-text="Befehl oder Tastenkombination suchen"></span><input id="shortcut-search" type="search"></label><label><span data-text="Anzeigen"></span><select id="shortcut-filter"><option value="all" data-text="Alle"></option><option value="changed" data-text="Eigene Änderungen"></option><option value="conflicts" data-text="Konflikte"></option></select></label></div>
-      <button type="button" data-shortcut-reset-all data-text="Alle eigenen Belegungen zurücksetzen"></button><p id="shortcut-conflicts" role="alert"></p><div class="table-container"><table><thead><tr><th data-text="Befehl"></th><th data-text="Tastenkombination"></th><th data-text="Bereich"></th><th data-text="Herkunft"></th><th data-text="Status"></th><th data-text="Aktionen"></th></tr></thead><tbody id="shortcut-rows"></tbody></table></div><p id="shortcut-empty" data-text="Keine passenden Einstellungen gefunden." hidden></p>
+      <button type="button" data-shortcut-reset-all data-text="Alle eigenen Belegungen zurücksetzen"></button><p id="shortcut-conflicts" role="alert"></p><div class="table-container"><table><thead><tr><th data-text="Befehl"></th><th data-text="Tastenkombination"></th><th data-text="Bereich"></th><th data-text="Herkunft"></th><th data-text="Aktionen"></th></tr></thead><tbody id="shortcut-rows"></tbody></table></div><p id="shortcut-empty" data-text="Keine passenden Einstellungen gefunden." hidden></p>
     </section>
     <section id="favorites-section" role="tabpanel">
       <div class="toolbar"><button type="button" data-add-favorite data-text="Favorit hinzufügen"></button><button type="button" data-add-group data-text="Gruppe hinzufügen"></button><button type="button" data-remove data-text="Entfernen"></button><button type="button" data-move="-1" data-text="Nach oben"></button><button type="button" data-move="1" data-text="Nach unten"></button></div>
@@ -21,10 +21,10 @@
         </form>
       </div>
     </section>
-    <section id="columns-section" role="tabpanel" hidden><div class="table-container"><table><thead><tr><th data-text="Sichtbar"></th><th data-text="Spalte"></th><th data-text="Überschrift"></th><th data-text="Breite (Pixel)"></th><th data-text="Ausrichtung"></th><th data-text="Reihenfolge"></th></tr></thead><tbody id="column-rows"></tbody></table></div></section>
+    <section id="columns-section" role="tabpanel" hidden><p id="column-reorder-help" data-text="Spalten zum Umsortieren ziehen. Tastatur: Alt+Pfeil hoch/runter."></p><div class="table-container"><table><thead><tr><th data-text="Sichtbar"></th><th data-text="Spalte"></th><th data-text="Ausrichtung"></th></tr></thead><tbody id="column-rows"></tbody></table></div></section>
   </main>
   </div>
   <dialog id="shortcut-dialog" aria-labelledby="shortcut-dialog-title"><h2 id="shortcut-dialog-title"></h2><label for="shortcut-capture" data-text="Tastenkombination jetzt drücken"></label><input id="shortcut-capture" readonly aria-describedby="shortcut-capture-help"><p id="shortcut-capture-help" data-text="Auch Enter und Escape werden erfasst. Zum Bestätigen oder Abbrechen die Schaltflächen verwenden. Mehrtastenfolgen werden nicht unterstützt."></p><p id="shortcut-capture-error" role="alert"></p><div class="toolbar"><button type="button" data-shortcut-accept data-text="Übernehmen"></button><button type="button" data-shortcut-add data-text="Als weitere Belegung hinzufügen"></button><button type="button" data-shortcut-cancel data-text="Abbrechen"></button></div></dialog>
   <footer><p role="status" id="configuration-status"></p><span data-text="Änderungen werden erst mit Speichern übernommen."></span><div><button type="button" data-discard data-text="Verwerfen"></button><button type="button" data-save class="primary" data-text="Speichern"></button></div></footer>
-  <script src="commander-paths.js"></script><script src="commander-i18n.js"></script><script src="commander-column-settings.js"></script><script src="commander-shortcuts.js"></script><script src="shortcut-configuration.js"></script><script src="configuration-model.js"></script><script src="configuration-view.js"></script>
+  <script src="commander-paths.js"></script><script src="commander-i18n.js"></script><script src="commander-column-settings.js"></script><script src="commander-shortcuts.js"></script><script src="shortcut-configuration.js"></script><script src="configuration-model.js"></script><script src="icon-font-metrics.js"></script><script src="commander-icons.js"></script><script src="configuration-view.js"></script>
 </body></html>

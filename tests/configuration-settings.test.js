@@ -17,15 +17,15 @@ test('configuration editor keeps user and workspace trees separate and does not 
 });
 test('failed combined save restores the previous tree instead of leaving a partial configuration', async () => {
   const { backend, values } = setup({}, key => key === 'columns.layout');
-  const data = backend.read('user'); data.favorites.push({ id: 'g', type: 'group', name: 'G', parent: null }); data.columns[0].width = 400;
+  const data = backend.read('user'); data.favorites.push({ id: 'g', type: 'group', name: 'G', parent: null }); data.columns[0].align = 'right';
   await assert.rejects(backend.write(data, 'user'), /Write failed/);
   assert.equal(values['favorites.items'].globalValue, undefined);
 });
 
-test('partial legacy tables retain widths and localized defaults in the configuration editor', () => {
+test('legacy width settings are ignored while localized defaults remain available', () => {
   const { backend } = setup({ 'columns.widths': { globalValue: { 'standard.name': 400 } } });
   const data = backend.read('user');
-  assert.equal(data.columns.find(item => item.id === 'name').width, 400);
+  assert.equal(Object.hasOwn(data.columns.find(item => item.id === 'name'), 'width'), false);
   assert.equal(data.columns.find(item => item.id === 'size').visible, true);
   assert.equal(data.columns.find(item => item.id === 'path').visible, false);
 });

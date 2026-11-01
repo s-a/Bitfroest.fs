@@ -5,12 +5,21 @@ function fixture() {
   const pane = path => ({ tabs: [path], tab: 0, selected: ['file'], cursor: 'file', filter: '', sort: 'size', descending: true });
   return { version: 1, active: 0, realFilesystem: true, snapshotId: 'one', panes: [pane('C:/tmp'), { ...pane('C:/temp'), selected: [], cursor: null }], folders: { 'C:/tmp': [{ id: 'file', name: 'keep.txt', fsSource: 'C:/tmp/keep.txt', type: 'text', size: 4 }], 'C:/temp': [] } };
 }
-function focus(app) { app.window.dispatchEvent(new app.window.Event('focus')); }
+function focus(app) { app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'window-focus' } })); }
 function refreshes(app) { return app.messages.filter(message => message.type === 'filesystem-refresh'); }
 
 function result(app, state, ok = true) {
   app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-result', ok, state } }));
 }
+
+test('DOM focus changes do not duplicate the refresh requested by the host window transition', t => {
+  const app = createApp(t, fixture());
+  app.window.dispatchEvent(new app.window.Event('blur'));
+  app.window.dispatchEvent(new app.window.Event('focus'));
+  assert.equal(refreshes(app).length, 0);
+  focus(app);
+  assert.equal(refreshes(app).length, 1);
+});
 
 test('refresh patches changed cells and keyed rows without replacing the list or unchanged icons', t => {
   const original = fixture(); original.folders['C:/tmp'].push({ id: 'second', name: 'second.txt', type: 'text', size: 2, fsSource: 'C:/tmp/second.txt' });

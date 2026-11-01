@@ -1,0 +1,386 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const { createApp } = require('./support/webview.cjs');
+function fixture(active = 0) {
+  const pane = path => ({ tabs: [path], tab: 0, selected: [], cursor: null, filter: '', sort: 'name' });
+  return { version: 1, realFilesystem: true, active, snapshotId: 'jobs', panes: [pane('C:/left'), pane('C:/right')], folders: Object.fromEntries(['C:/left', 'C:/right'].map(path => [path, ['a', 'b'].map(name => ({ id: path + name, name: name + '.txt', type: 'text', fsSource: path + '/' + name + '.txt', size: 5 }))])) };
+}
+const submit = app => app.document.querySelector('#modal-form').dispatchEvent(new app.window.Event('submit', { bubbles: true, cancelable: true }));
+test('opening an archive while packing leaves the pack job active', t => {
+  const state = fixture();
+  state.folders['C:/left'].push({ id: 'zip', name: 'existing.zip', type: 'archive', fsSource: 'C:/left/existing.zip' });
+  const app = createApp(t, state); app.click(app.row('a.txt')); app.action('pack'); submit(app);
+  const pack = app.messages.find(message => message.type === 'zip-write');
+  app.click(app.row('existing.zip')); app.key('Enter');
+  const request = app.messages.find(message => message.type === 'zip-open');
+  assert.ok(request); assert.ok(request.navigationRequestId);
+  const root = 'zip:C%3A%2Fleft%2Fexisting.zip!';
+  const opened = structuredClone(state); opened.folders[root] = []; opened.archiveLocations = { [root]: { archive: 'C:/left/existing.zip', parent: 'C:/left' } };
+  app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-result', ok: true, state: opened, navigationRequestId: request.navigationRequestId, resumeNavigation: { side: 0, path: root } } }));
+  assert.equal(app.state().panes[0].tabs[0], root);
+  assert.ok(app.document.querySelector('[data-job-row]'));
+  app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-result', ok: true, state: opened, operationId: pack.operationId } }));
+  assert.equal(app.state().panes[0].tabs[0], root);
+});
+function loadProductionStyles(app) {
+  const fs = require('node:fs'), path = require('node:path');
+  for (const name of ['workbench-vendor.css', 'app.css']) { const style = app.document.createElement('style'); style.textContent = fs.readFileSync(path.join(__dirname, '../media', name), 'utf8'); app.document.head.append(style); }
+}
+test('job rings and the footer use the same planner while the final acknowledgement is outstanding', t => {
+  const app = createApp(t, fixture()); app.action('select-all'); app.action('pack'); submit(app);
+  const request = app.messages.find(message => message.type === 'zip-write');
+  app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-progress', operationId: request.operationId, progress: { phase: 'packing', completedBytes: 100, totalBytes: 100, transferred: 100, total: 100 } } }));
+  assert.equal(app.document.querySelector('#status-percent').textContent.split('/')[0], '—');
+  assert.equal(app.document.querySelector('[data-job-ring="current"]').hasAttribute('aria-valuenow'), false);
+});
+for (const sameDirectory of [false, true]) test(`one visible job automatically owns the footer across both panes (same directory: ${sameDirectory})`, t => {
+  const state = fixture();
+  if (sameDirectory) state.panes[1].tabs = ['C:/left'];
+  const app = createApp(t, state); app.action('select-all'); app.action('pack'); submit(app);
+  const request = app.messages.find(message => message.type === 'zip-write');
+  app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-progress', operationId: request.operationId, progress: { phase: 'packing', currentPath: 'a.txt', completedBytes: 42, totalBytes: 100 } } }));
+  const bar = app.document.querySelector('#statusbar');
+  assert.equal(bar.classList.contains('job-context-hidden'), false);
+  assert.ok(bar.dataset.footerJobId);
+  assert.equal(app.document.querySelector('#job-normal-status').hidden, true);
+  assert.equal(app.document.querySelector('#status-metrics').hidden, false);
+  assert.equal(app.document.querySelector('#status-percent').textContent, '42%/—');
+  assert.equal(new Set([...app.document.querySelectorAll('.pane-jobs [data-job-row]')].map(node => node.dataset.jobRow)).size, 1);
+});
+test('one visible job owns the footer even when another job targets a directory outside both panes', t => {
+  const app = createApp(t, fixture()); app.action('select-all'); app.action('pack'); submit(app);
+  app.action('pack'); app.document.querySelector('#value').value = 'C:/elsewhere/other.zip'; submit(app);
+  const bar = app.document.querySelector('#statusbar');
+  assert.equal(app.document.querySelectorAll('[data-job-row]').length, 1);
+  assert.equal(bar.classList.contains('job-context-hidden'), false);
+  assert.equal(bar.dataset.footerJobId, app.document.querySelector('[data-job-row]').dataset.jobRow);
+});
+test('process strips sit above the table with no extra info icon or hidden file rows', t => {
+  const app = createApp(t, fixture()); app.action('select-all'); app.action('pack'); submit(app);
+  const request = app.messages.find(message => message.type === 'zip-write');
+  app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-progress', operationId: request.operationId, progress: { phase: 'packing', currentPath: 'a.txt', completedBytes: 1, totalBytes: 2 } } }));
+  const pane = app.document.querySelector('[data-pane="1"]'), strip = pane.querySelector('.pane-jobs');
+  assert.ok(strip); assert.equal(strip.hidden, false);
+  assert.equal(strip.nextElementSibling.classList.contains('list'), true);
+  assert.equal(strip.querySelectorAll('[data-job-row]').length, 1);
+  assert.equal(strip.querySelector('[data-status-icon]'), null);
+  assert.equal(pane.querySelector('table [data-job-row]'), null);
+  loadProductionStyles(app);
+  assert.equal(app.window.getComputedStyle(strip).overflowY, 'auto');
+  assert.match(app.window.getComputedStyle(strip).maxHeight, /30%/);
+});
+test('the job popup is visibly open with the actual bundled stylesheet, not just a cleared hidden attribute', t => {
+  const app = createApp(t, fixture()); loadProductionStyles(app);
+  const panel = app.document.querySelector('#jobs-center');
+  assert.equal(app.window.getComputedStyle(panel).display, 'none');
+  app.click(app.document.querySelector('#jobs-toggle'));
+  assert.equal(app.window.getComputedStyle(panel).display, 'block');
+  app.click(app.document.querySelector('#jobs-toggle'));
+  assert.equal(app.window.getComputedStyle(panel).display, 'none');
+});
+test('a long process path is bounded before the nonshrinking percentage and time columns', t => {
+  const app = createApp(t, fixture()); loadProductionStyles(app); app.action('select-all'); app.action('pack'); submit(app);
+  const request = app.messages.find(message => message.type === 'zip-write');
+  app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-progress', operationId: request.operationId, progress: { phase: 'packing', currentPath: 'long/path/'.repeat(100) + 'file.bin', completedBytes: 42, totalBytes: 100 } } }));
+  const row = app.document.querySelector('[data-job-row]');
+  assert.equal(app.window.getComputedStyle(row.querySelector('.job-status-text-region')).display, 'flex');
+  assert.equal(app.window.getComputedStyle(row.querySelector('.job-status-text-region')).overflow, 'hidden');
+  assert.match(app.window.getComputedStyle(row.querySelector('.job-content')).gridTemplateColumns, /minmax\(0,\s*1fr\).*max-content/);
+  assert.equal(app.window.getComputedStyle(row.querySelector('[data-progress-directory]')).textOverflow, 'ellipsis');
+});
+for (const command of ['pack', 'copy']) test(`the first ${command} confirmation during focus refresh is retained and starts exactly once after its reply`, async t => {
+  const state = fixture(); state.folders['C:/right'] = [];
+  const app = createApp(t, state); app.action('select-all');
+  app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'window-focus' } }));
+  assert.ok(app.messages.some(message => message.type === 'filesystem-refresh'));
+  app.action(command); assert.equal(app.document.querySelector('#modal').open, true); submit(app);
+  assert.equal(app.messages.some(message => ['zip-write', 'filesystem-apply'].includes(message.type)), false);
+  app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-result', ok: true, state: structuredClone(state) } }));
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(app.messages.filter(message => ['zip-write', 'filesystem-apply'].includes(message.type)).length, 1);
+});
+test('cancelling a start deferred by refresh prevents that command from running after the reply', t => {
+  const app = createApp(t, fixture()); app.action('select-all'); app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'window-focus' } }));
+  app.action('pack'); submit(app);
+  app.click(app.document.querySelector('[data-job-row] .job-cancel'));
+  app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-result', ok: true, state: fixture() } }));
+  assert.equal(app.messages.some(message => message.type === 'zip-write'), false);
+  assert.equal(app.document.querySelectorAll('[data-job-row]').length, 0);
+});
+test('progress updates preserve the pressed file-list cancel button until the click is delivered', t => {
+  const app = createApp(t, fixture()); app.action('select-all'); app.action('pack'); submit(app);
+  const request = app.messages.find(message => message.type === 'zip-write');
+  const stop = app.document.querySelector('[data-job-row] .job-cancel');
+  stop.dispatchEvent(new app.window.MouseEvent('pointerdown', { bubbles: true, button: 0 })); stop.focus();
+  app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-progress', operationId: request.operationId, progress: { phase: 'packing', completedBytes: 42, totalBytes: 100, transferred: 68, total: 100 } } }));
+  assert.equal(stop.isConnected, true);
+  assert.equal(app.document.querySelector('[data-job-row] .job-cancel'), stop);
+  stop.dispatchEvent(new app.window.MouseEvent('pointerup', { bubbles: true, button: 0 })); app.click(stop);
+  assert.equal(app.messages.filter(message => message.type === 'filesystem-cancel' && message.operationId === request.operationId).length, 1);
+  assert.equal(stop.disabled, true);
+});
+test('foreground deletion reports native progress in the footer and cancels by operation identity', t => {
+  const state = fixture(); state.folders['C:/left'].push({ id: 'z', name: 'z.txt', type: 'text', fsSource: 'C:/left/z.txt', size: 5 });
+  const app = createApp(t, state); app.click(app.row('a.txt')); app.click(app.row('z.txt'), { ctrlKey: true }); app.action('delete'); submit(app);
+  const request = app.messages.find(message => message.type === 'filesystem-delete');
+  const Progress = require('../media/commander-progress');
+  assert.match(request.operationId, /^delete-/);
+  assert.equal(app.document.querySelector('#panes').inert, true);
+  assert.equal(app.document.querySelector('#functionbar').inert, true);
+  assert.equal(app.document.querySelectorAll('[data-job-row]').length, 0);
+  app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-task-progress', operationId: request.operationId, progress: Progress.event({ phase: 'deleting', path: 'C:/left/z.txt', overall: Progress.known('items', 1, 2), current: Progress.unknown('items', 0, 'native-operation') }) } }));
+  assert.equal(app.document.querySelector('#status-percent').textContent, '50%/—');
+  const cancel = app.document.querySelector('#status-cancel'); assert.equal(cancel.hidden, false); app.click(cancel);
+  assert.equal(app.messages.filter(message => message.type === 'filesystem-cancel' && message.operationId === request.operationId).length, 1);
+  app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-result', operationId: request.operationId, ok: false, cancelled: true, state: fixture() } }));
+  assert.equal(app.document.querySelector('#panes').inert, false);
+  assert.equal(app.document.querySelectorAll('[data-job-row]').length, 0);
+});
+test('the centered count has a current-operation ring and an honest aggregate ring plus simple popup entries', t => {
+  const app = createApp(t, fixture()); app.action('select-all'); app.action('pack'); submit(app);
+  app.action('pack'); submit(app);
+  const request = app.messages.find(message => message.type === 'zip-write');
+  app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-progress', operationId: request.operationId, progress: { phase: 'packing', completedBytes: 42, totalBytes: 100, transferred: 68, total: 100 } } }));
+  const toggle = app.document.querySelector('#jobs-toggle');
+  assert.equal(toggle.querySelector('.jobs-count').textContent, '2');
+  const css = require('node:fs').readFileSync(require('node:path').join(__dirname, '../media/app.css'), 'utf8');
+  const style = app.document.createElement('style'); style.textContent = css; app.document.head.append(style);
+  assert.equal(app.window.getComputedStyle(toggle.querySelector('.jobs-count')).placeItems, 'center');
+  assert.equal(app.window.getComputedStyle(toggle.querySelector('.jobs-ring')).borderRadius, '50%');
+  assert.equal(toggle.querySelector('[data-job-ring="current"]').getAttribute('aria-valuenow'), '42');
+  const overall = toggle.querySelector('[data-job-ring="overall"]');
+  assert.equal(overall.hidden, false); assert.equal(overall.hasAttribute('aria-valuenow'), false, 'waiting jobs do not have reliable totals yet');
+  app.click(toggle);
+  const rows = app.document.querySelectorAll('#jobs-center .job-progress');
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0].querySelector('[role="progressbar"]').getAttribute('aria-valuenow'), '42');
+  assert.equal(rows[0].querySelector('.job-summary-percent').textContent, '42%');
+  assert.equal(rows[0].querySelector('.job-status-metrics'), null);
+  app.click(rows[1].querySelector('.job-cancel'));
+  assert.equal(toggle.querySelector('.jobs-count').textContent, '1');
+  assert.equal(overall.hidden, true);
+  assert.equal(app.messages.filter(message => message.type === 'zip-write').length, 1);
+  const stop = app.document.querySelector('#jobs-center .job-cancel');
+  stop.dispatchEvent(new app.window.MouseEvent('pointerdown', { bubbles: true, button: 0 })); stop.focus();
+  app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-progress', operationId: request.operationId, progress: { phase: 'packing', completedBytes: 50, totalBytes: 100 } } }));
+  assert.equal(app.document.querySelector('#jobs-center .job-cancel'), stop);
+  app.click(stop);
+  assert.equal(app.messages.filter(message => message.type === 'filesystem-cancel' && message.operationId === request.operationId).length, 1);
+});
+for (const target of ['.job-progress', '.job-content', '.job-summary-title', '.job-summary-percent', '.job-summary-meter', '.job-location']) test(`a popup entry opens its target folder through ${target} without starting another operation`, t => {
+  const app = createApp(t, fixture()); app.action('select-all'); app.action('pack'); submit(app);
+  app.click(app.document.querySelector('#jobs-toggle'));
+  app.click(app.document.querySelector(`#jobs-center ${target}`));
+  assert.equal(app.state().active, 1);
+  assert.equal(app.state().panes[1].tabs[app.state().panes[1].tab], 'C:/right');
+  assert.equal(app.document.querySelector('#jobs-center').hidden, true);
+  assert.equal(app.messages.filter(message => message.type === 'zip-write').length, 1);
+});
+
+test('cancelling a popup job does not navigate or close the popup', t => {
+  const app = createApp(t, fixture()); app.action('select-all'); app.action('pack'); submit(app);
+  app.action('pack'); submit(app);
+  app.click(app.document.querySelector('#jobs-toggle'));
+  const rows = app.document.querySelectorAll('#jobs-center .job-progress');
+  app.click(rows[1].querySelector('.job-cancel svg'));
+  assert.equal(app.state().active, 0);
+  assert.equal(app.document.querySelector('#jobs-center').hidden, false);
+  assert.equal(app.document.querySelectorAll('#jobs-center .job-progress').length, 1);
+  assert.equal(app.messages.some(message => message.type === 'filesystem-cancel'), false);
+  assert.equal(app.messages.filter(message => message.type === 'zip-write').length, 1);
+});
+for (const activation of ['click', 'keyboard']) test(`a job popup restores its target pane and tab through ${activation}`, async t => {
+  const app = createApp(t, fixture());
+  app.document.querySelector('[data-pane="1"] .list').focus(); app.action('new-tab');
+  const targetTabIndex = app.state().panes[1].tab, targetTabId = app.state().panes[1].tabStates[targetTabIndex].id;
+  app.click(app.document.querySelector('[data-pane="0"] tbody tr[data-id]'));
+  app.action('select-all'); app.action('copy'); submit(app);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(app.document.querySelectorAll('[data-job-row]').length, 1);
+  const operationCount = app.messages.filter(message => ['filesystem-apply', 'zip-write'].includes(message.type)).length;
+  app.click(app.document.querySelector(`[data-pane="1"] [data-tab="${targetTabIndex === 0 ? 1 : 0}"]`));
+  app.click(app.document.querySelector('#jobs-toggle'));
+  const entry = app.document.querySelector('#jobs-center .job-content');
+  if (activation === 'click') app.click(entry);
+  else { entry.focus(); app.key('Enter', {}, entry); }
+  const current = app.state();
+  assert.equal(current.active, 1);
+  assert.equal(current.panes[1].tabStates[current.panes[1].tab].id, targetTabId);
+  assert.equal(current.panes[1].tabs[current.panes[1].tab], 'C:/right');
+  assert.equal(app.document.querySelector('[data-pane="1"] .pane-jobs').hidden, false);
+  assert.equal(app.messages.filter(message => ['filesystem-apply', 'zip-write'].includes(message.type)).length, operationCount, 'opening the job location does not dispatch another operation');
+});
+test('a job whose target tab was closed opens a new tab on the original target pane', async t => {
+  const app = createApp(t, fixture());
+  app.document.querySelector('[data-pane="1"] .list').focus(); app.action('new-tab');
+  const targetPane = app.state().panes[1], closedTargetTabId = targetPane.tabStates[targetPane.tab].id;
+  app.click(app.document.querySelector('[data-pane="0"] tbody tr[data-id]'));
+  app.action('select-all'); app.action('copy'); submit(app); await new Promise(resolve => setImmediate(resolve));
+  const operationCount = app.messages.filter(message => ['filesystem-apply', 'zip-write'].includes(message.type)).length;
+  app.click(app.document.querySelector(`[data-pane="1"] [data-tab="${targetPane.tab}"]`)); app.action('close-tab');
+  const remainingTabId = app.state().panes[1].tabStates[app.state().panes[1].tab].id;
+  assert.notEqual(remainingTabId, closedTargetTabId);
+  app.click(app.document.querySelector('#jobs-toggle'));
+  const entry = app.document.querySelector('#jobs-center .job-content'); entry.focus(); app.key('Enter', {}, entry);
+  const current = app.state(), pane = current.panes[1];
+  assert.equal(current.active, 1);
+  assert.equal(pane.tabs.length, 2);
+  assert.ok(pane.tabStates.some(tab => tab.id === remainingTabId), 'the current target tab remains open');
+  assert.ok(!pane.tabStates.some(tab => tab.id === closedTargetTabId), 'the closed target tab is not restored');
+  assert.equal(pane.tabs[pane.tab], 'C:/right');
+  const replacementTabId = pane.tabStates[pane.tab].id;
+  app.click(app.document.querySelector('[data-pane="1"] [data-tab="0"]'));
+  app.click(app.document.querySelector('#jobs-toggle'));
+  const repeatedEntry = app.document.querySelector('#jobs-center .job-content'); repeatedEntry.focus(); app.key('Enter', {}, repeatedEntry);
+  assert.equal(app.state().panes[1].tabs.length, 2, 'reopening the same job reuses its replacement tab');
+  assert.equal(app.state().panes[1].tabStates[app.state().panes[1].tab].id, replacementTabId);
+  assert.equal(app.messages.filter(message => ['filesystem-apply', 'zip-write'].includes(message.type)).length, operationCount);
+});
+test('process rows use the shared refresh spinner and selecting a waiting job does not start it', t => {
+  const app = createApp(t, fixture()); app.action('select-all'); app.action('pack'); submit(app);
+  app.action('pack'); submit(app);
+  const request = app.messages.find(message => message.type === 'zip-write');
+  app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-progress', operationId: request.operationId, progress: { phase: 'packing', currentPath: 'a.txt', completedBytes: 42, totalBytes: 100, transferred: 68, total: 100 } } }));
+  const rows = app.document.querySelectorAll('[data-pane="1"] [data-job-row]');
+  const running = [...rows].find(row => row.textContent.includes('42%'));
+  assert.ok(running.querySelector('.job-location .codicon-modifier-spin [data-icon-reviewed="workbench:loading"]'));
+  assert.equal(running.querySelector('[data-icon-reviewed="font:folder"]'), null);
+  const waiting = [...rows].find(row => row.textContent.includes('Wartend'));
+  app.click(waiting.querySelector('.job-content'));
+  assert.match(app.document.querySelector('#status-message').textContent, /Wartend/, JSON.stringify({ footer: app.document.querySelector('#statusbar').dataset.footerJobId, selected: waiting.dataset.jobRow, active: app.state().active, controls: [...app.document.querySelectorAll('[data-pane="1"] .job-content')].map(e => ({text:e.textContent, pressed:e.getAttribute('aria-pressed')})) }));
+  assert.equal(app.document.querySelector('#status-metrics').hidden, true);
+  assert.equal(app.messages.filter(message => message.type === 'zip-write').length, 1);
+  const current = [...app.document.querySelectorAll('[data-pane="1"] [data-job-row]')].find(row => row.textContent.includes('42%'));
+  const content = current.querySelector('.job-content'); content.focus(); app.key('Enter', {}, content);
+  assert.equal(app.document.querySelector('#status-percent').textContent, '42%/68%');
+  assert.equal(app.document.querySelector('#status-metrics').hidden, false);
+  const pending = [...app.document.querySelectorAll('[data-pane="1"] [data-job-row]')].find(row => row.textContent.includes('Wartend'));
+  app.click(pending.querySelector('.job-content'));
+  app.click(app.document.querySelector('#status-cancel'));
+  assert.equal(app.document.querySelectorAll('[data-job-row]').length, 1);
+  assert.equal(app.messages.some(message => message.type === 'filesystem-cancel'), false, 'only the selected waiting job is cancelled');
+  assert.equal(app.document.querySelector('#status-percent').textContent, '42%/68%');
+});
+test('process row text, status icon and metrics retain one non-wrapping baseline', t => {
+  const app = createApp(t, fixture()); app.action('select-all'); app.action('pack'); submit(app);
+  const request = app.messages.find(message => message.type === 'zip-write');
+  app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-progress', operationId: request.operationId, progress: { phase: 'packing', currentPath: 'very/long/a.txt', completedBytes: 42, totalBytes: 100, transferred: 68, total: 100 } } }));
+  const node = app.document.querySelector('[data-job-row] .job-status-message');
+  const css = require('node:fs').readFileSync(require('node:path').join(__dirname, '../media/app.css'), 'utf8');
+  const style = app.document.createElement('style'); style.textContent = css; app.document.head.append(style);
+  assert.equal(app.window.getComputedStyle(node).display, 'inline-flex');
+  assert.equal(app.window.getComputedStyle(node).whiteSpace, 'nowrap');
+  assert.equal(node.querySelector('[data-status-icon]'), null);
+});
+for (const active of [0, 1]) test(`one selected batch produces one job row in the opposite destination (${active})`, async t => {
+  const app = createApp(t, fixture(active));
+  app.action('select-all'); app.action('pack'); submit(app);
+  assert.equal(app.messages.filter(message => message.type === 'zip-write').length, 1);
+  const rows = app.document.querySelectorAll('[data-job-row]');
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].closest('[data-pane]').dataset.pane, String(1 - active));
+  assert.equal(rows[0].closest('.pane-jobs').nextElementSibling.classList.contains('list'), true);
+  app.action('pack'); submit(app);
+  assert.equal(app.document.querySelectorAll('[data-job-row]').length, 2);
+  assert.equal(app.messages.filter(message => message.type === 'zip-write').length, 1, 'only the first job executes');
+  app.click(app.document.querySelector('#jobs-toggle'));
+  assert.equal(app.document.querySelectorAll('#jobs-center .job-progress').length, 2);
+  assert.match(app.document.querySelector('#jobs-center').textContent, /Wartend/);
+  const request = app.messages.find(message => message.type === 'zip-write');
+  app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-result', operationId: request.operationId, ok: false, error: 'fixture failure' } }));
+  assert.equal(app.messages.filter(message => message.type === 'zip-write').length, 2, 'failure dialog does not stall the next job');
+  assert.equal(app.document.querySelectorAll('[data-job-row]').length, 1);
+  assert.equal(app.document.querySelectorAll('#notifications-list .notification-list-item').length, 1, 'only the failed terminal job is notified');
+});
+test('navigation requests are sent during a queued ZIP operation without cancelling it', t => {
+  const app = createApp(t, fixture()); app.action('select-all'); app.action('pack'); submit(app);
+  app.document.querySelector('.pane.active .list').focus(); app.key('Backspace');
+  assert.ok(app.messages.some(message => message.type === 'filesystem-navigate'));
+  assert.equal(app.document.querySelector('#jobs-toggle .jobs-count').textContent, '1');
+});
+test('Escape closes the process overview without cancelling its running operation', t => {
+  const app = createApp(t, fixture()); app.action('select-all'); app.action('pack'); submit(app);
+  app.click(app.document.querySelector('#jobs-toggle'));
+  const button = app.document.querySelector('#jobs-center .job-cancel'); button.focus();
+  app.key('Escape');
+  assert.equal(app.document.querySelector('#jobs-center').hidden, true);
+  assert.equal(app.messages.some(message => message.type === 'filesystem-cancel'), false);
+});
+test('Escape in the file list does not cancel a running background operation', t => {
+  const app = createApp(t, fixture()); app.action('select-all'); app.action('pack'); submit(app);
+  const request = app.messages.find(message => message.type === 'zip-write');
+  app.document.querySelector('.pane.active .list').focus(); app.key('Escape');
+  assert.equal(app.messages.some(message => message.type === 'filesystem-cancel'), false);
+  assert.equal(app.document.querySelector('#jobs-toggle .jobs-count').textContent, '1');
+  app.click(app.document.querySelector('#status-cancel'));
+  assert.equal(app.messages.find(message => message.type === 'filesystem-cancel')?.operationId, request.operationId);
+});
+test('a generic dialog cancel event during a background job leaves the job running', t => {
+  const app = createApp(t, fixture()); app.action('select-all'); app.action('pack'); submit(app);
+  const request = app.messages.find(message => message.type === 'zip-write');
+  const cancel = new app.window.Event('cancel', { cancelable: true }); app.document.querySelector('#modal').dispatchEvent(cancel);
+  assert.equal(cancel.defaultPrevented, false);
+  assert.equal(app.messages.some(message => message.type === 'filesystem-cancel'), false);
+  app.click(app.document.querySelector('#status-cancel'));
+  assert.equal(app.messages.find(message => message.type === 'filesystem-cancel')?.operationId, request.operationId);
+});
+test('an unrelated confirmation dialog can close while a background job continues', t => {
+  const app = createApp(t, fixture()); app.action('select-all'); app.action('pack'); submit(app);
+  app.document.querySelector('#modal').showModal();
+  const cancel = new app.window.Event('cancel', { cancelable: true }); app.document.querySelector('#modal').dispatchEvent(cancel);
+  assert.equal(cancel.defaultPrevented, false);
+  app.click(app.document.querySelector('#modal-close'));
+  assert.equal(app.document.querySelector('#modal').open, false);
+  assert.equal(app.document.querySelector('#jobs-toggle .jobs-count').textContent, '1');
+  assert.equal(app.messages.some(message => message.type === 'filesystem-cancel'), false);
+});
+test('confirmed deletion starts once in the locked foreground footer', t => {
+  const app = createApp(t, fixture()); app.action('select-all'); app.action('delete'); submit(app);
+  const request = app.messages.find(message => message.type === 'filesystem-delete');
+  assert.ok(request?.operationId);
+  assert.equal(app.messages.filter(message => message.type === 'filesystem-delete').length, 1);
+  assert.equal(app.document.querySelector('#modal').open, false);
+  assert.equal(app.document.querySelectorAll('[data-job-row]').length, 0);
+  assert.equal(app.document.querySelector('#panes').inert, true);
+  assert.equal(app.document.querySelector('#status-cancel').hidden, false);
+  assert.equal(app.document.querySelector('#jobs-toggle .jobs-count').textContent, '0');
+});
+test('foreground delete errors clear progress and release the pane lock', t => {
+  const app = createApp(t, fixture()); app.action('select-all'); app.action('delete'); submit(app);
+  const request = app.messages.find(message => message.type === 'filesystem-delete');
+  app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-result', operationId: request.operationId, ok: false, error: 'delete fixture failed', state: fixture() } }));
+  assert.equal(app.document.querySelectorAll('[data-job-row]').length, 0);
+  assert.equal(app.document.querySelector('#panes').inert, false);
+  assert.equal(app.document.querySelector('#status-cancel').hidden, true);
+});
+test('archive testing without a selection does not dispatch an invalid background request', t => {
+  const state = fixture(); state.folders['C:/left'] = [];
+  const app = createApp(t, state), errors = [];
+  app.window.addEventListener('error', event => errors.push(event.error));
+  app.action('test-archives');
+  assert.deepEqual(errors, []);
+  assert.equal(app.messages.some(message => message.type === 'zip-test'), false);
+  assert.equal(app.document.querySelectorAll('[data-job-row]').length, 0);
+});
+for (const command of ['rename-one', 'rename']) test(`${command} keeps the foreground lock and footer without creating a background job`, t => {
+  const app = createApp(t, fixture()); app.action('select-all'); app.action(command);
+  if (command === 'rename-one') {
+    const input = app.document.querySelector('.inline-rename'); input.value = 'renamed.txt'; app.key('Enter', {}, input);
+  } else submit(app);
+  const request = app.messages.find(message => message.type === 'filesystem-apply');
+  assert.ok(request);
+  assert.equal(app.document.querySelector('#panes').inert, true);
+  assert.equal(app.document.querySelector('#functionbar').inert, true);
+  assert.equal(app.document.querySelectorAll('[data-job-row]').length, 0);
+  assert.match(app.document.querySelector('#status-activity').textContent, /Dateioperation/);
+  app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-result', ok: true, state: structuredClone(request.state) } }));
+  assert.equal(app.document.querySelector('#panes').inert, false);
+});
+for (const active of [0, 1]) test(`copying several marked files creates one destination job (${active})`, async t => {
+  const app = createApp(t, fixture(active)); app.action('select-all'); app.action('copy'); submit(app);
+  await new Promise(resolve => setImmediate(resolve));
+  const rows = app.document.querySelectorAll('[data-job-row]');
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].closest('[data-pane]').dataset.pane, String(1 - active));
+  assert.equal(app.document.querySelector('#jobs-toggle .jobs-count').textContent, '1');
+});

@@ -93,7 +93,7 @@ test('confirmed cut moves clear their temporary marker while failed moves retain
     clipboardResponse(app, app.messages.find(message => message.type === 'clipboard-write'), selection);
     app.key('Tab'); app.key('v', { ctrlKey: true });
     clipboardResponse(app, app.messages.find(message => message.type === 'clipboard-read'), selection);
-    app.document.querySelector('#modal-form').dispatchEvent(new app.window.Event('submit', { bubbles: true, cancelable: true })); await tick();
+    assert.equal(app.document.querySelector('#modal').open, false); await tick();
     const pending = app.messages.find(message => message.type === 'filesystem-apply');
     assert.ok(pending);
     const confirmed = ok ? structuredClone(pending.state) : original;

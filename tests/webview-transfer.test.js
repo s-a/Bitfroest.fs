@@ -11,7 +11,7 @@ function submit(app) { app.document.querySelector('#modal-form').dispatchEvent(n
 function choose(app, name, extra = {}) { app.click(app.row(name).querySelector('[data-filename]'), extra); }
 
 test('overwrite all dismisses immediately and local cancellation prevents a bulk host commit', async t => {
-  for (const cancel of ['escape', 'button']) {
+  for (const cancel of ['button']) {
   const saved = fixture(); saved.realFilesystem = true; saved.snapshotId = 'bulk-conflict';
   for (let i = 0; i < 300; i++) {
     saved.folders['/left'].push({ id: `source-${i}`, name: `bulk-${i}.txt`, type: 'text', size: 1, fsSource: `/left/bulk-${i}.txt` });
@@ -56,6 +56,27 @@ test('copy conflict waits for a specific choice and offers native-style alternat
   assert.equal(app.state().folders['/right'].find(file => file.name === 'same.txt').content, 'new');
   assert.equal(app.document.querySelector('#modal').open, false);
 });
+test('Escape cannot dismiss a transfer conflict, while the progress X cancels its job', async t => {
+  const app = createApp(t, fixture());
+  choose(app, 'same.txt'); app.action('copy'); submit(app); await tick();
+  assert.ok(app.document.querySelector('[data-conflict-action="overwrite"]'));
+  const cancel = new app.window.Event('cancel', { cancelable: true }); app.document.querySelector('#modal').dispatchEvent(cancel);
+  assert.equal(cancel.defaultPrevented, true);
+  app.click(app.document.querySelector('#status-cancel'));
+  assert.equal(app.document.querySelector('#modal').open, false);
+});
+test('a conflict hides text cancellation but keeps its X and restores cancel on the next dialog', async t => {
+  const app = createApp(t, fixture());
+  choose(app, 'same.txt'); app.action('copy'); submit(app); await tick();
+  const cancelText = app.document.querySelector('#modal-cancel'), close = app.document.querySelector('#modal-close');
+  assert.equal(cancelText.hidden, true);
+  assert.equal(close.hidden, false);
+  app.click(close); await tick();
+  assert.equal(app.document.querySelector('#modal').open, false);
+  app.action('mkdir');
+  assert.equal(app.document.querySelector('#modal').open, true);
+  assert.equal(cancelText.hidden, false);
+});
 
 test('skip-all leaves moved sources intact while overwrite-all applies to subsequent conflicts', async t => {
   for (const action of ['skip-all', 'overwrite-all']) {
@@ -70,7 +91,7 @@ test('skip-all leaves moved sources intact while overwrite-all applies to subseq
 test('cancelled conflicts preserve source and target and explicit rename creates a separate copy', async t => {
   const app = createApp(t, fixture());
   choose(app, 'same.txt'); app.action('copy'); submit(app); await tick();
-  app.click(app.document.querySelector('[data-conflict-action="cancel"]')); await tick();
+  app.click(app.document.querySelector('#modal-close')); await tick();
   assert.equal(app.state().folders['/right'][0].content, 'old');
   app.action('copy'); submit(app); await tick();
   app.document.querySelector('#conflict-name').value = 'renamed.txt';
@@ -102,11 +123,101 @@ test('real transfers preserve source metadata before host mutation', async t => 
   assert.equal(mutation.state.folders['/right'].find(file => file.name === 'same.txt').fsSource, '/left/same.txt');
 });
 
-test('conflict cancellation is offered once in the footer while retaining its action identifier',async t=>{
+test('favorites navigate while a background copy is waiting in its JavaScript planning phase', async t => {
+  const state = fixture(); state.realFilesystem = true;
+  let release;
+  const app = createApp(t, state, { beforeApp({ window }) {
+    const api = window.CommanderTransfer;
+    window.CommanderTransfer = { ...api, execute: () => new Promise(resolve => { release = () => resolve({ completed: 0, directories: 0, skipped: 0, cancelled: true, errors: [], completedIds: [] }); }) };
+  } });
+  app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'favorite-settings', settings: { entries: { elsewhere: '/elsewhere' }, order: ['elsewhere'] } } }));
+  choose(app, 'same.txt'); app.action('copy'); app.document.querySelector('#value').value = '/right/new/deep/'; submit(app); await tick();
+  const request = app.messages.find(message => message.type === 'filesystem-apply');
+  assert.equal(request, undefined);
+  const button = app.document.querySelector('[data-favorites]'); app.click(button);
+  assert.ok(app.document.querySelector('[data-favorite-menu]'));
+  app.click(app.document.querySelector('[data-favorite-entry]'));
+  assert.equal(app.messages.some(message => message.type === 'filesystem-navigate' && message.path === '/elsewhere'), false);
+  assert.match(app.document.querySelector('#status-message').textContent, /Verzeichnisanfrage wartet auf Kopierplanung/);
+  app.click(app.document.querySelector('#status-cancel'));
+  release(); await tick();
+  assert.equal(app.messages.filter(message => message.type === 'filesystem-apply').length, 0);
+  assert.ok(app.messages.some(message => message.type === 'filesystem-navigate' && message.path === '/elsewhere'));
+});
+test('a successful favorites navigation during the real copy planner preserves its pending commit', async t => {
+  const state = fixture(); state.realFilesystem = true; state.snapshotId = 'navigation-copy-race'; state.folders['/right'] = []; state.folders['/elsewhere'] = [];
+  let release, executionCount = 0;
+  const app = createApp(t, state, { beforeApp({ window }) {
+    const api = window.CommanderTransfer;
+    window.CommanderTransfer = { ...api, execute: options => new Promise((resolve, reject) => { release = () => { executionCount++; api.execute(options).then(resolve, reject); }; }) };
+  } });
+  app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'favorite-settings', settings: { entries: { elsewhere: '/elsewhere' }, order: ['elsewhere'] } } }));
+  const originalTargetTabId = app.state().panes[0].tabStates?.[app.state().panes[0].tab]?.id;
+  choose(app, 'same.txt'); app.action('copy'); submit(app); await tick();
+  assert.equal(typeof release, 'function');
+  app.click(app.document.querySelector('[data-favorites]')); app.click(app.document.querySelector('[data-favorite-entry]'));
+  assert.equal(app.messages.filter(message => message.type === 'filesystem-navigate' && message.path === '/elsewhere').length, 0, 'host read waits until the real planner and commit dispatch finish');
+  assert.equal(app.document.querySelector('[data-pane="0"] .path-input').value, '/elsewhere');
+  release(); await tick(); await tick();
+  const applies = app.messages.filter(message => message.type === 'filesystem-apply');
+  assert.equal(applies.length, 1, 'the planned copy is dispatched once after navigation succeeds');
+  assert.ok(applies[0].state.folders['/right'].some(row => row.name === 'same.txt'));
+  assert.equal(applies[0].state.panes[0].tabs[0], '/elsewhere');
+  assert.equal(applies[0].state.panes[0].tabStates[applies[0].state.panes[0].tab].id, originalTargetTabId);
+  assert.equal(executionCount, 1);
+  const navigation = app.messages.filter(message => message.type === 'filesystem-navigate' && message.path === '/elsewhere').at(-1);
+  assert.ok(navigation);
+  app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-result', operationId: applies[0].operationId, ok: true, state: applies[0].state } }));
+  const fresh = structuredClone(app.state()); fresh.snapshotId = 'navigation-copy-race-result';
+  app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-result', navigationRequestId: navigation.navigationRequestId, ok: true, state: fresh } }));
+  assert.equal(app.document.querySelector('[data-pane="0"] .path-input').value, '/elsewhere');
+  assert.equal(app.messages.filter(message => message.type === 'filesystem-apply').length, 1, 'navigation completion cannot dispatch the copy again');
+});
+test('X cancellation before the host commit discards planner changes and releases deferred navigation', async t => {
+  const state = fixture(); state.realFilesystem = true; state.snapshotId = 'cancel-copy-navigation-race'; state.folders['/right'] = []; state.folders['/elsewhere'] = [];
+  let release;
+  const app = createApp(t, state, { beforeApp({ window }) {
+    const api = window.CommanderTransfer;
+    window.CommanderTransfer = { ...api, execute: options => new Promise((resolve, reject) => { release = () => api.execute(options).then(resolve, reject); }) };
+  } });
+  app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'favorite-settings', settings: { entries: { elsewhere: '/elsewhere' }, order: ['elsewhere'] } } }));
+  choose(app, 'same.txt'); app.action('copy'); submit(app); await tick();
+  app.click(app.document.querySelector('[data-favorites]')); app.click(app.document.querySelector('[data-favorite-entry]'));
+  assert.equal(app.messages.some(message => message.type === 'filesystem-navigate' && message.path === '/elsewhere'), false);
+  app.click(app.document.querySelector('#status-cancel')); release(); await tick(); await tick();
+  assert.equal(app.messages.some(message => message.type === 'filesystem-apply'), false, 'unconfirmed planner data never reaches the host');
+  const navigation = app.messages.find(message => message.type === 'filesystem-navigate' && message.path === '/elsewhere');
+  assert.ok(navigation, 'the deferred navigation is released after cancellation');
+  assert.equal(app.messages.some(message => message.type === 'filesystem-cancel'), false, 'pre-commit cancellation has no native operation to cancel');
+  app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-result', navigationRequestId: navigation.navigationRequestId, ok: true, state: structuredClone(app.state()) } }));
+  assert.equal(app.document.querySelector('[data-pane="0"] .path-input').value, '/elsewhere');
+  assert.equal(app.messages.some(message => message.type === 'filesystem-apply'), false);
+});
+test('a queued ZIP starts after an X-cancelled copy planner has finished its outer lifecycle', async t => {
+  const state = fixture(); state.realFilesystem = true; state.snapshotId = 'queued-after-planner-cancel'; state.folders['/right'] = [];
+  let release;
+  const app = createApp(t, state, { beforeApp({ window }) {
+    const api = window.CommanderTransfer;
+    window.CommanderTransfer = { ...api, execute: options => new Promise((resolve, reject) => { release = () => api.execute(options).then(resolve, reject); }) };
+  } });
+  app.action('select-all'); app.action('pack'); submit(app);
+  const firstZip = app.messages.find(message => message.type === 'zip-write'); assert.ok(firstZip);
+  choose(app, 'same.txt'); app.action('copy'); submit(app);
+  app.action('select-all'); app.action('pack'); submit(app);
+  app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-result', operationId: firstZip.operationId, ok: true, state: app.state() } })); await tick();
+  assert.equal(typeof release, 'function');
+  assert.equal(app.messages.filter(message => message.type === 'zip-write').length, 1);
+  app.click(app.document.querySelector('#status-cancel'));
+  assert.equal(app.messages.filter(message => message.type === 'zip-write').length, 1, 'the next job waits for the current planner to unwind');
+  release(); await tick(); await tick();
+  assert.equal(app.messages.filter(message => message.type === 'filesystem-apply').length, 0);
+  assert.equal(app.messages.filter(message => message.type === 'zip-write').length, 2, 'the queued job starts after the planner lifecycle finishes');
+});
+
+test('conflict cancellation uses its X while the text button stays hidden',async t=>{
  const app=createApp(t,fixture());choose(app,'same.txt');app.action('copy');submit(app);await tick();
- const buttons=[...app.document.querySelectorAll('#modal button')].filter(button=>!button.hidden&&button.textContent.trim()==='Abbrechen');
- assert.equal(buttons.length,1);assert.equal(buttons[0].id,'modal-cancel');assert.equal(buttons[0].dataset.conflictAction,'cancel');
- app.click(buttons[0]);await tick();assert.equal(app.document.querySelector('#modal').open,false);assert.equal(app.state().folders['/right'][0].content,'old');assert.equal(app.document.querySelector('#modal-cancel').hasAttribute('data-conflict-action'),false);
+ assert.equal(app.document.querySelector('#modal-cancel').hidden,true);assert.equal(app.document.querySelector('#modal-close').hidden,false);
+ app.click(app.document.querySelector('#modal-close'));await tick();assert.equal(app.document.querySelector('#modal').open,false);assert.equal(app.state().folders['/right'][0].content,'old');assert.equal(app.document.querySelector('#modal-cancel').hasAttribute('data-conflict-action'),false);
 });
 
 test('reference overwrite alternatives are offered in both languages without duplicate cancellation',async t=>{
@@ -131,7 +242,7 @@ test('successful copies are unmarked while filtered and skipped entries remain s
 });
 test('complete unmarking retains the cursor fallback and cancellation keeps only unfinished entries selected',async t=>{
  const state=fixture();state.folders['/right']=[];const app=createApp(t,state);choose(app,'same.txt');app.action('copy');submit(app);await tick();assert.deepEqual(app.state().panes[0].selected,[]);assert.equal(app.state().panes[0].cursor,'a');app.action('edit');assert.ok(app.messages.find(message=>message.type==='edit'));
- const partial=fixture();partial.folders['/left'].unshift({id:'done',name:'done.txt',type:'text',content:'done',size:4});const other=createApp(t,partial);choose(other,'done.txt');choose(other,'same.txt',{ctrlKey:true});choose(other,'other.txt',{ctrlKey:true});other.action('copy');submit(other);await tick();other.click(other.document.querySelector('[data-conflict-action="cancel"]'));await tick();assert.deepEqual(other.state().panes[0].selected,['a','b']);
+ const partial=fixture();partial.folders['/left'].unshift({id:'done',name:'done.txt',type:'text',content:'done',size:4});const other=createApp(t,partial);choose(other,'done.txt');choose(other,'same.txt',{ctrlKey:true});choose(other,'other.txt',{ctrlKey:true});other.action('copy');submit(other);await tick();other.click(other.document.querySelector('#modal-close'));await tick();assert.deepEqual(other.state().panes[0].selected,['a','b']);
 });
 
 test('conflict F3 shortcuts use frozen real source and target URIs while preserving the dialog',async t=>{
@@ -139,7 +250,7 @@ test('conflict F3 shortcuts use frozen real source and target URIs while preserv
  const app=createApp(t,state);choose(app,'same.txt');app.action('copy');submit(app);await tick();const input=app.document.querySelector('#conflict-name');input.value='keep-me.txt';
  app.key('F3',{},input);app.key('F3',{shiftKey:true},input);app.key('F3',{ctrlKey:true},input);
  const views=app.messages.filter(message=>message.type==='conflict-preview');assert.deepEqual(views.map(message=>message.path),['/right/same.txt','/left/same.txt']);const compare=app.messages.find(message=>message.type==='compare');assert.equal(compare.sourcePath,'/left/same.txt');assert.equal(compare.targetPath,'/right/same.txt');assert.equal(input.value,'keep-me.txt');assert.equal(app.document.querySelector('#modal').open,true);assert.equal(app.document.querySelector('#conflict-compare').disabled,false);assert.equal(app.messages.some(message=>message.type==='filesystem-apply'),false);
- app.action('conflict-compare');assert.equal(app.messages.filter(message=>message.type==='compare').length,2);app.click(app.document.querySelector('[data-conflict-action="cancel"]'));await tick();assert.equal(app.messages.filter(message=>message.type==='inputFocus').at(-1).conflict,false);
+  app.action('conflict-compare');assert.equal(app.messages.filter(message=>message.type==='compare').length,2);app.click(app.document.querySelector('#modal-close'));await tick();assert.equal(app.messages.filter(message=>message.type==='inputFocus').at(-1).conflict,false);
 });
 
 test('real copy reports progress in the statusbar until the host confirms success and exposes host failure without false success',async t=>{

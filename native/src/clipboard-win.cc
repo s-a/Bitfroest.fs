@@ -25,7 +25,7 @@
 
 namespace {
 constexpr UINT kWorkMessage = WM_APP + 41;
-enum class Operation { Read, Write, Acknowledge };
+enum class Operation { Read, Write, Acknowledge, Cancel };
 struct Request { Operation operation = Operation::Read; std::wstring token, mode; std::vector<std::wstring> paths, remaining; };
 struct Result { HRESULT status = E_FAIL; bool matched = false; std::wstring mode, token; std::vector<std::wstring> paths; std::vector<std::string> errors; };
 
@@ -69,6 +69,7 @@ bool Parse(napi_env env, const char* operation, napi_value object, Request* requ
   if (napi_typeof(env, object, &type) != napi_ok || type != napi_object || napi_get_null(env, &null_value) != napi_ok || napi_strict_equals(env, object, null_value, &is_null) != napi_ok || is_null) return false;
   if (!std::strcmp(operation, "clipboard.readFiles")) { request->operation = Operation::Read; return true; }
   if (!std::strcmp(operation, "clipboard.writeFiles")) { request->operation = Operation::Write; return Paths(env, object, "paths", false, &request->paths) && Field(env, object, "mode", 8, &request->mode) && (request->mode == L"copy" || request->mode == L"move"); }
+  if (!std::strcmp(operation, "clipboard.cancelFiles")) { request->operation = Operation::Cancel; return Field(env, object, "token", 512, &request->token) && !request->token.empty() && Field(env, object, "mode", 8, &request->mode) && (request->mode == L"copy" || request->mode == L"move") && Paths(env, object, "paths", false, &request->paths); }
   if (!std::strcmp(operation, "clipboard.acknowledge")) { request->operation = Operation::Acknowledge; return Field(env, object, "token", 512, &request->token) && !request->token.empty() && Field(env, object, "mode", 8, &request->mode) && (request->mode == L"copy" || request->mode == L"move") && Paths(env, object, "paths", false, &request->paths) && Paths(env, object, "remainingPaths", true, &request->remaining); }
   return false;
 }
@@ -114,7 +115,7 @@ class SystemBackend final : public ClipboardBackend {
     if (!id_ok) return HRESULT_FROM_WIN32(id_error); if (!basic_ok) return HRESULT_FROM_WIN32(basic_error);
     identity->volume = info.VolumeSerialNumber; identity->id = info.FileId; identity->directory = (basic.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0; return S_OK;
   }
-  HRESULT Replace(const std::vector<std::wstring>& paths, const std::wstring& mode, bool check, DWORD expected) override {
+  HRESULT Replace(const std::vector<std::wstring>& paths, const std::wstring& mode, bool check, DWORD expected, DWORD* published_sequence = nullptr) override {
     HGLOBAL drop = nullptr, effect = nullptr;
     if (!paths.empty()) {
       std::vector<wchar_t> names;
@@ -136,6 +137,7 @@ class SystemBackend final : public ClipboardBackend {
     else if (!EmptyClipboard()) result = HRESULT_FROM_WIN32(GetLastError());
     else if (drop && !SetClipboardData(CF_HDROP, drop)) result = HRESULT_FROM_WIN32(GetLastError());
     else if (drop) { drop = nullptr; const UINT format = RegisterClipboardFormatW(L"Preferred DropEffect"); if (!format || !SetClipboardData(format, effect)) result = HRESULT_FROM_WIN32(GetLastError()); else effect = nullptr; }
+    if (SUCCEEDED(result) && published_sequence) *published_sequence = GetClipboardSequenceNumber();
     CloseClipboard(); if (drop) GlobalFree(drop); if (effect) GlobalFree(effect); return result;
   }
  private: HWND owner_;
@@ -258,6 +260,7 @@ class StaSession final : public std::enable_shared_from_this<StaSession> {
         HRESULT hr = E_INVALIDARG; ClipboardSelection selection; bool matched = false;
         if (call->request.operation == Operation::Read) { hr = engine->Read(&selection); if (SUCCEEDED(hr)) { result.paths = std::move(selection.paths); result.mode = std::move(selection.mode); result.token = std::move(selection.token); } }
         else if (call->request.operation == Operation::Write) { hr = engine->Write(call->request.paths, call->request.mode, &selection); if (SUCCEEDED(hr)) { result.paths = std::move(selection.paths); result.mode = std::move(selection.mode); result.token = std::move(selection.token); } }
+        else if (call->request.operation == Operation::Cancel) hr = engine->Cancel(call->request.token, call->request.paths, call->request.mode, &matched);
         else hr = engine->Acknowledge(call->request.token, call->request.paths, call->request.mode, call->request.remaining, &matched, &result.errors);
         result.matched = matched; result.status = hr;
       } catch (...) { result.status = E_OUTOFMEMORY; }
@@ -317,7 +320,7 @@ napi_value Text(napi_env env, const std::string& value) { napi_value result; ret
 napi_value Wide(napi_env env, const std::wstring& value) { napi_value result; return napi_create_string_utf16(env, reinterpret_cast<const char16_t*>(value.data()), value.size(), &result) == napi_ok ? result : nullptr; }
 napi_value Outcome(napi_env env, const Job& job) {
   napi_value result; if (napi_create_object(env, &result) != napi_ok) return nullptr;
-  if (job.request.operation == Operation::Acknowledge) { napi_value matched, errors; if (napi_get_boolean(env, job.result.matched, &matched) != napi_ok || napi_create_array_with_length(env, job.result.errors.size(), &errors) != napi_ok) return nullptr; for (uint32_t i = 0; i < job.result.errors.size(); ++i) { napi_value value = Text(env, job.result.errors[i]); if (!value || napi_set_element(env, errors, i, value) != napi_ok) return nullptr; } if (napi_set_named_property(env, result, "matched", matched) != napi_ok || napi_set_named_property(env, result, "notificationErrors", errors) != napi_ok) return nullptr; return result; }
+  if (job.request.operation == Operation::Acknowledge || job.request.operation == Operation::Cancel) { napi_value matched, errors; if (napi_get_boolean(env, job.result.matched, &matched) != napi_ok || napi_create_array_with_length(env, job.result.errors.size(), &errors) != napi_ok) return nullptr; for (uint32_t i = 0; i < job.result.errors.size(); ++i) { napi_value value = Text(env, job.result.errors[i]); if (!value || napi_set_element(env, errors, i, value) != napi_ok) return nullptr; } if (napi_set_named_property(env, result, "matched", matched) != napi_ok || napi_set_named_property(env, result, "notificationErrors", errors) != napi_ok) return nullptr; return result; }
   napi_value paths; if (napi_create_array_with_length(env, job.result.paths.size(), &paths) != napi_ok) return nullptr; for (uint32_t i = 0; i < job.result.paths.size(); ++i) { napi_value value = Wide(env, job.result.paths[i]); if (!value || napi_set_element(env, paths, i, value) != napi_ok) return nullptr; } napi_value mode = Wide(env, job.result.mode), token = Wide(env, job.result.token); if (!mode || !token || napi_set_named_property(env, result, "paths", paths) != napi_ok || napi_set_named_property(env, result, "mode", mode) != napi_ok || napi_set_named_property(env, result, "token", token) != napi_ok) return nullptr; return result;
 }
 void FinalizeTSFN(napi_env, void* data, void*) { delete static_cast<JobHandle*>(data); }
@@ -360,7 +363,7 @@ bool VerifyWindowsClipboardStaLifecycleForTest() {
 }
 #endif
 
-bool IsWindowsClipboardOperation(const char* operation) { return !std::strcmp(operation, "clipboard.readFiles") || !std::strcmp(operation, "clipboard.writeFiles") || !std::strcmp(operation, "clipboard.acknowledge"); }
+bool IsWindowsClipboardOperation(const char* operation) { return !std::strcmp(operation, "clipboard.readFiles") || !std::strcmp(operation, "clipboard.writeFiles") || !std::strcmp(operation, "clipboard.acknowledge") || !std::strcmp(operation, "clipboard.cancelFiles"); }
 napi_value StartClipboardQuery(napi_env env, const std::shared_ptr<SessionState>& state, const char* operation,
                                napi_value request, StaSession::BackendFactory factory) {
   auto job = std::make_shared<Job>(); job->state = state; job->operation = operation;

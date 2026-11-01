@@ -1,0 +1,59 @@
+/* Copyright (c) Microsoft Corporation. Codicons licensed under CC BY 4.0. See licenses/CODICONS-NOTICE.txt. */
+@import url('./icon-metrics.css');
+@font-face { font-family: codicon; src: url('./codicon.ttf') format('truetype'); font-weight: normal; font-style: normal; font-display: block; }
+.codicon { display: inline-block; width: var(--icon-size, 16px); height: var(--icon-size, 16px); font: normal normal normal 16px/1 codicon; text-align: center; text-decoration: none; text-transform: none; flex: 0 0 var(--icon-size, 16px); -webkit-font-smoothing: antialiased; }
+.codicon-refresh::before { content: '\eb37'; }
+.codicon-star-empty::before { content: '\ea6a'; }
+.codicon-loading::before { content: '\eb19'; }
+.codicon-arrow-right::before { content: '\ea9c'; }
+.codicon-eye-closed::before { content: '\eae7'; }
+.codicon-arrow-up::before { content: '\eaa1'; }
+.codicon-file::before { content: '\ea7b'; }
+.codicon-markdown::before { content: '\eb1d'; }
+.codicon-file-code::before { content: '\eae9'; }
+.codicon-star-full::before { content: '\eb59'; }
+.codicon-arrow-down::before { content: '\ea9a'; }
+.codicon-chevron-down::before { content: '\eab4'; }
+.codicon-check::before { content: '\eab2'; }
+@keyframes codicon-spin { to { transform: rotate(360deg); } }
+.codicon-loading.codicon-modifier-spin { animation: codicon-spin 1s cubic-bezier(0.53, 0.21, 0.29, 0.67) infinite; }
+
+.codicon-copy::before { content:"\ebcc"; }
+.codicon-clippy::before { content:"\eac0"; }
+.codicon-edit::before { content:"\ea73"; }
+.codicon-trash::before { content:"\ea81"; }
+.codicon-folder::before { content:"\ea83"; }
+.codicon-folder-opened::before { content:"\eaf7"; }
+.codicon-git-compare::before { content:"\eafd"; }
+.codicon-lock::before { content:"\ea75"; }
+.codicon-settings-gear::before { content:"\eb51"; }
+.codicon-close::before { content:"\ea76"; }
+.codicon-chevron-right::before { content:"\eab6"; }
+.codicon-file-zip::before { content:"\eaef"; }
+.codicon-search::before { content:"\ea6d"; }
+.codicon-arrow-left::before { content:"\ea9b"; }
+.codicon-arrow-swap::before { content:"\ebcb"; }
+.codicon-check-all::before { content:"\ebb1"; }
+.codicon-checklist::before { content:"\eab3"; }
+.codicon-selection::before { content:"\eb85"; }
+.codicon-save::before { content:"\eb4b"; }
+.codicon-history::before { content:"\ea82"; }
+.codicon-link::before { content:"\eb15"; }
+.codicon-new-file::before { content:"\ea7f"; }
+.codicon-files::before { content:"\eaf0"; }
+.codicon-layout::before { content:"\ebeb"; }
+.codicon-question::before { content:"\eb32"; }
+.codicon-law::before { content:"\eb12"; }
+.codicon-symbol-key::before { content:"\ea93"; }
+.codicon-symbol-string::before { content:"\eb8d"; }
+.codicon-text-size::before { content:"\eb69"; }
+.codicon-word-wrap::before { content:"\eb80"; }
+.codicon-file-binary::before { content:"\eae8"; }
+.codicon-eye::before { content:"\ea70"; }
+.codicon-sort-precedence::before { content:"\eb55"; }
+.codicon-calendar::before { content:"\eab0"; }
+.codicon-symbol-numeric::before { content:"\ea90"; }
+.codicon-star-add::before { content:"\ea6a"; }
+.codicon-remove::before { content:"\eb3b"; }
+.codicon-add::before { content:"\ea60"; }
+.codicon-terminal::before { content:"\ea85"; }

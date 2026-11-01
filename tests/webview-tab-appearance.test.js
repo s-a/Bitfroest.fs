@@ -21,25 +21,36 @@ test('encoded archive roots and nested folders have readable tab labels while re
   assert.deepEqual(labels(), ['A & 100%.zip', 'inner folder']);
   assert.equal(app.state().panes[0].tabs[1], nested);
 });
-test('tabs have no icons, selected labels are bold and archive labels use contrast-safe archive colors', async t => {
+test('tabs use folder icons and regular theme-accent selection while inactive archive colors stay contrast-safe', async t => {
   const app = createApp(t, fixture(), { fileSettings: { colors: { enabled: true, rules: { '*.zip': '#ff0000' } } } });
   const style = app.document.createElement('style'); style.textContent = fs.readFileSync(path.join(__dirname, '../media/app.css'), 'utf8'); app.document.head.appendChild(style);
   app.document.body.style.setProperty('--vscode-tab-activeBackground', '#ffffff');
   app.document.body.style.setProperty('--vscode-tab-inactiveBackground', '#181818');
   app.document.body.style.setProperty('--vscode-sideBar-background', '#ffffff');
   await new Promise(resolve => setImmediate(resolve));
-  assert.equal(app.document.querySelector('.tabs .fileicon,.tabs .git-icon'), null);
+  for (const tab of app.document.querySelectorAll('.tab')) {
+    const icon = tab.querySelector('.tab-icon.codicon-folder');
+    assert.ok(icon);
+    assert.equal(tab.firstElementChild, icon);
+    assert.equal(icon.getAttribute('aria-hidden'), 'true');
+    assert.equal(icon.nextElementSibling.hasAttribute('data-tab-label'), true);
+  }
   const tab = app.document.querySelector('.pane.active [data-tab="1"]');
-  assert.equal(app.window.getComputedStyle(tab).fontWeight, '700');
+  assert.equal(app.window.getComputedStyle(tab).fontWeight, '400');
+  const selectedStyle = [...style.sheet.cssRules].find(rule => rule.selectorText === '.tab[aria-selected="true"], .tab[aria-selected="true"]:hover')?.style;
+  assert.equal(selectedStyle?.color, 'var(--accent)');
   const color = tab.style.getPropertyValue('--archive-tab-color');
   assert.ok(app.window.CommanderFileColors.ratio(color, '#ffffff') >= 4.5);
   assert.ok(color !== '#000000');
   assert.equal(app.document.querySelector('.pane.active [data-tab="0"]').style.getPropertyValue('--archive-tab-color'), '');
   assert.equal(app.messages.filter(message => message.type === 'icons').flatMap(message => message.requests).length, 0);
-  app.click(app.document.querySelector('.pane.active [data-tab="0"]'));
+  app.click(app.document.querySelector('.pane.active [data-tab="0"] .tab-icon'));
+  assert.equal(app.state().panes[0].tab, 0);
+  assert.equal(app.document.querySelector('.pane.active [data-tab="0"]').getAttribute('aria-selected'), 'true');
+  assert.equal(app.window.getComputedStyle(app.document.querySelector('.pane.active [data-tab="0"]')).fontWeight, '400');
   const inactive = app.document.querySelector('.pane.active [data-tab="1"]');
   assert.ok(app.window.CommanderFileColors.ratio(inactive.style.getPropertyValue('--archive-tab-color'), '#181818') >= 4.5);
-  assert.equal(app.document.querySelector('.tabs .fileicon,.tabs .git-icon'), null);
+  assert.equal(app.document.querySelectorAll('.tabs .tab-icon.codicon-folder').length, 4);
   app.document.body.classList.add('vscode-high-contrast');
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(inactive.style.getPropertyValue('--archive-tab-color'), '');
@@ -61,7 +72,7 @@ test('status badges use the default two-thirds size and filled Bootstrap geometr
   const request = app.messages.find(message => message.type === 'git-status');
   app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'git-status-result', requestId: request.requestId, snapshotId: request.snapshotId, directories: { '/repo': { ok: true, repository: true, statuses: { 'a.txt': 'clean' } } } } }));
   const badge = app.row('a.txt').querySelector('[data-git-status]'), computed = app.window.getComputedStyle(badge);
-  assert.equal(computed.width, '66%'); assert.equal(computed.height, '66%');
+  assert.equal(computed.width, '50%'); assert.equal(computed.height, '50%');
   assert.equal(computed.left, '0px'); assert.equal(computed.bottom, '0px');
   assert.ok(badge.querySelector('svg.bi-check-circle-fill'));
   assert.equal(badge.querySelector('[data-git-glyph]'), null);

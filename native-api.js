@@ -1,6 +1,7 @@
+const Progress = require('./media/commander-progress');
 const OPERATIONS = Object.freeze([
   'files.copy', 'files.rename', 'clipboard.readFiles', 'clipboard.writeFiles',
-  'clipboard.acknowledge', 'shell.showContextMenu', 'shell.openAssociated',
+  'clipboard.acknowledge', 'clipboard.cancelFiles', 'shell.showContextMenu', 'shell.openAssociated',
   'shell.openTrash', 'shell.openTerminal', 'icons.resolve', 'metadata.query', 'paths.resolveNetwork',
   'encoding.describe', 'encoding.decodeBlock', 'encoding.decodeChunk', 'windows.resolveOwner',
   'windows.maximize', 'locks.scan', 'locks.releaseHandles', 'locks.unloadModules', 'locks.rename', 'git.status', 'git.info',
@@ -44,6 +45,7 @@ function createNativeApi(binding) {
           if (closed) throw failure('SessionClosed', 'The native session is closed.');
           if (!OPERATIONS.includes(operation)) throw failure('UnknownOperation', 'Unknown native operation.');
           if (capabilities[operation].status === 'unsupported') throw failure('UnsupportedOperation', `${operation} is unavailable.`);
+          if (operation === 'git.status' && request?.summary === true && capabilities[operation].dirtySummary !== true) throw failure('UnsupportedOperation', 'The loaded native module does not support Git dirty summaries.');
           const requestId = nextRequest++;
           let nativePromise, progressFailure, cancelTimer, cancellationSent = false, finished = false, cancelRequested = false;
           const signal = options.signal;
@@ -66,9 +68,15 @@ function createNativeApi(binding) {
             cancelRequested = true;
             notifyCancellation();
           };
+          /** @param {Record<string, unknown> & {transferred?: number, total?: number}} event */
           const progress = event => {
             if (finished || closed || signal?.aborted || progressFailure) return;
-            try { options.onProgress?.(Object.freeze({ ...event, requestId, generation: resource.generation })); }
+            try {
+              const transferred = event?.transferred, total = event?.total;
+              const measurable = typeof transferred === 'number' && typeof total === 'number' && Number.isSafeInteger(transferred) && Number.isSafeInteger(total) && transferred >= 0 && total >= transferred;
+              const measurement = measurable ? Progress.known('bytes', transferred, total) : Progress.unknown('items', 0, 'native-operation');
+              options.onProgress?.(Progress.event({ ...event, phase: operation, requestId, generation: resource.generation, overall: measurement, current: measurement }));
+            }
             catch (error) { progressFailure = error; cancel(); }
           };
           nativePromise = operation === 'files.copy' || operation === 'git.status' && typeof options.onProgress === 'function' ? resource.invoke(operation, request, progress) : resource.invoke(operation, request);

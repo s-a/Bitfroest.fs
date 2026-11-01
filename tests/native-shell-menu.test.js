@@ -4,6 +4,16 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
 const { createShellMenuProvider } = require('../native-shell-menu');
+
+test('Git Diff is an explicitly enabled file action returned separately from shell verbs', { skip: process.platform !== 'win32' }, async t => {
+  const files = await fixture(t); let request;
+  const provider = createShellMenuProvider({ roots: [files.root], invokeNative: async input => { request = input; return { ok: true, displayed: true, invoked: true, cancelled: false, action: 'git-diff' }; } });
+  t.after(() => provider.dispose());
+  assert.equal((await provider.show([files.a], { gitDiff: true })).action, 'git-diff');
+  assert.equal(request.gitDiff, true);
+  await assert.rejects(provider.show([files.a]), /Systemmenü/);
+  await assert.rejects(provider.show([files.a, files.b], { gitDiff: true }), /Systemmenü/);
+});
 const { createNativeApi } = require('../native-api');
 
 test('selected file inspection uses the versioned native session and closes it without starting a process', { skip: process.platform !== 'win32' }, async t => {
@@ -118,6 +128,21 @@ test('direct native inspection enumerates a temporary file menu without displayi
   assert.ok(result.timing.nativeMilliseconds >= 0);
   assert.equal(await fs.readFile(files.a, 'utf8'), 'ORIGINAL');
   assert.equal(await fs.readFile(files.b, 'utf8'), 'SECOND');
+});
+
+test('direct native Git submenu is limited to an enabled single file without displaying the menu', {
+  skip: process.platform !== 'win32' || !process.env.NATIVE_BINDING_TEST_PATH
+}, async t => {
+  const files = await fixture(t), directory = path.join(files.root, 'folder'); await fs.mkdir(directory);
+  const nativeApi = createNativeApi(require(process.env.NATIVE_BINDING_TEST_PATH));
+  const session = nativeApi.openSession();
+  t.after(() => { session.close(); nativeApi.shutdown(); });
+  for (const [paths, gitDiff, expected] of [[[files.a], true, true], [[files.a], false, false], [[files.a, files.b], true, false], [[directory], true, false]]) {
+    const result = await session.invoke('shell.showContextMenu', { mode: 'inspect', paths, roots: [files.root], gitDiff });
+    assert.equal(result.displayed, false); assert.equal(result.invoked, false);
+    assert.equal(result.entries.some(entry => entry.label === 'Git' && entry.submenu), expected);
+  }
+  assert.equal(await fs.readFile(files.a, 'utf8'), 'ORIGINAL');
 });
 
 test('menu display carries a host-owned window title and keyboard anchor without accepting arbitrary popup coordinates', { skip: process.platform !== 'win32' }, async t => {

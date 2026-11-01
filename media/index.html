@@ -5,11 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <!--POLICY-->
   <title>Bitfroest.fs · Prototyp</title>
+  <script src="webview-bootstrap.js"></script>
   <link rel="stylesheet" href="workbench-vendor.css">
+  <link rel="stylesheet" href="codicons.css">
   <link rel="stylesheet" href="app.css">
   <link rel="stylesheet" href="file-search.css">
 </head>
 <body>
+  <header class="commander-header">
   <nav class="main-menu" data-main-menu role="menubar" aria-label="Hauptmenü">
     <button type="button" role="menuitem" aria-haspopup="true" aria-expanded="false" aria-controls="main-menu-popup">Dateien</button>
     <button type="button" role="menuitem" aria-haspopup="true" aria-expanded="false" aria-controls="main-menu-popup">Markierung</button>
@@ -22,6 +25,7 @@
       <button type="button" role="menuitem" data-group="Dateien" data-menu-action="unpack" data-menu-keys="alt+f9 alt+f6">Entpacken</button>
       <button type="button" role="menuitem" data-group="Dateien" data-menu-action="test-archives" data-menu-keys="alt+shift+f9">Archive testen</button>
       <button type="button" role="menuitem" data-group="Dateien" data-menu-action="rename" data-menu-keys="ctrl+m">Mehrfach-Umbenennen</button>
+      <button type="button" role="menuitem" data-group="Dateien" data-menu-action="open-trash">Papierkorb öffnen</button>
       <button type="button" role="menuitem" data-group="Markierung" data-menu-action="select-group" data-menu-keys="numpad_add shift+numpad_add">Gruppe markieren...</button>
       <button type="button" role="menuitem" data-group="Markierung" data-menu-action="unselect-group" data-menu-keys="numpad_subtract shift+numpad_subtract">Gruppenauswahl rückgängig...</button>
       <button type="button" role="menuitem" data-group="Markierung" data-menu-action="select-all" data-menu-keys="ctrl+a">Alle markieren</button>
@@ -53,21 +57,24 @@
       <button type="button" role="menuitem" data-group="Hilfe" data-menu-action="licenses">Lizenzen und Danksagungen</button>
     </div>
   </nav>
+  <div id="header-actions" role="group"></div>
+  </header>
   <main>
-    <div id="panes" class="panes"><p id="startup-message" role="status">Loading file manager…</p></div>
+    <div id="panes" class="panes"><div id="startup-indicator"><p id="startup-message" role="status">Loading file manager…</p><progress id="startup-progress" aria-label="Loading file manager…"></progress><p id="startup-detail" aria-live="polite"></p><section aria-labelledby="startup-log-title"><h2 id="startup-log-title">Startup log</h2><button id="startup-log-copy" type="button">Copy startup log</button><ol id="startup-log" role="log" aria-live="polite"></ol></section></div></div>
   </main>
   <footer id="statusbar" class="statusbar"></footer>
   <aside id="notifications-center" class="notifications-center" role="region" hidden></aside>
   <div id="toast" role="status" aria-live="polite"></div>
   <template id="operation-error-art"><img class="operation-error-art" src="error-monkey.png" alt="" width="2172" height="724"></template>
-  <dialog id="modal" aria-labelledby="modal-title"><form id="modal-form" method="dialog"><div class="modal-heading"><div><div class="eyebrow" id="modal-eyebrow">DATEIAKTION</div><h2 id="modal-title"></h2></div><button type="button" id="modal-close" aria-label="Dialog schließen">×</button></div><div id="modal-body"></div><div class="modal-actions"><button type="button" id="modal-cancel">Abbrechen</button><button type="submit" id="modal-confirm" class="primary">Übernehmen</button></div></form></dialog>
-  <script src="webview-bootstrap.js"></script>
+  <dialog id="modal" aria-labelledby="modal-title"><form id="modal-form" method="dialog"><div class="modal-heading"><div><div class="eyebrow" id="modal-eyebrow">DATEIAKTION</div><h2 id="modal-title"></h2></div><button type="button" id="modal-close" aria-label="Dialog schließen"></button></div><div id="modal-body"></div><div class="modal-actions"><button type="button" id="modal-cancel">Abbrechen</button><button type="submit" id="modal-confirm" class="primary">Übernehmen</button></div></form></dialog>
   <script src="commander-paths.js"></script>
   <script src="commander-shortcuts.js"></script>
+  <script src="commander-menu.js"></script>
   <script src="shortcut-runtime.js"></script>
   <script src="commander-i18n.js"></script>
   <script src="commander-column-settings.js"></script>
   <script src="commander-tabs.js"></script>
+  <script src="commander-directory-cache.js"></script>
   <script src="commander-columns.js"></script>
   <script src="commander-search.js"></script>
   <script src="file-search-view.js"></script>
@@ -82,7 +89,12 @@
   <script src="workbench-vendor.js"></script>
   <script src="workbench-icons.js"></script>
   <script src="git-status-icons.js"></script>
+  <script src="icon-font-metrics.js"></script>
+  <script src="icon-layout.js"></script>
+  <script src="commander-icons.js"></script>
+  <script src="commander-progress.js"></script>
   <script src="commander-statusbar.js"></script>
+  <script src="commander-jobs.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

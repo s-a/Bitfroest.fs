@@ -1,6 +1,7 @@
 const path = require('node:path');
 const { Worker } = require('node:worker_threads');
 const { validateSettings } = require('./file-search');
+const Progress = require('./media/commander-progress');
 
 function createSearchProvider({ roots }) {
   const jobs = new Map(), completed = new Map(); let disposed = false;
@@ -19,7 +20,7 @@ function createSearchProvider({ roots }) {
         jobs.set(id, job);
         worker.on('message', message => {
           if (job.settled) return;
-          if (message.type === 'progress') callbacks.onProgress?.(message.value);
+          if (message.type === 'progress') callbacks.onProgress?.(Progress.read(message.value));
           if (message.type === 'match') job.partial.push(message.row);
           if (message.type === 'complete') job.finish(message.result);
           if (message.type === 'error') job.finish(null, new Error(message.error));

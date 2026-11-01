@@ -9,6 +9,11 @@ const { test } = require('node:test');
 
 const bindingPath = process.env.NATIVE_BINDING_TEST_PATH || path.join(__dirname, '../native/binding.node');
 
+test('packaged Windows binding exposes separate conditional clipboard cancellation', { skip: process.platform !== 'win32' }, () => {
+  const binding = require('../native/binding.node');
+  assert.equal(binding.capabilities['clipboard.cancelFiles']?.status, 'supported');
+});
+
 test('native clipboard binding validates typed requests without a sibling executable or system clipboard access', { skip: process.platform !== 'win32' }, () => {
   assert.ok(bindingPath, 'NATIVE_BINDING_TEST_PATH must point to the compiled binding');
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'clipboard-direct-binding-'));
@@ -18,9 +23,10 @@ test('native clipboard binding validates typed requests without a sibling execut
     assert.equal(fs.existsSync(path.join(directory, 'clipboard-broker-win.exe')), false);
     const script = `const assert=require('node:assert/strict');const binding=require(${JSON.stringify(localBinding)});` +
       `if(typeof binding.verifyStaLifecycle==='function')assert.equal(binding.verifyStaLifecycle(),true);` +
-      `for(const op of ['clipboard.readFiles','clipboard.writeFiles','clipboard.acknowledge'])assert.equal(binding.capabilities[op]?.status,'supported');` +
+      `for(const op of ['clipboard.readFiles','clipboard.writeFiles','clipboard.acknowledge','clipboard.cancelFiles'])assert.equal(binding.capabilities[op]?.status,'supported');` +
       `const session=binding.openSession();try{assert.throws(()=>session.invoke('clipboard.writeFiles',{paths:['relative.txt'],mode:'copy'}),{code:'InvalidRequest'});` +
-      `assert.throws(()=>session.invoke('clipboard.acknowledge',{token:'',paths:[],mode:'copy',remainingPaths:[]}),{code:'InvalidRequest'});}finally{session.close();}`;
+      `assert.throws(()=>session.invoke('clipboard.acknowledge',{token:'',paths:[],mode:'copy',remainingPaths:[]}),{code:'InvalidRequest'});` +
+      `assert.throws(()=>session.invoke('clipboard.cancelFiles',{token:'',paths:[],mode:'copy'}),{code:'InvalidRequest'});}finally{session.close();}`;
     const child = spawnSync(process.execPath, ['-e', script], { encoding: 'utf8', timeout: 10000 });
     assert.equal(child.status, 0, child.stderr);
   } finally {

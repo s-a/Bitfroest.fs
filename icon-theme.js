@@ -1,4 +1,5 @@
 const path = require('node:path');
+const { defaults: iconLayoutDefaults } = require('./media/icon-layout');
 
 function parseTheme(text) {
   let result = '', quoted = false, escaped = false;
@@ -67,7 +68,7 @@ async function loadIconTheme(vscode) {
     return {
       roots: [root], associations,
       css(webview) {
-        const rules = ['.fileicon.themed{font-size:16px;background-repeat:no-repeat;background-position:center;background-size:contain;position:relative}.fileicon.themed::before,.fileicon.themed::after{display:none}'];
+        const rules = [`.fileicon.themed{font-size:var(--icon-size,${iconLayoutDefaults.size}px);background-repeat:no-repeat;background-position:center;background-size:contain;position:relative}.fileicon.themed::before,.fileicon.themed::after{display:none}`];
         for (const font of fonts) {
           const sources = (font.src || []).map(source => {
             const uri = source.path && resource(source.path);

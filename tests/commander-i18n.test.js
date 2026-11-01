@@ -80,3 +80,11 @@ test('English conflict and permanent delete dialogs state their effects in Engli
   app.click(app.document.querySelector('[data-conflict-action="cancel"]'));
   await new Promise(resolve => setImmediate(resolve));
 });
+
+test('short extension column heading follows the selected interface language', t => {
+  for (const [language, expected] of [['de', 'Erw.'], ['de-DE', 'Erw.'], ['en', 'Ext.']]) {
+    const app = createApp(t, undefined, { language });
+    assert.equal(app.document.querySelector('[data-sort="type"]').textContent, expected);
+    assert.equal(create(language).t('Ext.'), expected);
+  }
+});

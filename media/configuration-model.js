@@ -69,12 +69,12 @@
     return nodes;
   }
   function validateColumns(input) {
+    if (Array.isArray(input) && [13, 14].includes(input.length) && columns.catalog.slice(0, input.length).every(column => input.some(item => item?.id === column.id))) input = [...input, ...columns.catalog.slice(input.length).map(column => ({ id: column.id, align: column.align, visible: false }))];
     if (!Array.isArray(input) || input.length !== columns.catalog.length || new Set(input.map(item => item?.id)).size !== columns.catalog.length) throw new Error('Der vollständige Spaltenkatalog ist erforderlich.');
     return input.map(item => {
       if (!columns.catalog.some(column => column.id === item.id)) throw new Error('Unbekannte Spalte.');
-      if (!Number.isInteger(item.width) || item.width < 32 || item.width > 1600) throw new Error('Die Breite muss zwischen 32 und 1600 Pixeln liegen.');
-      if (!['left', 'right', 'center'].includes(item.align) || typeof item.visible !== 'boolean' || typeof item.title !== 'string') throw new Error('Ungültige Spaltendarstellung.');
-      return { id: item.id, title: item.title, width: item.width, align: item.align, visible: item.visible };
+      if (!['left', 'right', 'center'].includes(item.align) || typeof item.visible !== 'boolean') throw new Error('Ungültige Spaltendarstellung.');
+      return { id: item.id, align: item.align, visible: item.visible };
     });
   }
   return { validateFavorites, favoritesFromTables, favoritesToTables, moveFavorite, validateColumns };

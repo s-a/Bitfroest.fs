@@ -154,6 +154,7 @@ test('font glyphs use declared font, color and dimensions with safe CSS escaping
   const { css } = render(theme);
   assert.match(css, /content:"\\e001 "/);
   assert.match(css, /font-size:120%;color:#12ab34;/);
+  assert.match(css, /\.fileicon\.themed\{font-size:var\(--icon-size,16px\)/);
   assert.match(css, /content:"\\22 \\3b \\7d "/);
   assert.match(css, /font-size:100%;/);
   assert.ok(!css.includes('display:none;'));

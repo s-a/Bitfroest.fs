@@ -47,6 +47,17 @@ test('ZIP copies only selected file and folder subtrees, preserves bytes and han
   await provider.copy(request, { onConflict: async () => 'overwrite' });
   assert.deepEqual(await fs.readFile(path.join(target, 'docs/one.bin')), Buffer.from([0, 255, 3]));
 });
+
+test('ZIP extraction reports aggregate and individual byte totals including empty entries', async t => {
+  const { archive, target, provider } = await fixture(t, { 'one.txt': 'one', 'two.txt': 'second', 'empty.txt': '' });
+  const view = await provider.open(archive), events = [];
+  await provider.copy({ path: view.path, ids: view.folders[view.path].map(row => row.id), target }, { onProgress: event => events.push(event) });
+  assert.equal(events[0].overall.total, 9);
+  assert.ok(events.some(event => event.currentPath === 'one.txt' && event.current.total === 3));
+  assert.ok(events.some(event => event.currentPath === 'empty.txt' && event.current.total === 0));
+  assert.equal(events.at(-1).overall.completed, 9);
+  assert.ok(events.every(event => event.version === 1));
+});
 test('ZIP rejects unsafe paths and changed archives, and aborts without output', async t => {
   const { archive, target, provider } = await fixture(t, { 'file.txt': 'hello' });
   const opened = await provider.open(archive), request = { path: opened.path, ids: [opened.folders[opened.path][0].id], target };

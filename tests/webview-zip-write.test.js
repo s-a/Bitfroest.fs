@@ -10,6 +10,28 @@ function state(inside = false) {
 }
 const submit = app => app.document.querySelector('#modal-form').dispatchEvent(new app.window.Event('submit', { bubbles: true, cancelable: true }));
 
+test('ZIP preparation reports collected entries and packing uses both known progress totals', t => {
+  for (const language of ['de', 'en']) {
+    const app = createApp(t, state(), { language }); app.click(app.row('file.txt')); app.action('pack'); submit(app);
+    const request = app.messages.find(message => message.type === 'zip-write');
+    const send = progress => app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-progress', operationId: request.operationId, progress } }));
+    send({ phase: 'preparing', currentPath: 'C:/tmp/models/large.bin', filesScanned: 1248 });
+    assert.match(app.document.querySelector('#status-message').textContent, language === 'de' ? /ZIP-Dateien erfassen · 1248 Einträge erfasst/ : /Collect ZIP files · 1248 entries collected/);
+    assert.match(app.document.querySelector('#status-message').textContent, /large\.bin/);
+    assert.equal(app.document.querySelector('#status-percent').textContent, '—/—');
+    send({ phase: 'packing', currentPath: 'models/large.bin', transferred: 68, total: 100, completedBytes: 42, totalBytes: 100 });
+    assert.equal(app.document.querySelector('#status-percent').textContent, '42%/68%');
+    assert.doesNotMatch(app.document.querySelector('#status-message').textContent, /1248/);
+    send({ phase: 'packing', currentPath: 'models/large.bin', transferred: 4294967296, total: 8589934592, completedBytes: 4294967296, totalBytes: 17179869184 });
+    assert.equal(app.document.querySelector('#status-percent').textContent, '25%/50%');
+    send({ phase: 'finalizing', currentPath: 'C:/temp/result.zip' });
+    assert.match(app.document.querySelector('#status-message').textContent, language === 'de' ? /ZIP abschließen/ : /Finalize ZIP/);
+    assert.equal(app.document.querySelector('#status-percent').textContent, '—/—');
+    send({ phase: 'publishing', currentPath: 'C:/temp/result.zip' });
+    assert.match(app.document.querySelector('#status-message').textContent, language === 'de' ? /ZIP speichern/ : /Save ZIP/);
+  }
+});
+
 test('ZIP progress names packing and verification, shows literal entries and resets file progress between phases', t => {
   for (const language of ['de', 'en']) {
     const saved = state(), app = createApp(t, saved, { language });
@@ -17,21 +39,21 @@ test('ZIP progress names packing and verification, shows literal entries and res
     const request = app.messages.find(message => message.type === 'zip-write');
     const send = progress => app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-progress', operationId: request.operationId, progress } }));
     send({ phase: 'packing', currentPath: 'docs/A & B.txt', transferred: 80, total: 100 });
-    assert.equal(app.document.querySelector('#status-message').textContent, language === 'de' ? 'ZIP erstellen: A & B.txt' : 'Creating ZIP: A & B.txt');
+    assert.equal(app.document.querySelector('#status-message').textContent, language === 'de' ? 'ZIP erstellen · docs/A & B.txt' : 'Create ZIP · docs/A & B.txt');
     assert.equal(app.document.querySelector('[data-current-file-path]').textContent, 'docs/A & B.txt');
     assert.match(app.document.querySelector('#status-message').title, /docs\/A & B.txt/);
     assert.equal(app.document.querySelector('#status-progress-file').getAttribute('aria-valuenow'), '80');
     send({ phase: 'verifying', currentPath: 'docs/A & B.txt', transferred: 0, total: 100, completedBytes: 0, totalBytes: 100 });
-    assert.equal(app.document.querySelector('#status-message').textContent, language === 'de' ? 'Archiv prüfen: A & B.txt' : 'Verifying archive: A & B.txt');
+    assert.equal(app.document.querySelector('#status-message').textContent, language === 'de' ? 'Archiv prüfen · docs/A & B.txt' : 'Verify archive · docs/A & B.txt');
     assert.equal(app.document.querySelector('#status-progress-file').getAttribute('aria-valuenow'), '0');
     send({ phase: 'verifying', currentPath: 'empty.txt', transferred: 0, total: 0, completedBytes: 100, totalBytes: 100 });
     assert.match(app.document.querySelector('#status-message').textContent, /empty\.txt/);
-    assert.equal(app.document.querySelector('#status-progress-file').hasAttribute('aria-valuenow'), false);
+    assert.equal(app.document.querySelector('#status-progress-file').style.width, '100%');
     app.click(app.document.querySelector('#status-cancel'));
     assert.equal(app.messages.filter(message => message.type === 'filesystem-cancel').length, 1);
-    assert.equal(app.document.querySelector('#status-message').textContent, language === 'de' ? 'Abbruch wird ausgeführt…' : 'Cancelling…');
+    assert.equal(app.document.querySelector('#status-message').textContent, language === 'de' ? 'Abbruch wird ausgeführt… · empty.txt' : 'Cancelling… · empty.txt');
     app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-result', operationId: request.operationId, ok: true, cancelled: true, archiveCommitted: true, notice: 'saved', state: saved } }));
-    assert.equal(app.document.querySelector('#status-progress-area').classList.contains('is-idle'), true);
+    assert.equal(app.document.querySelector('#statusbar').dataset.statusProgressOwner, 'background');
     send({ phase: 'packing', currentPath: 'late.txt' });
     assert.equal(app.document.querySelector('#status-message').textContent, 'saved');
   }
@@ -87,7 +109,12 @@ test('ZIP-F23 delete needs confirmation and does not optimistically remove the r
   assert.equal(app.document.querySelector('#modal').open, true);
   assert.equal(app.messages.some(message => message.type === 'zip-write'), false); submit(app);
   const message = app.messages.find(message => message.type === 'zip-write');
-  assert.equal(message?.action, 'remove'); assert.ok(app.row('file.txt'));
+  assert.equal(message?.action, 'remove'); assert.ok(message.operationId); assert.ok(app.row('file.txt'));
+  assert.equal(app.document.querySelector('#panes').inert, true);
+  assert.equal(app.document.querySelectorAll('[data-job-row]').length, 0);
+  assert.equal(app.document.querySelector('#status-cancel').hidden, false);
+  app.click(app.document.querySelector('#status-cancel'));
+  assert.equal(app.messages.find(item => item.type === 'filesystem-cancel')?.operationId, message.operationId);
   assert.equal(app.messages.some(message => message.type === 'filesystem-apply'), false);
 });
 test('ZIP-F24 Shift F6 keeps inline editing and commits through the archive host operation', t => {
@@ -167,4 +194,18 @@ test('ZIP-F43 new text file opens its confirmed archive entry in the native edit
   saved.folders[source].push({ id: 'new', name: 'new.txt', archive: 'C:/tmp/test.zip', archiveEntry: 'new.txt', fsSource: source + '/new.txt' });
   app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-result', ok: true, operationId: request.operationId, state: saved } }));
   assert.equal(app.messages.find(message => message.type === 'edit')?.path, source + '/new.txt');
+});
+
+test('an unpack job opens an uncached target on the destination pane from its popup', t => {
+  const saved = state(); saved.folders['C:/tmp'].push({ id: 'archive', name: 'test.zip', type: 'archive', fsSource: 'C:/tmp/test.zip', size: 10 });
+  const app = createApp(t, saved); app.click(app.row('test.zip')); app.action('unpack');
+  app.document.querySelector('#value').value = 'C:/custom-target'; submit(app);
+  const request = app.messages.find(message => message.type === 'zip-unpack');
+  assert.equal(request.target, 'C:/custom-target');
+  app.click(app.document.querySelector('#jobs-toggle'));
+  app.click(app.document.querySelector('#jobs-center .job-content'));
+  const navigation = app.messages.filter(message => message.type === 'filesystem-navigate').at(-1);
+  assert.equal(navigation.path, 'C:/custom-target');
+  assert.equal(navigation.side, 1);
+  assert.equal(app.messages.filter(message => message.type === 'zip-unpack').length, 1);
 });

@@ -2,6 +2,49 @@ const assert = require('node:assert/strict');
 const test = require('node:test');
 const settings = require('../media/commander-column-settings');
 
+test('additional content fields use actual metadata and keep platform restrictions explicit', () => {
+  const flags = { archive: false, readonly: true, hidden: false, system: true, compressed: true, encrypted: false, sparse: true, offline: false, directory: false };
+  const row = { name: 'example.dll', type: 'binary', attributeFlags: flags, fileVersionString: '2.0 beta', dosName: 'EXAMPL~1.DLL', comment: 'Notes' };
+  for (const [field, expected] of Object.entries({ comment: 'Notes', versionstring: '2.0 beta', dosname: 'EXAMPL~1.DLL', 'file type': 'file', archive: '0', 'read only': '1', hidden: '0', system: '1', compressed: '1', encrypted: '0', sparse: '1', offline: '0', directory: '0', attributestr: 'r-s--c-p-' })) {
+    const result = settings.evaluateColumnTemplate(row, `[=tc.${field}]`);
+    assert.equal(result.supported, true, field); assert.equal(result.text, expected, field);
+  }
+  assert.equal(settings.evaluateColumnTemplate({ type: 'link' }, '[=file.file type]').text, 'reparse point');
+  assert.equal(settings.evaluateColumnTemplate({ type: 'folder' }, '[=file.directory]').text, '1');
+  assert.equal(settings.evaluateColumnTemplate({}, '[=file.versionstring]').text, '—');
+  for (const id of ['archive', 'system', 'compressed', 'encrypted', 'sparse', 'offline', 'dosName']) {
+    const column = settings.catalog.find(item => item.id === id); assert.ok(column, id);
+    assert.equal(settings.isColumnAvailable(column, 'linux'), false, id);
+    assert.equal(settings.isColumnAvailable(column, 'win32'), true, id);
+  }
+  for (const id of ['comment', 'versionString', 'readOnly', 'hidden', 'directory', 'fileType', 'attributeText']) assert.equal(settings.isColumnAvailable(settings.catalog.find(item => item.id === id), 'linux'), true, id);
+  assert.equal(settings.isColumnAvailable({ field: '[="a"tc.archive"b"]' }, 'linux'), false);
+  assert.equal(settings.evaluateColumnTemplate({ posixMode: 0o100644 }, '[=file.attributestr]').text, '-rw-r--r--');
+  assert.equal(settings.evaluateColumnTemplate({ posixMode: 0o41777, type: 'folder' }, '[=file.attributestr]').text, 'drwxrwxrwt');
+});
+
+test('optional Version column formats four-part executable metadata and distinguishes unavailable values', () => {
+  const column = settings.catalog.find(item => item.id === 'version');
+  assert.ok(column); assert.equal(column.title, 'Version'); assert.equal(column.visible, false);
+  for (const field of [column.field, '[=tc.versionnr]']) {
+    for (const version of [[11, 56, 0, 0], [0, 0, 0, 0], [65535, 2, 3, 4]]) {
+      assert.equal(settings.evaluateColumnTemplate({ name: 'file.dll', fileVersion: version }, field).text, version.join('.'));
+    }
+    for (const version of [undefined, null, [], [1, 2, 3], [1, 2, 3, -1], [1, 2, 3, 65536], '1.2.3.4']) {
+      const result = settings.evaluateColumnTemplate({ fileVersion: version }, field);
+      assert.equal(result.text, '—'); assert.equal(result.supported, true); assert.equal(result.missingFields.length, 1);
+    }
+  }
+  assert.equal(settings.columnTitle({ field: '[=tc.versionnr]' }), 'Version');
+});
+
+test('column defaults use fixed short titles and ignore title preferences', () => {
+  assert.equal(settings.catalog.find(column => column.id === 'type').title, 'Ext.');
+  assert.equal(settings.catalog.find(column => column.id === 'attributes').title, 'Attr.');
+  assert.equal(settings.normalizeColumnSets(null)[0].columns.find(column => column.id === 'attributes').title, 'Attr.');
+  assert.equal(settings.columnSetFromPreferences({ 'title.attributes': 'My attributes' }).columns.find(column => column.id === 'attributes').title, 'Attr.');
+});
+
 test('public column defaults and examples use neutral file property names', () => {
   assert.equal(settings.evaluateColumnTemplate({ name: 'report.txt', size: 1536 }, '[=file.name] [=file.size.auto]').text, 'report 1.5 KB');
   assert.ok(settings.catalog.every(column => !column.field.includes('tc.')));
@@ -138,7 +181,7 @@ test('every custom column option documents its meaning in both contribution lang
       assert.ok(require(`../${file}`)[option.description.slice(1, -1)]);
     }
   }
-  assert.equal(schema.items.properties.columns.items.properties.width.minimum, 32);
+  assert.equal(schema.items.properties.columns.items.properties.width, undefined);
   const alignment = schema.items.properties.columns.items.properties.align;
   assert.equal(alignment.enumDescriptions.length, alignment.enum.length);
 });
@@ -167,7 +210,7 @@ test('column tables reject malformed keys and values and identify unavailable fi
 test('all new column settings can be edited with native scalar, list or table controls', () => {
   const properties = Object.assign({}, ...require('../package.json').contributes.configuration.map(category => category.properties));
   const scalar = schema => ['string', 'number', 'integer', 'boolean'].includes(schema.type);
-  for (const name of ['names', 'fields', 'titles', 'widths', 'alignments', 'visibility', 'order']) {
+  for (const name of ['names', 'fields', 'alignments', 'visibility', 'order']) {
     const schema = properties[`bitfroest.columns.${name}`];
     assert.ok(schema, name);
     assert.ok(scalar(schema) || schema.type === 'array' && scalar(schema.items) || schema.type === 'object' && scalar(schema.additionalProperties), name);
@@ -178,6 +221,14 @@ test('all new column settings can be edited with native scalar, list or table co
     assert.equal(new RegExp(pattern).test('invalid.key.extra'), false);
     for (const file of ['package.nls.json', 'package.nls.de.json']) assert.ok(require(`../${file}`)[schema.markdownDescription.slice(1, -1)]);
   }
+});
+
+test('column width settings are absent from every contributed column schema', () => {
+  const properties = Object.assign({}, ...require('../package.json').contributes.configuration.map(category => category.properties));
+  assert.equal(Object.keys(properties).some(key => /^bitfroest\.columns\.width(?:s|\.)/.test(key)), false);
+  const layout = properties['bitfroest.columns.layout'].items;
+  assert.equal(layout.properties.width, undefined);
+  assert.equal(layout.required.includes('width'), false);
 });
 
 test('custom columns have a localized native settings category', () => {

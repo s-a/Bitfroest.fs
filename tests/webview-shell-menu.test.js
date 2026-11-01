@@ -10,12 +10,53 @@ const requests = app => app.messages.filter(message => message.type === 'shell-c
 function context(app, target) { const event = new app.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }); target.dispatchEvent(event); return event; }
 const send = (app, data) => app.window.dispatchEvent(new app.window.MessageEvent('message', { data }));
 
-test('Unix folder context uses the native workbench contribution instead of launching a Windows shell helper', t => {
+test('native Git Diff completion and failure use the status bar without an operation dialog', t => {
+  const app = createApp(t, fixture(), { language: 'en' });
+  for (const ok of [true, false]) {
+    app.action('shell-context-menu'); const request = requests(app).at(-1);
+    send(app, { type: 'shell-context-menu-result', requestId: request.requestId, action: 'git-diff', ok, error: 'Git unavailable', refreshed: false });
+    assert.equal(app.document.querySelector('#status-message').textContent, ok ? 'Git diff opened.' : 'Git unavailable');
+    assert.equal(app.document.querySelector('#modal').open, false);
+  }
+});
+
+test('archive row context reports unavailable status without a native request or error dialog', t => {
+  const state = fixture(), directory = 'zip:C%3A%2Ftmp%2Fsample.zip!/folder';
+  state.panes[0].tabs = [directory];
+  state.folders[directory] = state.folders['C:/tmp'];
+  state.archiveLocations = { [directory]: { archive: 'C:/tmp/sample.zip', prefix: 'folder/' } };
+  const app = createApp(t, state, { language: 'en', fileSettings: { useSystemContextMenu: true } });
+  context(app, app.row('literal & Datei.txt'));
+  assert.equal(requests(app).length, 0);
+  assert.equal(app.document.querySelector('#modal').open, false);
+  assert.equal(app.document.querySelector('.operation-error'), null);
+  assert.equal(app.document.querySelector('#status-message').textContent, 'This action is unavailable inside a ZIP archive.');
+  assert.deepEqual(Array.from(app.state().panes[0].selected), ['a', 'b']);
+});
+
+test('shell menu error copy includes request context and runtime diagnostics', t => {
+  const app = createApp(t, fixture(), { language: 'en' }); app.action('shell-context-menu');
+  const request = requests(app)[0];
+  send(app, { type: 'shell-context-menu-result', requestId: request.requestId, ok: false, error: 'Invalid selection', diagnostic: {
+    request: { ...request, paths: ['C:/tmp/literal & Datei.txt'] }, platform: 'win32', runtimeVersion: 'v22.test',
+    failure: { code: 'NativeFailure', nativeCode: '31', operation: 'shell.showContextMenu', requestId: '2', generation: '7', stack: 'selection validation stack', cause: { nativeCode: '5', nativeStage: 'IContextMenu.InvokeCommand', hresult: '0x80004005', nativeCommand: 'delete', nativeCommandId: '0' } }
+  } });
+  app.click(app.document.querySelector('[data-copy-error]'));
+  const copied = app.messages.find(message => message.type === 'selection-io' && message.action === 'copy');
+  assert.ok(copied);
+  for (const value of ['shell-context-menu', request.requestId, 'C:/tmp', 'menu-snapshot', 'v22.test', 'NativeFailure', 'Native code: 31', 'Native code: 5', 'Native operation: shell.showContextMenu', 'Native request ID: 2', 'Session generation: 7', 'selection validation stack', 'literal & Datei.txt']) assert.ok(copied.text.includes(value), value);
+  assert.ok(copied.text.includes('Native stage: IContextMenu.InvokeCommand'));
+  assert.ok(copied.text.includes('HRESULT: 0x80004005'));
+  assert.ok(copied.text.includes('Native command: delete'));
+  assert.ok(copied.text.includes('Native command ID: 0'));
+});
+
+test('Unix folder context uses the shared popup without launching a Windows shell helper', t => {
   for (const platform of ['linux']) {
     const state = fixture(); state.folders['C:/tmp'][0].type = 'folder'; state.panes[0].selected = ['a'];
     const app = createApp(t, state, { platform });
     const row = app.row('literal & Datei.txt'), event = context(app, row);
-    assert.equal(event.defaultPrevented, false); assert.equal(requests(app).length, 0);
+    assert.equal(event.defaultPrevented, true); assert.equal(requests(app).length, 0);
     assert.equal(JSON.parse(row.dataset.vscodeContext).webviewSection, 'folder');
     app.action('inspect-folder-locks'); assert.equal(requests(app)[0].inspectLocks, true);
     send(app, { type: 'shell-context-menu-result', requestId: requests(app)[0].requestId, ok: true });
@@ -41,8 +82,8 @@ test('folder lock command freezes selected IDs for direct host inspection', t =>
   assert.deepEqual(Array.from(requests(app)[0].ids), ['a']); assert.equal(requests(app)[0].paths, undefined);
 });
 
-test('row context freezes IDs and directory while suppressing the competing workbench menu; column settings stay native', t => {
-  const app = createApp(t, fixture()); let workbenchMenus = 0;
+test('row context freezes IDs and directory while suppressing the competing workbench menu; column settings use the shared popup', t => {
+  const app = createApp(t, fixture(), { fileSettings: { useSystemContextMenu: true } }); let workbenchMenus = 0;
   app.window.addEventListener('contextmenu', event => { if (!event.defaultPrevented) workbenchMenus++; });
   const event = context(app, app.row('literal & Datei.txt').querySelector('[data-cell="size"]'));
   assert.equal(event.defaultPrevented, true);
@@ -51,12 +92,13 @@ test('row context freezes IDs and directory while suppressing the competing work
   assert.equal(request.paths, undefined); assert.equal(request.keyboard, false); assert.equal(workbenchMenus, 0);
   app.click(app.row('second.txt').querySelector('[data-cell="size"]'));
   assert.deepEqual(Array.from(request.ids), ['a', 'b'], 'subsequent selection cannot change the captured menu');
-  assert.equal(context(app, app.document.querySelector('thead th')).defaultPrevented, false); assert.equal(workbenchMenus, 1);
+  assert.equal(context(app, app.document.querySelector('thead th')).defaultPrevented, true); assert.equal(workbenchMenus, 0);
+  assert.ok(app.document.querySelector('[data-context-action="configure-columns"]'));
   assert.equal(requests(app).length, 1);
 });
 
 test('keyboard context targets the cursor selection and stale responses cannot replace the current menu outcome', t => {
-  const app = createApp(t, fixture()), list = app.document.querySelector('.pane.active .list');
+  const app = createApp(t, fixture(), { fileSettings: { useSystemContextMenu: true } }), list = app.document.querySelector('.pane.active .list');
   app.key('F10', { shiftKey: true }, list);
   assert.equal(requests(app).length, 1); assert.equal(requests(app)[0].keyboard, true);
   send(app, { type: 'shell-context-menu-result', requestId: 'foreign', ok: false, error: 'foreign' }); assert.equal(app.document.querySelector('#modal').open, false);
@@ -65,31 +107,34 @@ test('keyboard context targets the cursor selection and stale responses cannot r
   assert.equal(app.document.querySelector('.operation-error-text literal'), null);
 });
 
-test('menu focus changes wait for the native result, with no duplicate refresh after confirmed metadata refresh', t => {
+test('native menu DOM focus changes never schedule a filesystem refresh', t => {
   for (const refreshed of [true, false]) {
     const app = createApp(t, fixture()); app.action('shell-context-menu'); assert.equal(requests(app).length, 1);
     app.window.dispatchEvent(new app.window.Event('focus')); app.window.dispatchEvent(new app.window.Event('focus'));
+    send(app, { type: 'window-focus' });
     assert.equal(app.messages.filter(message => message.type === 'filesystem-refresh').length, 0);
     send(app, { type: 'shell-context-menu-result', requestId: requests(app)[0].requestId, ok: true, cancelled: !refreshed, invoked: refreshed, refreshed });
-    assert.equal(app.messages.filter(message => message.type === 'filesystem-refresh').length, refreshed ? 0 : 1);
+    assert.equal(app.messages.filter(message => message.type === 'filesystem-refresh').length, 0);
   }
 });
 
-test('native execution invalidates cut intent without reading clipboard contents or accepting a late write acknowledgement', t => {
-  const app = createApp(t, fixture()); app.action('clipboard-cut');
-  const write = app.messages.find(message => message.type === 'clipboard-write'); assert.ok(write);
-  assert.equal(app.document.querySelectorAll('.is-cut').length, 2);
-  app.action('shell-context-menu');
-  send(app, { type: 'shell-context-menu-result', requestId: requests(app)[0].requestId, ok: true, invoked: true, refreshed: true, clipboardInvalidated: true });
-  assert.equal(app.document.querySelectorAll('.is-cut').length, 0);
-  send(app, { type: 'clipboard-result', requestId: write.requestId, ok: true, selection: { paths: write.paths, mode: 'move', source: 'system', token: 'old' } });
-  assert.equal(app.document.querySelectorAll('.is-cut').length, 0);
-  assert.equal(app.messages.some(message => message.type === 'clipboard-read'), false);
+test('native execution invalidates clipboard markers without accepting a late write acknowledgement', t => {
+  for (const [action, mode, marker] of [['clipboard-cut', 'move', '.is-cut'], ['clipboard-copy', 'copy', '.is-copied']]) {
+    const app = createApp(t, fixture()); app.action(action);
+    const write = app.messages.find(message => message.type === 'clipboard-write'); assert.ok(write);
+    assert.equal(app.document.querySelectorAll(marker).length, 2);
+    app.action('shell-context-menu');
+    send(app, { type: 'shell-context-menu-result', requestId: requests(app)[0].requestId, ok: true, invoked: true, refreshed: true, clipboardInvalidated: true });
+    assert.equal(app.document.querySelectorAll(marker).length, 0);
+    send(app, { type: 'clipboard-result', requestId: write.requestId, ok: true, selection: { paths: write.paths, mode, source: 'system', token: 'old' } });
+    assert.equal(app.document.querySelectorAll(marker).length, 0);
+    assert.equal(app.messages.some(message => message.type === 'clipboard-read'), false);
+  }
 });
 
 test('empty list space and the parent entry cannot open an older selected file context', t => {
   for (const selector of ['.pane.active .list', '.pane.active [data-parent]']) {
-    const app = createApp(t, fixture());
+    const app = createApp(t, fixture(), { fileSettings: { useSystemContextMenu: true } });
     const event = context(app, app.document.querySelector(selector));
     assert.equal(event.defaultPrevented, true);
     assert.equal(requests(app).length, 0);
@@ -126,4 +171,53 @@ test('inline rename text keeps the native editing menu inside a file row', t => 
   const event = context(app, input);
   assert.equal(event.defaultPrevented, false); assert.equal(requests(app).length, 0);
   assert.equal(JSON.parse(input.dataset.vscodeContext).webviewSection, 'textInput');
+});
+
+test('default file popup updates when system menus are enabled', t => {
+  const app = createApp(t, fixture(), { platform: 'win32' });
+  const row = app.row('literal & Datei.txt');
+  assert.equal(context(app, row).defaultPrevented, true);
+  assert.equal(requests(app).length, 0);
+  const captured = JSON.parse(row.dataset.vscodeContext);
+  assert.equal(captured.fileMenu, true);
+  assert.deepEqual(captured.ids, ['a', 'b']);
+  assert.equal(captured.directory, 'C:/tmp');
+  app.key('F10', { shiftKey: true }, app.document.querySelector('.pane.active .list'));
+  assert.equal(requests(app).length, 0);
+  send(app, { type: 'file-settings', settings: { useSystemContextMenu: true } });
+  context(app, row);
+  assert.equal(requests(app).length, 1);
+});
+
+test('clipboard menu commands preserve the opening selection and reject stale snapshots', t => {
+  const app = createApp(t, fixture(), { platform: 'win32' });
+  context(app, app.row('literal & Datei.txt'));
+  const captured = JSON.parse(app.row('literal & Datei.txt').dataset.vscodeContext);
+  app.click(app.row('second.txt').querySelector('[data-cell="size"]'));
+  send(app, { type: 'action', action: 'clipboard-copy', contextSelection: captured });
+  const write = app.messages.find(message => message.type === 'clipboard-write');
+  assert.deepEqual(Array.from(write.paths), ['C:/tmp/literal & Datei.txt', 'C:/tmp/second.txt']);
+  send(app, { type: 'action', action: 'clipboard-cut', contextSelection: { ...captured, snapshotId: 'stale' } });
+  assert.equal(app.messages.filter(message => message.type === 'clipboard-write').length, 1);
+});
+
+test('file menu schema defaults to false and includes lock inspection on Windows', () => {
+  const manifest = require('../package.json');
+  const setting = manifest.contributes.configuration.flatMap(group => Object.entries(group.properties)).find(([key]) => key === 'bitfroest.files.useSystemContextMenu')[1];
+  assert.equal(setting.default, false); assert.equal(setting.type, 'boolean'); assert.equal(setting.scope, 'resource');
+  const menu = manifest.contributes.menus['webview/context'];
+  assert.ok(menu.find(item => item.command === 'bitfroest.inspect-folder-locks').when.includes('isWindows'));
+  assert.equal(menu.some(item => item.submenu === 'bitfroest.menu'), false);
+});
+
+test('default background context offers paste without capturing previously selected files', t => {
+  const app = createApp(t, fixture(), { platform: 'win32' });
+  const list = app.document.querySelector('.pane.active .list');
+  assert.equal(context(app, list).defaultPrevented, true);
+  const captured = JSON.parse(list.dataset.vscodeContext);
+  assert.equal(captured.webviewSection, 'fileBackground');
+  assert.deepEqual(captured.ids, []);
+  assert.equal(requests(app).length, 0);
+  const menu = require('../package.json').contributes.menus['webview/context'];
+  for (const command of ['bitfroest.clipboard-copy', 'bitfroest.clipboard-cut']) assert.match(menu.find(item => item.command === command).when, /webviewSection != fileBackground/);
 });

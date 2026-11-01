@@ -29,6 +29,14 @@ test('recursive masks exclude directories without reading unrelated content', as
   assert.equal(result.errors.length, 0);
 });
 
+test('content search supplies a versioned byte measurement for the current file', async t => {
+  const { run } = await fixture(t), events = [];
+  await run({ name: 'one.txt', textEnabled: true, text: 'needle', encodings: ['utf-8'] }, { onProgress: event => events.push(event) });
+  assert.ok(events.length);
+  assert.ok(events.every(event => event.version === 1 && event.overall && event.current));
+  assert.ok(events.some(event => event.path.endsWith('one.txt') && event.current.unit === 'bytes' && event.current.total === 6));
+});
+
 test('depth, selected files and selected directories constrain traversal', async t => {
   const { root, run } = await fixture(t);
   assert.deepEqual((await run({ name: '*.txt', depth: 0 })).results.map(row => row.name).sort(), ['one.txt', 'two.txt']);

@@ -18,6 +18,98 @@ function createEngine(t, overrides = {}) {
   return engine;
 }
 
+test('unreadable repository markers retain Git error context instead of becoming ordinary folders', async t => {
+  const directory = await fsp.mkdtemp(path.join(require('node:os').tmpdir(), 'git-empty-marker-'));
+  t.after(() => fsp.rm(directory, { recursive: true, force: true }));
+  await fsp.mkdir(path.join(directory, 'child', '.git'), { recursive: true });
+  const engine = createGitStatusEngine({ nativeApi: {}, session: { close() {} }, info: async () => ({ repository: false }), status: async () => ({ repository: false }) });
+  t.after(() => engine.close());
+  const updates = [], child = await engine.inspect(path.join(directory, 'child'), {}, update => updates.push(update));
+  assert.equal(child.ok, false); assert.equal(child.repositoryDetected, true); assert.ok(child.error);
+  const parent = await engine.inspect(directory, {}, update => updates.push(update));
+  assert.equal(parent.ok, true); assert.deepEqual(parent.statuses, {});
+  assert.ok(parent.repositoryErrors.child);
+  assert.equal(updates.some(update => update.repositoryResult?.ok === false), true);
+});
+
+test('a parent directory asks only for dirty summaries rather than full child status matrices', async t => {
+  const directory = await fsp.mkdtemp(path.join(require('node:os').tmpdir(), 'git-parent-summary-'));
+  t.after(() => fsp.rm(directory, { recursive: true, force: true }));
+  for (const name of ['changed', 'clean']) await fsp.mkdir(path.join(directory, name, '.git'), { recursive: true });
+  const calls = [], engine = createGitStatusEngine({ nativeApi: {}, session: { close() {} }, info: async () => ({ repository: true }), status: async (request, options) => {
+    calls.push(request); assert.equal(request.summary, true); assert.equal(options.onProgress, undefined);
+    return { repository: true, summary: true, dirty: path.basename(request.directory) === 'changed', indexVersion: 2, entries: [] };
+  } }); t.after(() => engine.close());
+  const result = await engine.inspect(directory);
+  assert.equal(result.ok, true); assert.equal(calls.length, 2);
+  assert.deepEqual(result.statuses, { changed: 'modified', clean: 'clean' });
+});
+
+test('native comparison progress uses bounded larger batches instead of flooding the renderer', async t => {
+  const directory = await fsp.mkdtemp(path.join(require('node:os').tmpdir(), 'git-native-batches-'));
+  t.after(() => fsp.rm(directory, { recursive: true, force: true })); await fsp.mkdir(path.join(directory, '.git'));
+  const updates = [], engine = createGitStatusEngine({ nativeApi: {}, session: { close() {} }, status: async (_request, options) => {
+    for (let i = 0; i < 4096; i++) options.onProgress({ path: `file-${i}` });
+    return { repository: true, indexVersion: 2, entries: [] };
+  } });
+  t.after(() => engine.close());
+  await engine.inspect(directory, {}, update => { if (update.nativeChecks) updates.push(update.nativeChecks); });
+  assert.ok(updates.length < 20, `Received ${updates.length} progress batches`);
+  assert.ok(updates.every(update => update.paths.length <= 512));
+  assert.equal(updates.flatMap(update => update.paths).length, 4096);
+  assert.equal(updates.at(-1).completed, 4096); assert.equal(updates.at(-1).total, 4096);
+});
+
+test('parent repository discovery reports a failed child inspection before checking the next child', async t => {
+  const dir = await fsp.mkdtemp(path.join(require('node:os').tmpdir(), 'git-child-failure-'));
+  t.after(() => fsp.rm(dir, { recursive: true, force: true }));
+  for (const name of ['first', 'next']) await fsp.mkdir(path.join(dir, name, '.git'), { recursive: true });
+  const updates = [], engine = createGitStatusEngine({ nativeApi: {}, session: { close() {} }, info: async () => ({ repository: true }), status: async (request, options) => {
+    assert.equal(request.summary, true); assert.equal(options.onProgress, undefined);
+    if (path.basename(request.directory) === 'first') throw new Error('Path too long');
+    return { repository: true, summary: true, dirty: false, indexVersion: 2, entries: [] };
+  } });
+  t.after(() => engine.close());
+  const result = await engine.inspect(dir, {}, update => updates.push(update));
+  assert.equal(result.ok, true);
+  assert.equal(result.repositoryErrors.first, 'Path too long');
+  const failed = updates.findIndex(update => update.repositoryResult?.ok === false);
+  assert.ok(failed >= 0); assert.equal(updates[failed].repositoryResult.error, 'Path too long');
+  assert.ok(updates.slice(failed + 1).some(update => update.repositoryChecks?.active === path.join(dir, 'next') && update.repositoryResult?.ok === true));
+});
+
+test('Git progress identifies repository discovery, native worktree inspection and measured status mapping', async t => {
+  const os = require('node:os'), dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'git-phases-'));
+  t.after(() => fsp.rm(dir, { recursive: true, force: true }));
+  await fsp.mkdir(path.join(dir, '.git'));
+  const updates = [];
+  const engine = createGitStatusEngine({ nativeApi: {}, session: { close() {} }, status: async (_request, options) => {
+    assert.equal(updates.at(-1)?.phase, 'git-read-worktree');
+    assert.equal(updates.at(-1)?.path, dir);
+    assert.equal(typeof options.onProgress, 'function');
+    options.onProgress({ path: 'file.txt' });
+    assert.equal(updates.at(-1).overall.kind, 'indeterminate');
+    assert.equal(updates.at(-1).overall.completed, 0);
+    assert.equal(updates.at(-1).nativeChecks.total, 1);
+    assert.equal(updates.at(-1).nativeChecks.completed, 0);
+    options.onProgress({ path: 'second.txt' }); options.onProgress({ path: 'third.txt' });
+    return { repository: true, indexVersion: 2, branch: 'main', entries: [{ path: 'file.txt', head: 1, workdir: 1, stage: 1 }] };
+  } });
+  t.after(() => engine.close());
+  const result = await engine.inspect(dir, {}, update => updates.push(update));
+  assert.equal(result.ok, true, result.error);
+  assert.ok(updates.some(update => update.phase === 'git-locate' && update.path === path.join(dir, '.git')));
+  const mapped = updates.findLast(update => update.phase === 'git-map-status');
+  assert.equal(updates.find(update => update.phase === 'git-map-status').current.completed, 0);
+  assert.ok(mapped); assert.equal(mapped.path, path.join(dir, 'file.txt'));
+  assert.deepEqual(mapped.current, { kind: 'determinate', unit: 'items', completed: 1, total: 1 });
+  assert.equal(mapped.overall.kind, 'indeterminate');
+  assert.equal(mapped.overall.completed, 4);
+  const comparisons = updates.filter(update => update.nativeChecks);
+  assert.deepEqual(comparisons.flatMap(update => update.nativeChecks.paths), ['file.txt', 'second.txt', 'third.txt'].map(name => path.join(dir, name)));
+  assert.equal(comparisons.at(-1).nativeChecks.completed, 3);
+});
+
 test('real repository statuses and recursive folders are read without invoking Git or writing the index', async t => {
   const { dir } = await changedRepository(t);
   const digest = async () => crypto.createHash('sha256').update(await fsp.readFile(path.join(dir, '.git/index'))).digest('hex');
@@ -130,6 +222,32 @@ test('ignored entries in a scoped subdirectory retain their repository-relative 
   const nested = path.join(dir, 'nested');
   const result = await engine.inspect(nested, { showIgnored: true, includePaths: [nested] });
   assert.equal(result.statuses['ignored.log'], 'ignored');
+});
+
+test('ignored contents decorate parent folders without overriding tracked or untracked statuses', async t => {
+  const { dir, write, git } = await repository(t);
+  await write('.gitignore', 'output/*.*\nloose/*.log\n');
+  await write('mixed/keep.txt', 'tracked');
+  await git.add({ filepath: 'mixed/keep.txt' });
+  await write('.gitignore', 'output/*.*\nmixed/*.*\nloose/*.log\n');
+  await git.add({ filepath: '.gitignore' });
+  await git.commit('Track mixed contents');
+  await write('output/program.dll', 'ignored');
+  await write('mixed/generated.dll', 'ignored');
+  await write('loose/generated.log', 'ignored');
+  await write('loose/new.txt', 'untracked');
+  const engine = createEngine(t), result = await engine.inspect(dir, { showIgnored: true });
+  assert.equal(result.ok, true);
+  assert.equal(result.statuses.output, 'ignored');
+  assert.equal(result.statuses.mixed, 'clean');
+  assert.equal(result.statuses.loose, 'untracked');
+  assert.equal((await engine.inspect(path.join(dir, 'output'), { showIgnored: true })).statuses['program.dll'], 'ignored');
+  engine.invalidate();
+  assert.equal((await engine.inspect(dir, { showIgnored: false })).statuses.output, undefined);
+  engine.invalidate();
+  assert.equal((await engine.inspect(dir, { showIgnored: true, recursive: false })).statuses.output, undefined);
+  engine.invalidate();
+  assert.equal((await engine.inspect(dir, { showIgnored: true, excludePaths: [path.join(dir, 'output')] })).statuses.output, undefined);
 });
 
 test('sparse checkout is explicitly unavailable rather than reporting skipped files as deleted', async t => {

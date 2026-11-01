@@ -1,5 +1,6 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
+const Progress = require('./media/commander-progress');
 const crypto = require('node:crypto');
 const { createCodepageDecoder } = require('./lister-codepages');
 const { archiveEntries, officeText } = require('./search-archives');
@@ -159,6 +160,15 @@ async function searchFiles(options, input) {
   }
   const nativeDecoder = createCodepageDecoder(), decoder = { text: (bytes, encoding) => process.platform !== 'win32' && ['0', '1'].includes(encoding) ? Promise.resolve(new TextDecoder(encoding === '0' ? 'windows-1252' : 'ibm866').decode(bytes)) : nativeDecoder.text(bytes, encoding) };
   const results = [], errors = [], seen = new Set(), found = new Set();
+  let duplicateTotal, duplicateCompleted = 0;
+  /** @param {import('./media/commander-progress').Measurement} current */
+  const report = (target, current = Progress.unknown('items', 0, 'enumerating')) => options.onProgress?.(Progress.event({ phase: duplicateTotal === undefined ? 'searching' : 'duplicates', path: target, count: results.length, overall: duplicateTotal === undefined ? Progress.unknown('items', seen.size, 'enumerating') : Progress.known('items', duplicateCompleted, duplicateTotal), current }));
+  async function* measured(chunks, target, total) {
+    let completed = 0;
+    const measurement = () => Number.isSafeInteger(total) && completed <= total ? Progress.known('bytes', completed, total) : Progress.unknown('bytes', completed, 'stream-size-unknown');
+    report(target, measurement());
+    for await (const chunk of chunks) { completed += chunk.length; report(target, measurement()); yield chunk; }
+  }
   let matches = compileName(s.name, s.nameRegex);
   const now = options.now || Date.now();
   const patterns = s.name.split('|');
@@ -193,7 +203,7 @@ async function searchFiles(options, input) {
       if (stat.isDirectory()) return;
       const office = !archiveEntry && s.office && /\.(docx|xlsx|pptx|odt|ods|odp|epub)$/i.test(target);
       const handle = archiveEntry || office ? null : await fs.open(target, 'r');
-      try { if (!await contentMatches(office ? officeText(target, signal) : archiveEntry ? archiveBytes ? [archiveBytes] : archiveEntry.chunks() : handle.createReadStream({ autoClose: false }), office ? { ...s, encodings: ['utf-8'] } : s, decoder, signal)) return; }
+      try { if (!await contentMatches(measured(office ? officeText(target, signal) : archiveEntry ? archiveBytes ? [archiveBytes] : archiveEntry.chunks() : handle.createReadStream({ autoClose: false }), target, office ? undefined : Number(stat.size)), office ? { ...s, encodings: ['utf-8'] } : s, decoder, signal)) return; }
       finally { await handle?.close(); }
     }
     found.add(resultIdentity); results.push(row); options.onResult?.(row);
@@ -205,14 +215,16 @@ async function searchFiles(options, input) {
     await allowed(target);
     if (!stat.isDirectory() && !stat.isFile()) return;
     if (stat.isDirectory() && options.skipDirectory?.(target)) return;
-    options.onProgress?.({ path: target, count: results.length }); abort(signal);
+    report(target); abort(signal);
     if (direct || depth > 0) await candidate(target, stat, start);
     if (stat.isDirectory() && (s.depth < 0 || depth <= s.depth)) {
-      for (const item of await fs.readdir(target)) {
+      const children = await fs.readdir(target); let processed = 0;
+      for (const item of children) {
         abort(signal); if (options.skipDirectory?.(target)) break;
         const child = `${target}/${item}`, relative = slash(path.relative(start, child));
         if (exclusions.some(mask => matchDirectory(relative, mask))) continue;
         try { await visit(child, start, depth + 1); } catch (error) { if (error.name === 'AbortError') throw error; errors.push({ path: child, error: error.message }); }
+        report(target, Progress.known('items', ++processed, children.length));
       }
     } else if (stat.isFile() && s.archives) {
       for await (const entry of (options.archiveEntries || archiveEntries)(target, signal)) { abort(signal); await candidate(entry.fsSource || `${target}!/${entry.entry}`, entry.stat, start, { ...entry, archive: target }); }
@@ -258,14 +270,16 @@ async function searchFiles(options, input) {
     } else for (const source of s.searchIn.split(';').map(x => x.trim().replace(/^"(.*)"$/, '$1')).filter(Boolean)) { const target = await allowed(source); await visit(target, target, 0); }
     if (!sources && !s.searchIn.trim()) throw new Error('Ein Suchort ist erforderlich.');
     if (s.duplicates) {
+      duplicateTotal = results.filter(row => row.type !== 'folder').length;
       const groups = new Map();
       for (const row of results) {
         abort(signal); if (row.type === 'folder') continue;
         const key = [];
         if (s.sameName) key.push(row.name.toLowerCase()); if (s.sameSize) key.push(row.size);
-        if (s.sameContent) { if (row.archive) key.push(row.contentHash); else { const digest = crypto.createHash('sha256'); const handle = await fs.open(row.fsSource, 'r'); try { for await (const chunk of handle.createReadStream({ autoClose: false })) { abort(signal); digest.update(chunk); } } finally { await handle.close(); } key.push(digest.digest('hex')); } }
+        if (s.sameContent) { if (row.archive) key.push(row.contentHash); else { const digest = crypto.createHash('sha256'); const handle = await fs.open(row.fsSource, 'r'); try { for await (const chunk of measured(handle.createReadStream({ autoClose: false }), row.fsSource, row.size)) { abort(signal); digest.update(chunk); } } finally { await handle.close(); } key.push(digest.digest('hex')); } }
         for (const field of s.sameFields || []) key.push(property(row, field));
         const id = JSON.stringify(key); if (!groups.has(id)) groups.set(id, []); groups.get(id).push(row);
+        duplicateCompleted++; report(row.fsSource, Progress.known('items', 1, 1));
       }
       results.length = 0; let group = 0;
       for (const rows of [...groups.values()].filter(rows => rows.length > 1).sort((a, b) => a[0].name.localeCompare(b[0].name))) { for (const row of rows) results.push({ ...row, group }); group++; }

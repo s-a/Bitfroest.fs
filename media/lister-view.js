@@ -1,7 +1,7 @@
 (function (root) {
   'use strict';
   root.CommanderListerView = { create };
-  function create({ host, state, t, escape, modal, restore, edit, notify, remember, report = () => {} }) {
+  function create({ host, state, t, escape, modal, restore, edit, notify, remember, report = () => {}, task = () => {} }) {
     const core = root.CommanderLister, sessions = [null, null], requests = new Map();
     const menu = document.querySelector('[data-main-menu]'), originalMenu = [...menu.childNodes];
     const labels = { text: '1 Nur Text', binary: '2 Binär', hex: '3 Hexadezimal', html: '5 HTML-Text', unicode: '6 Unicode', utf8: '7 UTF-8' };
@@ -13,6 +13,7 @@
       const requestId = `lister-${instance}-${++sequence}`;
       const statusVersion = report(t(type === 'lister-copy' ? 'Auswahl wird kopiert…' : 'Dateiansicht wird aktualisiert…'), 'info');
       requests.set(requestId, { session, type, callback, statusVersion });
+      task(requestId, t('Dateiansicht wird aktualisiert…') + ` · ${t('Hostbestätigung')}`);
       host.postMessage({ type, requestId, ...message });
       return requestId;
     }
@@ -216,6 +217,7 @@
         const shut = () => { popup.hidden = true; heads.forEach(head => head.setAttribute('aria-expanded', 'false')); };
         const show = index => {
           const current = active(); if (!current) return;
+          window.dispatchEvent(new CustomEvent('commander-menu-open', { detail: 'lister' }));
           shut(); opened = index; heads[index].setAttribute('aria-expanded', 'true');
           popup.replaceChildren(); popup.setAttribute('aria-label', t(groups[index][0])); popup.style.left = `${heads[index].offsetLeft}px`;
           const entries = groups[index][1].concat(index === 2 ? current.custom.map(item => [`encoding:${item.encoding}`, `${item.label} (${item.encoding})`]) : []);
@@ -224,12 +226,15 @@
             const checked = action === `mode:${current.mode}` || action === `encoding:${current.selectedEncoding}` || action === `charset:${current.fontEncoding}` || action === 'cursor' && current.cursor || action === 'wrap' && current.wrap || action === 'variable' && current.variable;
             if (action.startsWith('mode:') || action.startsWith('encoding:') || action.startsWith('charset:') || ['cursor', 'wrap', 'variable'].includes(action)) { button.role = ['mode:', 'encoding:', 'charset:'].some(prefix => action.startsWith(prefix)) ? 'menuitemradio' : 'menuitemcheckbox'; button.setAttribute('aria-checked', String(Boolean(checked))); }
             button.onclick = () => { shut(); command(current, action); if (!document.querySelector('#modal').open) current.area.focus(); };
+            window.CommanderMenus.decorate(button, action);
+            if (checked) button.append(window.CommanderIcons.element('check', { class: 'menu-check' }));
             popup.append(button); return button;
           });
-          popup.hidden = false; items[0]?.focus();
+          popup.hidden = false; window.CommanderMenus.place(popup, { anchor: heads[index] }); items[0]?.focus();
         };
         groups.forEach(([title], index) => {
           const button = document.createElement('button'); button.type = 'button'; button.role = 'menuitem'; button.textContent = t(title);
+          button.addEventListener('mouseenter', () => { if (opened >= 0 && !popup.hidden && opened !== index) show(index); });
           button.setAttribute('aria-haspopup', 'true'); button.setAttribute('aria-expanded', 'false'); button.setAttribute('aria-controls', popup.id);
           button.onclick = () => { if (opened === index && !popup.hidden) shut(); else show(index); }; heads.push(button); menu.append(button);
         });
@@ -269,7 +274,7 @@
       if (sessions[side]) close(sessions[side]);
       remember();
       const element = document.createElement('div'); element.dataset.lister = ''; element.className = 'lister';
-      element.innerHTML = `<div class="lister-heading"><span></span><button type="button" data-lister-close aria-label="${escape(t('Zur Dateiliste'))}" title="Escape">×</button></div><div class="lister-content"><textarea readonly wrap="off" spellcheck="false" aria-label="${escape(t('Dateiinhalt'))}" data-cursor="false"></textarea></div><nav data-lister-links class="lister-links" hidden aria-label="${escape(t('Links'))}"></nav><label class="lister-position">${escape(t('Dateiposition'))}<input type="range" min="0" max="100000" value="0" data-lister-position aria-label="${escape(t('Dateiposition'))}"></label><div class="lister-status" data-lister-status role="status"></div>`;
+      element.innerHTML = `<div class="lister-heading"><span></span><button type="button" data-lister-close aria-label="${escape(t('Zur Dateiliste'))}" title="Escape">${window.CommanderIcons.font('close')}</button></div><div class="lister-content"><textarea readonly wrap="off" spellcheck="false" aria-label="${escape(t('Dateiinhalt'))}" data-cursor="false"></textarea></div><nav data-lister-links class="lister-links" hidden aria-label="${escape(t('Links'))}"></nav><label class="lister-position">${escape(t('Dateiposition'))}<input type="range" min="0" max="100000" value="0" data-lister-position aria-label="${escape(t('Dateiposition'))}"></label><div class="lister-status" data-lister-status role="status"></div>`;
       element.querySelector('.lister-heading span').textContent = root.CommanderPaths.displayPath(file.fsSource || file.name);
       const session = { side, file, root: element, area: element.querySelector('textarea'), mode: 'text', encoding: 'utf-8', selectedEncoding: 'font', fontEncoding: '0', wrap: true, width: 80, version: 0, navigation: 0, searchVersion: 0, cursor: false, variable: false, size: file.size || 0, custom: [] };
       sessions[side] = session;
@@ -301,6 +306,9 @@
       } else { session.bytes = new TextEncoder().encode(file.content || ''); Object.assign(session, core.detect(session.bytes)); load(session); }
     }
     document.addEventListener('click', event => { if (!menu.contains(event.target)) menu._listerClose?.(); });
+    window.addEventListener('commander-menu-open', event => { if (event.detail !== 'lister') menu._listerClose?.(); });
+    window.addEventListener('resize', () => menu._listerClose?.());
+    window.addEventListener('blur', () => menu._listerClose?.());
     document.addEventListener('keydown', event => {
       const session = active();
       if (!session || document.querySelector('#modal').open || !event.target.closest('[data-lister]')) return;
@@ -354,6 +362,7 @@
       if (result?.type !== 'lister-result') return;
       const item = requests.get(result.requestId); if (!item) return;
       requests.delete(result.requestId);
+      task(result.requestId, null);
       if (item.session.closed) { if (['lister-open', 'lister-link'].includes(item.type) && result.id) host?.postMessage({ type: 'lister-close', id: result.id }); return; }
       item.callback(result);
       if (!result.ok) report(result.error || t('Dateiaktion fehlgeschlagen.'), result.cancelled ? 'cancelled' : 'error', item.statusVersion);
@@ -361,7 +370,7 @@
     });
     return { open, mount, updateMenu, has: side => Boolean(sessions[side]), focus: () => active()?.area.focus(),
       run(value) { const session = active(); if (!session || document.querySelector('#modal').open) return false; command(session, value.startsWith('lister:') ? value.slice(7) : ({ view: 'next', edit: 'edit', copy: 'next', move: 'cursor', mkdir: 'find', 'select-all': 'select-all', 'clipboard-copy': 'copy', filter: 'find', refresh: 'reload' })[value] || ''); return true; },
-      dispose() { sessions.forEach((session, index) => { if (session) { session.closed = true; host?.postMessage({ type: 'lister-close', id: session.id }); sessions[index] = null; } }); updateMenu(); }
+      dispose() { for (const id of requests.keys()) task(id, null); sessions.forEach((session, index) => { if (session) { session.closed = true; host?.postMessage({ type: 'lister-close', id: session.id }); sessions[index] = null; } }); updateMenu(); }
     };
   }
 })(typeof globalThis === 'object' ? globalThis : this);

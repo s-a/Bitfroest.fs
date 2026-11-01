@@ -22,10 +22,51 @@ test('delete and rename prepare their selected subtree before opening a single d
  assert.equal(app.messages.filter(message=>message.type==='filesystem-prepare').length,1);
  }
 });
-test('inline folder rename waits for recursive preparation and resumes on the same file',t=>{
- const app=createApp(t,fixture());select(app,'docs');app.action('rename-one');assert.equal(app.document.querySelector('.inline-rename'),null);
- assert.equal(app.messages.find(message=>message.type==='filesystem-prepare').action,'rename-one');result(app,{resumeAction:'rename-one'});
- assert.equal(app.document.querySelector('.inline-rename').value,'docs');
+test('Escape keeps a copy preparation active and its explicit cancel uses the operation id', t => {
+ const app=createApp(t,fixture());select(app,'docs');app.action('copy');submit(app);
+ const request=app.messages.find(message=>message.type==='filesystem-prepare');assert.ok(request?.operationId);
+ app.key('Escape',{},app.document.body);
+ assert.equal(app.messages.some(message=>message.type==='filesystem-cancel'),false);
+ assert.equal(app.document.querySelector('#status-cancel').hidden,false);
+ app.click(app.document.querySelector('#status-cancel'));
+ assert.equal(app.messages.find(message=>message.type==='filesystem-cancel')?.operationId,request.operationId);
+});
+test('cold folder rename opens immediately and prepares only the confirmed proposal',t=>{
+ const app=createApp(t,fixture());select(app,'docs');app.action('rename-one');
+ const input=app.document.querySelector('.inline-rename');assert.ok(input);assert.equal(app.document.activeElement,input);
+ assert.equal(app.messages.some(message=>message.type==='filesystem-prepare'),false);
+ input.value='renamed';app.key('Enter',{},input);
+ const preparation=app.messages.find(message=>message.type==='filesystem-prepare');assert.equal(preparation.action,'rename-one');
+ assert.equal(app.messages.some(message=>message.type==='filesystem-apply'),false);
+ result(app,{resumeAction:'rename-one'});
+ const apply=app.messages.find(message=>message.type==='filesystem-apply');assert.ok(apply);
+ assert.equal(apply.state.folders['C:/tmp'][0].name,'renamed');
+ assert.equal(apply.state.folders['C:/tmp/renamed'][0].name,'child.txt');
+ assert.equal(app.messages.filter(message=>message.type==='filesystem-prepare').length,1);
+});
+
+test('cold folder rename cancellation and unchanged confirmation never read descendants',t=>{
+ for(const finish of ['Escape','Enter','blur']){
+  const app=createApp(t,fixture());select(app,'docs');app.key('F6',{shiftKey:true});
+  const input=app.document.querySelector('.inline-rename');assert.ok(input);
+  if(finish==='blur'){input.value='discarded';app.document.querySelector('[data-pane="1"] .list').focus();}
+  else {if(finish==='Escape')input.value='discarded';app.key(finish,{},input);}
+  assert.equal(app.document.querySelector('.inline-rename'),null);
+  assert.equal(app.messages.some(message=>['filesystem-prepare','filesystem-apply'].includes(message.type)),false);
+  assert.equal(app.state().folders['C:/tmp'][0].name,'docs');
+ }
+});
+
+test('cold folder rename does not commit after failed or cancelled preparation or source replacement',t=>{
+ for(const outcome of ['failure','cancelled','replaced']){
+  const ok=outcome!=='failure';
+  const app=createApp(t,fixture());select(app,'docs');app.action('rename-one');
+  const input=app.document.querySelector('.inline-rename');assert.ok(input);input.value='renamed';app.key('Enter',{},input);
+  const fresh=app.state();fresh.unloadedFolders=[];if(outcome==='replaced')fresh.folders['C:/tmp'][0].name='replacement';
+  app.window.dispatchEvent(new app.window.MessageEvent('message',{data:{type:'filesystem-result',ok,cancelled:outcome==='cancelled',state:fresh,error:ok?undefined:'Access denied'}}));
+  assert.equal(app.messages.some(message=>message.type==='filesystem-apply'),false);
+  assert.equal(app.state().folders['C:/tmp'][0].name,outcome==='replaced'?'replacement':'docs');
+ }
 });
 test('failed preparation does not open the deferred operation dialog',t=>{
  const app=createApp(t,fixture());select(app,'docs');app.action('delete');app.window.dispatchEvent(new app.window.MessageEvent('message',{data:{type:'filesystem-result',ok:false,state:app.state()}}));

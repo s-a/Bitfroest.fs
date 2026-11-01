@@ -4,6 +4,15 @@ const { createClipboardProvider } = require('../clipboard-provider');
 
 const allowed = value => /^C:\/tmp\//i.test(value);
 
+test('Windows cancellation uses a separate operation without move acknowledgement', async () => {
+  const app = nativeHarness();
+  const selection = await app.provider.read();
+  assert.equal(await app.provider.reset(selection), true);
+  assert.equal(app.calls.at(-1).operation, 'clipboard.cancelFiles');
+  assert.deepEqual(app.calls.at(-1).request, { token: selection.token, paths: selection.paths, mode: selection.mode });
+  app.provider.dispose();
+});
+
 for (const platform of ['linux', 'darwin']) test(`${platform} system file clipboard is excluded without starting a helper or loading a binding`, async () => {
   let calls = 0;
   const provider = createClipboardProvider({ platform, contains: () => true,
@@ -29,7 +38,7 @@ function nativeHarness(options = {}) {
           if (session.closed) throw Object.assign(new Error('closed'), { code: 'SessionClosed' });
           if (operation === 'clipboard.readFiles') return Promise.resolve(options.selection || { paths: ['C:/tmp/Größe.txt'], mode: 'move', token: 'native-session:9:1' });
           if (operation === 'clipboard.writeFiles') return Promise.resolve({ paths: request.paths, mode: request.mode, token: 'native-session:9:2' });
-          if (operation === 'clipboard.acknowledge') return Promise.resolve(options.acknowledgement || { matched: true, notificationErrors: [] });
+          if (operation === 'clipboard.acknowledge' || operation === 'clipboard.cancelFiles') return Promise.resolve(options.acknowledgement || { matched: true, notificationErrors: [] });
           throw Object.assign(new Error('unknown operation'), { code: 'UnknownOperation' });
         },
         close() { session.closed = true; }

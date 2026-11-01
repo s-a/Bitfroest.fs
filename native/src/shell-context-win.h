@@ -18,6 +18,7 @@ struct ShellContextMenuRequest {
   bool keyboard = false;
   std::wstring owner_title;
   std::wstring lock_inspection_label;
+  bool git_diff = false;
 };
 
 struct ShellContextMenuEntry {
@@ -30,10 +31,16 @@ struct ShellContextMenuResult {
   bool displayed = false;
   bool invoked = false;
   bool cancelled = false;
+  bool refresh_required = false;
   bool context_menu2 = false;
   bool context_menu3 = false;
   bool inspect_locks = false;
+  bool git_diff = false;
   DWORD native_milliseconds = 0;
+  const char* error_stage = nullptr;
+  HRESULT error_hresult = S_OK;
+  std::wstring command_verb;
+  UINT command_id = 0;
   std::vector<ShellContextMenuEntry> entries;
 };
 
@@ -45,6 +52,12 @@ bool ResolveShellContextMenu(const ShellContextMenuRequest& request,
 bool EnumerateShellMenu(HMENU menu, IContextMenu* context,
                        std::vector<ShellContextMenuEntry>* entries,
                        DWORD* native_error);
+
+bool AppendGitDiffMenu(HMENU menu, bool enabled, DWORD* native_error);
+bool SelectGitDiffMenuCommand(UINT command, bool enabled, ShellContextMenuResult* result);
+
+HRESULT InvokeShellMenuCommand(IContextMenu* context, LPCMINVOKECOMMANDINFO command,
+                              ShellContextMenuResult* result);
 
 bool RelayShellMenuMessage(IContextMenu2* second, IContextMenu3* third,
                            UINT message, WPARAM wparam, LPARAM lparam,

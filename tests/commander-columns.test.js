@@ -65,7 +65,7 @@ test('autosize includes the header, visible contents, and icon spacing', () => {
   assert.equal(result[0].width, 'A long project filename'.length * 8 + 32);
   assert.equal(source[0].width, 260);
   const header = columns.autoSize(source, 'type', [{ name: 'a.js' }], text => text.length * 10);
-  assert.equal(header.find(item => item.key === 'type').width, 'Erweiterung'.length * 10 + 16);
+  assert.equal(header.find(item => item.key === 'type').width, 'Ext.'.length * 10 + 16);
 });
 
 test('malformed persisted widths use defaults instead of coercing null and boolean values', () => {
@@ -153,7 +153,7 @@ test('autosize handles invalid keys, missing rows and width limits', () => {
   assert.equal(columns.autoSize(source, 'name', [], () => 99999)[0].width, 1600);
   const calls = [];
   columns.autoSize(source, 'type', [{ name: 'sample.txt' }], (text, key) => { calls.push([text, key]); return text.length * 8; });
-  assert.deepEqual(calls, [['Erweiterung', 'type'], ['txt', 'type']]);
+  assert.deepEqual(calls, [['Ext.', 'type'], ['txt', 'type']]);
 });
 
 test('autosize ignores absent and nonnumeric measurements without altering stored width', () => {
@@ -166,7 +166,7 @@ test('autosize ignores absent and nonnumeric measurements without altering store
 test('custom column normalization preserves only configured columns including hidden fields', () => {
   const input = [{id:'custom-size',title:'Kilobytes',field:'[=tc.size.kbytes]',width:200,align:'right',visible:true},{id:'custom-hidden',title:'Hidden',field:'[=plugin.info]',width:50,align:'center',visible:false}];
   const result = columns.normalize(input);
-  assert.deepEqual(result.map(column=>[column.key,column.label,column.field,column.width,column.align,column.visible]),[['custom-size','Kilobytes','[=tc.size.kbytes]',200,'right',true],['custom-hidden','Hidden','[=plugin.info]',50,'center',false]]);
+  assert.deepEqual(result.map(column=>[column.key,column.label,column.field,column.width,column.align,column.visible]),[['custom-size','Größe','[=tc.size.kbytes]',200,'right',true],['custom-hidden','[=plugin.info]','[=plugin.info]',50,'center',false]]);
   assert.equal(result[0].minWidth,32); assert.equal(result[0].maxWidth,1600);
   assert.deepEqual(columns.normalize(result),result);
   assert.equal(columns.resizeColumn(result,'custom-size',2)[0].width,32);
@@ -183,11 +183,11 @@ test('custom numeric and date sorts compare metadata semantically and keep folde
   assert.deepEqual(columns.sort(files,{field:'[=tc.creationdate]'}).map(file=>file.name),['dir','large','small']);
   assert.deepEqual(columns.sort(files,{field:'[=tc.size]'},true).map(file=>file.name),['dir','large','small']);
 });
-test('custom autosize measures the configured title and evaluated values', () => {
+test('custom autosize measures the derived field heading and evaluated values', () => {
   const config = columns.normalize([{id:'custom',title:'Bytes',field:'Size [=tc.size]',width:200,align:'right'}]);
   const measured = [];
   const result = columns.autoSize(config,'custom',[{size:12345}],text=>{measured.push(text);return text.length*10;});
-  assert.deepEqual(measured,['Bytes','Size 12345']); assert.equal(result[0].width,116);
+  assert.deepEqual(measured,['Size [=file.size]','Size 12345']); assert.equal(result[0].width,'Size [=file.size]'.length * 10 + 16);
   assert.equal(config[0].width,200);
 });
 

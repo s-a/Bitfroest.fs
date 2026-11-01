@@ -234,15 +234,26 @@ HRESULT ClipboardOleEngine::ReadCurrent(IDataObject** data, DWORD* sequence, Cli
   return S_OK;
 }
 
-HRESULT ClipboardOleEngine::Read(ClipboardSelection* selection) {
+HRESULT ClipboardOleEngine::Read(ClipboardSelection* selection, const DWORD* expected_sequence) {
   if (!selection) return E_POINTER;
-  Reset();
   IDataObject* current = nullptr;
   DWORD sequence = 0;
   std::vector<Entry> entries;
   HRESULT result = ReadCurrent(&current, &sequence, selection, &entries);
-  if (FAILED(result)) return result;
-  result = CreateToken(sequence, next_token_++, &selection->token);
+  if (FAILED(result)) { Reset(); return result; }
+  if (expected_sequence && sequence != *expected_sequence) {
+    if (current) current->Release();
+    Reset(); selection->paths.clear(); selection->token.clear();
+    return kClipboardChanged;
+  }
+  bool unchanged = retained_ && sequence == sequence_ && selection->mode == mode_ && entries.size() == entries_.size();
+  for (size_t index = 0; unchanged && index < entries.size(); ++index) {
+    unchanged = SamePath(entries[index].path, entries_[index].path) && SameIdentity(entries[index].identity, entries_[index].identity);
+  }
+  const std::wstring previous_token = token_;
+  Reset();
+  if (unchanged) { selection->token = previous_token; result = S_OK; }
+  else result = CreateToken(sequence, next_token_++, &selection->token);
   if (FAILED(result)) {
     if (current) current->Release();
     return result;
@@ -271,11 +282,31 @@ HRESULT ClipboardOleEngine::Write(const std::vector<std::wstring>& paths, const 
   result = CheckOpen(backend_);
   if (FAILED(result)) return result;
   Reset();
-  result = backend_->Replace(paths, mode, false, 0);
+  DWORD published_sequence = 0;
+  result = backend_->Replace(paths, mode, false, 0, &published_sequence);
   if (FAILED(result)) return result;
   result = CheckOpen(backend_);
   if (FAILED(result)) return result;
-  return Read(selection);
+  return Read(selection, &published_sequence);
+}
+
+HRESULT ClipboardOleEngine::Cancel(const std::wstring& token, const std::vector<std::wstring>& paths,
+                                  const std::wstring& mode, bool* matched) {
+  if (!matched) return E_POINTER;
+  *matched = false;
+  HRESULT status = CheckOpen(backend_);
+  if (FAILED(status)) return status;
+  if (!retained_ || token.empty() || token != token_ || mode != mode_ || paths.size() != entries_.size() || paths.empty()) return S_OK;
+  for (size_t index = 0; index < paths.size(); ++index) {
+    if (!SamePath(paths[index], entries_[index].path)) return S_OK;
+  }
+  if (backend_->Sequence() != sequence_) return S_OK;
+  status = backend_->Replace({}, L"copy", true, sequence_);
+  if (status == kClipboardChanged) return S_OK;
+  if (FAILED(status)) return status;
+  *matched = true;
+  Reset();
+  return S_OK;
 }
 
 HRESULT ClipboardOleEngine::Acknowledge(const std::wstring& token, const std::vector<std::wstring>& paths,

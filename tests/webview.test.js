@@ -57,8 +57,12 @@ test('five sortable columns include attributes and support autosizing at the bou
   const headers = [...app.document.querySelectorAll('[data-pane="0"] th')];
   assert.deepEqual(headers.map(item => item.dataset.column), ['name', 'type', 'size', 'date', 'attributes']);
   const before = app.state().panes[0].columns[0].width;
+  const handle = app.document.querySelector('[data-pane="0"] [data-resize="name"]');
+  const pointer = (type, x) => { const event = new app.window.MouseEvent(type, { bubbles: true, button: 0, clientX: x }); handle.dispatchEvent(event); };
+  pointer('pointerdown', 100); pointer('pointermove', 180); pointer('pointerup', 180);
+  assert.equal(app.state().panes[0].columns[0].width, before + 80);
   app.document.querySelector('[data-pane="0"] [data-resize="name"]').dispatchEvent(new app.window.MouseEvent('dblclick', { bubbles: true, detail: 2 }));
-  assert.notEqual(app.state().panes[0].columns[0].width, before);
+  assert.equal(app.state().panes[0].columns[0].width, before);
   app.click(app.document.querySelector('[data-pane="0"] [data-sort="name"]'));
   const firstRow = app.document.querySelector('[data-pane="0"] tr[data-id]');
   assert.ok(firstRow.querySelector('.folder'));

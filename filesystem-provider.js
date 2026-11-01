@@ -3,8 +3,10 @@ const fsPromises = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
 const crypto = require('node:crypto');
+const Progress = require('./media/commander-progress');
 const { createOperationError } = require('./operation-errors');
-const { getFileVersion } = require('./pe-file-version');
+const { getFileVersionInfo } = require('./pe-file-version');
+const { readDirectoryComments } = require('./content-comments');
 const { renameCase } = require('./native-rename');
 const { createCopySession, abortError, throwIfAborted } = require('./native-copy');
 const { normalizePath } = require('./media/commander-paths');
@@ -64,6 +66,8 @@ function createProvider(options = {}) {
   if (!roots.length || roots.some((root, index) => roots.some((other, otherIndex) => index !== otherIndex && below(root, other)))) throw new Error('Mindestens ein eindeutiges, nicht überlappendes Root-Verzeichnis ist erforderlich.');
   const limits = { entries: options.maxEntries ?? Infinity, depth: options.maxDepth ?? Infinity, fileBytes: options.maxFileBytes ?? 262144, totalBytes: options.maxTotalBytes ?? options.maxBytes ?? 4194304 };
   let snapshot = null, busy = false;
+  const directoryHistory = new Map();
+  let directoryClock = 0;
   const visitedRoots = new Set();
 
   function permittedRoots() {
@@ -117,7 +121,7 @@ function createProvider(options = {}) {
       loadedDirectories.delete(directory);
       for (const [key, entry] of entries) if (identity(slash(path.dirname(entry.path))) === identity(directory)) entries.delete(key);
     }
-    let count = settings.baseline ? [...entries.values()].filter(entry => !entry.root).length : 0;
+    let count = settings.baseline ? [...entries.values()].filter(entry => !entry.root).length : 0, processedEntries = 0;
     async function scan(directory, ...args) {
       try { return await scanDirectory(directory, ...args); }
       catch (error) {
@@ -147,17 +151,36 @@ function createProvider(options = {}) {
       const names = (await fs.readdir(directory)).sort();
       loadedDirectories.add(directory);
       folders[directory] = [];
+      let emitted = 0, emittedAt = Date.now();
+      const publish = async final => {
+        if (!settings.onDirectory || !final && folders[directory].length - emitted < 64 && Date.now() - emittedAt < 50) return;
+        const rows = folders[directory].slice(emitted);
+        emitted = folders[directory].length; emittedAt = Date.now();
+        if (rows.length) await settings.onDirectory({ path: directory, rows, completed: folders[directory].length, total: names.length, ...(final ? { phase: 'publication' } : {}) });
+      };
+      await settings.onDirectory?.({ path: directory, names, rows: [], completed: 0, total: names.length });
       let directoryEntries;
       for (const name of names) {
+        processedEntries++;
+        await publish(false);
         throwIfAborted(settings.signal);
         const absolute = canonical(path.join(directory, name));
         if (!entries.has(identity(absolute)) && ++count > limits.entries) throw new Error('Die Eintragsgrenze des Dateisystem-Scans wurde erreicht.');
-        let child, fileVersion;
+        let child, versionInfo, attributeFlags;
         try {
           child = await fs.lstat(absolute, { bigint: true });
           if (!child.isSymbolicLink()) await assertComponents(absolute);
+          if (options.readAttributes) {
+            try { attributeFlags = await options.readAttributes(absolute); }
+            catch (cause) {
+              const code = { NotFound: 'ENOENT', Denied: 'EACCES' }[cause.code];
+              if (!code) throw cause;
+              throw Object.assign(new Error(cause.message, { cause }), { code, path: absolute, nativeCode: cause.nativeCode });
+            }
+          }
+          throwIfAborted(settings.signal);
           if (child.isFile() && /\.(exe|dll)$/i.test(name)) {
-            fileVersion = await getFileVersion(absolute, { fs });
+            versionInfo = await getFileVersionInfo(absolute, { fs });
             if (statSignature(await fs.lstat(absolute, { bigint: true })) !== statSignature(child)) throw Object.assign(new Error('Datei während der Bestandsaufnahme geändert.'), { code: 'FileChangedDuringScan', path: absolute, scanPhase: 'file-metadata-validation' });
           }
         }
@@ -175,24 +198,38 @@ function createProvider(options = {}) {
           continue;
         }
         if (!child.isFile() && !child.isDirectory() && !child.isSymbolicLink()) throw new Error('Nicht reguläre Dateisystemeinträge sind nicht erlaubt.');
-        const row = { id: `fs:${identity(absolute)}`, name, type: child.isSymbolicLink() ? 'link' : child.isDirectory() ? 'folder' : fileType(name), size: child.isDirectory() ? 0 : Number(child.size), date: displayDate(child.mtimeMs), mtimeMs: Number(child.mtimeMs), attributes: `${child.isSymbolicLink() ? 'l' : child.isDirectory() ? 'd' : '-'}${child.isFile() ? 'a' : '-'}${(child.mode & 0o200n) === 0n ? 'r' : '-'}-`, fsSource: absolute };
+        const hidden = attributeFlags?.hidden ?? (process.platform !== 'win32' && name.startsWith('.'));
+        const row = { id: `fs:${identity(absolute)}`, name, type: child.isSymbolicLink() ? 'link' : child.isDirectory() ? 'folder' : fileType(name), size: child.isDirectory() ? 0 : Number(child.size), date: displayDate(child.mtimeMs), mtimeMs: Number(child.mtimeMs), attributes: `${child.isSymbolicLink() ? 'l' : child.isDirectory() ? 'd' : '-'}${child.isFile() ? 'a' : '-'}${(child.mode & 0o200n) === 0n ? 'r' : '-'}${hidden ? 'h' : '-'}`, fsSource: absolute };
         for (const [field, timestamp] of [['writedate', child.mtimeMs], ['creationdate', child.birthtimeMs], ['accessdate', child.atimeMs]]) {
           if (timestamp !== undefined && Number.isFinite(Number(timestamp))) row[field] = new Date(Number(timestamp)).toISOString();
         }
-        if (fileVersion) row.fileVersion = fileVersion;
+        row.attributeFlags = attributeFlags ? Object.fromEntries(Object.entries(attributeFlags).filter(([, value]) => typeof value === 'boolean')) : { directory: child.isDirectory(), readonly: (child.mode & 0o222n) === 0n, hidden };
+        if (process.platform !== 'win32') row.posixMode = Number(child.mode);
+        if (typeof attributeFlags?.dosName === 'string' && attributeFlags.dosName) row.dosName = attributeFlags.dosName;
+        if (versionInfo?.version) row.fileVersion = versionInfo.version;
+        if (versionInfo?.versionString !== undefined) row.fileVersionString = versionInfo.versionString;
         entries.set(identity(absolute), { path: absolute, type: child.isDirectory() ? 'folder' : 'file', signature: statSignature(child), contentSignature: contentSignature(child), row });
         folders[directory].push(row);
-        settings.onProgress?.({ phase: settings.phase || 'preparing', filesScanned: count, path: absolute });
+        settings.onProgress?.(Progress.event({ phase: settings.phase || 'preparing', filesScanned: count, path: absolute, overall: Progress.unknown('items', count, 'enumerating'), current: Progress.known('items', folders[directory].length, names.length) }));
         throwIfAborted(settings.signal);
         if (child.isDirectory()) {
           folders[absolute] ||= [];
           if (recursive) await scan(absolute, depth + 1, false, true);
         }
       }
+      await settings.onDirectory?.({ path: directory, phase: 'comments', rows: [], completed: names.length, total: names.length });
+      const comments = await readDirectoryComments(directory, names, { fs, platform: process.platform, encoding: typeof options.commentEncoding === 'function' ? options.commentEncoding(directory) : options.commentEncoding, signal: settings.signal, onProgress: settings.onDirectory ? progress => settings.onDirectory({ path: directory, phase: 'comments', rows: [], completed: names.length, total: names.length, progress: Progress.read(progress) }) : undefined });
+      for (const row of folders[directory]) {
+        const key = process.platform === 'win32' ? row.name.toLowerCase() : row.name;
+        if (comments.has(key)) row.comment = comments.get(key);
+      }
+      await settings.onDirectory?.({ path: directory, phase: 'validation', rows: [], completed: names.length, total: names.length });
       const finalStat = await fs.lstat(directory, { bigint: true });
       if (!finalStat.isDirectory() || finalStat.isSymbolicLink() || finalStat.dev !== stat.dev || finalStat.ino !== stat.ino || finalStat.mode !== stat.mode || strict && statSignature(finalStat) !== statSignature(stat)) {
         throw Object.assign(new Error('Ordner während der Bestandsaufnahme geändert.'), { code: 'DirectoryChangedDuringScan', path: directory, scanPhase: 'directory-validation' });
       }
+      await publish(true);
+      await settings.onDirectory?.({ path: directory, done: true, rows: [], completed: names.length, total: names.length });
     }
     if (!settings.visibleOnly) for (const root of roots) await scan(root, 0, true, settings.recursive === true);
     async function scanAncestors(value, recursive) {
@@ -222,7 +259,7 @@ function createProvider(options = {}) {
       }
     }
     const unloadedFolders = [...entries.values()].filter(entry => entry.type === 'folder' && !loadedDirectories.has(entry.path)).map(entry => entry.path);
-    settings.onProgress?.({ phase: settings.phase || 'preparing', filesScanned: count, done: true });
+    settings.onProgress?.(Progress.event({ phase: settings.phase || 'preparing', filesScanned: count, done: true, overall: Progress.known('items', processedEntries, processedEntries), current: Progress.known('items', processedEntries, processedEntries) }));
     throwIfAborted(settings.signal);
     return { folders, entries, loadedDirectories: [...loadedDirectories], unloadedFolders };
   }
@@ -242,11 +279,31 @@ function createProvider(options = {}) {
   async function load(settings = {}) {
     const left = allowed(settings.left || roots[0]), right = allowed(settings.right || roots[1] || roots[0]);
     const previous = snapshot;
-    const visibleOnly = settings.visibleOnly ?? previous?.visibleOnly ?? false;
+    const visibleOnly = settings.baseline ? true : settings.visibleOnly ?? previous?.visibleOnly ?? false;
     const result = await readSnapshot({ ...settings, visibleOnly, directories: visibleOnly || settings.baseline ? settings.directories || [] : [...(settings.directories || []), left, right] });
+    if (settings.visibleDirectories) {
+      for (const directory of settings.directories || []) directoryHistory.set(directory, ++directoryClock);
+      const inactive = Object.keys(result.folders).filter(directory => !settings.visibleDirectories.includes(directory));
+      let bytes = inactive.reduce((sum, directory) => sum + Buffer.byteLength(JSON.stringify([directory, result.folders[directory]])), 0);
+      const budget = options.directoryCacheBytes ?? 2 * 1024 * 1024;
+      for (const directory of inactive.sort((a, b) => (directoryHistory.get(a) || 0) - (directoryHistory.get(b) || 0))) {
+        if (bytes <= budget) break;
+        bytes -= Buffer.byteLength(JSON.stringify([directory, result.folders[directory]]));
+        delete result.folders[directory]; directoryHistory.delete(directory);
+        result.loadedDirectories = result.loadedDirectories.filter(value => value !== directory);
+        for (const [key, entry] of result.entries) if (identity(slash(path.dirname(entry.path))) === identity(directory) && !settings.visibleDirectories.includes(entry.path)) result.entries.delete(key);
+      }
+      for (const directory of [left, right, ...(settings.baseline?.state.panes || []).flatMap(p => p.tabs)]) result.folders[directory] ||= [];
+      for (const [directory, rows] of Object.entries(result.folders)) for (const row of rows) if (row.type === 'folder') result.folders[canonical(path.join(directory, row.name))] ||= [];
+      for (const directory of settings.visibleDirectories) {
+        const entry = result.entries.get(identity(directory));
+        if (entry && !(result.folders[slash(path.dirname(directory))] || []).some(row => row.type === 'folder' && row.name === path.basename(directory))) entry.root = true;
+      }
+    }
     const inactiveDirectories = settings.visibleDirectories ? result.loadedDirectories.filter(directory => !settings.visibleDirectories.includes(directory)) : [];
     result.loadedDirectories = result.loadedDirectories.filter(directory => !inactiveDirectories.includes(directory));
-    const deferredDirectories = [...new Set([...(visibleOnly ? roots : []), ...inactiveDirectories, ...(settings.deferredDirectories || previous?.deferredDirectories || [])].flatMap(directory => { try { return [allowed(directory)]; } catch { return []; } }))].filter(directory => !result.loadedDirectories.includes(directory));
+    const requestedDeferred = new Set((settings.deferredDirectories || []).flatMap(directory => { try { return [allowed(directory)]; } catch { return []; } }));
+    const deferredDirectories = [...new Set([...(visibleOnly ? roots : []), ...inactiveDirectories, ...(settings.deferredDirectories || previous?.deferredDirectories || [])].flatMap(directory => { try { return [allowed(directory)]; } catch { return []; } }))].filter(directory => (requestedDeferred.has(directory) || roots.includes(directory) || Object.hasOwn(result.folders, directory) || Object.hasOwn(previous?.folders || {}, directory)) && !result.loadedDirectories.includes(directory));
     for (const directory of deferredDirectories) {
       if (!settings.baseline) {
         const refreshed = target => result.loadedDirectories.some(loaded => below(target, loaded));
@@ -255,7 +312,7 @@ function createProvider(options = {}) {
       }
       result.folders[directory] ||= [];
     }
-    result.unloadedFolders = [...new Set([...result.unloadedFolders, ...Object.keys(result.folders).filter(directory => !result.loadedDirectories.includes(directory))])];
+    result.unloadedFolders = [...new Set([...result.unloadedFolders.filter(directory => Object.hasOwn(result.folders, directory)), ...Object.keys(result.folders).filter(directory => !result.loadedDirectories.includes(directory))])];
     if (!Object.hasOwn(result.folders, left) || !Object.hasOwn(result.folders, right)) throw new Error('Der gewählte Ordner wurde nicht vollständig eingelesen.');
     for (const entry of result.entries.values()) if (entry.root) visitedRoots.add(entry.path);
     const state = { version: 1, active: 0, realFilesystem: true, snapshotId: crypto.randomUUID(), panes: [pane(left), pane(right)], folders: result.folders, unloadedFolders: result.unloadedFolders };
@@ -422,7 +479,8 @@ function createProvider(options = {}) {
     const backups = new Map(), moved = [], createdFiles = [], createdDirectories = [], stages = [], renamedCases = [];
     const totalBytes = [...staged.values()].reduce((sum, file) => sum + (file.expectedSize ?? file.data?.length ?? file.source?.row.size ?? 0), 0);
     let publishedBytes = 0;
-    const report = (file, event) => { const bytes = file.expectedSize ?? file.data?.length ?? file.source?.row.size ?? 0; operation.onProgress?.({ ...event, path: file.path, sourcePath: file.appendSources?.[0]?.path || file.source?.path || file.path, totalBytes, completedBytes: publishedBytes + (event.phase === 'published' ? bytes : Math.min(bytes, event.transferred || 0)), filesCompleted: createdFiles.filter(item => item.completed).length, filesTotal: staged.size }); };
+    /** @param {object} file @param {{phase: string, transferred?: number, [field: string]: unknown}} event */
+    const report = (file, event) => { const bytes = file.expectedSize ?? file.data?.length ?? file.source?.row.size ?? 0; const transferred = event.phase === 'published' ? bytes : Math.min(bytes, event.transferred || 0); operation.onProgress?.(Progress.event({ ...event, path: file.path, sourcePath: file.appendSources?.[0]?.path || file.source?.path || file.path, totalBytes, completedBytes: publishedBytes + transferred, filesCompleted: createdFiles.filter(item => item.completed).length, filesTotal: staged.size, overall: Progress.known('bytes', publishedBytes + transferred, totalBytes), current: Progress.known('bytes', transferred, bytes) })); };
     async function verifyCopiedBytes(file, sourcePath, destination) {
       const original = Buffer.alloc(65536), copied = Buffer.alloc(65536);
       let destinationOffset = 0;
@@ -735,7 +793,7 @@ function createProvider(options = {}) {
     if (!entry || entry.root || entry.type !== 'folder') throw new Error('Ein bekannter Unterordner ist erforderlich.');
     busy = true;
     try {
-      let total = 0;
+      let total = 0, scanned = 0;
       const pending = [target];
       while (pending.length) {
         throwIfAborted(settings.signal);
@@ -743,10 +801,13 @@ function createProvider(options = {}) {
         await assertComponents(current);
         const beforeStat = await fs.lstat(current, { bigint: true });
         if (!beforeStat.isDirectory()) throw new Error('Der Ordner wurde während der Größenberechnung geändert.');
-        for (const name of await fs.readdir(current)) {
+        const names = await fs.readdir(current); let processed = 0;
+        settings.onProgress?.(Progress.event({ phase: 'folder-size', path: current, overall: Progress.unknown('items', scanned, 'enumerating'), current: Progress.known('items', 0, names.length) }));
+        for (const name of names) {
           throwIfAborted(settings.signal);
           const child = allowed(path.join(current, name));
           const stat = await fs.lstat(child, { bigint: true });
+          settings.onProgress?.(Progress.event({ phase: 'folder-size', path: child, overall: Progress.unknown('items', ++scanned, 'enumerating'), current: Progress.known('items', ++processed, names.length) }));
           if (stat.isSymbolicLink() || !stat.isDirectory() && !stat.isFile()) throw new Error('Nicht reguläre Dateisystemeinträge sind nicht erlaubt.');
           if (stat.isDirectory()) pending.push(child);
           else {
@@ -763,14 +824,14 @@ function createProvider(options = {}) {
 
   async function prepare(before, settings = {}) {
     if (busy) throw new Error('Eine Dateisystemoperation läuft bereits.');
-    if (!snapshot || before?.snapshotId !== snapshot.state.snapshotId || filesystemDigest(before) !== snapshot.digest) throw new Error('Der Dateisystem-Snapshot ist veraltet oder wurde verändert.');
+    if (!settings.navigation && (!snapshot || before?.snapshotId !== snapshot.state.snapshotId || filesystemDigest(before) !== snapshot.digest)) throw new Error('Der Dateisystem-Snapshot ist veraltet oder wurde verändert.');
     const directories = (settings.directories || []).map(allowed);
-    const fresh = await load({ directories: settings.navigation ? directories : [...(snapshot.visibleOnly ? activeDirectories(before) : snapshot.loadedDirectories), ...directories], ...(settings.navigation ? { baseline: snapshot, refreshDirectories: directories, visibleDirectories: settings.visibleDirectories } : {}), recursiveDirectories: settings.recursive ? directories : [], signal: settings.signal, onProgress: settings.onProgress });
+    const fresh = await load({ directories: settings.navigation ? directories : [...(snapshot.visibleOnly ? activeDirectories(before) : snapshot.loadedDirectories), ...directories], ...(settings.navigation ? { baseline: snapshot, refreshDirectories: directories, visibleDirectories: settings.visibleDirectories, onDirectory: settings.onDirectory } : {}), recursiveDirectories: settings.recursive ? directories : [], signal: settings.signal, onProgress: settings.onProgress });
     const state = inheritedPanes(fresh, before);
     snapshot.state = clone(state);
     return state;
   }
-  async function remove(before, request = {}) {
+  async function remove(before, request = {}, settings = {}) {
     if (busy) throw new Error('Eine Dateisystemoperation läuft bereits.');
     const baseline = snapshot;
     if (!baseline || before?.snapshotId !== baseline.state.snapshotId || filesystemDigest(before) !== baseline.digest) throw new Error('Der Dateisystem-Snapshot ist veraltet oder wurde verändert.');
@@ -788,9 +849,12 @@ function createProvider(options = {}) {
     try {
       await validateEntries(baseline, targets);
       for (const item of targets) {
+        throwIfAborted(settings.signal);
+        settings.onProgress?.(Progress.event({ phase: 'deleting', path: item.path, overall: Progress.known('items', completed, targets.length), current: Progress.unknown('items', 0, 'native-operation') }));
         await validateEntries(baseline, [item]);
         await options.deletePath(item.path, { recursive: true, useTrash: request.useTrash });
         completed++;
+        settings.onProgress?.(Progress.event({ phase: 'deleting', path: item.path, overall: Progress.known('items', completed, targets.length), current: Progress.known('items', 1, 1) }));
       }
       const remainingDirectories = (baseline.visibleOnly ? activeDirectories(before) : baseline.loadedDirectories).filter(directory => !targets.some(item => below(directory, item.path)));
       const state = inheritedPanes(await load({ directories: await availableViewDirectories(remainingDirectories), ...(baseline.visibleOnly ? { visibleOnly: true, deferredDirectories: deferredDirectories(before) } : {}) }), before);
@@ -799,6 +863,7 @@ function createProvider(options = {}) {
       return state;
     } catch (error) {
       snapshot = null;
+      if (error.name === 'AbortError') throw error;
       const failure = new Error(`Löschen fehlgeschlagen nach ${completed} Einträgen: ${error.message}`, { cause: error });
       failure.deletedCount = completed;
       throw failure;

@@ -5,11 +5,20 @@ const os = require('node:os');
 const path = require('node:path');
 const { createNativeApi } = require('../native-api');
 
+test('a dirty-summary request never falls back to a full scan with an older native module', () => {
+  let invoked = false;
+  const api = createNativeApi({ apiVersion: { major: 1, minor: 1 }, capabilities: { 'git.status': { status: 'supported' } }, openSession: () => ({ close() {}, invoke() { invoked = true; return Promise.resolve({}); } }) });
+  assert.throws(() => api.openSession().invoke('git.status', { directory: 'C:/repo', scope: '.', summary: true }), { code: 'UnsupportedOperation' });
+  assert.equal(invoked, false); api.shutdown();
+});
+
 test('missing packaged bindings fail explicitly without a build or interpreter fallback', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'native-loader-'));
   try {
     const copy = path.join(root, 'native-api.js');
     await fs.copyFile(path.join(__dirname, '../native-api.js'), copy);
+    await fs.mkdir(path.join(root, 'media'));
+    await fs.copyFile(path.join(__dirname, '../media/commander-progress.js'), path.join(root, 'media/commander-progress.js'));
     assert.throws(() => require(copy).loadNativeApi(), error => error.code === 'BindingUnavailable' && error.cause?.code === 'MODULE_NOT_FOUND');
   } finally { await fs.rm(root, { recursive: true, force: true }); }
 });

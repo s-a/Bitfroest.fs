@@ -27,10 +27,10 @@ function createClipboardProvider(options = {}) {
   async function invoke(payload) {
     if (Buffer.byteLength(JSON.stringify(payload)) > 1048576) throw new Error('Datei-Zwischenablage überschreitet die Größenbegrenzung.');
     if (platform === 'win32') {
-      const operation = payload.action === 'read' ? 'clipboard.readFiles' : payload.action === 'write' ? 'clipboard.writeFiles' : 'clipboard.acknowledge';
+      const operation = payload.action === 'read' ? 'clipboard.readFiles' : payload.action === 'write' ? 'clipboard.writeFiles' : payload.action === 'reset' ? 'clipboard.cancelFiles' : 'clipboard.acknowledge';
       const request = payload.action === 'read' ? {} : payload.action === 'write'
         ? { paths: payload.paths, mode: payload.mode }
-        : { token: payload.token, paths: payload.paths, mode: payload.mode, remainingPaths: payload.remainingPaths };
+        : { token: payload.token, paths: payload.paths, mode: payload.mode, ...(payload.action === 'reset' ? {} : { remainingPaths: payload.remainingPaths }) };
       const result = nativeQueue.then(async () => {
         if (disposed) throw Object.assign(new Error('Datei-Zwischenablage ist geschlossen.'), { code: 'SessionClosed' });
         if (!nativeApi) nativeApi = loadNative();
@@ -71,6 +71,11 @@ function createClipboardProvider(options = {}) {
       const original = paths(request.paths), remaining = paths(request.remainingPaths, true);
       if (remaining.some(item => !original.includes(item))) throw new Error('Ungültige verbleibende Zwischenablage-Auswahl.');
       const result = await invoke({ action: 'ack', token: request.token, paths: original, mode: mode(request.mode), remainingPaths: remaining });
+      return result.matched === true;
+    },
+    async reset(request) {
+      if (typeof request?.token !== 'string' || !request.token || request.token.length > 512) throw new Error('Ungültige Zwischenablage-Referenz.');
+      const result = await invoke({ action: 'reset', token: request.token, paths: paths(request.paths), mode: mode(request.mode) });
       return result.matched === true;
     },
     dispose() {

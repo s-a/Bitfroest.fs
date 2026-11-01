@@ -85,14 +85,17 @@ test('PRIM-020 both delete keys obey all preference/Shift combinations and cance
   }
 });
 
-test('PRIM-023 cancelling a system cut paste retains both sources and sends neither mutation nor acknowledgement', async t => {
-  const app = createApp(t, fixture()), before = structuredClone(app.state().folders);
+test('PRIM-023 cancelling a direct system cut paste conflict retains both sources without mutation or acknowledgement', async t => {
+  const saved = fixture(); saved.folders['C:/temp'] = [file('old', 'a.txt')];
+  const app = createApp(t, saved), before = structuredClone(app.state().folders);
   select(app, 'a.txt'); select(app, 'b.txt', { ctrlKey: true }); app.key('x', { ctrlKey: true });
   const selection = { paths: ['C:/tmp/a.txt', 'C:/tmp/b.txt'], mode: 'move', token: 'cancel-cut', source: 'system' };
   respond(app, app.messages.find(message => message.type === 'clipboard-write'), selection);
   app.key('Tab'); app.key('v', { ctrlKey: true });
-  respond(app, app.messages.find(message => message.type === 'clipboard-read'), selection);
+  respond(app, app.messages.find(message => message.type === 'clipboard-read'), selection); await tick();
   assert.equal(app.document.querySelector('#modal').open, true);
+  assert.ok(app.document.querySelector('[data-conflict-action="overwrite"]'));
+  assert.equal(app.document.querySelector('#transfer-filter'), null);
   app.click(app.document.querySelector('#modal-cancel')); await tick();
   assert.deepEqual(app.state().folders, before);
   assert.equal(app.messages.some(message => ['filesystem-apply', 'clipboard-ack'].includes(message.type)), false);
@@ -100,8 +103,8 @@ test('PRIM-023 cancelling a system cut paste retains both sources and sends neit
 
 test('PRIM-023 repeated copy paste resolves its new collision without consuming the source', async t => {
   const app = createApp(t, fixture(false)); select(app, 'a.txt'); app.key('c', { ctrlKey: true }); app.key('Tab');
-  app.key('v', { ctrlKey: true }); submit(app); await tick();
-  app.key('v', { ctrlKey: true }); submit(app); await tick();
+  app.key('v', { ctrlKey: true }); await tick();
+  app.key('v', { ctrlKey: true }); await tick();
   const skip = app.document.querySelector('[data-conflict-action="skip"]'); assert.ok(skip); app.click(skip); await tick();
   assert.deepEqual(app.state().folders['C:/tmp'].map(row => row.content), ['a', 'b']);
   assert.deepEqual(app.state().folders['C:/temp'].map(row => row.content), ['a']);

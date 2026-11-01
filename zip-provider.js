@@ -1,5 +1,6 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
+const Progress = require('./media/commander-progress');
 const crypto = require('node:crypto');
 const { AsyncLocalStorage } = require('node:async_hooks');
 const { WritableStream, TransformStream } = require('node:stream/web');
@@ -182,6 +183,9 @@ function createZipProvider(options = {}) {
       if (signature(await handle.stat({ bigint: true })) !== session.signature || signature(await fs.stat(session.archive, { bigint: true })) !== session.signature) throw new Error('Das ZIP-Archiv wurde geändert.');
     };
     let completed = 0, completedBytes = 0;
+    let totalBytes = selected.reduce((sum, [, metadata]) => sum + (metadata.directory ? 0 : metadata.uncompressedSize), 0);
+    const report = (name, written, total) => settings.onProgress?.(Progress.event({ phase: 'copying', currentPath: name, transferred: written, total, completedBytes: completedBytes + written, totalBytes,
+      overall: Progress.known('bytes', completedBytes + written, totalBytes), current: Progress.known('bytes', written, total) }));
     try {
       await verify();
       await fs.mkdir(target, { recursive: true }); await noLinks(target);
@@ -197,13 +201,14 @@ function createZipProvider(options = {}) {
           if (!permitted(destination)) throw new Error('Ungültiger Entpackpfad.');
           await noLinks(destination);
           if (metadata.directory) { await fs.mkdir(destination, { recursive: true }); continue; }
+          report(name, 0, metadata.uncompressedSize);
           let existing;
           try { existing = await fs.lstat(destination, { bigint: true }); } catch (error) { if (error.code !== 'ENOENT') throw error; }
           if (existing) {
             if (isSource(existing)) throw new Error('Das Quellarchiv darf nicht überschrieben werden.');
             if (!existing.isFile()) throw new Error('Das Entpackziel ist keine gewöhnliche Datei.');
             const answer = request.overwrite ? 'overwrite' : await settings.onConflict?.(destination);
-            if (answer === 'skip') continue;
+            if (answer === 'skip') { totalBytes -= metadata.uncompressedSize; report(name, 0, 0); continue; }
             if (answer !== 'overwrite') throw new DOMException('Entpacken abgebrochen.', 'AbortError');
           }
           stop(settings.signal);
@@ -212,7 +217,7 @@ function createZipProvider(options = {}) {
           const output = await fs.open(stage, 'wx', 0o600);
           let written = 0, backup;
           try {
-            const writer = new WritableStream({ async write(bytes) { stop(settings.signal); if (written + bytes.length > metadata.uncompressedSize) throw new Error('Ungültige entpackte Dateigröße.'); let offset = 0; while (offset < bytes.length) { const result = await output.write(bytes, offset, bytes.length - offset); if (!result.bytesWritten) throw new Error('Entpackziel konnte nicht geschrieben werden.'); offset += result.bytesWritten; } written += bytes.length; settings.onProgress?.({ completedBytes: completedBytes + written, currentPath: name, phase: 'copying' }); } });
+            const writer = new WritableStream({ async write(bytes) { stop(settings.signal); if (written + bytes.length > metadata.uncompressedSize) throw new Error('Ungültige entpackte Dateigröße.'); let offset = 0; while (offset < bytes.length) { const result = await output.write(bytes, offset, bytes.length - offset); if (!result.bytesWritten) throw new Error('Entpackziel konnte nicht geschrieben werden.'); offset += result.bytesWritten; } written += bytes.length; report(name, written, metadata.uncompressedSize); } });
             const entry = actual.get(name), password = await resolvePassword(entry, settings);
             await entry.getData(writer, { signal: settings.signal, password });
             if (written !== metadata.uncompressedSize) throw new Error('Ungültige entpackte Dateigröße.');
@@ -225,6 +230,7 @@ function createZipProvider(options = {}) {
             try { await publish(stage, destination, settings.signal); }
             catch (error) { if (backup) { try { await publish(backup, destination); await fs.unlink(backup); backup = null; } catch { throw new Error(`Wiederherstellung erforderlich: ${backup}`, { cause: error }); } } throw error; }
             if (backup) { await fs.unlink(backup); backup = null; }
+            report(name, written, metadata.uncompressedSize);
             completed++; completedBytes += written;
           } finally { await output.close().catch(() => {}); await fs.unlink(stage).catch(error => { if (error.code !== 'ENOENT') throw error; }); }
         }

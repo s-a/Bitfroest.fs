@@ -6,14 +6,21 @@
 })(typeof globalThis === 'object' ? globalThis : this, function (paths) {
   'use strict';
   const units = { bytes: 1, kbytes: 1024, mbytes: 1048576, gbytes: 1073741824, tbytes: 1099511627776 };
-  const fields = new Set(['name','ext','fullname','size','writedate','writetime','creationdate','creationtime','accessdate','accesstime','attributes','path','fullpath']);
+  const booleanFields = { archive: 'archive', 'read only': 'readonly', hidden: 'hidden', system: 'system', directory: 'directory', compressed: 'compressed', encrypted: 'encrypted', sparse: 'sparse', offline: 'offline' };
+  const windowsFields = new Set(['archive', 'system', 'compressed', 'encrypted', 'sparse', 'offline', 'dosname']);
+  const fields = new Set(['name','ext','fullname','size','writedate','writetime','creationdate','creationtime','accessdate','accesstime','attributes','path','fullpath','versionnr','versionstring','comment','attributestr','dosname','file type', ...Object.keys(booleanFields)]);
+  function isColumnAvailable(column, platform) {
+    if (!column) return false;
+    const expressions = [...String(column.field || '').matchAll(/\[=(?:"[^"]*")?(?:file|tc)\.([^\]".:]+)/g)];
+    return !expressions.some(match => windowsFields.has(match[1])) || platform === 'win32';
+  }
   const dateFields = /^(write|creation|access)(date|time)$/;
   const catalog = [
     ['name', 'Name', '[=file.name]', 260, 'left'],
-    ['type', 'Erweiterung', '[=file.ext]', 88, 'left'],
+    ['type', 'Ext.', '[=file.ext]', 88, 'left'],
     ['size', 'Größe', '[=file.size.auto]', 96, 'right'],
     ['date', 'Datum', '[=file.writedate] [=file.writetime]', 154, 'left'],
-    ['attributes', 'Attribute', '[=file.attributes]', 72, 'left'],
+    ['attributes', 'Attr.', '[=file.attributes]', 72, 'left'],
     ['fullName', 'Vollständiger Dateiname', '[=file.fullname]', 260, 'left'],
     ['path', 'Pfad', '[=file.path]', 320, 'left'],
     ['fullPath', 'Vollständiger Pfad', '[=file.fullpath]', 400, 'left'],
@@ -21,13 +28,28 @@
     ['creationDate', 'Erstellungsdatum', '[=file.creationdate]', 154, 'left'],
     ['creationTime', 'Erstellungszeit', '[=file.creationtime]', 120, 'left'],
     ['accessDate', 'Zugriffsdatum', '[=file.accessdate]', 154, 'left'],
-    ['accessTime', 'Zugriffszeit', '[=file.accesstime]', 120, 'left']
+    ['accessTime', 'Zugriffszeit', '[=file.accesstime]', 120, 'left'],
+    ['version', 'Version', '[=file.versionnr]', 154, 'left'],
+    ['versionString', 'Versionsstring', '[=file.versionstring]', 180, 'left'],
+    ['comment', 'Kommentar', '[=file.comment]', 320, 'left'],
+    ['attributeText', 'Attributtext', '[=file.attributestr]', 140, 'left'],
+    ['archive', 'Archiv', '[=file.archive]', 88, 'left'],
+    ['readOnly', 'Nur Lesen', '[=file.read only]', 88, 'left'],
+    ['hidden', 'Versteckt', '[=file.hidden]', 88, 'left'],
+    ['system', 'System', '[=file.system]', 88, 'left'],
+    ['compressed', 'Komprimiert', '[=file.compressed]', 96, 'left'],
+    ['encrypted', 'Verschlüsselt', '[=file.encrypted]', 96, 'left'],
+    ['sparse', 'Sparse-Datei', '[=file.sparse]', 96, 'left'],
+    ['offline', 'Offline', '[=file.offline]', 88, 'left'],
+    ['directory', 'Verzeichnis', '[=file.directory]', 96, 'left'],
+    ['fileType', 'Dateityp', '[=file.file type]', 120, 'left'],
+    ['dosName', 'DOS-Name', '[=file.dosname]', 154, 'left']
   ].map(([id, title, field, width, align], index) => Object.freeze({ id, title, field, width, align, visible: index < 5, position: index + 1 }));
 
   function columnSetFromPreferences(preferences = {}, translate = value => value) {
     const columns = catalog.map(column => ({
       ...column,
-      title: typeof preferences[`title.${column.id}`] === 'string' && preferences[`title.${column.id}`].trim() ? preferences[`title.${column.id}`] : translate(column.title),
+      title: translate(column.title),
       width: preferences[`width.${column.id}`] ?? column.width,
       align: preferences[`alignment.${column.id}`] ?? column.align,
       visible: preferences[`visible.${column.id}`] ?? column.visible,
@@ -76,6 +98,27 @@
       if (field === 'name') value = splitName(file)[0];
       else if (field === 'ext') value = splitName(file)[1];
       else if (field === 'fullname') value = file.name;
+      else if (field === 'versionstring') value = file.fileVersionString;
+      else if (field === 'comment') value = file.comment;
+      else if (field === 'dosname') value = file.dosName || undefined;
+      else if (field === 'file type') value = file.type === 'link' ? 'reparse point' : file.type === 'folder' || file.isDirectory ? 'folder' : file.type ? 'file' : undefined;
+      else if (Object.hasOwn(booleanFields, field)) {
+        let flag = file.attributeFlags?.[booleanFields[field]];
+        if (field === 'directory' && flag === undefined && file.type) flag = file.type === 'folder' || file.isDirectory === true;
+        if (typeof flag === 'boolean') value = flag ? '1' : '0';
+      } else if (field === 'attributestr') {
+        const flags = file.attributeFlags;
+        if (Number.isInteger(file.posixMode)) {
+          const mode = file.posixMode;
+          value = (file.type === 'folder' ? 'd' : file.type === 'link' ? 'l' : '-') + [8,7,6,5,4,3,2,1,0].map((bit, index) => mode & (1 << bit) ? 'rwx'[index % 3] : '-').join('');
+          const chars = [...value];
+          for (const [bit, index, on, off] of [[0o4000,3,'s','S'],[0o2000,6,'s','S'],[0o1000,9,'t','T']]) if (mode & bit) chars[index] = chars[index] === 'x' ? on : off;
+          value = chars.join('');
+        } else if (flags) value = [['readonly','r'],['hidden','h'],['system','s'],['directory','d'],['archive','a'],['compressed','c'],['encrypted','e'],['sparse','p'],['offline','o']].map(([key, letter]) => typeof flags[key] === 'boolean' ? flags[key] ? letter : '-' : '?').join('');
+      }
+      else if (field === 'versionnr') {
+        if (Array.isArray(file.fileVersion) && file.fileVersion.length === 4 && file.fileVersion.every(part => Number.isInteger(part) && part >= 0 && part <= 65535)) value = file.fileVersion.join('.');
+      }
       else if (field === 'size') {
         if (file.type === 'folder' || file.isDirectory) value = Number.isFinite(file.folderSize) ? format === 'auto' ? automaticSize(file.folderSize) : String(file.folderSize / (units[format] || 1)) : '<DIR>';
         else if (file.size !== undefined && Number.isFinite(Number(file.size))) value = format === 'auto' ? automaticSize(Number(file.size)) : String(Number(file.size) / (units[format] || 1));
@@ -103,10 +146,10 @@
   function defaults() {
     return [{id:'standard',name:'Standard',columns:[
       {id:'name',title:'Name',field:'[=file.name]',width:260,align:'left',visible:true},
-      {id:'type',title:'Erweiterung',field:'[=file.ext]',width:88,align:'left',visible:true},
+      {id:'type',title:'Ext.',field:'[=file.ext]',width:88,align:'left',visible:true},
       {id:'size',title:'Größe',field:'[=file.size.auto]',width:96,align:'right',visible:true},
       {id:'date',title:'Datum',field:'[=file.writedate] [=file.writetime]',width:154,align:'left',visible:true},
-      {id:'attributes',title:'Attribute',field:'[=file.attributes]',width:72,align:'left',visible:true}
+      {id:'attributes',title:'Attr.',field:'[=file.attributes]',width:72,align:'left',visible:true}
     ],unsupportedFields:[]}];
   }
   function normalizeColumnSets(input) {
@@ -152,5 +195,13 @@
     }
     return result;
   }
-  return { normalizeColumnSets, evaluateColumnTemplate, columnSetsFromTables, catalog: Object.freeze(catalog), columnSetFromPreferences };
+  function columnTitle(column, translate = value => value) {
+    const field = String(column.field || '').replace(/\[=tc\./g, '[=file.');
+    const exact = catalog.find(item => item.field === field);
+    const property = /^\[=file\.([a-z]+)(?:\.[^\]]+)?\]$/i.exec(field)?.[1];
+    const aliases = { name: 'name', fullname: 'fullName', ext: 'type', size: 'size', writedate: 'date', writetime: 'writeTime', creationdate: 'creationDate', creationtime: 'creationTime', accessdate: 'accessDate', accesstime: 'accessTime', attributes: 'attributes', path: 'path', fullpath: 'fullPath' };
+    const definition = exact || catalog.find(item => item.id === (aliases[property] || (!field ? column.id || column.key : undefined)));
+    return definition ? translate(definition.title) : field || column.id || column.key || '';
+  }
+  return { normalizeColumnSets, evaluateColumnTemplate, columnSetsFromTables, catalog: Object.freeze(catalog), columnSetFromPreferences, columnTitle, isColumnAvailable };
 });

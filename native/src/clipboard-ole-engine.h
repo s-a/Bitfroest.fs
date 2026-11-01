@@ -25,7 +25,7 @@ class ClipboardBackend {
   virtual DWORD Sequence() = 0;
   virtual HRESULT GetDataObject(IDataObject** data) = 0;
   virtual HRESULT Replace(const std::vector<std::wstring>& paths, const std::wstring& mode,
-                          bool check_sequence, DWORD expected_sequence) = 0;
+                          bool check_sequence, DWORD expected_sequence, DWORD* published_sequence = nullptr) = 0;
   virtual HRESULT GetIdentity(const std::wstring& path, ClipboardFileIdentity* identity) = 0;
   virtual bool IsClosed() const { return false; }
 };
@@ -37,13 +37,15 @@ class ClipboardOleEngine {
   ClipboardOleEngine(const ClipboardOleEngine&) = delete;
   ClipboardOleEngine& operator=(const ClipboardOleEngine&) = delete;
 
-  HRESULT Read(ClipboardSelection* selection);
+  HRESULT Read(ClipboardSelection* selection, const DWORD* expected_sequence = nullptr);
   HRESULT Write(const std::vector<std::wstring>& paths, const std::wstring& mode,
                 ClipboardSelection* selection);
   HRESULT Acknowledge(const std::wstring& token, const std::vector<std::wstring>& paths,
                       const std::wstring& mode, const std::vector<std::wstring>& remaining,
                       bool* matched, std::vector<std::string>* notification_errors);
   void Reset();
+  HRESULT Cancel(const std::wstring& token, const std::vector<std::wstring>& paths,
+                 const std::wstring& mode, bool* matched);
 
  private:
   struct Entry {

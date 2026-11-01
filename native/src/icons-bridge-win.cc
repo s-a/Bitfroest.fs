@@ -34,6 +34,31 @@ struct StreamHandle {
   StreamHandle& operator=(const StreamHandle&) = delete;
 };
 
+struct IconBitmaps {
+  ICONINFO value{};
+  ~IconBitmaps() {
+    if (value.hbmColor) DeleteObject(value.hbmColor);
+    if (value.hbmMask) DeleteObject(value.hbmMask);
+  }
+  IconBitmaps() = default;
+  IconBitmaps(const IconBitmaps&) = delete;
+  IconBitmaps& operator=(const IconBitmaps&) = delete;
+};
+
+struct IconSurface {
+  HDC dc = CreateCompatibleDC(nullptr);
+  HBITMAP bitmap = nullptr;
+  HGDIOBJ previous = nullptr;
+  ~IconSurface() {
+    if (previous && previous != HGDI_ERROR) SelectObject(dc, previous);
+    if (bitmap) DeleteObject(bitmap);
+    if (dc) DeleteDC(dc);
+  }
+  IconSurface() = default;
+  IconSurface(const IconSurface&) = delete;
+  IconSurface& operator=(const IconSurface&) = delete;
+};
+
 struct ComApartment {
   HRESULT result = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
   ~ComApartment() { if (SUCCEEDED(result)) CoUninitialize(); }
@@ -305,8 +330,60 @@ HICON SystemIcon(const Request& request, const std::wstring& local_path, bool ex
   return info.hIcon;
 }
 
+bool RasterizeIcon(HICON icon, int* width, int* height, std::vector<uint32_t>* pixels) {
+  IconBitmaps source;
+  if (!GetIconInfo(icon, &source.value)) return false;
+  BITMAP dimensions{};
+  const HBITMAP source_bitmap = source.value.hbmColor ? source.value.hbmColor : source.value.hbmMask;
+  if (!source_bitmap || !GetObjectW(source_bitmap, sizeof(dimensions), &dimensions)) return false;
+  *width = dimensions.bmWidth;
+  *height = source.value.hbmColor ? dimensions.bmHeight : dimensions.bmHeight / 2;
+  if (*width <= 0 || *width > INT_MAX / 4 || *height <= 0 ||
+      static_cast<uint64_t>(*width) * *height > kMaxResourceBytes / 4) return false;
+  BITMAPINFO format{};
+  format.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+  format.bmiHeader.biWidth = *width;
+  format.bmiHeader.biHeight = -*height;
+  format.bmiHeader.biPlanes = 1;
+  format.bmiHeader.biBitCount = 32;
+  format.bmiHeader.biCompression = BI_RGB;
+  IconSurface surface;
+  if (!surface.dc) return false;
+  void* raw = nullptr;
+  surface.bitmap = CreateDIBSection(surface.dc, &format, DIB_RGB_COLORS, &raw, nullptr, 0);
+  if (!surface.bitmap || !raw) return false;
+  surface.previous = SelectObject(surface.dc, surface.bitmap);
+  if (!surface.previous || surface.previous == HGDI_ERROR) return false;
+  const size_t count = static_cast<size_t>(*width) * *height;
+  auto* rendered = static_cast<uint32_t*>(raw);
+  std::fill(rendered, rendered + count, 0);
+  if (!DrawIconEx(surface.dc, 0, 0, icon, *width, *height, 0, nullptr, DI_NORMAL) || !GdiFlush()) return false;
+  pixels->assign(rendered, rendered + count);
+  const bool has_alpha = std::any_of(pixels->begin(), pixels->end(), [](uint32_t pixel) { return (pixel >> 24) != 0; });
+  if (!has_alpha) {
+    std::fill(rendered, rendered + count, 0);
+    if (!DrawIconEx(surface.dc, 0, 0, icon, *width, *height, 0, nullptr, DI_MASK) || !GdiFlush()) return false;
+    for (size_t i = 0; i < count; ++i) {
+      (*pixels)[i] = (rendered[i] & 0x00ffffff) ? 0 : ((*pixels)[i] | 0xff000000);
+    }
+  } else {
+    for (auto& pixel : *pixels) {
+      const uint32_t alpha = pixel >> 24;
+      if (!alpha) { pixel = 0; continue; }
+      const auto channel = [alpha](uint32_t value) { return std::min<uint32_t>(255, (value * 255 + alpha / 2) / alpha); };
+      pixel = (alpha << 24) | (channel((pixel >> 16) & 255) << 16) |
+              (channel((pixel >> 8) & 255) << 8) | channel(pixel & 255);
+    }
+  }
+  return true;
+}
+
 bool EncodePng(HICON icon, std::vector<unsigned char>* output) {
-  Gdiplus::Bitmap bitmap(icon);
+  int width = 0, height = 0;
+  std::vector<uint32_t> pixels;
+  if (!RasterizeIcon(icon, &width, &height, &pixels)) return false;
+  Gdiplus::Bitmap bitmap(width, height, width * 4, PixelFormat32bppARGB,
+                         reinterpret_cast<BYTE*>(pixels.data()));
   if (bitmap.GetLastStatus() != Gdiplus::Ok) return false;
   HGLOBAL memory = GlobalAlloc(GMEM_MOVEABLE, 0);
   if (!memory) return false;

@@ -1,0 +1,34 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const { JSDOM } = require('jsdom');
+
+test('document diagnostics report lifecycle, resources, frames and errors after readiness', t => {
+  const dom = new JSDOM('<html data-startup-id="start" data-document-id="view"><body><main>Loading</main></body></html>', { runScripts: 'outside-only' });
+  t.after(() => dom.window.close());
+  const { window } = dom, messages = [], frames = [];
+  let acquired = 0;
+  window.acquireVsCodeApi = () => { acquired++; return { postMessage: message => messages.push(message) }; };
+  window.requestAnimationFrame = callback => { frames.push(callback); return frames.length; };
+  window.eval(fs.readFileSync(path.join(__dirname, '../media/startup-diagnostics.js'), 'utf8'));
+  window.dispatchEvent(new window.Event('commander-started'));
+  assert.ok(messages.some(message => message.event.name === 'document-start'));
+  assert.ok(frames.length > 0);
+  frames.shift()();
+  window.dispatchEvent(new window.ErrorEvent('error', { message: 'late failure', filename: 'app.js', lineno: 12 }));
+  const link = window.document.createElement('link'); link.rel = 'stylesheet'; link.href = 'app.css';
+  window.document.head.append(link); link.dispatchEvent(new window.Event('error'));
+  const violation = new window.Event('securitypolicyviolation');
+  Object.assign(violation, { effectiveDirective: 'style-src-elem', blockedURI: 'https://example.invalid/app.css?token=private', lineNumber: 1 });
+  window.document.dispatchEvent(violation);
+  const events = messages.map(message => message.event);
+  assert.ok(events.some(event => event.name === 'document-start'));
+  assert.ok(events.some(event => event.name === 'application-ready'));
+  assert.ok(events.some(event => event.name === 'frame-observed' && typeof event.width === 'number'));
+  assert.ok(events.some(event => event.name === 'runtime-error' && event.message === 'late failure' && event.line === 12));
+  assert.ok(events.some(event => event.name === 'resource-error' && event.resource === 'app.css'));
+  assert.ok(events.some(event => event.name === 'csp-violation' && event.directive === 'style-src-elem' && event.source === 'https://example.invalid/app.css'));
+  assert.ok(messages.every((message, index) => message.version === 1 && message.startupId === 'start' && message.documentId === 'view' && message.sequence === index + 1));
+  assert.equal(acquired, 1);
+});

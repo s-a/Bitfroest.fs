@@ -59,7 +59,7 @@ test('a later failed write acknowledges only the already confirmed cut prefix', 
     const request = app.messages.find(message => message.type === type);
     app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'clipboard-result', requestId: request.requestId, ok: true, selection } }));
   };
-  respond('clipboard-write'); app.key('Tab'); app.key('v', { ctrlKey: true }); respond('clipboard-read'); submit(app); await tick();
+  respond('clipboard-write'); app.key('Tab'); app.key('v', { ctrlKey: true }); respond('clipboard-read'); await tick();
   const first = applies(app)[0], native = confirmed(first); reply(app, first, native); await tick();
   app.click(app.document.querySelector('[data-conflict-action="overwrite"]')); await tick();
   const second = applies(app)[1]; assert.ok(second); reply(app, second, clone(native), false); await tick();

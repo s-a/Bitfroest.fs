@@ -1,0 +1,62 @@
+/* Generated icon metrics. Source SHA-256: a6ad3dda625bd1e7114cdd954a7f4e2e6524537b5ecfd7421eea341999adaecb. */
+.codicon,.icon-font{position:relative;vertical-align:middle}
+.icon-font{display:inline-block;width:var(--icon-size, 16px);height:var(--icon-size, 16px);flex:0 0 var(--icon-size, 16px);font-size:16px;line-height:1}
+.codicon-modifier-spin{transform-origin:50% 50%;animation:codicon-spin 1s cubic-bezier(0.53, 0.21, 0.29, 0.67) infinite}
+@media(prefers-reduced-motion:reduce){.codicon-modifier-spin{animation:none!important}}
+.codicon:not([data-icon-reviewed]),.icon-font:not([data-icon-reviewed]),.fileicon:not([data-icon-reviewed]),svg:not([data-icon-reviewed]){visibility:hidden}
+svg[data-icon-reviewed]{width:var(--icon-size, 16px);height:var(--icon-size, 16px);flex-shrink:0;vertical-align:middle}
+.codicon::before,.icon-font::before{position:absolute;display:block;height:1em;font-style:normal;font-weight:normal;font-synthesis:none;line-height:1;text-align:left;white-space:pre}
+@font-face{font-family:commander-codicon-metrics;src:url('./codicon.ttf') format('truetype');font-weight:normal;font-style:normal;font-display:block;ascent-override:100%;descent-override:0%;line-gap-override:0%}
+.codicon::before{font-family:commander-codicon-metrics}
+.codicon-refresh::before{font-size:calc(var(--icon-size, 16px) * 1);left:calc(var(--icon-size, 16px) * 0.0616666667);top:calc(var(--icon-size, 16px) * -0.0616666667);content:'\eb37'}
+.codicon-star-empty::before{font-size:calc(var(--icon-size, 16px) * 1);left:calc(var(--icon-size, 16px) * 0.0166666667);top:calc(var(--icon-size, 16px) * -0.03);content:'\ea6a'}
+.codicon-loading::before{font-size:calc(var(--icon-size, 16px) * 1);left:calc(var(--icon-size, 16px) * 0.0616666667);top:calc(var(--icon-size, 16px) * -0.0616666667);content:'\eb19'}
+.codicon-arrow-right::before{font-size:calc(var(--icon-size, 16px) * 1);left:calc(var(--icon-size, 16px) * 0.0616666667);top:calc(var(--icon-size, 16px) * -0.0933333333);content:'\ea9c'}
+.codicon-eye-closed::before{font-size:calc(var(--icon-size, 16px) * 1);left:calc(var(--icon-size, 16px) * 0.03);top:calc(var(--icon-size, 16px) * -0.03);content:'\eae7'}
+.codicon-arrow-up::before{font-size:calc(var(--icon-size, 16px) * 1);left:calc(var(--icon-size, 16px) * 0.0616666667);top:calc(var(--icon-size, 16px) * -0.0616666667);content:'\eaa1'}
+.codicon-file::before{font-size:calc(var(--icon-size, 16px) * 1);left:calc(var(--icon-size, 16px) * 0.0933333333);top:calc(var(--icon-size, 16px) * -0.03);content:'\ea7b'}
+.codicon-markdown::before{font-size:calc(var(--icon-size, 16px) * 1);left:calc(var(--icon-size, 16px) * 0.03);top:calc(var(--icon-size, 16px) * -0.09);content:'\eb1d'}
+.codicon-file-code::before{font-size:calc(var(--icon-size, 16px) * 1);left:calc(var(--icon-size, 16px) * 0.0616666667);top:calc(var(--icon-size, 16px) * -0.03);content:'\eae9'}
+.codicon-star-full::before{font-size:calc(var(--icon-size, 16px) * 1);left:calc(var(--icon-size, 16px) * 0.0166666667);top:calc(var(--icon-size, 16px) * -0.03);content:'\eb59'}
+.codicon-arrow-down::before{font-size:calc(var(--icon-size, 16px) * 1);left:calc(var(--icon-size, 16px) * 0.0616666667);top:calc(var(--icon-size, 16px) * -0.0616666667);content:'\ea9a'}
+.codicon-chevron-down::before{font-size:calc(var(--icon-size, 16px) * 1);left:calc(var(--icon-size, 16px) * 0.0933333333);top:calc(var(--icon-size, 16px) * -0.155);content:'\eab4'}
+.codicon-check::before{font-size:calc(var(--icon-size, 16px) * 1);left:calc(var(--icon-size, 16px) * 0.0466666667);top:calc(var(--icon-size, 16px) * -0.0933333333);content:'\eab2'}
+.codicon-copy::before{font-size:calc(var(--icon-size, 16px) * 1);left:calc(var(--icon-size, 16px) * 0.0933333333);top:calc(var(--icon-size, 16px) * -0.03);content:'\ebcc'}
+.codicon-clippy::before{font-size:calc(var(--icon-size, 16px) * 0.9966777409);left:calc(var(--icon-size, 16px) * 0);top:calc(var(--icon-size, 16px) * -0.0299003322);content:'\eac0'}
+.codicon-edit::before{font-size:calc(var(--icon-size, 16px) * 1);left:calc(var(--icon-size, 16px) * 0.03);top:calc(var(--icon-size, 16px) * -0.03);content:'\ea73'}
+.codicon-trash::before{font-size:calc(var(--icon-size, 16px) * 1);left:calc(var(--icon-size, 16px) * 0.0466666667);top:calc(var(--icon-size, 16px) * 0);content:'\ea81'}
+.codicon-folder::before{font-size:calc(var(--icon-size, 16px) * 1);left:calc(var(--icon-size, 16px) * 0.03);top:calc(var(--icon-size, 16px) * -0.0616666667);content:'\ea83'}
+.codicon-folder-opened::before{font-size:calc(var(--icon-size, 16px) * 1);left:calc(var(--icon-size, 16px) * 0.0283333333);top:calc(var(--icon-size, 16px) * -0.0616666667);content:'\eaf7'}
+.codicon-git-compare::before{font-size:calc(var(--icon-size, 16px) * 1);left:calc(var(--icon-size, 16px) * 0.03);top:calc(var(--icon-size, 16px) * -0.03);content:'\eafd'}
+.codicon-lock::before{font-size:calc(var(--icon-size, 16px) * 1);left:calc(var(--icon-size, 16px) * 0.0616666667);top:calc(var(--icon-size, 16px) * -0.03);content:'\ea75'}
+.codicon-settings-gear::before{font-size:calc(var(--icon-size, 16px) * 1);left:calc(var(--icon-size, 16px) * 0.0366666667);top:calc(var(--icon-size, 16px) * -0.03);content:'\eb51'}
+.codicon-close::before{font-size:calc(var(--icon-size, 16px) * 1);left:calc(var(--icon-size, 16px) * 0.0616666667);top:calc(var(--icon-size, 16px) * -0.0616666667);content:'\ea76'}
+.codicon-chevron-right::before{font-size:calc(var(--icon-size, 16px) * 1);left:calc(var(--icon-size, 16px) * 0.14);top:calc(var(--icon-size, 16px) * -0.0933333333);content:'\eab6'}
+.codicon-file-zip::before{font-size:calc(var(--icon-size, 16px) * 1);left:calc(var(--icon-size, 16px) * 0.03);top:calc(var(--icon-size, 16px) * -0.0616666667);content:'\eaef'}
+.codicon-search::before{font-size:calc(var(--icon-size, 16px) * 1);left:calc(var(--icon-size, 16px) * 0.0616666667);top:calc(var(--icon-size, 16px) * -0.03);content:'\ea6d'}
+.codicon-arrow-left::before{font-size:calc(var(--icon-size, 16px) * 1);left:calc(var(--icon-size, 16px) * 0.0616666667);top:calc(var(--icon-size, 16px) * -0.0933333333);content:'\ea9b'}
+.codicon-arrow-swap::before{font-size:calc(var(--icon-size, 16px) * 1);left:calc(var(--icon-size, 16px) * 0.0616666667);top:calc(var(--icon-size, 16px) * -0.0466666667);content:'\ebcb'}
+.codicon-check-all::before{font-size:calc(var(--icon-size, 16px) * 1);left:calc(var(--icon-size, 16px) * 0.015);top:calc(var(--icon-size, 16px) * -0.1083333333);content:'\ebb1'}
+.codicon-checklist::before{font-size:calc(var(--icon-size, 16px) * 1);left:calc(var(--icon-size, 16px) * 0.03);top:calc(var(--icon-size, 16px) * -0.0616666667);content:'\eab3'}
+.codicon-selection::before{font-size:calc(var(--icon-size, 16px) * 1);left:calc(var(--icon-size, 16px) * 0.0616666667);top:calc(var(--icon-size, 16px) * -0.0933333333);content:'\eb85'}
+.codicon-save::before{font-size:calc(var(--icon-size, 16px) * 1);left:calc(var(--icon-size, 16px) * 0.03);top:calc(var(--icon-size, 16px) * -0.03);content:'\eb4b'}
+.codicon-history::before{font-size:calc(var(--icon-size, 16px) * 1);left:calc(var(--icon-size, 16px) * 0.0616666667);top:calc(var(--icon-size, 16px) * -0.0616666667);content:'\ea82'}
+.codicon-link::before{font-size:calc(var(--icon-size, 16px) * 1);left:calc(var(--icon-size, 16px) * 0.0616666667);top:calc(var(--icon-size, 16px) * -0.125);content:'\eb15'}
+.codicon-new-file::before{font-size:calc(var(--icon-size, 16px) * 1);left:calc(var(--icon-size, 16px) * 0);top:calc(var(--icon-size, 16px) * -0.03);content:'\ea7f'}
+.codicon-files::before{font-size:calc(var(--icon-size, 16px) * 1);left:calc(var(--icon-size, 16px) * 0.0616666667);top:calc(var(--icon-size, 16px) * 0);content:'\eaf0'}
+.codicon-layout::before{font-size:calc(var(--icon-size, 16px) * 1);left:calc(var(--icon-size, 16px) * 0.03);top:calc(var(--icon-size, 16px) * -0.03);content:'\ebeb'}
+.codicon-question::before{font-size:calc(var(--icon-size, 16px) * 1);left:calc(var(--icon-size, 16px) * 0.03);top:calc(var(--icon-size, 16px) * -0.03);content:'\eb32'}
+.codicon-law::before{font-size:calc(var(--icon-size, 16px) * 1);left:calc(var(--icon-size, 16px) * 0.03);top:calc(var(--icon-size, 16px) * -0.0616666667);content:'\eb12'}
+.codicon-symbol-key::before{font-size:calc(var(--icon-size, 16px) * 1);left:calc(var(--icon-size, 16px) * 0.0616666667);top:calc(var(--icon-size, 16px) * -0.125);content:'\ea93'}
+.codicon-symbol-string::before{font-size:calc(var(--icon-size, 16px) * 1);left:calc(var(--icon-size, 16px) * 0.0616666667);top:calc(var(--icon-size, 16px) * -0.125);content:'\eb8d'}
+.codicon-text-size::before{font-size:calc(var(--icon-size, 16px) * 1);left:calc(var(--icon-size, 16px) * 0.0283333333);top:calc(var(--icon-size, 16px) * -0.0616666667);content:'\eb69'}
+.codicon-word-wrap::before{font-size:calc(var(--icon-size, 16px) * 1);left:calc(var(--icon-size, 16px) * 0.0616666667);top:calc(var(--icon-size, 16px) * -0.03);content:'\eb80'}
+.codicon-file-binary::before{font-size:calc(var(--icon-size, 16px) * 1);left:calc(var(--icon-size, 16px) * 0.0933333333);top:calc(var(--icon-size, 16px) * -0.03);content:'\eae8'}
+.codicon-eye::before{font-size:calc(var(--icon-size, 16px) * 1);left:calc(var(--icon-size, 16px) * 0.06);top:calc(var(--icon-size, 16px) * -0.1233333333);content:'\ea70'}
+.codicon-sort-precedence::before{font-size:calc(var(--icon-size, 16px) * 1);left:calc(var(--icon-size, 16px) * 0.03);top:calc(var(--icon-size, 16px) * -0.03);content:'\eb55'}
+.codicon-calendar::before{font-size:calc(var(--icon-size, 16px) * 1);left:calc(var(--icon-size, 16px) * 0.03);top:calc(var(--icon-size, 16px) * -0.03);content:'\eab0'}
+.codicon-symbol-numeric::before{font-size:calc(var(--icon-size, 16px) * 1);left:calc(var(--icon-size, 16px) * 0.03);top:calc(var(--icon-size, 16px) * -0.03);content:'\ea90'}
+.codicon-star-add::before{font-size:calc(var(--icon-size, 16px) * 1);left:calc(var(--icon-size, 16px) * 0.0166666667);top:calc(var(--icon-size, 16px) * -0.03);content:'\ea6a'}
+.codicon-remove::before{font-size:calc(var(--icon-size, 16px) * 1);left:calc(var(--icon-size, 16px) * 0.0616666667);top:calc(var(--icon-size, 16px) * -0.2183333333);content:'\eb3b'}
+.codicon-add::before{font-size:calc(var(--icon-size, 16px) * 1);left:calc(var(--icon-size, 16px) * 0.0616666667);top:calc(var(--icon-size, 16px) * -0.03);content:'\ea60'}
+.codicon-terminal::before{font-size:calc(var(--icon-size, 16px) * 1);left:calc(var(--icon-size, 16px) * 0.03);top:calc(var(--icon-size, 16px) * -0.03);content:'\ea85'}

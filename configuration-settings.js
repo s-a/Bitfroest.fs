@@ -18,9 +18,9 @@ function createConfigurationSettings(vscode, options) {
     const favorites = readFavorites(scope);
     const layout = value('columns.layout');
     if (Array.isArray(layout)) return { favorites, columns: validateColumns(layout), shortcuts };
-    const preferences = Object.fromEntries(catalog.flatMap(column => ['visible', 'title', 'width', 'alignment', 'position'].map(kind => [`${kind}.${column.id}`, value(`columns.${kind}.${column.id}`)])));
+    const preferences = Object.fromEntries(catalog.flatMap(column => ['visible', 'alignment', 'position'].map(kind => [`${kind}.${column.id}`, value(`columns.${kind}.${column.id}`)])));
     const fixed = Object.values(preferences).some(item => item !== undefined);
-    const tableKeys = ['names', 'fields', 'titles', 'widths', 'alignments', 'visibility', 'order'];
+    const tableKeys = ['names', 'fields', 'alignments', 'visibility', 'order'];
     const hasTables = tableKeys.some(key => value(`columns.${key}`) !== undefined);
     const defaults = Object.assign({}, ...require('./package.json').contributes.configuration.map(category => category.properties));
     const tables = Object.fromEntries(tableKeys.map(key => {
@@ -28,13 +28,13 @@ function createConfigurationSettings(vscode, options) {
       return [key, key === 'order' ? own ?? fallback : { ...fallback, ...own }];
     }));
     const defaultTitles = Object.fromEntries(catalog.slice(0, 5).map(column => [`standard.${column.id}`, options.t(column.title)]));
-    tables.titles = { ...defaultTitles, ...value('columns.titles') };
+    tables.titles = defaultTitles;
     const oldSets = value('columns.sets');
     const legacy = !fixed && (hasTables ? columnSetsFromTables(tables, options.t) : Array.isArray(oldSets) ? normalizeColumnSets(oldSets) : null);
     const source = legacy ? (legacy.find(item => item.id === value('columns.activeSet')) || legacy[0]).columns : columnSetFromPreferences(preferences, options.t).columns;
     const columns = catalog.map(column => {
       const found = source.find(item => item.id === column.id || item.field === column.field);
-      return { id: column.id, title: found?.title ?? options.t(column.title), width: found?.width ?? column.width, align: found?.align ?? column.align, visible: found ? found.visible !== false : false };
+      return { id: column.id, align: found?.align ?? column.align, visible: found ? found.visible !== false : false };
     });
     const position = id => { const index = source.findIndex(item => item.id === id || item.field === catalog.find(column => column.id === id).field); return index < 0 ? source.length + catalog.findIndex(item => item.id === id) : index; };
     columns.sort((left, right) => position(left.id) - position(right.id));

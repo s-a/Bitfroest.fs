@@ -57,9 +57,10 @@ test('arrow rename ignores modifiers, multiple marks and absent adjacent entries
   const edge = createApp(t, fixture()); edge.action('rename-one'); const first = edge.document.querySelector('.inline-rename'); first.value = 'unconfirmed.txt'; edge.key('ArrowUp', {}, first);
   assert.equal(edge.document.querySelector('.inline-rename'), first); assert.equal(edge.state().folders['C:/tmp'][0].name, 'a.one.txt');
 });
-test('right click on F8 requests only the OS trash view and keeps the selection unchanged', t => {
+test('main menu trash entry requests only the OS trash view and keeps the selection unchanged', t => {
   const app = createApp(t, fixture(true)), before = JSON.stringify(app.state().folders);
-  app.document.querySelector('#functionbar [data-action="delete"]').dispatchEvent(new app.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }));
+  app.click(app.document.querySelector('[data-menu-group="Dateien"]'));
+  app.click(app.document.querySelector('[data-menu-action="open-trash"]'));
   assert.equal(app.messages.filter(item => item.type === 'open-trash').length, 1);
   assert.equal(JSON.stringify(app.state().folders), before); assert.equal(app.document.querySelector('#modal').open, false);
   assert.equal(app.messages.some(item => ['filesystem-delete', 'filesystem-apply'].includes(item.type)), false);

@@ -1,18 +1,19 @@
 (function (root) {
   'use strict';
-  root.installCommanderShortcuts = function ({ host, focus, enabled }) {
+  root.installCommanderShortcuts = function ({ host, focus, enabled, decorate }) {
     const model = root.CommanderShortcuts, platform = document.body.dataset.platform || 'win32';
     let catalog = [], bindings = {};
     const synthetic = new WeakSet();
     const originals = [...document.querySelectorAll('[data-menu-action]')].map(item => ({ item, aria: item.getAttribute('aria-keyshortcuts'), title: item.getAttribute('title'), hints: item.querySelector('.menu-shortcuts')?.cloneNode(true) }));
     function hints() {
       for (const original of originals) {
-        const { item } = original, entries = catalog.filter(entry => entry.command === `bitfroest.${item.dataset.menuAction}` && entry.when.includes('listFocus') && !entry.when.includes('searchResults'));
+        const { item } = original, entries = catalog.filter(entry => entry.command === `bitfroest.${item.dataset.menuAction}` && (entry.when.includes('listFocus') || entry.when.includes('tabFocus')) && !entry.when.includes('searchResults'));
         item.querySelector('.menu-shortcuts')?.remove();
         for (const [attribute, value] of [['aria-keyshortcuts', original.aria], ['title', original.title]]) { if (value === null) item.removeAttribute(attribute); else item.setAttribute(attribute, value); }
         if (!entries.some(entry => Object.hasOwn(bindings, entry.id))) { if (original.hints) item.append(original.hints.cloneNode(true)); continue; }
         const keys = [...new Set(entries.flatMap(entry => model.keys(entry, bindings, platform)))];
         if (!keys.length) { item.removeAttribute('aria-keyshortcuts'); item.title = item.firstChild.textContent.trim(); continue; }
+        if (decorate) { decorate(item, keys); continue; }
         const names = { ctrl: 'Control', cmd: 'Meta', shift: 'Shift', alt: 'Alt', up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight' };
         item.setAttribute('aria-keyshortcuts', keys.map(key => key.split('+').map(part => names[part] || part.toUpperCase()).join('+')).join(' '));
         const label = keys.map(key => key.split('+').map(part => part === 'cmd' ? '⌘' : part === 'ctrl' && /^de/.test(document.documentElement.lang) ? 'Strg' : part.toUpperCase()).join('+')).join(' / ');
@@ -36,6 +37,11 @@
       const replacement = new KeyboardEvent('keydown', { key: aliases[name] || name, ctrlKey: parts.includes('ctrl'), metaKey: parts.includes('cmd'), altKey: parts.includes('alt'), shiftKey: parts.includes('shift'), bubbles: true, cancelable: true });
       synthetic.add(replacement); event.target.dispatchEvent(replacement);
     }, true);
+    const keysFor = (command, fallback) => {
+      const entries = catalog.filter(entry => entry.command === `bitfroest.${command}` && (entry.when.includes('listFocus') || entry.when.includes('tabFocus')) && !entry.when.includes('searchResults'));
+      return entries.length ? [...new Set(entries.flatMap(entry => model.keys(entry, bindings, platform)))] : fallback;
+    };
     if (document.body.dataset.shortcutSettings) update(JSON.parse(decodeURIComponent(document.body.dataset.shortcutSettings)));
+    return { keysFor };
   };
 })(globalThis);

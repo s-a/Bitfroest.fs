@@ -8,6 +8,7 @@ function createApp(t, saved, options = {}) {
   const dom = new JSDOM(options.html || fs.readFileSync(path.join(root, 'media/index.html'), 'utf8'), { runScripts: 'outside-only', url: 'https://prototype.invalid/' });
   t.after(() => dom.window.close());
   const window = dom.window, document = window.document;
+  if (options.ResizeObserver) window.ResizeObserver = options.ResizeObserver;
   document.body.dataset.language = options.language || document.body.dataset.language || 'de';
   if (options.platform) document.body.dataset.platform = options.platform;
   document.body.dataset.extensionVersion = require('../../package.json').version;
@@ -26,7 +27,8 @@ function createApp(t, saved, options = {}) {
   window.TextDecoder = TextDecoder;
   window.structuredClone = structuredClone;
   window.HTMLDialogElement.prototype.show = function () { this.setAttribute('open', ''); };
-  for (const name of ['commander-paths.js', 'commander-shortcuts.js', 'shortcut-runtime.js', 'commander-i18n.js', 'commander-column-settings.js', 'commander-tabs.js', 'commander-columns.js', 'commander-search.js', 'file-search-view.js', 'commander-contrast.js', 'commander-file-colors.js', 'commander-file-names.js', 'commander-transfer.js', 'search-duplicates.js', 'commander-clipboard.js', 'commander-lister.js', 'lister-view.js', 'workbench-vendor.js', 'workbench-icons.js', 'git-status-icons.js', 'commander-statusbar.js', 'app.js']) {
+  for (const name of ['commander-paths.js', 'commander-shortcuts.js', 'commander-menu.js', 'shortcut-runtime.js', 'commander-i18n.js', 'commander-column-settings.js', 'commander-tabs.js', 'commander-directory-cache.js', 'commander-columns.js', 'commander-search.js', 'file-search-view.js', 'commander-contrast.js', 'commander-file-colors.js', 'commander-file-names.js', 'commander-transfer.js', 'search-duplicates.js', 'commander-clipboard.js', 'commander-lister.js', 'lister-view.js', 'workbench-vendor.js', 'workbench-icons.js', 'git-status-icons.js', 'icon-font-metrics.js', 'icon-layout.js', 'commander-icons.js', 'commander-progress.js', 'commander-statusbar.js', 'commander-jobs.js', 'app.js']) {
+    if (name === 'app.js') options.beforeApp?.({ window, document });
     const file = path.join(root, 'media', name);
     new vm.Script(fs.readFileSync(file, 'utf8'), { filename: file }).runInContext(dom.getInternalVMContext());
   }

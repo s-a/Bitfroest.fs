@@ -9,6 +9,141 @@ function fixture() {
 function reply(app, request, extra = {}) {
   app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'git-status-result', requestId: request.requestId, snapshotId: request.snapshotId, directories: { '/repo': { ok: true, repository: true, branch: 'feature/<one>', statuses: { 'a.txt': 'modified', folder: 'conflict' } } }, ...extra } }));
 }
+function finishDirectory(app) {
+  const request = app.messages.filter(message => message.type === 'filesystem-navigate').at(-1);
+  if (request) app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-result', navigationRequestId: request.navigationRequestId, ok: true, state: app.state() } }));
+}
+
+test('confirmed empty folders show a neutral outlined Git badge without requesting another scan', t => {
+  for (const language of ['de', 'en']) {
+    const state = fixture();
+    const app = createApp(t, state, { language });
+    const before = app.messages.length;
+    const request = app.messages.find(message => message.type === 'git-status');
+    reply(app, request, { directories: { '/repo': { ok: true, repository: true, statuses: {} } } });
+    const badge = app.row('folder').querySelector('[data-git-status="empty"]');
+    assert.ok(badge);
+    const label = language === 'de' ? 'Leer – von Git nicht erfasst' : 'Empty – not tracked by Git';
+    assert.equal(badge.title, label);
+    assert.equal(badge.getAttribute('aria-label'), label);
+    assert.equal(app.row('folder').title, label);
+    assert.ok(badge.querySelector('[data-icon-reviewed="status:empty"]'));
+    assert.equal(app.messages.slice(before).some(message => ['filesystem-navigate', 'filesystem-refresh', 'git-status', 'icons'].includes(message.type)), false);
+    assert.equal(badge.style.getPropertyValue('--git-badge-color'), '');
+  }
+});
+
+test('empty Git badges require confirmed directory contents and a successful repository result', t => {
+  for (const mode of ['unloaded', 'missing', 'nonempty', 'outside', 'failure', 'loading', 'ignored', 'modified']) {
+    const state = fixture();
+    if (mode === 'unloaded') state.unloadedFolders = ['/repo/folder'];
+    if (mode === 'missing') delete state.folders['/repo/folder'];
+    if (mode === 'nonempty') state.folders['/repo/folder'] = [{ id: 'nested', name: 'file.txt', type: 'text' }];
+    const app = createApp(t, state);
+    reply(app, app.messages.find(message => message.type === 'git-status'), { directories: { '/repo': { ok: mode !== 'failure', repository: mode !== 'outside', loading: mode === 'loading', statuses: ['ignored', 'modified'].includes(mode) ? { folder: mode } : {} } } });
+    assert.equal(app.row('folder').querySelector('[data-git-status="empty"]'), null, mode);
+  }
+});
+
+test('a detected but unreadable repository keeps the Git location context and its error tooltip', t => {
+  const app = createApp(t, fixture()), request = app.messages.find(message => message.type === 'git-status');
+  reply(app, request, { directories: { '/repo': { ok: false, repository: false, repositoryDetected: true, error: 'Repository metadata could not be read', statuses: {} } } });
+  assert.equal(app.document.querySelector('.pane.active [data-location-icon]').dataset.locationIcon, 'git');
+  assert.match(app.document.querySelector('.pane.active .path-input').title, /metadata could not be read/);
+});
+
+test('failed child repository keeps its original icon and shows a distinct Git error with current details', t => {
+  const app = createApp(t, fixture()), request = app.messages.find(message => message.type === 'git-status');
+  const folder = app.row('folder'), original = folder.querySelector('.fileicon'), other = app.row('a.txt');
+  const send = error => reply(app, request, { directories: { '/repo': { ok: true, repository: false, statuses: {}, repositoryErrors: error ? { folder: error } : {} } } });
+  send('Path too long');
+  assert.equal(folder.querySelector('.fileicon'), original);
+  const badge = folder.querySelector('[data-git-status="error"]');
+  assert.ok(badge); assert.ok(badge.querySelector('[data-icon-reviewed="workbench:error"]'));
+  assert.match(badge.getAttribute('aria-label'), /Git.*Path too long/);
+  assert.match(folder.title, /Git.*Path too long/);
+  assert.equal(other.querySelector('[data-git-status="error"]'), null);
+  send('Access denied');
+  assert.match(folder.querySelector('[data-git-status="error"]').title, /Access denied/);
+  assert.match(folder.title, /Access denied/);
+  send(null);
+  assert.equal(folder.querySelector('[data-git-status="error"]'), null);
+  assert.equal(folder.querySelector('.fileicon'), original);
+  assert.equal(folder.title, '');
+});
+
+test('Git file context becomes available after status and freezes only a single regular file', t => {
+  const app = createApp(t, fixture());
+  const context = name => JSON.parse(app.row(name).dataset.vscodeContext);
+  assert.equal(context('a.txt').gitFile, false);
+  reply(app, app.messages.find(m => m.type === 'git-status'));
+  assert.equal(context('a.txt').gitFile, true);
+  assert.equal(JSON.parse(app.document.querySelector('.pane.active .list').dataset.vscodeContext).gitFile, true);
+  assert.equal(context('folder').gitFile, false);
+  const captured = context('a.txt');
+  app.click(app.row('folder').querySelector('[data-cell="size"]'));
+  app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'action', action: 'git-diff', contextSelection: captured } }));
+  const request = app.messages.find(m => m.type === 'git-diff');
+  assert.ok(request);
+  assert.equal(request.directory, '/repo');
+  assert.deepEqual(Array.from(request.ids), ['a']);
+  assert.equal(request.snapshotId, 'one');
+});
+
+test('Git context excludes folders, multiple selections, archives and nonrepositories', t => {
+  for (const mode of ['folder', 'multiple', 'archive', 'outside']) {
+    const state = fixture();
+    if (mode === 'folder') state.panes[0].selected = ['b'];
+    if (mode === 'multiple') state.panes[0].selected = ['a', 'b'];
+    if (mode === 'archive') state.archiveLocations = { '/repo': { archive: '/archive.zip', prefix: '' } };
+    const app = createApp(t, state), request = app.messages.find(m => m.type === 'git-status');
+    if (request) reply(app, request, mode === 'outside' ? { directories: { '/repo': { ok: true, repository: false } } } : {});
+    for (const row of app.document.querySelectorAll('.pane.active tr[data-id]')) assert.equal(JSON.parse(row.dataset.vscodeContext).gitFile, false, mode);
+  }
+});
+
+test('Git menu invocation survives focus refresh before or after command delivery', t => {
+  for (const completedFirst of [false, true]) {
+    const app = createApp(t, fixture());
+    reply(app, app.messages.find(message => message.type === 'git-status'));
+    app.row('a.txt').dispatchEvent(new app.window.MouseEvent('contextmenu', { bubbles: true, button: 2 }));
+    const selection = JSON.parse(app.row('a.txt').dataset.vscodeContext);
+    app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'window-focus' } }));
+    assert.equal(app.messages.filter(message => message.type === 'filesystem-refresh').length, 1);
+    const next = structuredClone(app.state()); next.snapshotId = 'refreshed';
+    const invoke = () => app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'action', action: 'git-diff', contextSelection: selection } }));
+    const finish = () => app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-result', ok: true, state: next } }));
+    if (completedFirst) { finish(); invoke(); } else { invoke(); finish(); }
+    const requests = app.messages.filter(message => message.type === 'git-diff');
+    assert.equal(requests.length, 1, String(completedFirst));
+    assert.equal(requests[0].snapshotId, 'refreshed');
+    assert.equal(requests[0].directory, '/repo');
+    assert.deepEqual(Array.from(requests[0].ids), ['a']);
+  }
+});
+
+test('Git menu rejects a renamed target after focus refresh without opening the new selection', t => {
+  const app = createApp(t, fixture()); reply(app, app.messages.find(message => message.type === 'git-status'));
+  app.row('a.txt').dispatchEvent(new app.window.MouseEvent('contextmenu', { bubbles: true, button: 2 }));
+  const selection = JSON.parse(app.row('a.txt').dataset.vscodeContext);
+  app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'window-focus' } }));
+  app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'action', action: 'git-diff', contextSelection: selection } }));
+  const next = structuredClone(app.state()); next.snapshotId = 'changed'; next.folders['/repo'][0].name = 'renamed.txt';
+  app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-result', ok: true, state: next } }));
+  assert.equal(app.messages.filter(message => message.type === 'git-diff').length, 0);
+  assert.equal(app.document.querySelector('#status-message').textContent, 'Ungültige Dateiauswahl für Git Diff.');
+});
+
+test('returning DOM focus from the Git menu does not refresh the filesystem or discard Diff', t => {
+  const app = createApp(t, fixture()); reply(app, app.messages.find(message => message.type === 'git-status'));
+  app.row('a.txt').dispatchEvent(new app.window.MouseEvent('contextmenu', { bubbles: true, button: 2 }));
+  const selection = JSON.parse(app.row('a.txt').dataset.vscodeContext);
+  app.window.dispatchEvent(new app.window.Event('blur'));
+  app.window.dispatchEvent(new app.window.Event('focus'));
+  app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'action', action: 'git-diff', contextSelection: selection } }));
+  assert.equal(app.messages.filter(message => message.type === 'filesystem-refresh').length, 0);
+  assert.equal(app.messages.filter(message => message.type === 'git-diff').length, 1);
+});
 
 test('pending status uses a quiet placeholder and resolves without replacing native icons', t => {
   const app = createApp(t, fixture()), request = app.messages.find(m => m.type === 'git-status');
@@ -110,6 +245,7 @@ test('left navigation requests Git only for its destination and retains the righ
   const app = createApp(t, separatePanes()), first = app.messages.find(message => message.type === 'git-status');
   reply(app, first, { directories: { '/repo': { ok: true, repository: true, branch: 'left', statuses: {} }, '/other': { ok: true, repository: true, branch: 'right', statuses: { 'right.txt': 'clean' } } } });
   app.click(app.row('folder').querySelector('[data-filename]')); app.key('Enter', {}, app.document.querySelector('.pane.active .list'));
+  finishDirectory(app);
   const requests = app.messages.filter(message => message.type === 'git-status');
   assert.equal(requests.length, 2);
   assert.deepEqual(Array.from(requests[1].directories), ['/repo/folder']);
@@ -243,6 +379,7 @@ test('navigation finishes while status is pending and old directory results cann
   app.click(app.row('folder').querySelector('[data-filename]')); app.key('Enter', {}, app.document.querySelector('.pane.active .list'));
   assert.equal(app.state().panes[0].tabs[0], '/repo/folder');
   assert.equal(app.document.querySelector('.pane.active .path-input').value, '/repo/folder');
+  finishDirectory(app);
   const next = app.messages.filter(m => m.type === 'git-status').at(-1); assert.notEqual(next.requestId, first.requestId);
   reply(app, first); assert.equal(app.document.querySelector('.pane.active [data-git-branch]'), null);
 });
@@ -328,7 +465,8 @@ test('early branch progress preserves editing and completes without replacing th
   reply(app, request, { partial: true, directories: { '/repo': { ok: true, repository: true, branch: 'main', loading: true, statuses: {} } } });
   const branch = app.document.querySelector('[data-git-branch]');
   assert.ok(branch); assert.equal(branch.getAttribute('aria-busy'), 'true');
-  assert.ok(branch.querySelector('[role="progressbar"]'));
+  assert.equal(branch.querySelector('[role="progressbar"]'), null);
+  assert.equal(app.document.querySelector('.pane.active [data-refresh]').getAttribute('aria-busy'), 'true');
   assert.equal(app.document.activeElement, input); assert.equal(input.value, '/editing');
   branch.focus(); reply(app, request, { directories: { '/repo': { ok: true, repository: true, branch: 'main', statuses: {} } } });
   assert.equal(app.document.activeElement.getAttribute('data-git-branch'), '');
@@ -344,8 +482,11 @@ test('incremental status patches retain previous entries and finish the loading 
   reply(app, request, { partial: true, directories: { '/repo': { ...info, incremental: true, statuses: { folder: 'conflict' } } } });
   assert.equal(app.row('a.txt').querySelector('[data-git-status]').dataset.gitStatus, 'modified');
   assert.equal(app.row('folder').querySelector('[data-git-status]').dataset.gitStatus, 'conflict');
-  assert.ok(app.document.querySelector('[data-git-branch] [role="progressbar"]'));
+  assert.equal(app.document.querySelector('[data-git-branch]').getAttribute('aria-busy'), 'true');
   reply(app, request, { directories: { '/repo': { ok: false, error: 'Timed out', statuses: {} } } });
   assert.equal(app.document.querySelector('[data-git-branch] [role="progressbar"]'), null);
-  assert.equal(app.document.querySelector('[data-git-status]'), null);
+  assert.equal(app.document.querySelector('[data-git-branch]').getAttribute('aria-busy'), 'false');
+  assert.ok(app.row('a.txt').querySelector('[data-git-status="modified"]'));
+  assert.ok(app.row('folder').querySelector('[data-git-status="conflict"]'));
+  assert.match(app.document.querySelector('.pane.active .path-input').title, /Timed out/);
 });

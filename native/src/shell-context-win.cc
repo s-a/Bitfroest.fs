@@ -3,9 +3,11 @@
 #include <windows.h>
 #include <shlobj.h>
 #include <shellapi.h>
+#include <sherrors.h>
 #include <objbase.h>
 #include <algorithm>
 #include <cwchar>
+#include <cstring>
 #include <new>
 #include <mutex>
 #include <process.h>
@@ -21,12 +23,13 @@ constexpr UINT kCancelCheckMs = 80;
 constexpr UINT kFirstCommand = 1;
 constexpr UINT kLastCommand = 0x7fff;
 constexpr UINT kLockCommand = 0x8000;
+constexpr UINT kGitDiffCommand = 0x8001;
 constexpr wchar_t kWindowClass[] = L"VisualStudioCodeFileShellMenuOwner";
 
 struct MenuPoint { LONG x; LONG y; };
 struct MenuRect { LONG left; LONG top; LONG right; LONG bottom; };
 
-struct NativeError { DWORD code; };
+struct NativeError { DWORD code; const char* stage = nullptr; HRESULT hresult = S_OK; };
 
 template <typename T>
 class ComOwner {
@@ -305,17 +308,17 @@ void RunMenu(const ShellContextMenuRequest& request, const std::vector<std::wstr
     PIDLIST_ABSOLUTE raw = nullptr;
     SFGAOF attributes = 0;
     const HRESULT parsed = SHParseDisplayName(path.c_str(), nullptr, &raw, 0, &attributes);
-    if (FAILED(parsed) || !raw) throw NativeError{FAILED(parsed) ? static_cast<DWORD>(HRESULT_CODE(parsed)) : ERROR_INVALID_DATA};
+    if (FAILED(parsed) || !raw) throw NativeError{FAILED(parsed) ? static_cast<DWORD>(HRESULT_CODE(parsed)) : ERROR_INVALID_DATA, "SHParseDisplayName", parsed};
     pidls.emplace_back(raw);
     children.push_back(ILFindLastID(raw));
   }
   ComOwner<IShellFolder> folder;
   PCUITEMID_CHILD first_child = nullptr;
   const HRESULT bound = SHBindToParent(pidls.front().get(), IID_PPV_ARGS(folder.put()), &first_child);
-  if (FAILED(bound) || !folder.get()) throw NativeError{FAILED(bound) ? static_cast<DWORD>(HRESULT_CODE(bound)) : ERROR_INVALID_DATA};
+  if (FAILED(bound) || !folder.get()) throw NativeError{FAILED(bound) ? static_cast<DWORD>(HRESULT_CODE(bound)) : ERROR_INVALID_DATA, "SHBindToParent", bound};
   ComOwner<IContextMenu> context;
   const HRESULT queried = folder->GetUIObjectOf(nullptr, static_cast<UINT>(children.size()), children.data(), IID_IContextMenu, nullptr, reinterpret_cast<void**>(context.put()));
-  if (FAILED(queried) || !context.get()) throw NativeError{FAILED(queried) ? static_cast<DWORD>(HRESULT_CODE(queried)) : ERROR_INVALID_DATA};
+  if (FAILED(queried) || !context.get()) throw NativeError{FAILED(queried) ? static_cast<DWORD>(HRESULT_CODE(queried)) : ERROR_INVALID_DATA, "IShellFolder.GetUIObjectOf", queried};
   ComOwner<IContextMenu2> second;
   ComOwner<IContextMenu3> third;
   context->QueryInterface(IID_PPV_ARGS(second.put()));
@@ -326,11 +329,13 @@ void RunMenu(const ShellContextMenuRequest& request, const std::vector<std::wstr
   if (!menu) throw NativeError{GetLastError()};
   struct MenuGuard { HMENU value; ~MenuGuard() { if (value) DestroyMenu(value); } } menu_guard{menu};
   const HRESULT populated = context->QueryContextMenu(menu, 0, kFirstCommand, kLastCommand, CMF_EXPLORE);
-  if (FAILED(populated)) throw NativeError{static_cast<DWORD>(HRESULT_CODE(populated))};
+  if (FAILED(populated)) throw NativeError{static_cast<DWORD>(HRESULT_CODE(populated)), "IContextMenu.QueryContextMenu", populated};
   const bool inspect_folder = paths.size() == 1 && IsDirectory(paths.front());
   if (inspect_folder && (!AppendMenuW(menu, MF_SEPARATOR, 0, nullptr) ||
       !AppendMenuW(menu, MF_STRING, kLockCommand, request.lock_inspection_label.c_str()))) throw NativeError{GetLastError()};
   DWORD menu_error = ERROR_SUCCESS;
+  const bool git_diff = request.git_diff && paths.size() == 1 && !IsDirectory(paths.front());
+  if (!AppendGitDiffMenu(menu, git_diff, &menu_error)) throw NativeError{menu_error};
   if (!EnumerateShellMenu(menu, context.get(), &result->entries, &menu_error)) throw NativeError{menu_error};
   if (request.mode == L"inspect") return;
   MenuWindow window(owner, second.get(), third.get(), &session_closed);
@@ -341,6 +346,7 @@ void RunMenu(const ShellContextMenuRequest& request, const std::vector<std::wstr
   const UINT command = TrackPopupMenuEx(menu, TPM_RETURNCMD | TPM_RIGHTBUTTON, point.x, point.y, window.get(), nullptr);
   result->cancelled = command == 0;
   if (session_closed.load()) throw NativeError{ERROR_CANCELLED};
+  if (SelectGitDiffMenuCommand(command, git_diff, result)) return;
   if (command == kLockCommand && inspect_folder) {
     result->inspect_locks = true;
     result->invoked = true;
@@ -359,10 +365,9 @@ void RunMenu(const ShellContextMenuRequest& request, const std::vector<std::wstr
     invoke.nShow = SW_SHOWNORMAL;
     invoke.ptInvoke.x = point.x;
     invoke.ptInvoke.y = point.y;
-    const HRESULT invoked = context->InvokeCommand(reinterpret_cast<LPCMINVOKECOMMANDINFO>(&invoke));
-    if (FAILED(invoked)) throw NativeError{static_cast<DWORD>(HRESULT_CODE(invoked))};
-    result->invoked = true;
-    while (HasNewVisibleWindow(baseline) && !session_closed.load()) {
+    const HRESULT invoked = InvokeShellMenuCommand(context.get(), reinterpret_cast<LPCMINVOKECOMMANDINFO>(&invoke), result);
+    if (FAILED(invoked)) throw NativeError{static_cast<DWORD>(HRESULT_CODE(invoked)), "IContextMenu.InvokeCommand", invoked};
+    while (!result->cancelled && HasNewVisibleWindow(baseline) && !session_closed.load()) {
       PumpMessages();
       Sleep(25);
     }
@@ -400,7 +405,13 @@ bool ResolveShellContextMenu(const ShellContextMenuRequest& request,
     result->native_milliseconds = elapsed > MAXDWORD ? MAXDWORD : static_cast<DWORD>(elapsed);
     return true;
   } catch (const NativeError& error) {
+    auto command_verb = std::move(result->command_verb);
+    const UINT command_id = result->command_id;
     *result = ShellContextMenuResult{};
+    result->command_verb = std::move(command_verb);
+    result->command_id = command_id;
+    result->error_stage = error.stage;
+    result->error_hresult = error.hresult;
     if (native_error) *native_error = error.code ? error.code : ERROR_GEN_FAILURE;
   } catch (const std::bad_alloc&) {
     *result = ShellContextMenuResult{};
@@ -410,6 +421,45 @@ bool ResolveShellContextMenu(const ShellContextMenuRequest& request,
     if (native_error) *native_error = ERROR_GEN_FAILURE;
   }
   return false;
+}
+
+HRESULT InvokeShellMenuCommand(IContextMenu* context, LPCMINVOKECOMMANDINFO command,
+                              ShellContextMenuResult* result) {
+  result->command_id = static_cast<UINT>(reinterpret_cast<UINT_PTR>(command->lpVerb));
+  wchar_t verb[257]{};
+  if (SUCCEEDED(context->GetCommandString(result->command_id, GCS_VERBW, nullptr,
+      reinterpret_cast<LPSTR>(verb), static_cast<UINT>(std::size(verb))))) result->command_verb.assign(verb, wcsnlen_s(verb, std::size(verb)));
+  const HRESULT status = context->InvokeCommand(command);
+  if (status == E_ABORT || status == HRESULT_FROM_WIN32(ERROR_CANCELLED) || status == COPYENGINE_E_USER_CANCELLED) {
+    result->cancelled = true;
+    result->refresh_required = true;
+    return S_OK;
+  }
+  if (SUCCEEDED(status)) result->invoked = true;
+  return status;
+}
+
+bool AppendGitDiffMenu(HMENU menu, bool enabled, DWORD* native_error) {
+  if (native_error) *native_error = ERROR_SUCCESS;
+  if (!enabled) return true;
+  HMENU submenu = CreatePopupMenu();
+  if (!submenu) { if (native_error) *native_error = GetLastError(); return false; }
+  if (!AppendMenuW(submenu, MF_STRING, kGitDiffCommand, L"Diff") ||
+      !AppendMenuW(menu, MF_SEPARATOR, 0, nullptr) ||
+      !AppendMenuW(menu, MF_POPUP, reinterpret_cast<UINT_PTR>(submenu), L"Git")) {
+    if (native_error) *native_error = GetLastError();
+    DestroyMenu(submenu);
+    return false;
+  }
+  return true;
+}
+
+bool SelectGitDiffMenuCommand(UINT command, bool enabled, ShellContextMenuResult* result) {
+  if (!enabled || command != kGitDiffCommand || !result) return false;
+  result->git_diff = true;
+  result->invoked = true;
+  result->cancelled = false;
+  return true;
 }
 
 bool EnumerateShellMenu(HMENU menu, IContextMenu* context,
@@ -536,6 +586,13 @@ bool ParseRequest(napi_env env, napi_value value, ShellContextMenuRequest* reque
   std::wstring label;
   if (!ReadWide(env, value, "lockInspectionLabel", 120, &label, true)) return false;
   request->lock_inspection_label = label.empty() ? L"Ordnersperren untersuchen" : std::move(label);
+  bool has_git_diff = false;
+  if (napi_has_named_property(env, value, "gitDiff", &has_git_diff) != napi_ok) return false;
+  if (has_git_diff) {
+    napi_value git_diff;
+    if (napi_get_named_property(env, value, "gitDiff", &git_diff) != napi_ok ||
+        napi_get_value_bool(env, git_diff, &request->git_diff) != napi_ok) return false;
+  }
   bool has_keyboard = false;
   if (napi_has_named_property(env, value, "keyboard", &has_keyboard) != napi_ok) return false;
   if (has_keyboard) {
@@ -587,6 +644,8 @@ napi_value ResultValue(napi_env env, const ShellContextMenuResult& result) {
   if (napi_create_uint32(env, result.native_milliseconds, &value) != napi_ok || !Set(env, timing, "nativeMilliseconds", value) ||
       !Set(env, output, "entries", entries) || !Set(env, output, "interfaces", interfaces) || !Set(env, output, "timing", timing)) return nullptr;
   if (result.inspect_locks && !Set(env, output, "action", WideValue(env, L"inspect-locks"))) return nullptr;
+  if (result.git_diff && !Set(env, output, "action", WideValue(env, L"git-diff"))) return nullptr;
+  if (result.refresh_required && !Set(env, output, "refreshRequired", (napi_get_boolean(env, true, &value) == napi_ok) ? value : nullptr)) return nullptr;
   return output;
 }
 
@@ -600,6 +659,20 @@ void Reject(napi_env env, MenuJob* job, const char* code) {
   napi_set_named_property(env, error, "code", code_value);
   napi_set_named_property(env, error, "operation", operation);
   napi_set_named_property(env, error, "nativeCode", native);
+  if (job->result.error_stage) {
+    napi_value stage;
+    if (napi_create_string_utf8(env, job->result.error_stage, NAPI_AUTO_LENGTH, &stage) == napi_ok) napi_set_named_property(env, error, "nativeStage", stage);
+  }
+  if (FAILED(job->result.error_hresult)) {
+    wchar_t hex[11]{};
+    swprintf_s(hex, L"0x%08lX", static_cast<unsigned long>(job->result.error_hresult));
+    Set(env, error, "hresult", WideValue(env, hex));
+  }
+  if (job->result.error_stage && std::strcmp(job->result.error_stage, "IContextMenu.InvokeCommand") == 0) {
+    if (!job->result.command_verb.empty()) Set(env, error, "nativeCommand", WideValue(env, job->result.command_verb));
+    napi_value command_id;
+    if (napi_create_uint32(env, job->result.command_id, &command_id) == napi_ok) napi_set_named_property(env, error, "nativeCommandId", command_id);
+  }
   napi_reject_deferred(env, job->deferred, error);
 }
 

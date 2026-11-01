@@ -8,7 +8,7 @@
   const aliases = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', Escape: 'escape', ' ': 'space', Control: null, Shift: null, Alt: null, Meta: null, Dead: null, Process: null, Unidentified: null };
   const numpad = { NumpadAdd: 'numpad_add', NumpadSubtract: 'numpad_subtract', NumpadMultiply: 'numpad_multiply', NumpadDivide: 'numpad_divide' };
   const samples = [
-    { listFocus: true }, { listFocus: true, searchResults: true },
+    { listFocus: true, tabFocus: true }, { listFocus: true, tabFocus: true, searchResults: true }, { tabFocus: true },
     { textInput: true }, { textInput: true, inlineRenameInput: true, fileDialog: true },
     { textInput: true, transferNameInput: true, fileDialog: true }, { textInput: true, fileDialog: true },
     { textInput: true, fileDialog: true, conflictDialog: true },
@@ -22,8 +22,10 @@
   }
   function createCatalog(manifest) {
     const result = manifest.contributes.keybindings.map(binding => {
-      const when = (binding.when || '').replace(guard, '');
-      const id = idFor(JSON.stringify([binding.command, binding.key, binding.args ?? null, when]));
+      const defaultWhen = (binding.when || '').replace(guard, '');
+      const when = binding.command === 'bitfroest.shell-context-menu' ? defaultWhen.replace(/ && config\.bitfroest\.files\.useSystemContextMenu$/, '') : defaultWhen;
+      const identityWhen = ['bitfroest.next-tab', 'bitfroest.previous-tab'].includes(binding.command) ? when.replace('bitfroest.tabFocus', 'bitfroest.listFocus') : when;
+      const id = idFor(JSON.stringify([binding.command, binding.key, binding.args ?? null, identityWhen]));
       const declaration = manifest.contributes.commands.find(c => c.command === binding.command);
       return { ...binding, when, id, source: 'manifest', title: declaration?.title || binding.command, editable: Boolean(when) && !binding.command.endsWith('ignore-dialog-function-key') };
     });
@@ -58,6 +60,7 @@
   function keys(entry, overrides, platform) { return combinations(Object.hasOwn(overrides, entry.id) ? overrides[entry.id] : platform === 'darwin' ? entry.mac ?? entry.key : platform === 'linux' ? entry.linux ?? entry.key : entry.win ?? entry.key); }
   function active(entry, focus, platform) {
     const values = { 'activeWebviewPanelId': 'bitfroestPrototype', webviewFocus: true, isWindows: platform === 'win32', isLinux: platform === 'linux', isMac: platform === 'darwin', 'bitfroest.ready': true };
+    if (focus.listFocus) values['bitfroest.tabFocus'] = true;
     for (const [key, value] of Object.entries(focus)) values[`bitfroest.${key}`] = value;
     return entry.when.split('&&').every(part => {
       part = part.trim();

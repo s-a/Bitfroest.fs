@@ -56,7 +56,9 @@ test('real ZIP activation requests metadata, enters only after host response, an
   app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-result', ok: true, state, resumeNavigation: { side: 0, path: root } } }));
   assert.equal(app.state().panes[0].tabs[0], root);
   assert.equal(app.document.querySelector('.pane.active .path-input').value, 'C:\\tmp\\sample.zip!');
+  assert.match(app.document.querySelector('#status-message').textContent, /Verzeichnis geöffnet: C:\\tmp\\sample\.zip!/);
   app.click(app.row('docs')); app.key('Enter'); assert.equal(app.state().panes[0].tabs[0], `${root}/docs`);
+  assert.match(app.document.querySelector('#status-message').textContent, /Verzeichnis geöffnet: C:\\tmp\\sample\.zip!\\docs/);
   app.key('Backspace'); app.key('Backspace'); assert.equal(app.state().panes[0].tabs[0], 'C:/tmp');
 });
 test('ZIP F5 waits for confirmation and sends selected IDs; writes and moves stay unavailable', t => {

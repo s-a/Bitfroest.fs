@@ -8,6 +8,7 @@
     const safeKeys = item => { try { return model.keys(item, effective(), platform); } catch { return [t('Ungültige Tastaturbelegungen.')]; } };
     const name = item => `${t(item.title)}${item.args === undefined ? '' : ` · ${item.detail || (typeof item.args === 'string' ? item.args : JSON.stringify(item.args))}`}`;
     const area = item => t(!item.when ? 'Global' : item.when.includes('conflictDialog') ? 'Dateikonfliktdialog' : item.when.includes('transferNameInput') ? 'Dateiname im Transferdialog' : item.when.includes('inlineRenameInput') ? 'Umbenennen' : item.when.includes('searchResultsFocus') ? 'Suchtreffer' : item.when.includes('searchFocus') ? 'Dateisuche' : item.when.includes('listerFocus') ? 'Lister' : item.when.includes('fileDialog') ? 'Dateidialog' : 'Dateiliste');
+    const conflictText = conflicts => conflicts.map(pair => `${pair.keys.map(format).join(', ')}: ${pair.ids.map(id => name(catalog.find(item => item.id === id))).join(' ↔ ')}`).join('\n');
     function close() {
       editing = null;
       if ($('#shortcut-dialog').open) $('#shortcut-dialog').close();
@@ -20,7 +21,7 @@
       const ids = new Set(conflicts.flatMap(pair => pair.ids));
       const query = $('#shortcut-search').value.toLocaleLowerCase(), filter = $('#shortcut-filter').value;
       const body = $('#shortcut-rows'); body.replaceChildren();
-      $('#shortcut-conflicts').textContent = invalid || conflicts.map(pair => `${pair.keys.map(format).join(', ')}: ${pair.ids.map(id => name(catalog.find(item => item.id === id))).join(' ↔ ')}`).join('\n');
+      $('#shortcut-conflicts').textContent = invalid || conflictText(conflicts);
       blocked(Boolean(invalid) || conflicts.length > 0);
       for (const item of catalog) {
         const values = safeKeys(item), custom = Object.hasOwn(data, item.id);
@@ -29,7 +30,6 @@
         const cell = value => { const td = document.createElement('td'); td.textContent = value; row.append(td); return td; };
         cell(name(item)); cell(values.map(format).join(' / ') || t('Nicht belegt')); cell(area(item));
         cell(t(custom ? 'Eigene Belegung' : Object.hasOwn(base, item.id) ? 'Vom Benutzer geerbt' : 'Standard'));
-        cell(t(ids.has(item.id) ? 'Konflikt' : 'Externe Belegungen ungeprüft'));
         const actions = cell('');
         for (const [kind, label, disabled, action] of [
           ['edit', 'Ändern…', !item.editable, () => { editing = item; candidate = values.join(' | '); returnFocus = item.id; $('#shortcut-capture').value = values.map(format).join(' / '); $('#shortcut-dialog-title').textContent = name(item); $('#shortcut-capture-error').textContent = ''; $('#shortcut-dialog').showModal(); $('#shortcut-capture').focus(); }],
@@ -46,7 +46,13 @@
       if (!editing) return;
       event.preventDefault(); event.stopImmediatePropagation();
       const value = model.capture(event);
-      if (value) { candidate = value; $('#shortcut-capture').value = format(value); $('#shortcut-capture-error').textContent = ''; }
+      if (value) {
+        candidate = value; $('#shortcut-capture').value = format(value);
+        try {
+          const conflicts = model.conflicts(catalog, { ...effective(), [editing.id]: candidate }, platform).filter(pair => pair.ids.includes(editing.id));
+          $('#shortcut-capture-error').textContent = conflictText(conflicts);
+        } catch (failure) { $('#shortcut-capture-error').textContent = t(failure.message); }
+      }
       else if (!['Control', 'Shift', 'Alt', 'Meta'].includes(event.key)) { candidate = ''; $('#shortcut-capture').value = ''; $('#shortcut-capture-error').textContent = t('Diese Taste kann nicht erfasst werden.'); }
     });
     const accept = append => {

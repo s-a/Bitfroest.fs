@@ -2,6 +2,40 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { parseVersion, getFileVersion } = require('../pe-file-version');
 
+function stringImage(translated = false) {
+  const bytes = image([7, 6, 5, 4]);
+  function block(key, value, children = [], type = 1) {
+    const name = Buffer.from(key + '\0', 'utf16le'), start = (6 + name.length + 3) & ~3;
+    const content = Buffer.isBuffer(value) ? value : Buffer.from(value + '\0', 'utf16le');
+    let parts = [Buffer.alloc(start), content];
+    let length = start + content.length;
+    for (const child of children) { const padding = Buffer.alloc((4 - length % 4) % 4); parts.push(padding, child); length += padding.length + child.length; }
+    const result = Buffer.concat(parts); result.writeUInt16LE(result.length); result.writeUInt16LE(type ? content.length / 2 : content.length, 2); result.writeUInt16LE(type, 4); name.copy(result, 6); return result;
+  }
+  const entries = [block('040904b0', Buffer.alloc(0), [block('FileVersion', '7.6 beta'), block('ProductVersion', '99.0')])];
+  if (translated) entries.push(block('040704b0', Buffer.alloc(0), [block('FileVersion', '7.6 Vorschau')]));
+  const tables = block('StringFileInfo', Buffer.alloc(0), entries);
+  const tail = translated ? block('VarFileInfo', Buffer.alloc(0), [block('Translation', Buffer.from([7,4,176,4]), [], 0)]) : Buffer.alloc(0);
+  const padding = Buffer.alloc((4 - tables.length % 4) % 4);
+  const children = Buffer.concat([tables, padding, tail]);
+  children.copy(bytes, 0x35c); bytes.writeUInt16LE(92 + children.length, 0x300); bytes.writeUInt32LE(92 + children.length, 0x264);
+  return bytes;
+}
+
+test('file version strings remain independent of fixed numbers and product versions', async () => {
+  const { parseVersionInfo, getFileVersionInfo } = require('../pe-file-version');
+  assert.equal(typeof parseVersionInfo, 'function');
+  assert.deepEqual(parseVersionInfo(stringImage()), { version: [7, 6, 5, 4], versionString: '7.6 beta' });
+  assert.deepEqual(parseVersion(stringImage()), [7, 6, 5, 4]);
+  const file = fakeFile(stringImage());
+  assert.deepEqual(await getFileVersionInfo('file.dll', { fs: file.fs }), { version: [7, 6, 5, 4], versionString: '7.6 beta' });
+  assert.equal(file.calls.at(-1).close, true);
+  assert.equal(parseVersionInfo(image()).versionString, undefined);
+  const malformed = stringImage(); malformed.writeUInt16LE(65535, 0x35c);
+  assert.equal(parseVersionInfo(malformed).versionString, undefined);
+  assert.equal(parseVersionInfo(stringImage(true)).versionString, '7.6 Vorschau');
+});
+
 function image(version = [2, 12, 345, 6], plus = false) {
   const bytes = Buffer.alloc(0x600), nt=0x80, optional=nt+24, optionalSize=plus?240:224, section=optional+optionalSize;
   bytes.write('MZ');bytes.writeUInt32LE(nt,0x3c);bytes.write('PE\0\0',nt);bytes.writeUInt16LE(1,nt+6);bytes.writeUInt16LE(optionalSize,nt+20);
@@ -44,9 +78,12 @@ module.exports={image,fakeFile};
 test('filesystem snapshots include versions for executable files without inventing them for unrelated files',async t=>{
  const fs=require('node:fs/promises'),path=require('node:path'),os=require('node:os');
  const root=await fs.mkdtemp(path.join(os.tmpdir(),'commander-versions-'));t.after(()=>fs.rm(root,{recursive:true,force:true}));
- await fs.writeFile(path.join(root,'sample.dll'),image([4,3,2,1]));await fs.writeFile(path.join(root,'plain.txt'),'ordinary');
+ await fs.writeFile(path.join(root,'sample.dll'),stringImage());await fs.writeFile(path.join(root,'plain.txt'),'ordinary');
+ await fs.writeFile(path.join(root,'descript.ion'),'sample.dll Release notes\n');
  const {createProvider}=require('../filesystem-provider');const state=await createProvider({roots:[root]}).load();
- const files=state.folders[root.replace(/\\/g,'/')];assert.deepEqual(files.find(file=>file.name==='sample.dll').fileVersion,[4,3,2,1]);assert.equal(files.find(file=>file.name==='plain.txt').fileVersion,undefined);
+ const files=state.folders[root.replace(/\\/g,'/')];assert.deepEqual(files.find(file=>file.name==='sample.dll').fileVersion,[7,6,5,4]);assert.equal(files.find(file=>file.name==='sample.dll').fileVersionString,'7.6 beta');assert.equal(files.find(file=>file.name==='plain.txt').fileVersion,undefined);
+ assert.equal(files.find(file=>file.name==='sample.dll').comment,'Release notes');
+ assert.equal(files.find(file=>file.name==='plain.txt').attributeFlags.archive,undefined);
 });
 
 test('malformed DOS and PE headers cannot redirect resource reads outside the image',()=>{

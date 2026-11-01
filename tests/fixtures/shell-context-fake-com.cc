@@ -1,6 +1,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <shobjidl.h>
+#include <sherrors.h>
 #include <cstdio>
 #include <cstring>
 #include <vector>
@@ -11,6 +12,7 @@ class FakeContextMenu final : public IContextMenu3 {
   ULONG refs = 1;
   unsigned int verb_calls = 0, second_calls = 0, third_calls = 0;
   HRESULT third_result = S_OK, second_result = S_OK;
+  HRESULT invoke_result = S_OK;
   HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, void** object) override {
     if (iid == IID_IUnknown || iid == IID_IContextMenu || iid == IID_IContextMenu2 || iid == IID_IContextMenu3) {
       *object = static_cast<IContextMenu3*>(this); AddRef(); return S_OK;
@@ -20,7 +22,7 @@ class FakeContextMenu final : public IContextMenu3 {
   ULONG STDMETHODCALLTYPE AddRef() override { return ++refs; }
   ULONG STDMETHODCALLTYPE Release() override { return --refs; }
   HRESULT STDMETHODCALLTYPE QueryContextMenu(HMENU, UINT, UINT, UINT, UINT) override { return S_OK; }
-  HRESULT STDMETHODCALLTYPE InvokeCommand(LPCMINVOKECOMMANDINFO) override { return S_OK; }
+  HRESULT STDMETHODCALLTYPE InvokeCommand(LPCMINVOKECOMMANDINFO) override { return invoke_result; }
   HRESULT STDMETHODCALLTYPE GetCommandString(UINT_PTR, UINT flags, UINT*, LPSTR text, UINT count) override {
     if (flags == GCS_VERBW && text && count >= 5) {
       wcscpy_s(reinterpret_cast<wchar_t*>(text), count / sizeof(wchar_t), L"open");
@@ -36,7 +38,38 @@ class FakeContextMenu final : public IContextMenu3 {
 };
 
 int wmain() {
+  {
+    HMENU git_menu = CreatePopupMenu();
+    DWORD git_error = 0;
+    if (!AppendGitDiffMenu(git_menu, false, &git_error) || GetMenuItemCount(git_menu) != 0) return 10;
+    if (!AppendGitDiffMenu(git_menu, true, &git_error)) return 11;
+    HMENU git_submenu = GetSubMenu(git_menu, GetMenuItemCount(git_menu) - 1);
+    wchar_t label[16]{};
+    if (!git_submenu || GetMenuItemCount(git_submenu) != 1 ||
+        !GetMenuStringW(git_submenu, 0, label, 16, MF_BYPOSITION) || wcscmp(label, L"Diff") != 0) return 12;
+    ShellContextMenuResult git_result;
+    const UINT git_command = GetMenuItemID(git_submenu, 0);
+    if (git_command <= 0x8000 || SelectGitDiffMenuCommand(git_command, false, &git_result) ||
+        !SelectGitDiffMenuCommand(git_command, true, &git_result) || !git_result.git_diff || !git_result.invoked || git_result.cancelled) return 13;
+    DestroyMenu(git_menu);
+  }
   FakeContextMenu fake;
+  CMINVOKECOMMANDINFO command{};
+  command.cbSize = sizeof(command);
+  for (const HRESULT status : { S_OK, E_ABORT, HRESULT_FROM_WIN32(ERROR_CANCELLED), COPYENGINE_E_USER_CANCELLED, COPYENGINE_E_CANCELLED, E_ACCESSDENIED, E_FAIL }) {
+    fake.invoke_result = status;
+    ShellContextMenuResult result;
+    const HRESULT actual = InvokeShellMenuCommand(&fake, &command, &result);
+    const bool cancelled = status == E_ABORT || status == HRESULT_FROM_WIN32(ERROR_CANCELLED) || status == COPYENGINE_E_USER_CANCELLED;
+    if (actual != (cancelled ? S_OK : status) || result.cancelled != cancelled ||
+        result.refresh_required != cancelled || result.invoked != SUCCEEDED(status) ||
+        result.command_verb != L"open" || result.command_id != 0) {
+      std::fprintf(stderr, "invocation outcome mismatch: status=0x%08lx cancelled=%d invoked=%d refresh=%d\n",
+                   static_cast<unsigned long>(status), result.cancelled, result.invoked, result.refresh_required);
+      return 9;
+    }
+  }
+  fake.verb_calls = 0;
   HMENU menu = CreatePopupMenu();
   HMENU submenu = CreatePopupMenu();
   if (!menu || !submenu) return 2;

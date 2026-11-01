@@ -1,5 +1,8 @@
 const vscode = require('vscode');
+const Progress = require('./media/commander-progress');
+const { productIcon } = require('./product-icons');
 const extensionVersion = require('./package.json').version;
+const iconLayout = require('./media/icon-layout');
 const { createSelectionIO } = require('./selection-io');
 const { selectStartupRoots, existingDirectories } = require('./startup-paths');
 const { resolveUncPaths } = require('./network-paths');
@@ -13,12 +16,13 @@ const crypto = require('node:crypto');
 const { loadIconTheme } = require('./icon-theme');
 const { getFilesystemIcons } = require('./filesystem-icons');
 const { createProvider } = require('./filesystem-provider');
+const { createSearchMetadata } = require('./search-metadata');
 const { createZipFilesystem } = require('./zip-filesystem');
 const { createZipEditor } = require('./zip-editor');
 const { createReadonlyResources } = require('./readonly-files');
 const { createClipboardProvider } = require('./clipboard-provider');
 const { create } = require('./media/commander-i18n');
-const { columnSetsFromTables, columnSetFromPreferences, catalog } = require('./media/commander-column-settings');
+const { columnSetsFromTables, columnSetFromPreferences, catalog, normalizeColumnSets, columnTitle, isColumnAvailable } = require('./media/commander-column-settings');
 const { renderOperationError } = require('./operation-errors');
 const { openTrash } = require('./open-trash');
 const { openTerminal } = require('./open-terminal');
@@ -31,7 +35,7 @@ const { createConfigurationEditor } = require('./configuration-editor');
 const { createConfigurationSettings } = require('./configuration-settings');
 
 function operationDiagnostic(error, request, state) {
-  const fields = ['path', 'paths', 'target', 'archive', 'side', 'action', 'recursive', 'operationId', 'snapshotId'];
+  const fields = ['path', 'paths', 'target', 'archive', 'side', 'action', 'recursive', 'operationId', 'snapshotId', 'directory', 'ids', 'requestId', 'keyboard', 'inspectLocks'];
   const requestContext = { type: request.type };
   for (const key of fields) if (request[key] !== undefined) requestContext[key] = request[key];
   if (request.transfer && typeof request.transfer === 'object') {
@@ -42,9 +46,9 @@ function operationDiagnostic(error, request, state) {
   const serialize = (failure, depth = 0) => {
     if (!failure || depth > 6) return undefined;
     const result = {};
-    for (const key of ['name', 'message', 'code', 'path', 'scanPhase']) {
+    for (const key of ['name', 'message', 'code', 'path', 'scanPhase', 'nativeCode', 'nativeStage', 'hresult', 'nativeCommand', 'nativeCommandId', 'operation', 'requestId', 'generation']) {
       const value = failure[key];
-      if (typeof value === 'string' || typeof value === 'number') result[key] = String(value).slice(0, 4000);
+      if (typeof value === 'string' || typeof value === 'number' || typeof value === 'bigint') result[key] = String(value).slice(0, 4000);
     }
     if (typeof failure.stack === 'string') result.stack = failure.stack.slice(0, 12000);
     if (failure.cause) result.cause = serialize(failure.cause, depth + 1);
@@ -64,6 +68,8 @@ const { createShellMenuProvider } = require('./native-shell-menu');
 const { createLockInspector } = require('./lock-inspector');
 const { createLicenseInformation } = require('./license-information');
 const os = require('node:os');
+
+let flushPersistence = () => Promise.resolve();
 
 function activate(context) {
   const displayLanguage = () => {
@@ -90,22 +96,22 @@ function activate(context) {
   context.subscriptions.push(vscode.commands.registerCommand('bitfroest.licenses', () => licenseInformation.open().catch(error => {
     vscode.window.showErrorMessage(t('Lizenzhinweise konnten nicht geöffnet werden: {error}', { error: error.message }));
   })));
-  const columnSettings = () => {
+  const readColumnSettings = () => {
     const settings = vscode.workspace.getConfiguration('bitfroest');
     const layout = settings.get('columns.layout');
     if (Array.isArray(layout) && layout.length) {
       try {
-        const columns = validateColumns(layout).map(column => ({ ...catalog.find(item => item.id === column.id), ...column, title: column.title.trim() || t(catalog.find(item => item.id === column.id).title) }));
+        const columns = validateColumns(layout).map(column => ({ ...catalog.find(item => item.id === column.id), ...column }));
         return { sets: [{ id: 'standard', name: 'Standard', columns }], activeSet: 'standard' };
       } catch { /* Earlier settings remain available when a layout is invalid. */ }
     }
-    const names = ['names', 'fields', 'titles', 'widths', 'alignments', 'visibility', 'order'];
+    const names = ['names', 'fields', 'alignments', 'visibility', 'order'];
     const configured = key => {
       if (!settings.inspect) return settings.get(key) !== undefined;
       const value = settings.inspect(key);
       return value && ['globalValue', 'workspaceValue', 'workspaceFolderValue'].some(scope => value[scope] !== undefined);
     };
-    const preferenceKeys = catalog.flatMap(column => ['visible', 'width', 'alignment', 'position', 'title'].map(kind => `${kind}.${column.id}`));
+    const preferenceKeys = catalog.flatMap(column => ['visible', 'alignment', 'position'].map(kind => `${kind}.${column.id}`));
     const hasFixed = preferenceKeys.some(key => configured(`columns.${key}`));
     if (hasFixed || !['sets', ...names].some(name => configured(`columns.${name}`))) {
       const preferences = Object.fromEntries(preferenceKeys.map(key => [key, settings.get(`columns.${key}`)]));
@@ -115,8 +121,12 @@ function activate(context) {
     if (legacy) return { sets: settings.get('columns.sets'), activeSet: settings.get('columns.activeSet') };
     const properties = Object.assign({}, ...require('./package.json').contributes.configuration.map(category => category.properties));
     const tables = Object.fromEntries(names.map(name => [name, settings.get(`columns.${name}`) ?? properties[`bitfroest.columns.${name}`].default]));
-    if (!configured('columns.titles')) tables.titles = Object.fromEntries(['Name', 'Erweiterung', 'Größe', 'Datum', 'Attribute'].map((title, index) => [`standard.${['name', 'type', 'size', 'date', 'attributes'][index]}`, t(title)]));
+    tables.titles = Object.fromEntries(catalog.slice(0, 5).map(column => [`standard.${column.id}`, t(column.title)]));
     return { sets: columnSetsFromTables(tables, t), activeSet: settings.get('columns.activeSet') };
+  };
+  const columnSettings = () => {
+    const settings = readColumnSettings();
+    return { ...settings, sets: normalizeColumnSets(settings.sets).map(set => ({ ...set, columns: set.columns.map(column => ({ ...column, visible: column.visible !== false && isColumnAvailable(column, process.platform), title: columnTitle(column, t) })) })) };
   };
   const favoriteSettings = () => {
     const settings = vscode.workspace.getConfiguration('bitfroest');
@@ -169,9 +179,10 @@ function activate(context) {
   }
   const fileSettings = () => {
     const settings = vscode.workspace.getConfiguration('bitfroest');
-    return { deleteToTrash: settings.get('files.deleteToTrash', true) !== false, countFolderSizeOnSpace: settings.get('files.countFolderSizeOnSpace', true) !== false, selectDirectories: settings.get('files.selectDirectories', true) !== false,
+    return { useSystemContextMenu: settings.get('files.useSystemContextMenu', false) === true, deleteToTrash: settings.get('files.deleteToTrash', true) !== false, countFolderSizeOnSpace: settings.get('files.countFolderSizeOnSpace', true) !== false, selectDirectories: settings.get('files.selectDirectories', true) !== false,
+      iconSize: iconLayout.resolve(settings.get('appearance.iconSize', iconLayout.defaults.size)).size,
       colors: { enabled: settings.get('colors.fileTypes', true), git: settings.get('colors.gitStatus', true), rules: settings.get('colors.rules', defaultFileColors) },
-      gitStatus: { iconSizePercent: settings.get('gitStatus.iconSizePercent', 66) },
+      gitStatus: { iconSizePercent: settings.get('gitStatus.iconSizePercent', iconLayout.defaults.badgeRatio * 100) },
       zip: { level: settings.get('zip.compressionLevel', 6), paths: settings.get('zip.storePaths', true), recursive: settings.get('zip.recursive', true), verify: settings.get('zip.verifyAfterWrite', true) } };
   };
   let panel, resetListerViews = async () => {}, resetSearchViews = () => {};
@@ -216,10 +227,45 @@ function activate(context) {
   context.subscriptions.push({ dispose() { shortcutsDisposed = true; for (const entry of shortcutCatalog.filter(item => item.source === 'manifest' && item.editable)) vscode.commands.executeCommand('setContext', `bitfroest.shortcutOverride.${entry.id}`, false); } });
   let searchPresetQueue = Promise.resolve();
   let panelReady = false, panelFailed = false;
+  let startupLog;
+  const startupDiagnostics = [];
+  let omittedStartupEvents = 0, currentStartup, startupClock = performance.now(), logSequence = 0;
+  function logStartup(kind, details = {}) {
+    const event = { version: 1, timestamp: new Date().toISOString(), startupId: currentStartup?.id || null,
+      sequence: ++logSequence, elapsed: Math.max(0, performance.now() - startupClock), kind, ...details };
+    startupDiagnostics.push(event);
+    if (startupDiagnostics.length > 256) { startupDiagnostics.shift(); omittedStartupEvents++; }
+    if (!startupLog) { startupLog = vscode.window.createOutputChannel('Bitfroest.fs', { log: true }); context.subscriptions.push(startupLog); }
+    const line = JSON.stringify(event);
+    if (kind === 'error') startupLog.error(line); else startupLog.info(line);
+  }
+  async function copyStartupLog() {
+    const report = { version: 1, timestamp: new Date().toISOString(), extensionVersion, vscodeVersion: vscode.version,
+      runtime: { node: process.version, electron: process.versions.electron, platform: process.platform, architecture: process.arch, osRelease: os.release(), remoteName: vscode.env.remoteName },
+      startup: currentStartup, webviewReady: panelReady, webviewFailed: panelFailed, opening,
+      panel: panel ? { visible: panel.visible, viewColumn: panel.viewColumn } : null,
+      panelPaths: (savedState?.panes || []).map(pane => pane.tabs?.[pane.tab || 0]), omittedEvents: omittedStartupEvents, events: startupDiagnostics };
+    try {
+      await vscode.env.clipboard.writeText(JSON.stringify(report, null, 2));
+      void vscode.window.showInformationMessage(t('Startprotokoll kopiert.'));
+      return true;
+    } catch (error) {
+      logStartup('error', { message: error.message, stack: error.stack, operation: 'clipboard' });
+      void vscode.window.showErrorMessage(t('Startprotokoll konnte nicht kopiert werden: {error}', { error: error.message }));
+      return false;
+    }
+  }
+  context.subscriptions.push(vscode.commands.registerCommand('bitfroest.copyStartupLog', copyStartupLog));
+  let windowFocused = vscode.window.state.focused;
+  context.subscriptions.push(vscode.window.onDidChangeWindowState(state => {
+    const returned = state.focused && !windowFocused;
+    windowFocused = state.focused;
+    if (returned && panel && panelReady) panel.webview.postMessage({ type: 'window-focus' });
+  }));
   function setReady(value) {
     panelReady = value;
     vscode.commands.executeCommand('setContext', 'bitfroest.ready', value);
-    if (!value) for (const key of ['textInput', 'listFocus', 'listerFocus', 'searchFocus', 'searchResultsFocus', 'searchResults', 'conflictDialog', 'transferNameInput', 'fileDialog', 'inlineRenameInput']) vscode.commands.executeCommand('setContext', `bitfroest.${key}`, false);
+    if (!value) for (const key of ['tabFocus', 'textInput', 'listFocus', 'listerFocus', 'searchFocus', 'searchResultsFocus', 'searchResults', 'conflictDialog', 'transferNameInput', 'fileDialog', 'inlineRenameInput', 'canPasteFiles']) vscode.commands.executeCommand('setContext', `bitfroest.${key}`, false);
   }
   let opening = false, pendingOpen = Promise.resolve();
   let scope = context.workspaceState.get('tabScope', vscode.workspace.workspaceFolders?.length ? 'workspace' : 'global');
@@ -232,12 +278,18 @@ function activate(context) {
     const identity = value => process.platform === 'win32' ? value.toLowerCase() : value;
     return normalized.filter((value, index) => !normalized.some((other, otherIndex) => otherIndex !== index && (identity(value) === identity(other) ? otherIndex < index : identity(value).startsWith(`${identity(other).replace(/\/$/, '')}/`))));
   };
-  const provider = createZipFilesystem(createProvider({ roots: fileRoots, additionalRoots: favoriteRoots, allowNavigationOutsideRoots: true, deletePath: (target, options) => vscode.workspace.fs.delete(vscode.Uri.file(target), options) }));
-  context.subscriptions.push(provider);
+  const directoryMetadata = createSearchMetadata();
+  context.subscriptions.push(directoryMetadata);
+  const provider = createZipFilesystem(createProvider({ roots: fileRoots, additionalRoots: favoriteRoots, allowNavigationOutsideRoots: true, commentEncoding: directory => vscode.workspace.getConfiguration('bitfroest', vscode.Uri.file(directory)).get('files.commentEncoding') || 'windows-1252', ...(process.platform === 'win32' ? { readAttributes: target => directoryMetadata.attributes(target, undefined, true) } : {}), deletePath: (target, options) => vscode.workspace.fs.delete(vscode.Uri.file(target), options) }));
+  const navigationProvider = createZipFilesystem(createProvider({ roots: fileRoots, additionalRoots: favoriteRoots, allowNavigationOutsideRoots: true, commentEncoding: directory => vscode.workspace.getConfiguration('bitfroest', vscode.Uri.file(directory)).get('files.commentEncoding') || 'windows-1252', ...(process.platform === 'win32' ? { readAttributes: target => directoryMetadata.attributes(target, undefined, true) } : {}), deletePath: (target, options) => vscode.workspace.fs.delete(vscode.Uri.file(target), options) }));
+  let navigationRevision = 0, viewRevision = 0;
+  context.subscriptions.push(provider, navigationProvider);
   const fileClipboard = createClipboardProvider({ contains: provider.contains });
   context.subscriptions.push({ dispose: () => fileClipboard.dispose() });
   let clipboardTicket = null, filesystemRevision = 0;
   let clipboardQueue = Promise.resolve();
+  function notifyClipboardChanged() { if (panel && panelReady) panel.webview.postMessage({ type: 'clipboard-changed' }); }
+  async function writeClipboardText(text) { await vscode.env.clipboard.writeText(text); notifyClipboardChanged(); }
   const clipboardIdentity = value => /^[a-z]:\//i.test(value) ? value.toLowerCase() : value;
   function clipboardSourceExists(value) {
     return Object.entries(filesystemState?.folders || {}).some(([directory, rows]) => rows.some(row => clipboardIdentity(`${directory}/${row.name}`) === clipboardIdentity(value)));
@@ -246,6 +298,15 @@ function activate(context) {
   let filesystemQueue = Promise.resolve();
   let filesystemRequests = 0;
   const transferJobs = new Map();
+  const directoryJobs = new Map();
+  const closeDirectoryJobs = () => { for (const job of directoryJobs.values()) job.controller.abort(); directoryJobs.clear(); };
+  const closeMissingDirectoryJobs = panes => {
+    for (const job of directoryJobs.values()) {
+      const tabs = panes?.[job.side]?.tabStates;
+      if (job.tabId && Array.isArray(tabs) && !tabs.some(tab => tab.id === job.tabId)) job.controller.abort();
+    }
+  };
+  context.subscriptions.push({ dispose: closeDirectoryJobs });
   const searchCatalog = new Map();
   const extractedSearchFiles = new Set();
   context.subscriptions.push({ dispose() { for (const job of transferJobs.values()) job.controller.abort(); transferJobs.clear(); } });
@@ -287,14 +348,14 @@ function activate(context) {
       return { ok: true };
     } catch (error) { if (target) await zipEditor.close(target); if (error.name !== 'AbortError') vscode.window.showErrorMessage(t(error.message)); return { ok: false, cancelled: error.name === 'AbortError', error: t(error.message) }; }
   }
-  function loadView(view) {
-    if (!view?.realFilesystem || !Array.isArray(view.panes) || !view.panes.length) return provider.load();
+  function loadView(view, progress = {}) {
+    if (!view?.realFilesystem || !Array.isArray(view.panes) || !view.panes.length) return provider.load(progress);
     const activePaths = (view?.panes || []).map(pane => pane.tabs?.[pane.tab || 0]);
     const directories = existingDirectories([...new Set(activePaths.filter(target => typeof target === 'string' && provider.canNavigate(target)))]);
     const deferredDirectories = [...new Set((view?.panes || []).flatMap(pane => pane.tabs || []).filter(target => typeof target === 'string' && !activePaths.includes(target)))];
     const resultDirectories = (view?.panes || []).flatMap(p => p.tabStates?.[p.tab || 0]?.searchResult?.paths || []).filter(target => typeof target === 'string' && provider.contains(target)).map(target => normalizePath(path.dirname(target)));
     directories.push(...resultDirectories.filter(target => !directories.includes(target) && fs.existsSync(target)));
-    return provider.load({ directories, deferredDirectories, visibleOnly: true });
+    return provider.load({ ...progress, directories, deferredDirectories, visibleOnly: true });
   }
   function affectedViewDirectories(view, targets) {
     const identity = value => pathIdentity(normalizePath(value), { platform: process.platform }).replace(/\/$/, '');
@@ -307,7 +368,7 @@ function activate(context) {
       const activePath = p.tabs[p.tab];
       const pane = { ...p, tabs: p.tabs.filter(target => Object.hasOwn(fresh.folders, target)) };
       if (!pane.tabs.length) return fresh.panes[index];
-      const retainedIndex = pane.tabs.indexOf(activePath);
+      const retainedIndex = Object.hasOwn(fresh.folders, activePath) ? p.tabs.slice(0, p.tab).filter(target => Object.hasOwn(fresh.folders, target)).length : -1;
       pane.tab = retainedIndex >= 0 ? retainedIndex : Math.min(pane.tab, pane.tabs.length - 1);
       if (pane.tabStates) pane.tabStates = pane.tabStates.filter(tab => pane.tabs.includes(tab.path));
       return pane;
@@ -316,59 +377,138 @@ function activate(context) {
     return fresh;
   }
   let saveQueue = Promise.resolve();
+  flushPersistence = () => saveQueue;
   function saveState(state) {
     savedState = state;
     const target = storage();
     const persisted = state?.realFilesystem ? { version: 1, realFilesystem: true, active: state.active, panes: state.panes } : state;
-    saveQueue = saveQueue.then(() => target.update('fileManagerState', persisted)).catch(error => vscode.window.showErrorMessage(t('Ordner-Tabs konnten nicht gespeichert werden: {error}', { error: t(error.message) })));
+    saveQueue = saveQueue.then(() => target.update('fileManagerState', persisted)).catch(error => { vscode.window.showErrorMessage(t('Ordner-Tabs konnten nicht gespeichert werden: {error}', { error: t(error.message) })); });
     return saveQueue;
   }
   const title = () => `Bitfroest.fs · ${t(scope === 'global' ? 'Global' : 'Arbeitsbereich')}`;
   const status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 101);
-  status.text = '$(folder)';
-  status.tooltip = t('Bitfroest.fs ein-/ausblenden (Strg+Alt+Umschalt+F12)');
-  status.command = 'bitfroest.openPrototype';
+  status.text = `${productIcon('folder')} Bitfroest.fs`;
+  status.tooltip = t('Dateiverwaltung öffnen oder nach vorn holen');
+  status.command = 'bitfroest.show';
   status.name = 'Bitfroest.fs';
   status.show();
   context.subscriptions.push(status);
   function updateStatus() {
-    status.text = panel?.visible ? '$(folder-opened)' : '$(folder)';
+    status.text = `${productIcon(panel?.visible ? 'folder-opened' : 'folder')} Bitfroest.fs`;
   }
-  function open(restoredPanel) {
+  function open(restoredPanel, toggle = true) {
     if (opening) return restoredPanel ? pendingOpen.then(() => open(restoredPanel)) : undefined;
-    pendingOpen = openPanel(restoredPanel);
+    pendingOpen = openPanel(restoredPanel, toggle);
     return pendingOpen;
   }
-  async function openPanel(restoredPanel) {
-    if (panel?.visible && !restoredPanel) { panel.dispose(); return; }
+  async function openPanel(restoredPanel, toggle = true) {
+    if (panel?.visible && !restoredPanel && toggle) { panel.dispose(); return; }
     if (panel) { if (restoredPanel) restoredPanel.dispose(); else panel.reveal(); return; }
     opening = true;
-    let restoredDisposed = false;
-    const restoringSubscription = restoredPanel?.onDidDispose(() => { restoredDisposed = true; });
+    const startupOrigin = performance.now(), startupEvents = [], directoryEvents = new Map();
+    startupClock = startupOrigin;
+    currentStartup = { id: crypto.randomUUID(), restored: Boolean(restoredPanel), startedAt: new Date().toISOString() };
+    logStartup('start', currentStartup);
+    logStartup('runtime', { extensionVersion, vscodeVersion: vscode.version, node: process.version, electron: process.versions.electron || null, platform: process.platform, architecture: process.arch, osRelease: os.release(), remoteName: vscode.env.remoteName || null,
+      processId: process.pid, extensionDigest: crypto.createHash('sha256').update(fs.readFileSync(__filename)).digest('hex') });
+    const startupWatchdog = setTimeout(() => {
+      const message = t('Die Dateiverwaltung meldet noch keine Bereitschaft. Das Startprotokoll enthält den letzten Ladeschritt.');
+      logStartup('waiting', { message });
+      logStartup('document-waiting', { documentId, documentSequence, diagnosticCount, lastBrowserEvent, lastFrame, panelVisible: loadingPanel?.visible, panelActive: loadingPanel?.active });
+      const action = t('Startprotokoll kopieren');
+      void Promise.resolve(vscode.window.showWarningMessage(message, action)).then(choice => {
+        if (choice === action) return copyStartupLog();
+      });
+    }, 15000);
+    startupWatchdog.unref?.();
+    const nonce = crypto.randomBytes(18).toString('base64');
+    const diagnosticsScript = fs.readFileSync(path.join(context.extensionPath, 'media', 'startup-diagnostics.js'), 'utf8').replace(/<\/script/gi, '<\\/script');
+    let documentId = crypto.randomUUID(), documentSequence = 0, diagnosticCount = 0, criticalCount = 0, lastBrowserEvent = null, lastFrame = null;
+    const startupId = currentStartup.id;
+    const receiveDiagnostic = message => {
+      if (message?.type !== 'startup-diagnostic') return false;
+      if (restoredDisposed || message.version !== 1 || message.startupId !== startupId || currentStartup?.id !== startupId || message.documentId !== documentId) return true;
+      if (!Number.isSafeInteger(message.sequence) || message.sequence <= documentSequence || !message.event || typeof message.event !== 'object') return true;
+      if (JSON.stringify(message).length > 32000) { logStartup('diagnostic-rejected', { reason: 'message-too-large', documentId }); return true; }
+      const event = message.event;
+      if (typeof event.name !== 'string' || event.name.length > 80 || !Number.isFinite(event.elapsed) || event.elapsed < 0) return true;
+      documentSequence = message.sequence;
+      const critical = ['runtime-error', 'resource-error', 'unhandled-rejection', 'csp-violation'].includes(event.name);
+      if (critical && ++criticalCount > 32) { if (criticalCount === 33) logStartup('diagnostic-limit', { documentId, limit: 32, category: 'errors' }); return true; }
+      if (!critical && ++diagnosticCount > 512) {
+        if (diagnosticCount === 513) logStartup('diagnostic-limit', { documentId, limit: 512 });
+        return true;
+      }
+      lastBrowserEvent = event.name;
+      const detail = {};
+      for (const key of ['name', 'readyState', 'visibility', 'focused', 'resource', 'tag', 'message', 'source', 'stack', 'directive', 'width', 'height', 'region', 'regionWidth', 'regionHeight', 'display', 'cssVisibility', 'opacity', 'background', 'timeOrigin', 'line', 'column']) {
+        const value = event[key];
+        if (typeof value === 'string') detail[key] = value.slice(0, key === 'stack' ? 16000 : key === 'message' ? 8000 : 2000);
+        else if (typeof value === 'boolean' || (typeof value === 'number' && Number.isFinite(value))) detail[key] = value;
+      }
+      logStartup('webview-event', { documentId, documentSequence, browserElapsed: event.elapsed, event: detail });
+      if (event.name === 'frame-observed') lastFrame = detail;
+      if (critical) logStartup('error', { operation: 'webview-diagnostic', documentId, documentSequence, browserElapsed: event.elapsed, ...detail });
+      return true;
+    };
+    const escapeStartup = value => String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const loadingPanel = restoredPanel || vscode.window.createWebviewPanel('bitfroestPrototype', title(), vscode.ViewColumn.Active, { enableScripts: true, localResourceRoots: [], retainContextWhenHidden: true });
+    let restoredDisposed = false, startupSubscription;
+    const restoringSubscription = loadingPanel?.onDidDispose(() => { logStartup('panel-disposed', { documentId }); restoredDisposed = true; clearTimeout(startupWatchdog); });
+    const publishStartup = event => {
+      if (loadingPanel && !restoredDisposed) void loadingPanel.webview.postMessage({ type: 'host-startup', ...event });
+    };
+    const startupStep = message => {
+      const event = { elapsed: Math.max(0, performance.now() - startupOrigin), message };
+      startupEvents.push(event); logStartup('step', event); publishStartup(event);
+    };
     try {
+    if (loadingPanel) {
+      loadingPanel.webview.options = { enableScripts: true, localResourceRoots: [] };
+      startupSubscription = loadingPanel.webview.onDidReceiveMessage(message => {
+        if (receiveDiagnostic(message)) return;
+        if (message?.type === 'host-startup-ready') { logStartup('loading-view-ready', { documentId }); if (startupEvents.length) publishStartup(startupEvents.at(-1)); }
+        if (message?.type === 'startup-log-copy') void copyStartupLog();
+      });
+      logStartup('document-assigned', { documentId, stage: 'loading' });
+      loadingPanel.webview.html = `<!DOCTYPE html><html data-startup-id="${currentStartup.id}" data-document-id="${documentId}"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}'"><style nonce="${nonce}">body{font-family:var(--vscode-font-family);font-size:var(--vscode-font-size);color:var(--vscode-foreground);background:var(--vscode-editor-background);padding:24px}ol{padding-left:24px}li{margin:8px 0}button{font:inherit;color:var(--vscode-button-foreground);background:var(--vscode-button-background);border:1px solid var(--vscode-button-border,transparent);padding:6px 10px}button:focus-visible{outline:1px solid var(--vscode-focusBorder);outline-offset:2px}</style></head><body><main id="host-startup"><h1>${escapeStartup(t('Dateiverwaltung wird geladen…'))}</h1><p id="host-startup-current" role="status">${escapeStartup(t('Tastaturkonfiguration wird übernommen'))}</p><button id="host-startup-copy" type="button">${escapeStartup(t('Startprotokoll kopieren'))}</button><ol id="host-startup-log" role="log"></ol></main><script nonce="${nonce}">${diagnosticsScript}
+window.addEventListener('message',event=>{const update=event.data;if(update?.type!=='host-startup')return;document.getElementById('host-startup-current').textContent=update.message;const row=document.createElement('li');row.textContent='['+(update.elapsed/1000).toFixed(3)+' s] '+update.message;document.getElementById('host-startup-log').append(row);});const host=window.CommanderHost;document.getElementById('host-startup-copy').onclick=()=>host.postMessage({type:'startup-log-copy'});host.postMessage({type:'host-startup-ready'});</script></body></html>`;
+    }
+    startupStep(t('Tastaturkonfiguration wird übernommen'));
     await initialShortcutsReady;
+    startupStep(t('Tastaturkonfiguration übernommen'));
     try {
+      startupStep(t('Warten auf vorherige Dateisystemaufträge'));
       await filesystemQueue;
-      const fresh = await loadView(savedState);
+      startupStep(t('Startverzeichnisse werden eingelesen'));
+      const fresh = await loadView(savedState, { onDirectory: update => {
+        const previous = directoryEvents.get(update.path);
+        if (previous) startupEvents.splice(startupEvents.indexOf(previous), 1);
+        const event = { elapsed: Math.max(0, performance.now() - startupOrigin), message: t('Startverzeichnis {path}: {completed}/{total} Einträge verarbeitet', { path: update.path, completed: update.completed, total: update.total }) };
+        startupEvents.push(event); directoryEvents.set(update.path, event); logStartup('directory', event); publishStartup(event);
+      } });
       if (fresh) { filesystemState = retainView(fresh, savedState); savedState = filesystemState; }
+      startupStep(t('Startverzeichnisse eingelesen'));
     } catch (error) {
-      if (restoredPanel && !restoredDisposed) restoredPanel.dispose();
+      clearTimeout(startupWatchdog);
+      logStartup('error', { message: error.message, stack: error.stack, operation: 'load-view' });
+      if (loadingPanel && !restoredDisposed) loadingPanel.dispose();
       vscode.window.showErrorMessage(t('Testverzeichnisse konnten nicht geladen werden: {error}', { error: t(error.message) }));
       return;
     }
-    if (restoredDisposed) return;
+    if (restoredDisposed) { clearTimeout(startupWatchdog); return; }
+    startupStep(t('Datei-Icon-Theme wird geladen'));
     const icons = await loadIconTheme(vscode);
-    if (restoredDisposed) return;
-    if (panel) { panel.reveal(); return; }
+    startupStep(t('Datei-Icon-Theme geladen'));
+    if (restoredDisposed) { clearTimeout(startupWatchdog); return; }
+    if (panel) { clearTimeout(startupWatchdog); panel.reveal(); return; }
     const webviewOptions = {
       enableScripts: true,
       localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, 'media'), ...icons.roots]
     };
-    panel = restoredPanel || vscode.window.createWebviewPanel('bitfroestPrototype', title(), vscode.ViewColumn.Active, {
-      ...webviewOptions, retainContextWhenHidden: true
-    });
-    if (restoredPanel) panel.webview.options = webviewOptions;
-    const nonce = crypto.randomBytes(18).toString('base64');
+    panel = loadingPanel;
+    panel.webview.options = webviewOptions;
+    panel.onDidDispose(() => { restoredDisposed = true; logStartup('panel-disposed', { documentId }); clearTimeout(startupWatchdog); });
     const shellMenu = createShellMenuProvider({ get roots() { return minimizeRoots([...fileRoots, ...Object.keys(filesystemState?.folders || {}).filter(directory => !filesystemState.unloadedFolders?.includes(directory))]); } });
     const lockInspector = createLockInspector(vscode, context, {
       language: displayLanguage,
@@ -397,24 +537,48 @@ function activate(context) {
     };
     panelFailed = false;
     setReady(false);
+    const reportStartupFailure = diagnostic => {
+      if (panelFailed) return;
+      panelFailed = true; setReady(false);
+      clearTimeout(startupWatchdog);
+      logStartup('error', { operation: 'webview', ...diagnostic });
+      if (!startupLog) { startupLog = vscode.window.createOutputChannel('Bitfroest.fs', { log: true }); context.subscriptions.push(startupLog); }
+      const summary = t('Die Dateiverwaltung konnte nicht gestartet werden. Diesen Tab schließen und erneut öffnen.');
+      startupLog.error(`${summary}\n${JSON.stringify(diagnostic, null, 2)}`);
+      void vscode.window.showErrorMessage(`${summary}${diagnostic.message ? `\n${diagnostic.message}` : ''}`);
+    };
     const resource = name => panel.webview.asWebviewUri(vscode.Uri.joinPath(context.extensionUri, 'media', name)).toString();
     const template = fs.readFileSync(path.join(context.extensionPath, 'media', 'index.html'), 'utf8');
+    const bootstrap = fs.readFileSync(path.join(context.extensionPath, 'media', 'webview-bootstrap.js'), 'utf8');
     const renderHtml = () => {
       language = displayLanguage();
       panel.title = title();
-      status.tooltip = t('Bitfroest.fs ein-/ausblenden (Strg+Alt+Umschalt+F12)');
+      status.tooltip = t('Dateiverwaltung öffnen oder nach vorn holen');
+      startupStep(t('Warten auf die Initialisierung der Webview'));
+      const elapsed = Math.max(0, performance.now() - startupOrigin);
+      const escape = value => String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      documentId = crypto.randomUUID(); documentSequence = 0; diagnosticCount = 0; criticalCount = 0; lastBrowserEvent = null; lastFrame = null;
+      logStartup('document-assigned', { documentId, stage: 'application' });
+      const startupRows = startupEvents.splice(0).map(event => `<li>[${(event.elapsed / 1000).toFixed(3)} s] ${escape(event.message)}</li>`).join('');
       panel.webview.html = template
+        .replace('<html lang="de">', () => `<html lang="de" data-startup-id="${currentStartup.id}" data-document-id="${documentId}">`)
         .replace('<!--POLICY-->', `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${panel.webview.cspSource} 'nonce-${nonce}'; script-src 'nonce-${nonce}'; img-src ${panel.webview.cspSource} data:; font-src ${panel.webview.cspSource};"><style nonce="${nonce}">${icons.css(panel.webview)}</style>`)
         .replace('<body>', `<body data-shortcut-settings="${encodeURIComponent(JSON.stringify(shortcutState()))}" data-favorite-settings="${encodeURIComponent(JSON.stringify(favoriteSettings()))}" data-startup-error="${encodeURIComponent(t('Die Dateiverwaltung konnte nicht gestartet werden. Diesen Tab schließen und erneut öffnen.'))}" data-language="${encodeURIComponent(language)}" data-file-settings="${encodeURIComponent(JSON.stringify(fileSettings()))}" data-column-settings="${encodeURIComponent(JSON.stringify(columnSettings()))}" data-icon-theme="${encodeURIComponent(JSON.stringify(icons.associations))}">`)
         .replace('<body ', `<body data-platform="${process.platform}" data-extension-version="${encodeURIComponent(require('./package.json').version)}" data-initial-state="${JSON.stringify(savedState || null).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;')}" `)
+        .replace('<body ', `<body data-startup-elapsed="${elapsed}" data-startup-log-labels="${encodeURIComponent(JSON.stringify({ webviewStarted: t('Webview-Initialisierung läuft'), waitingStyle: t('Warten auf Stylesheet: {resource}'), requestedScript: t('Skript angefordert: {resource}'), loadedScript: t('Skript geladen: {resource}'), loadedStyle: t('Stylesheet geladen: {resource}'), failedScript: t('Skript konnte nicht geladen werden: {resource}'), failedStyle: t('Stylesheet konnte nicht geladen werden: {resource}'), initializing: t('Dateiverwaltung wird initialisiert'), settings: t('Einstellungen und Dateisymbole werden eingerichtet'), restore: t('Ordner und Einträge werden wiederhergestellt'), controls: t('Tastaturbedienung wird registriert'), rendering: t('Dateilisten werden aufgebaut') }))}" data-startup-resource="${encodeURIComponent(t('Ressource geladen: {resource}'))}" data-startup-labels="${encodeURIComponent(JSON.stringify({ close: t('Schließen'), details: t('Details'), select: t('Details auswählen'), copy: t('Fehlerdetails kopieren') }))}" `)
         .replace(/href="([a-z0-9-]+\.css)"/g, (_, name) => `href="${resource(name)}"`)
         .replace(/src="([a-z0-9-]+\.png)"/g, (_, name) => `src="${resource(name)}"`)
         .replace('Loading file manager…', () => t('Dateiverwaltung wird geladen…'))
+        .replace('aria-label="Loading file manager…"', () => `aria-label="${t('Dateiverwaltung wird geladen…')}"`)
+        .replace('<ol id="startup-log" role="log" aria-live="polite"></ol>', () => `<ol id="startup-log" role="log" aria-live="polite">${startupRows}</ol>`)
+        .replace('Startup log', () => t('Startprotokoll'))
+        .replace('Copy startup log', () => t('Startprotokoll kopieren'))
+        .replace('<script src="webview-bootstrap.js"></script>', () => `<script nonce="${nonce}">${diagnosticsScript}\n${bootstrap.replace(/<\/script/gi, '<\\/script')}</script>`)
+        .replace(/<script src="([a-z0-9-]+\.js)"><\/script>/g, (_, name) => `<script nonce="${nonce}">window.CommanderStartupResource.start(${JSON.stringify(name)});</script><script src="${name}"></script>`)
         .replace(/src="([a-z0-9-]+\.js)"/g, (_, name) => `nonce="${nonce}" src="${resource(name)}"`);
     };
-    renderHtml();
     panel.onDidDispose(() => { shellMenu.dispose(); for (const job of transferJobs.values()) job.controller.abort(); panel = undefined; setReady(false); vscode.commands.executeCommand('setContext', 'bitfroest.textInput', false); vscode.commands.executeCommand('setContext', 'bitfroest.listFocus', false); vscode.commands.executeCommand('setContext', 'bitfroest.conflictDialog', false); vscode.commands.executeCommand('setContext', 'bitfroest.transferNameInput', false); vscode.commands.executeCommand('setContext', 'bitfroest.fileDialog', false); vscode.commands.executeCommand('setContext', 'bitfroest.inlineRenameInput', false); updateStatus(); }, null, context.subscriptions);
-    panel.onDidChangeViewState(() => { updateStatus(); updateAuxiliaryTabs(); if (panel === messagePanel && messagePanel.visible) publishGit().catch(() => {}); }, null, context.subscriptions);
+    panel.onDidChangeViewState(() => { logStartup('panel-state', { documentId, visible: panel?.visible, active: panel?.active, viewColumn: panel?.viewColumn }); updateStatus(); updateAuxiliaryTabs(); if (panel === messagePanel && messagePanel.visible) publishGit().catch(() => {}); }, null, context.subscriptions);
     updateStatus();
     const messagePanel = panel;
     let singleEditor = hasSingleEditor();
@@ -439,7 +603,7 @@ function activate(context) {
       const settings = vscode.workspace.getConfiguration('bitfroest');
       return Object.fromEntries(Object.entries({ enabled: true, showClean: true, showUntracked: true, showIgnored: true, recursive: true, untrackedAsModified: false, allowNetwork: false, includePaths: [], excludePaths: [] }).map(([key, fallback]) => [key, settings.get(`gitStatus.${key}`, fallback) ?? fallback]));
     };
-    const validGitPath = directory => typeof directory === 'string' && directory.length <= 4096 && !directory.includes('\0') && !directory.includes('!') && !directory.startsWith('zip:') && provider.contains(directory) && Object.hasOwn(filesystemState?.folders || {}, directory) && !filesystemState.unloadedFolders?.includes(directory);
+    const validGitPath = directory => typeof directory === 'string' && directory.length <= 4096 && !directory.includes('\0') && !filesystemState?.archiveLocations?.[directory] && !directory.startsWith('zip:') && provider.contains(directory) && Object.hasOwn(filesystemState?.folders || {}, directory) && !filesystemState.unloadedFolders?.includes(directory);
     const gitService = createGitStatusProvider({});
     const closeGit = () => { if (gitDisposed) return; gitDisposed = true; gitQuery = undefined; gitDirectoryQueries.clear(); gitService.dispose(); };
     messagePanel.onDidDispose(closeGit); context.subscriptions.push({ dispose: closeGit });
@@ -461,22 +625,28 @@ function activate(context) {
         if (settings.enabled && allowed.length) directories = await gitService.inspect(allowed, settings, updates => {
           const filtered = Object.fromEntries(Object.entries(updates).filter(([directory]) => allowed.includes(directory) && currentGitDirectory(query, directory)).map(([directory, info]) => [directory, { ...info, statuses: Object.fromEntries(Object.entries(info.statuses || {}).filter(([, status]) => (settings.showClean || status !== 'clean') && (settings.showUntracked || status !== 'untracked'))) }]));
           if (!Object.keys(filtered).length) return;
-          messagePanel.webview.postMessage({ type: 'git-status-result', requestId: query.requestId, snapshotId: query.snapshotId, partial: true, directories: filtered }).then(undefined, () => {});
+          query.repositories ||= new Set();
+          for (const [directory, info] of Object.entries(filtered)) { if (info.ok && info.repository) query.repositories.add(directory); else query.repositories.delete(directory); }
+          messagePanel.webview.postMessage({ type: 'git-status-result', emittedAt: Date.now(), requestId: query.requestId, snapshotId: query.snapshotId, partial: true, directories: filtered }).then(undefined, () => {});
         });
         else gitService.suspend?.();
         for (const info of Object.values(directories)) if (info.statuses) {
           info.statuses = Object.fromEntries(Object.entries(info.statuses).filter(([, status]) => (settings.showClean || status !== 'clean') && (settings.showUntracked || status !== 'untracked')));
         }
         directories = Object.fromEntries(Object.entries(directories).filter(([directory]) => currentGitDirectory(query, directory)));
-        if (query.directories.some(directory => currentGitDirectory(query, directory))) await messagePanel.webview.postMessage({ type: 'git-status-result', requestId: query.requestId, snapshotId: query.snapshotId, directories });
+        query.repositories ||= new Set();
+        for (const [directory, info] of Object.entries(directories)) { if (info.ok && info.repository) query.repositories.add(directory); else query.repositories.delete(directory); }
+        if (!gitDisposed && panel === messagePanel) await messagePanel.webview.postMessage({ type: 'git-status-result', emittedAt: Date.now(), requestId: query.requestId, snapshotId: query.snapshotId, directories });
       } catch (error) {
+        query.repositories?.clear();
         const directories = Object.fromEntries(query.directories.filter(directory => currentGitDirectory(query, directory)).map(directory => [directory, { ok: false, error: error.message, statuses: {} }]));
-        if (Object.keys(directories).length) await messagePanel.webview.postMessage({ type: 'git-status-result', requestId: query.requestId, snapshotId: query.snapshotId, directories });
+        if (!gitDisposed && panel === messagePanel) await messagePanel.webview.postMessage({ type: 'git-status-result', emittedAt: Date.now(), requestId: query.requestId, snapshotId: query.snapshotId, directories });
       } finally {
         gitUpdating.delete(query);
       }
     }
     messagePanel.onDidDispose(() => provider.clear());
+    messagePanel.onDidDispose(closeDirectoryJobs);
     const searchRoots = [...fileRoots];
     const searchService = createSearchProvider({ roots: searchRoots });
     let searchTemp, searchDisposed = false, searchGeneration = 0;
@@ -540,19 +710,62 @@ function activate(context) {
     const replyUiAction = (message, result) => {
       if (panel === messagePanel && !listerDisposed && typeof message.requestId === 'string' && /^ui-action-\d{1,15}$/.test(message.requestId)) return messagePanel.webview.postMessage({ type: 'ui-action-result', requestId: message.requestId, ...result });
     };
+    async function openGitDiff(message) {
+      const validSelection = () => panel === messagePanel && !listerDisposed && filesystemState?.realFilesystem && message.snapshotId === filesystemState.snapshotId && typeof message.directory === 'string' && !filesystemState.archiveLocations?.[message.directory] && !message.directory.startsWith('zip:') && provider.contains(message.directory) && savedState?.panes?.some(pane => pane.tabs[pane.tab] === message.directory) && Array.isArray(message.ids) && message.ids.length === 1;
+      if (!validSelection()) throw new Error(t('Ungültige Dateiauswahl für Git Diff.'));
+      const row = filesystemState.folders[message.directory]?.find(file => file.id === message.ids[0]);
+      const target = row?.fsSource;
+      if (!row || row.type === 'folder' || !knownFilePath(target) || clipboardIdentity(target) !== clipboardIdentity(`${message.directory.replace(/\/$/, '')}/${row.name}`)) throw new Error(t('Ungültige Dateiauswahl für Git Diff.'));
+      const extension = vscode.extensions.getExtension('vscode.git');
+      const git = extension && await extension.activate();
+      if (!git?.enabled) throw new Error(t('Die Git-Integration von VS Code ist nicht verfügbar.'));
+      const api = git.getAPI(1), uri = vscode.Uri.file(target);
+      const repository = api.getRepository(uri) || await api.openRepository(vscode.Uri.file(message.directory));
+      if (!repository) throw new Error(t('Für diese Datei ist kein Git-Repository verfügbar.'));
+      await repository.status();
+      if (!validSelection() || filesystemState.folders[message.directory]?.find(file => file.id === message.ids[0])?.fsSource !== target) throw new Error(t('Ungültige Dateiauswahl für Git Diff.'));
+      const changes = ['workingTreeChanges', 'indexChanges', 'mergeChanges', 'untrackedChanges'].flatMap(key => repository.state[key] || []);
+      if (changes.some(change => clipboardIdentity(change.uri.fsPath) === clipboardIdentity(target))) await vscode.commands.executeCommand('git.openChange', uri);
+      else await vscode.commands.executeCommand('vscode.diff', api.toGitUri(uri, 'HEAD'), uri, `${row.name} (HEAD) ↔ ${row.name}`, { preview: false });
+    }
     panel.webview.onDidReceiveMessage(async message => {
       if (panel !== messagePanel) return;
+      if (message?.type === 'status-log-copy') {
+        if (typeof message.requestId !== 'string' || !/^status-log-\d{1,15}$/.test(message.requestId)) return;
+        let result;
+        try {
+          if (typeof message.text !== 'string' || message.text.length > 8 * 1024 * 1024) throw new Error('Ungültiges Arbeitsprotokoll.');
+          const report = JSON.parse(message.text);
+          if (!report || Array.isArray(report) || report.formatVersion !== 1) throw new Error('Ungültiges Arbeitsprotokoll.');
+          report.runtime = { extensionVersion, vscodeVersion: vscode.version, platform: process.platform, architecture: process.arch, osRelease: os.release(), runtimeVersion: process.version, electronVersion: process.versions.electron || null, remoteName: vscode.env.remoteName || null,
+            filesystemRequests, transferJobs: transferJobs.size, directoryJobs: directoryJobs.size, snapshotId: filesystemState?.snapshotId };
+          await writeClipboardText(JSON.stringify(report, null, 2)); result = { ok: true };
+        } catch (error) { result = { ok: false, error: t(error.message) }; }
+        if (panel === messagePanel && !listerDisposed) await messagePanel.webview.postMessage({ type: 'status-log-copy-result', requestId: message.requestId, ...result });
+        return;
+      }
       if (message?.type === 'selection-io') {
         if (typeof message.requestId !== 'string' || !/^selection-\d{1,15}$/.test(message.requestId)) return;
         let result;
         try { result = await selectionIO(message.action, message.text, message.pathRanges); }
         catch (error) { result = { ok: false, error: t(error.message) }; }
+        if (result.ok && !result.cancelled && message.action === 'copy' && panel === messagePanel) notifyClipboardChanged();
         if (panel === messagePanel && !listerDisposed) await messagePanel.webview.postMessage({ type: 'selection-io-result', requestId: message.requestId, ...result });
         return;
       }
-      if (message?.type === 'app-startup-error') { panelFailed = true; setReady(false); return; }
+      if (receiveDiagnostic(message)) return;
+      if (message?.type === 'startup-log-copy') { await copyStartupLog(); return; }
+      if (message?.type === 'app-startup-error') {
+        if (panelFailed) return;
+        const diagnostic = Object.fromEntries(['message', 'source', 'stack'].map(key => [key, typeof message.diagnostic?.[key] === 'string' ? message.diagnostic[key].slice(0, 16000) : '']));
+        for (const key of ['line', 'column']) diagnostic[key] = Number.isSafeInteger(message.diagnostic?.[key]) ? message.diagnostic[key] : 0;
+        reportStartupFailure(diagnostic);
+        return;
+      }
       if (message?.type === 'app-ready') {
         if (!panelFailed) {
+          clearTimeout(startupWatchdog);
+          logStartup('ready', { startupId: currentStartup?.id, documentId, documentSequence, lastBrowserEvent, lastFrame, visible: panel?.visible, active: panel?.active, viewColumn: panel?.viewColumn });
           setReady(true);
           requestAuxiliaryReady();
         }
@@ -566,9 +779,12 @@ function activate(context) {
       }
       if (!panelReady) return;
       if (message?.type === 'git-status') {
-        if (typeof message.requestId !== 'string' || message.requestId.length > 100 || message.snapshotId !== filesystemState?.snapshotId || !Array.isArray(message.directories) || message.directories.length > 2 || message.directories.some(directory => !validGitPath(directory))) return;
+        if (typeof message.requestId !== 'string' || message.requestId.length > 100 || typeof message.snapshotId !== 'string' || message.snapshotId.length > 100 || !Array.isArray(message.directories) || message.directories.length > 2 || message.directories.some(directory => typeof directory !== 'string' || directory.length > 4096 || directory.includes('\0'))) return;
         const visibleDirectories = message.visibleDirectories || message.directories;
-        if (!Array.isArray(visibleDirectories) || visibleDirectories.length > 2 || visibleDirectories.some(directory => !validGitPath(directory)) || message.directories.some(directory => !visibleDirectories.includes(directory))) return;
+        if (message.snapshotId !== filesystemState?.snapshotId || message.directories.some(directory => !validGitPath(directory)) || !Array.isArray(visibleDirectories) || visibleDirectories.length > 2 || visibleDirectories.some(directory => !validGitPath(directory)) || message.directories.some(directory => !visibleDirectories.includes(directory))) {
+          await messagePanel.webview.postMessage({ type: 'git-status-result', requestId: message.requestId, snapshotId: message.snapshotId, directories: {} });
+          return;
+        }
         gitQuery = { requestId: message.requestId, snapshotId: message.snapshotId, directories: [...new Set(message.directories)], visibleDirectories: [...new Set(visibleDirectories)], signatures: new Map(message.directories.map(directory => [directory, JSON.stringify(filesystemState.folders[directory])])), retainedSnapshots: new Map() };
         for (const directory of gitDirectoryQueries.keys()) if (!visibleDirectories.includes(directory)) gitDirectoryQueries.delete(directory);
         for (const directory of gitQuery.directories) gitDirectoryQueries.set(directory, gitQuery);
@@ -589,6 +805,13 @@ function activate(context) {
             await vscode.window.showQuickPick(items, { title: t('Verfügbare Branches'), placeHolder: t('Branchliste (nur Anzeige)'), matchOnDescription: true });
           }
         } catch (error) { if (currentGitDirectory(query, message.path) && filesystemState?.snapshotId === message.snapshotId) vscode.window.showWarningMessage(t('Git-Status nicht verfügbar: {error}', { error: error.message })); }
+        return;
+      }
+      if (message?.type === 'git-diff') {
+        try {
+          await openGitDiff(message);
+          await replyUiAction(message, { ok: true });
+        } catch (error) { await replyUiAction(message, { ok: false, error: t(error.message) }); }
         return;
       }
       if (message?.type === 'configure-settings') { configurationEditor.open('settings'); return; }
@@ -642,7 +865,7 @@ function activate(context) {
             });
             searchPresetQueue.catch(() => {});
             searchRoots.splice(0, searchRoots.length, ...minimizeRoots([...fileRoots, ...favoriteRoots()]));
-            const result = await searchService.run(id, message.settings, { onProgress: value => reply({ type: 'search-progress', ...value }) });
+            const result = await searchService.run(id, message.settings, { onProgress: value => reply({ type: 'search-progress', ...Progress.read(value) }) });
             for (const row of result.results) searchCatalog.set(row.fsSource, row);
             await reply({ type: 'search-complete', ...result }); return;
           }
@@ -655,7 +878,7 @@ function activate(context) {
             return;
           }
           const results = searchService.results(id); if (!results) return;
-          if (message.type === 'search-copy') { await vscode.env.clipboard.writeText(results.map(row => row.fsSource).join('\r\n')); return; }
+          if (message.type === 'search-copy') { await writeClipboardText(results.map(row => row.fsSource).join('\r\n')); return; }
           if (message.type === 'search-apply' || message.type === 'search-navigate') {
             const navigate = message.type === 'search-navigate';
             const selected = navigate ? results.filter(row => row.fsSource === message.path) : results;
@@ -693,7 +916,7 @@ function activate(context) {
         return;
       }
       if (message?.type === 'lister-demo-copy') {
-        if (!filesystemState && typeof message.text === 'string' && message.text.length <= 100000) await vscode.env.clipboard.writeText(message.text);
+        if (!filesystemState && typeof message.text === 'string' && message.text.length <= 100000) await writeClipboardText(message.text);
         return;
       }
       if (message?.type === 'lister-cancel' || message?.type === 'lister-close') {
@@ -759,7 +982,7 @@ function activate(context) {
                 else {
                   const text = await lister.copy(message.id, settings, controller.signal);
                   if (controller.signal.aborted || listerDisposed) throw new Error('Suche abgebrochen.');
-                  await vscode.env.clipboard.writeText(text); await reply({ ok: true });
+                  await writeClipboardText(text); await reply({ ok: true });
                 }
               } finally { if (listerJobs.get(message.id) === controller) listerJobs.delete(message.id); }
             }
@@ -785,6 +1008,7 @@ function activate(context) {
         return;
       }
       if (message?.type === 'configure-favorites') { await vscode.commands.executeCommand('bitfroest.configureFavorites'); return; }
+      if (message?.type === 'configure-columns') { await vscode.commands.executeCommand('bitfroest.configureColumns'); return; }
       if (message?.type === 'favorite-toggle') { await toggleFavorite(message.path); return; }
       if (message?.type === 'choose-language') { await chooseLanguage(); return; }
       if (message?.type === 'language-reload') {
@@ -817,11 +1041,14 @@ function activate(context) {
         try {
           if (context.extensionUri.scheme !== 'file' || vscode.env.remoteName && context.extension.extensionKind !== vscode.ExtensionKind.UI) throw new Error(t('Das Systemmenü ist nur im lokalen Erweiterungshost verfügbar.'));
           const directory = message.directory;
+          if (typeof directory === 'string' && (directory.startsWith('zip:') || filesystemState?.archiveLocations?.[directory])) {
+            await reply({ ok: false, unsupported: true, error: t('Diese Aktion ist innerhalb eines ZIP-Archivs nicht verfügbar.') }); return;
+          }
           if (!filesystemState?.realFilesystem || message.snapshotId !== filesystemState.snapshotId || typeof directory !== 'string' || directory.length > 4096 || !provider.contains(directory) || !Object.hasOwn(filesystemState.folders, directory) || !savedState?.panes?.some(pane => pane.tabs[pane.tab] === directory) || !Array.isArray(message.ids) || !message.ids.length || message.ids.length > 256 || message.ids.some(id => typeof id !== 'string' || id.length > 1024) || new Set(message.ids).size !== message.ids.length) throw new Error(t('Ungültige Dateiauswahl für das Systemmenü.'));
           const rows = new Map(filesystemState.folders[directory].map(row => [row.id, row]));
           const paths = Object.freeze(message.ids.map(id => {
             const row = rows.get(id), target = row?.fsSource;
-            if (!row || typeof target !== 'string' || !provider.contains(target) || clipboardIdentity(target) !== clipboardIdentity(`${directory}/${row.name}`)) throw new Error(t('Ungültige Dateiauswahl für das Systemmenü.'));
+            if (!row || typeof target !== 'string' || !provider.contains(target) || clipboardIdentity(target) !== clipboardIdentity(`${directory.replace(/\/$/, '')}/${row.name}`)) throw new Error(t('Ungültige Dateiauswahl für das Systemmenü.'));
             return target;
           }));
           shellMenuBusy = true;
@@ -830,15 +1057,25 @@ function activate(context) {
             if (panel !== messagePanel) return;
             if (filesystemRequests || transferJobs.size) throw new Error(t('Eine Dateisystemoperation läuft bereits.'));
             attempted = true;
-            const result = message.inspectLocks === true ? { action: 'inspect-locks' } : await shellMenu.show(paths, { keyboard, ownerTitle: messagePanel.title, lockInspectionLabel: t('Ordnersperren untersuchen') });
+            const query = gitDirectoryQueries.get(directory);
+            const gitDiff = paths.length === 1 && rows.get(message.ids[0])?.type !== 'folder' && query && currentGitDirectory(query, directory) && query.repositories?.has(directory) === true && gitSettings().enabled;
+            const result = message.inspectLocks === true ? { action: 'inspect-locks' } : await shellMenu.show(paths, { keyboard, ownerTitle: messagePanel.title, lockInspectionLabel: t('Ordnersperren untersuchen'), gitDiff: Boolean(gitDiff) });
             if (panel !== messagePanel) return;
+            if (result.action === 'git-diff') {
+              try {
+                if (!gitDiff) throw new Error(t('Ungültige Dateiauswahl für Git Diff.'));
+                await openGitDiff(message);
+                await reply({ ok: true, action: 'git-diff', invoked: false, cancelled: false, refreshed: false });
+              } catch (error) { await reply({ ok: false, action: 'git-diff', error: t(error.message), refreshed: false }); }
+              return;
+            }
             if (result.action === 'inspect-locks') {
               if (paths.length !== 1 || rows.get(message.ids[0])?.type !== 'folder') throw new Error(t('Die Sperrenuntersuchung benötigt genau einen Ordner.'));
               lockInspector.open(paths[0]);
               await reply({ ok: true, invoked: false, cancelled: false, refreshed: false }); return;
             }
             invoked = result.invoked;
-            if (invoked) {
+            if (invoked || result.refreshRequired === true) {
               clipboardTicket = null; clipboardInvalidated = true;
               refreshed = await refresh();
             }
@@ -851,7 +1088,12 @@ function activate(context) {
             try { if (!refreshAttempted) refreshed = await refresh(); } catch { /* Keep the last confirmed snapshot when rereading fails. */ }
             finally { shellMenuBusy = false; }
           }
-          await reply({ ok: false, refreshed, ...(clipboardInvalidated ? { clipboardInvalidated: true } : {}), ...(invoked ? { invoked: true } : {}), error: invoked ? t('Das Systemmenü wurde ausgeführt, der Dateibestand konnte jedoch nicht aktualisiert werden: {error}', { error: t(error.message) }) : t(error.message) });
+          const diagnostic = operationDiagnostic(error, message, filesystemState);
+          diagnostic.request.paths = (Array.isArray(message.ids) ? message.ids : []).flatMap(id => {
+            const row = filesystemState?.folders?.[message.directory]?.find(row => row.id === id);
+            return typeof row?.fsSource === 'string' ? [row.fsSource] : [];
+          });
+          await reply({ ok: false, refreshed, diagnostic, ...(clipboardInvalidated ? { clipboardInvalidated: true } : {}), ...(invoked ? { invoked: true } : {}), error: invoked ? t('Das Systemmenü wurde ausgeführt, der Dateibestand konnte jedoch nicht aktualisiert werden: {error}', { error: t(error.message) }) : t(error.message) });
         }
         return;
       }
@@ -893,7 +1135,7 @@ function activate(context) {
         }
         return;
       }
-      if (['clipboard-read', 'clipboard-write', 'clipboard-ack'].includes(message?.type)) {
+      if (['clipboard-read', 'clipboard-write', 'clipboard-ack', 'clipboard-reset', 'clipboard-status'].includes(message?.type)) {
         if (typeof message.requestId !== 'string' || !/^[\w-]{1,64}$/.test(message.requestId)) return;
         if (shellMenuBusy) { await messagePanel.webview.postMessage({ type: 'clipboard-result', requestId: message.requestId, ok: false, error: t('Eine Dateisystemoperation läuft bereits.') }); return; }
         const current = panel;
@@ -903,7 +1145,21 @@ function activate(context) {
           try {
             if (!filesystemState) throw new Error(t('Kein Dateisystem geladen.'));
             let response;
-            if (message.type === 'clipboard-ack') {
+            if (message.type === 'clipboard-status') {
+              const statusProvider = createClipboardProvider({ contains: provider.contains });
+              try {
+                const selection = await statusProvider.read();
+                response = { available: Boolean(selection?.paths?.length && ['copy', 'move'].includes(selection.mode)) };
+              } finally { statusProvider.dispose(); }
+            } else if (message.type === 'clipboard-reset') {
+              const same = (a, b) => Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((item, index) => typeof item === 'string' && clipboardIdentity(item) === clipboardIdentity(b[index]));
+              const bound = clipboardTicket && (message.token ? message.token === clipboardTicket.token : typeof message.sourceRequestId === 'string' && message.sourceRequestId === clipboardTicket.originWriteRequestId);
+              response = { matched: false };
+              if (bound && message.mode === clipboardTicket.mode && same(message.paths, clipboardTicket.paths)) {
+                response.matched = await fileClipboard.reset({ token: clipboardTicket.token, paths: clipboardTicket.paths, mode: clipboardTicket.mode });
+                clipboardTicket = null;
+              }
+            } else if (message.type === 'clipboard-ack') {
               const same = (a, b) => Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((item, index) => typeof item === 'string' && clipboardIdentity(item) === clipboardIdentity(b[index]));
               const remaining = clipboardTicket?.paths.filter(clipboardSourceExists);
               if (!clipboardTicket || clipboardTicket.mode !== 'move' || message.token !== clipboardTicket.token || message.mode !== clipboardTicket.mode || filesystemRevision <= clipboardTicket.issuedRevision || !same(message.paths, clipboardTicket.paths) || !same(message.remainingPaths, remaining)) throw new Error(t('Zwischenablage wurde nicht durch eine bestätigte Dateioperation übernommen.'));
@@ -912,7 +1168,7 @@ function activate(context) {
             } else {
               if (message.type === 'clipboard-write' && (!Array.isArray(message.paths) || message.paths.length > 1024 || !message.paths.length || message.paths.some(value => typeof value !== 'string' || !clipboardSourceExists(value)))) throw new Error(t('Ungültige Datei-Zwischenablage.'));
               const selection = message.type === 'clipboard-read' ? await fileClipboard.read() : await fileClipboard.write({ paths: message.paths, mode: message.mode });
-              clipboardTicket = selection ? { ...selection, issuedRevision: filesystemRevision } : null;
+              clipboardTicket = selection ? { ...selection, issuedRevision: filesystemRevision, originWriteRequestId: message.type === 'clipboard-write' ? message.requestId : selection.token === clipboardTicket?.token ? clipboardTicket.originWriteRequestId : undefined } : null;
               response = { selection };
             }
             if (panel === current) await current.webview.postMessage({ type: 'clipboard-result', requestId: message.requestId, ok: true, ...response });
@@ -924,6 +1180,18 @@ function activate(context) {
       }
       if (message?.type === 'filesystem-cancel') {
         const job = transferJobs.get(message.operationId); if (job?.panel === panel) job.controller.abort(); return;
+      }
+      if (message?.type === 'zip-open' && /^directory-\d{1,12}$/.test(message.navigationRequestId || '')) {
+        const current = panel; let ok = true, error, navigation;
+        try {
+          if (shellMenuBusy || !filesystemState || ![0, 1].includes(message.side) || !knownFilePath(message.path)) throw new Error('Dieses ZIP-Archiv ist nicht verfügbar.');
+          const opened = await provider.openArchive(filesystemState, message.path);
+          filesystemState = retainView({ ...filesystemState, folders: { ...filesystemState.folders, ...Object.fromEntries(Object.entries(opened.state.folders).filter(([key]) => key.startsWith('zip:'))) }, archiveLocations: { ...filesystemState.archiveLocations, ...opened.state.archiveLocations } }, savedState || message.state);
+          navigationRevision++; navigation = { path: opened.path, side: message.side };
+          await saveState(filesystemState);
+        } catch (failure) { ok = false; error = renderOperationError(failure, t); }
+        if (panel === current) await current.webview.postMessage({ type: 'filesystem-result', navigationRequestId: message.navigationRequestId, ok, state: filesystemState, ...(navigation ? { resumeNavigation: navigation } : {}), ...(error ? { error } : {}) });
+        return;
       }
       if (['zip-open', 'zip-copy', 'zip-write', 'zip-unpack', 'zip-test'].includes(message?.type)) {
         const current = panel, copying = message.type !== 'zip-open', writing = message.type === 'zip-write';
@@ -962,6 +1230,7 @@ function activate(context) {
                 },
                 onProgress: progress => {
                   if (transferJobs.get(operationId) !== job || panel !== current) return;
+                  progress = Progress.read(progress);
                   pendingProgress = progress;
                   const final = progress.done || progress.totalBytes > 0 && progress.completedBytes === progress.totalBytes;
                   if (final || job.progressAt === undefined || progress.phase !== job.progressPhase || Date.now() - job.progressAt >= 50) flushProgress();
@@ -1006,7 +1275,7 @@ function activate(context) {
           }
           finally {
             flushProgress();
-            if (copying && message.type !== 'zip-test' && panel === current) { try { filesystemState = retainView(await loadView(view), view); } catch (failure) { ok = false; error ||= renderOperationError(failure, t); } }
+            if (copying && message.type !== 'zip-test' && panel === current) { try { const latestView = savedState || view; const fresh = await loadView(latestView); filesystemState = retainView(fresh, savedState || latestView); } catch (failure) { ok = false; error ||= renderOperationError(failure, t); } }
             if (job) transferJobs.delete(operationId);
           }
           if (panel === current) {
@@ -1030,7 +1299,12 @@ function activate(context) {
             if (shellMenuBusy || !filesystemState?.realFilesystem || snapshotId !== filesystemState.snapshotId || typeof directory !== 'string' || directory.length > 4096 || !provider.contains(directory)) throw new Error(t('Ungültiger Datei- oder Ordnername.'));
             const parent = directory.slice(0, directory.lastIndexOf('/')), name = directory.slice(directory.lastIndexOf('/') + 1);
             if (!filesystemState.folders[parent]?.some(row => row.type === 'folder' && row.name === name)) throw new Error(t('Ungültiger Datei- oder Ordnername.'));
-            const size = await provider.measureFolder(filesystemState, directory, { signal: job.controller.signal });
+            let progressAt = 0;
+            const size = await provider.measureFolder(filesystemState, directory, { signal: job.controller.signal, onProgress: progress => {
+              if (transferJobs.get(operationId) !== job || panel !== current || Date.now() - progressAt < 50) return;
+              progress = Progress.read(progress);
+              progressAt = Date.now(); current.webview.postMessage({ type: 'folder-size-progress', operationId, snapshotId: message.snapshotId, path: directory, progress });
+            } });
             result = { ok: true, size };
           } catch (error) {
             result = error.name === 'AbortError' ? { ok: false, cancelled: true } : { ok: false, error: renderOperationError(error, t) };
@@ -1041,51 +1315,92 @@ function activate(context) {
         return;
       }
       if (['filesystem-apply', 'filesystem-refresh', 'filesystem-navigate', 'filesystem-prepare', 'filesystem-delete'].includes(message?.type)) {
-        if (shellMenuBusy) { await messagePanel.webview.postMessage({ type: 'filesystem-result', ok: false, state: filesystemState, ...(message.operationId ? { operationId: message.operationId } : {}), error: t('Eine Dateisystemoperation läuft bereits.') }); return; }
+        if (shellMenuBusy) { await messagePanel.webview.postMessage({ type: 'filesystem-result', ok: false, state: filesystemState, ...(typeof message.refreshRequestId === 'string' ? { refreshRequestId: message.refreshRequestId } : {}), ...(message.operationId ? { operationId: message.operationId } : {}), ...(message.navigationRequestId ? { navigationRequestId: message.navigationRequestId } : {}), ...(message.taskRequestId ? { taskRequestId: message.taskRequestId } : {}), error: t('Eine Dateisystemoperation läuft bereits.') }); return; }
         const current = panel;
-        const operationId = (message.type === 'filesystem-apply' && message.transfer || message.type === 'filesystem-prepare') && typeof message.operationId === 'string' && /^[a-zA-Z0-9-]{1,80}$/.test(message.operationId) ? message.operationId : undefined;
+        const operationId = (message.type === 'filesystem-apply' && message.transfer || ['filesystem-prepare', 'filesystem-delete'].includes(message.type)) && typeof message.operationId === 'string' && /^[a-zA-Z0-9-]{1,80}$/.test(message.operationId) ? message.operationId : undefined;
+        const requestedViewRevision = viewRevision;
         if (operationId && transferJobs.has(operationId)) return;
         const job = operationId ? { controller: new AbortController(), panel: current } : null;
+        const navigationTabId = typeof message.navigationTabId === 'string' && /^[a-zA-Z0-9-]{1,128}$/.test(message.navigationTabId) ? message.navigationTabId : undefined;
+        const directoryJob = message.type === 'filesystem-navigate' && typeof message.navigationRequestId === 'string' && /^directory-\d{1,12}$/.test(message.navigationRequestId) && [0, 1].includes(message.side) ? { controller: new AbortController(), side: message.side, tabId: navigationTabId } : null;
+        const directoryKey = `${message.side}:${navigationTabId || ''}`;
+        if (directoryJob) { directoryJobs.get(directoryKey)?.controller.abort(); directoryJobs.set(directoryKey, directoryJob); }
+        const directoryView = () => directoryJob && navigationTabId && Array.isArray(savedState?.panes?.[message.side]?.tabStates) ? savedState : message.state || savedState;
         if (job) transferJobs.set(operationId, job);
         const onProgress = progress => {
           if (!job || transferJobs.get(operationId) !== job || panel !== current) return;
           const now = Date.now(), phase = progress.phase === 'published' ? 'copying' : progress.phase;
+          progress = Progress.read(progress);
           const final = progress.done || Number.isFinite(progress.totalBytes) && progress.completedBytes === progress.totalBytes;
           if (!final && job.progressAt !== undefined && phase === job.progressPhase && now - job.progressAt < 50) return;
           job.progressAt = now; job.progressPhase = phase;
           current.webview.postMessage({ type: 'filesystem-progress', operationId, progress });
         };
         filesystemRequests++;
-        filesystemQueue = filesystemQueue.then(async () => {
+        const isolatedNavigation = Boolean(directoryJob && transferJobs.size);
+        const execution = (isolatedNavigation ? Promise.resolve() : filesystemQueue).then(async () => {
+          const initialNavigationRevision = navigationRevision;
           let ok = true;
           let cancelled = false;
           let operationError;
           let diagnostic;
           let updatedDirectories;
           try {
+            if (directoryJob?.controller.signal.aborted) throw Object.assign(new Error('Navigation cancelled.'), { name: 'AbortError' });
             if (!filesystemState) throw new Error(t('Kein Dateisystem geladen.'));
             let fresh;
             if (message.type === 'filesystem-apply') fresh = await provider.apply(filesystemState, message.state, job ? { signal: job.controller.signal, transfer: message.transfer, onProgress } : {});
-            else if (message.type === 'filesystem-delete') fresh = await provider.remove(filesystemState, { paths: message.paths, useTrash: message.useTrash });
+            else if (message.type === 'filesystem-delete') fresh = await provider.remove(filesystemState, { paths: message.paths, useTrash: message.useTrash }, { ...(job ? { signal: job.controller.signal } : {}), onProgress: progress => { if (panel === current) current.webview.postMessage({ type: 'filesystem-task-progress', operationId, taskRequestId: message.taskRequestId, progress: Progress.read(progress) }); } });
             else if (message.type === 'filesystem-navigate' || message.type === 'filesystem-prepare') {
               const directories = message.type === 'filesystem-navigate' ? [message.path] : message.paths;
               if (!Array.isArray(directories) || directories.length > 128 || directories.some(target => typeof target !== 'string' || target.length > 4096 || !provider.canNavigate(target))) throw new Error(t('Ungültiger Datei- oder Ordnername.'));
               if (message.type === 'filesystem-navigate' && ![0, 1].includes(message.side)) throw new Error(t('Ungültiger Datei- oder Ordnername.'));
-              const visibleDirectories = (message.state || savedState)?.panes?.map((pane, side) => side === message.side ? message.path : pane.tabs[pane.tab]);
-              fresh = await provider.prepare(filesystemState, { directories, recursive: message.type === 'filesystem-prepare' && message.recursive !== false, ...(message.type === 'filesystem-navigate' ? { navigation: true, visibleDirectories } : {}), ...(job ? { signal: job.controller.signal, onProgress } : {}) });
-            } else fresh = await loadView(message.state || savedState);
+              const view = directoryView();
+              const visibleDirectories = view?.panes?.map((pane, side) => side === message.side && (!message.navigationTabId || pane.tabStates?.[pane.tab]?.id === message.navigationTabId) ? message.path : pane.tabs[pane.tab]);
+              fresh = isolatedNavigation ? await navigationProvider.load({ directories: visibleDirectories, visibleOnly: true, signal: directoryJob?.controller.signal, onDirectory: update => { if (panel === current) return current.webview.postMessage({ type: 'filesystem-directory', navigationRequestId: message.navigationRequestId, ...update }); } }) : await provider.prepare(filesystemState, { directories, recursive: message.type === 'filesystem-prepare' && message.recursive !== false, ...(message.type === 'filesystem-navigate' ? { navigation: true, visibleDirectories, onDirectory: update => {
+                if (message.navigationRequestId && panel === current) return current.webview.postMessage({ type: 'filesystem-directory', navigationRequestId: message.navigationRequestId, ...update });
+              }, ...(directoryJob ? { signal: directoryJob.controller.signal } : {}) } : {}), ...(job ? { signal: job.controller.signal, onProgress } : {}) });
+            } else fresh = await loadView(message.state || savedState, message.type === 'filesystem-refresh' && typeof message.refreshRequestId === 'string' ? { onDirectory: update => {
+              if (panel === current) return current.webview.postMessage({ type: 'filesystem-refresh-step', emittedAt: Date.now(), refreshRequestId: message.refreshRequestId, path: update.path, phase: update.phase || (update.done ? 'done' : 'metadata'), completed: update.completed, total: update.total, ...(update.progress ? { progress: Progress.read(update.progress) } : {}) });
+            } } : {});
+            if (!directoryJob && ['filesystem-apply', 'filesystem-delete'].includes(message.type) && initialNavigationRevision !== navigationRevision) fresh = await loadView(savedState);
             updatedDirectories = fresh.updatedDirectories;
-            filesystemState = retainView(fresh, message.state || savedState);
-            if (message.type === 'filesystem-navigate') {
-              const panes = (message.state || savedState)?.panes;
-              const previousPath = panes?.[message.side]?.tabs[panes[message.side].tab];
-              const opposite = panes?.[1 - message.side];
-              if (previousPath && previousPath !== opposite?.tabs[opposite.tab]) gitDirectoryQueries.delete(previousPath);
-            }
-            if (message.type === 'filesystem-apply') filesystemRevision++;
-            await saveState(filesystemState);
+            const publishState = async (fresh, authoritativeNavigation) => {
+              if (directoryJob?.controller.signal.aborted) throw Object.assign(new Error('Navigation cancelled.'), { name: 'AbortError' });
+              if (directoryJob) {
+                navigationRevision++;
+                if (!authoritativeNavigation) {
+                  const updated = new Set(fresh.updatedDirectories || [message.path]);
+                  const folders = { ...filesystemState.folders };
+                  for (const directory of updated) if (fresh.folders[directory]) folders[directory] = fresh.folders[directory];
+                  fresh = { ...filesystemState, ...fresh, folders, archiveLocations: { ...filesystemState.archiveLocations, ...fresh.archiveLocations } };
+                }
+              }
+              filesystemState = retainView(fresh, directoryJob ? directoryView() : viewRevision === requestedViewRevision ? message.state || savedState : savedState);
+              if (message.type === 'filesystem-navigate') {
+                const panes = (message.state || savedState)?.panes;
+                const previousPath = panes?.[message.side]?.tabs[panes[message.side].tab];
+                const opposite = panes?.[1 - message.side];
+                if (previousPath && previousPath !== opposite?.tabs[opposite.tab]) gitDirectoryQueries.delete(previousPath);
+              }
+              if (message.type === 'filesystem-apply') filesystemRevision++;
+              if (message.type === 'filesystem-refresh' && typeof message.refreshRequestId === 'string' && panel === current) current.webview.postMessage({ type: 'filesystem-refresh-step', emittedAt: Date.now(), refreshRequestId: message.refreshRequestId, phase: 'state-save' });
+              await saveState(filesystemState);
+            };
+            if (isolatedNavigation && !transferJobs.size) {
+              const rebase = filesystemQueue.then(async () => {
+                if (directoryJob.controller.signal.aborted) throw Object.assign(new Error('Navigation cancelled.'), { name: 'AbortError' });
+                const view = structuredClone(directoryView());
+                const pane = view.panes[message.side];
+                if (!message.navigationTabId || pane.tabStates?.[pane.tab]?.id === message.navigationTabId) pane.tabs[pane.tab] = message.path;
+                const fresh = await loadView(view, { signal: directoryJob.controller.signal });
+                await publishState(fresh, true);
+              });
+              filesystemQueue = rebase.catch(() => {});
+              await rebase;
+            } else await publishState(fresh, !isolatedNavigation);
           } catch (error) {
-            if (job && error.name === 'AbortError') cancelled = true;
+            if ((job || directoryJob) && error.name === 'AbortError') { cancelled = true; if (message.type === 'filesystem-delete') filesystemState = retainView(await loadView(savedState), savedState); }
             else {
             ok = false;
             diagnostic = operationDiagnostic(error, message, message.state || filesystemState);
@@ -1097,9 +1412,11 @@ function activate(context) {
             }
           }
           if (job) transferJobs.delete(operationId);
-          if (current && panel === current) await current.webview.postMessage({ type: 'filesystem-result', ok, state: filesystemState, ...(updatedDirectories?.length ? { refreshGitDirectories: updatedDirectories } : {}), ...(cancelled ? { cancelled: true } : {}), ...(operationId ? { operationId, operationOutcome: filesystemState?.operationOutcome } : {}), ...(!ok ? { error: operationError, diagnostic } : {}), ...(ok && !cancelled && message.type === 'filesystem-navigate' ? { resumeNavigation: { path: message.path, side: message.side } } : {}), ...(ok && !cancelled && message.type === 'filesystem-prepare' ? { resumeAction: message.action } : {}) });
+          if (directoryJob && directoryJobs.get(directoryKey) === directoryJob) directoryJobs.delete(directoryKey);
+          if (current && panel === current) await current.webview.postMessage({ type: 'filesystem-result', ok, state: filesystemState, ...(typeof message.refreshRequestId === 'string' ? { refreshRequestId: message.refreshRequestId } : {}), ...(message.taskRequestId ? { taskRequestId: message.taskRequestId } : {}), ...(message.navigationRequestId ? { navigationRequestId: message.navigationRequestId } : {}), ...(updatedDirectories?.length ? { refreshGitDirectories: updatedDirectories } : {}), ...(cancelled ? { cancelled: true } : {}), ...(operationId ? { operationId, operationOutcome: filesystemState?.operationOutcome } : {}), ...(!ok ? { error: operationError, diagnostic } : {}), ...(ok && !cancelled && message.type === 'filesystem-navigate' ? { resumeNavigation: { path: message.path, side: message.side } } : {}), ...(ok && !cancelled && message.type === 'filesystem-prepare' ? { resumeAction: message.action } : {}) });
         }).finally(() => { filesystemRequests--; });
-        await filesystemQueue;
+        if (!isolatedNavigation) filesystemQueue = execution.catch(() => {});
+        await execution;
         return;
       }
       if (message?.type === 'icons') {
@@ -1125,20 +1442,26 @@ function activate(context) {
         return;
       }
       if (message?.type === 'inputFocus') {
-        shortcutContext = { searchFocus: Boolean(message.search), searchResultsFocus: Boolean(message.searchResults && message.search), searchResults: Boolean(message.resultTab), listerFocus: Boolean(message.lister && !message.dialog), textInput: Boolean(message.value), listFocus: Boolean(message.list), conflictDialog: Boolean(message.conflict), transferNameInput: Boolean(message.transferName && message.value), fileDialog: Boolean(message.dialog), inlineRenameInput: Boolean(message.inlineRename && message.value) };
+        await vscode.commands.executeCommand('setContext', 'bitfroest.canPasteFiles', Boolean(message.paste));
+        shortcutContext = { tabFocus: Boolean(message.tabs && !message.value && !message.dialog && !message.lister), searchFocus: Boolean(message.search), searchResultsFocus: Boolean(message.searchResults && message.search), searchResults: Boolean(message.resultTab), listerFocus: Boolean(message.lister && !message.dialog), textInput: Boolean(message.value), listFocus: Boolean(message.list), conflictDialog: Boolean(message.conflict), transferNameInput: Boolean(message.transferName && message.value), fileDialog: Boolean(message.dialog), inlineRenameInput: Boolean(message.inlineRename && message.value) };
         await vscode.commands.executeCommand('setContext', 'bitfroest.searchFocus', Boolean(message.search));
         await vscode.commands.executeCommand('setContext', 'bitfroest.searchResultsFocus', Boolean(message.searchResults && message.search));
         await vscode.commands.executeCommand('setContext', 'bitfroest.searchResults', Boolean(message.resultTab));
         await vscode.commands.executeCommand('setContext', 'bitfroest.listerFocus', Boolean(message.lister && !message.dialog));
         await vscode.commands.executeCommand('setContext', 'bitfroest.textInput', Boolean(message.value));
         await vscode.commands.executeCommand('setContext', 'bitfroest.listFocus', Boolean(message.list));
+        await vscode.commands.executeCommand('setContext', 'bitfroest.tabFocus', shortcutContext.tabFocus);
         await vscode.commands.executeCommand('setContext', 'bitfroest.conflictDialog', Boolean(message.conflict));
         await vscode.commands.executeCommand('setContext', 'bitfroest.transferNameInput', Boolean(message.transferName && message.value));
         await vscode.commands.executeCommand('setContext', 'bitfroest.fileDialog', Boolean(message.dialog));
         await vscode.commands.executeCommand('setContext', 'bitfroest.inlineRenameInput', Boolean(message.inlineRename && message.value));
         return;
       }
-      if (message?.type === 'state') { await saveState(message.state); return; }
+      if (message?.type === 'view-state') {
+        if (filesystemState && [0, 1].includes(message.active) && Array.isArray(message.panes) && message.panes.length === 2 && message.panes.every(p => Array.isArray(p.tabs) && p.tabs.length > 0 && p.tabs.length <= 256 && Number.isInteger(p.tab) && p.tab >= 0 && p.tab < p.tabs.length && p.tabs.every(path => typeof path === 'string' && path.length <= 4096 && provider.canNavigate(path)))) { viewRevision++; closeMissingDirectoryJobs(message.panes); await saveState({ ...filesystemState, panes: message.panes, active: message.active }); }
+        return;
+      }
+      if (message?.type === 'state') { closeMissingDirectoryJobs(message.state?.panes); await saveState(message.state); return; }
       if (message?.type === 'zip-open-entry') {
         try {
           const row = fileSnapshot(message.path);
@@ -1202,16 +1525,22 @@ function activate(context) {
       await replyUiAction(message, { ok: true });
       } catch (error) { await replyUiAction(message, { ok: false, error: t(error.message) }); vscode.window.showErrorMessage(t(error.message)); }
     }, null, context.subscriptions);
+    renderHtml();
     if (restoredPanel) return;
     const current = panel;
     const token = crypto.randomUUID();
     current.title = `${title()} [${token}]`;
     try {
+      logStartup('window-move-start', { documentId });
       await vscode.commands.executeCommand('workbench.action.moveEditorToNewWindow');
-      auxiliaryMoveCompleted = true;
-      requestAuxiliaryReady();
-      if (process.platform === 'win32') {
-        await maximizeWindow(token);
+      logStartup('window-move-complete', { documentId });
+      try {
+        if (process.platform === 'win32') {
+          await maximizeWindow(token);
+        }
+      } finally {
+        auxiliaryMoveCompleted = true;
+        requestAuxiliaryReady();
       }
     } catch (error) {
       vscode.window.showErrorMessage(t('Das Commander-Fenster konnte nicht vollständig eingerichtet werden: {error}', { error: t(error.message) }));
@@ -1219,14 +1548,19 @@ function activate(context) {
       if (panel === current) current.title = title();
     }
     } catch (error) {
-      if (restoredPanel && !restoredDisposed) restoredPanel.dispose();
+      clearTimeout(startupWatchdog);
+      logStartup('error', { message: error.message, stack: error.stack, operation: 'open-panel' });
+      if (!restoredDisposed) loadingPanel.dispose();
       throw error;
-    } finally { restoringSubscription?.dispose(); opening = false; }
+    } finally { startupSubscription?.dispose(); restoringSubscription?.dispose(); opening = false; }
   }
   context.subscriptions.push(vscode.commands.registerCommand('bitfroest.openPrototype', () => open()));
+  context.subscriptions.push(vscode.commands.registerCommand('bitfroest.show', () => opening ? pendingOpen : open(undefined, false)));
   context.subscriptions.push(vscode.commands.registerCommand('bitfroest.inspect-folder-locks', selection => { if (panel && panelReady) panel.webview.postMessage({ type: 'action', action: 'inspect-folder-locks', ...(selection?.webviewSection === 'folder' ? { contextSelection: { directory: selection.directory, ids: selection.ids, snapshotId: selection.snapshotId } } : {}) }); }));
   context.subscriptions.push(vscode.window.registerWebviewPanelSerializer('bitfroestPrototype', {
-    deserializeWebviewPanel: restoredPanel => open(restoredPanel)
+    deserializeWebviewPanel: async restoredPanel => { void open(restoredPanel)?.catch(error => {
+      void vscode.window.showErrorMessage(t('Dateiverwaltung konnte nicht wiederhergestellt werden: {error}', { error: error.message }));
+    }); logStartup('serializer-returned', { visible: restoredPanel.visible, active: restoredPanel.active, viewColumn: restoredPanel.viewColumn }); }
   }));
   for (const action of ['search', 'search-separate', 'search-normal', 'search-duplicates']) context.subscriptions.push(vscode.commands.registerCommand(`bitfroest.${action}`, () => { if (panel && panelReady) panel.webview.postMessage({ type: 'action', action }); }));
   context.subscriptions.push(vscode.commands.registerCommand('bitfroest.search-key', key => { if (panel && panelReady && typeof key === 'string') panel.webview.postMessage({ type: 'action', action: `search-key:${key}` }); }));
@@ -1235,6 +1569,7 @@ function activate(context) {
   context.subscriptions.push(vscode.commands.registerCommand('bitfroest.configureSettings', () => configurationEditor.open('settings')));
   context.subscriptions.push(vscode.commands.registerCommand('bitfroest.configureShortcuts', () => configurationEditor.open('shortcuts')));
   context.subscriptions.push(vscode.commands.registerCommand('bitfroest.showLocalBranches', () => { if (panel && panelReady) panel.webview.postMessage({ type: 'action', action: 'git-branches' }); }));
+  context.subscriptions.push(vscode.commands.registerCommand('bitfroest.gitDiff', selection => { if (panel && panelReady && selection?.gitFile === true && selection.webviewSection === 'files') panel.webview.postMessage({ type: 'action', action: 'git-diff', contextSelection: { directory: selection.directory, ids: selection.ids, snapshotId: selection.snapshotId } }); }));
   context.subscriptions.push(vscode.commands.registerCommand('bitfroest.configureFavorites', () => configurationEditor.open('favorites')));
   for (const action of ['conflict-target', 'conflict-source', 'conflict-target-plain', 'conflict-source-plain', 'conflict-compare', 'conflict-compare-internal']) context.subscriptions.push(vscode.commands.registerCommand(`bitfroest.${action}`, () => { if (panel && panelReady) panel.webview.postMessage({ type: 'action', action }); }));
   context.subscriptions.push(vscode.commands.registerCommand('bitfroest.transfer-name-parts', key => { if (panel && panelReady) panel.webview.postMessage({ type: 'action', action: 'transfer-name-parts', key }); }));
@@ -1246,7 +1581,7 @@ function activate(context) {
   context.subscriptions.push(vscode.commands.registerCommand('bitfroest.lister-action', action => { if (panel && panelReady && typeof action === 'string') panel.webview.postMessage({ type: 'action', action: `lister:${action}` }); }));
   for (const action of ['open-terminal', 'shell-context-menu', 'view', 'edit', 'clipboard-copy', 'clipboard-cut', 'clipboard-paste', 'copy', 'copy-same', 'move', 'mkdir', 'mkdir-other', 'new-file', 'delete', 'delete-alternate', 'delete-permanently', 'pack', 'pack-move', 'test-archives', 'unpack', 'rename', 'select-all', 'invert', 'clear', 'toggle-selection-next', 'open-trash', 'swap', 'reset', 'help', 'new-tab', 'close-tab', 'next-tab', 'previous-tab', 'refresh', 'filter', 'path', 'path-clipboard', 'background-tab', 'open-dir-tab', 'open-dir-other-tab', 'rename-one', 'back', 'forward', 'swap-paths']) {
     context.subscriptions.push(vscode.commands.registerCommand(`bitfroest.${action}`, options => {
-      if (panel && panelReady) panel.webview.postMessage({ type: 'action', action, ...(options?.reverseDirectories === true ? { reverseDirectories: true } : {}) });
+      if (panel && panelReady) panel.webview.postMessage({ type: 'action', action, ...(options?.reverseDirectories === true ? { reverseDirectories: true } : {}), ...(['clipboard-copy', 'clipboard-cut', 'clipboard-paste'].includes(action) && ['files', 'folder', 'fileBackground'].includes(options?.webviewSection) ? { contextSelection: { directory: options.directory, ids: options.ids, snapshotId: options.snapshotId } } : {}) });
     }));
   }
   context.subscriptions.push(vscode.commands.registerCommand('bitfroest.chooseTabMode', async () => {
@@ -1279,7 +1614,7 @@ function activate(context) {
       const current = create(displayLanguage()).language;
       const items = [['de', 'Deutsch'], ['en', 'English']].map(([value, name]) => ({
         value,
-        label: `${value === defaultLanguage ? '$(star-full) ' : ''}${name}`,
+        label: `${value === defaultLanguage ? productIcon('star-full') + ' ' : ''}${name}`,
         description: [value === defaultLanguage ? t('Standard · Visual Studio Code') : '', value === current ? t('Aktiv') : ''].filter(Boolean).join(' · ')
       }));
       const chosen = await vscode.window.showQuickPick(items, { title: t('Sprache wechseln'), placeHolder: t('Standardsprache mit Stern gekennzeichnet') });
@@ -1299,7 +1634,7 @@ function activate(context) {
     if (event.affectsConfiguration('bitfroest.columns') || event.affectsConfiguration('bitfroest.favorites') || event.affectsConfiguration('bitfroest.shortcuts')) { configurationEditor.changed(); }
     if (event.affectsConfiguration('bitfroest.shortcuts')) await syncShortcuts();
     if (event.affectsConfiguration('bitfroest.language')) notifyLanguageChange();
-    if ((event.affectsConfiguration('bitfroest.files') || event.affectsConfiguration('bitfroest.zip') || event.affectsConfiguration('bitfroest.colors') || event.affectsConfiguration('bitfroest.gitStatus.iconSizePercent')) && panel) await panel.webview.postMessage({ type: 'file-settings', settings: fileSettings() });
+    if ((event.affectsConfiguration('bitfroest.files') || event.affectsConfiguration('bitfroest.appearance.iconSize') || event.affectsConfiguration('bitfroest.zip') || event.affectsConfiguration('bitfroest.colors') || event.affectsConfiguration('bitfroest.gitStatus.iconSizePercent')) && panel) await panel.webview.postMessage({ type: 'file-settings', settings: fileSettings() });
     if (event.affectsConfiguration('bitfroest.columns') && panel) await panel.webview.postMessage({ type: 'column-settings', settings: columnSettings() });
     if (event.affectsConfiguration('bitfroest.favorites') && panel) await panel.webview.postMessage({ type: 'favorite-settings', settings: favoriteSettings() });
     if (!event.affectsConfiguration('workbench.iconTheme') || !panel) return;
@@ -1309,7 +1644,7 @@ function activate(context) {
   }));
 }
 
-module.exports = { activate };
+module.exports = { activate, deactivate: () => flushPersistence() };
 
 
 

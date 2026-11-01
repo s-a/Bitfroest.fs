@@ -3,13 +3,25 @@ const assert = require('node:assert/strict');
 const { createApp } = require('./support/webview.cjs');
 const send = (app, settings) => app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'favorite-settings', settings } }));
 
+test('a previously loaded favorite is displayed before its background validation completes', t => {
+  const pane = path => ({ tabs: [path], tab: 0, selected: [], cursor: null, filter: '', sort: 'name' });
+  const app = createApp(t, { version: 1, realFilesystem: true, active: 0, panes: [pane('C:/tmp'), pane('C:/temp')], folders: { 'C:/tmp': [], 'C:/temp': [{ id: 'known', name: 'known.txt', type: 'text' }] } });
+  send(app, { entries: { Known: 'C:/temp' } });
+  app.click(app.document.querySelector('[data-favorites]')); app.click(app.document.querySelector('[data-favorite-entry]'));
+  assert.equal(app.state().panes[0].tabs[0], 'C:/temp'); assert.ok(app.row('known.txt'));
+  assert.equal(app.messages.filter(message => message.type === 'filesystem-navigate').length, 1);
+});
+
 test('the favorite tree preserves group order and empty groups without encoding names as paths', t => {
   const app = createApp(t);
   send(app, { entries: {}, items: [{ id: 'b', type: 'group', name: 'Second', parent: null }, { id: 'a', type: 'group', name: 'First', parent: null }] });
   app.click(app.document.querySelector('[data-favorites]'));
   assert.deepEqual([...app.document.querySelectorAll('[data-favorite-group]')].map(item => item.textContent), ['Second', 'First']);
   app.click(app.document.querySelector('[data-favorite-group]'));
-  assert.ok(app.document.querySelector('[data-favorite-back]'));
+  const group = app.document.querySelector('[data-favorite-group]');
+  assert.equal(group.getAttribute('aria-expanded'), 'true');
+  assert.match(app.document.getElementById(group.getAttribute('aria-controls')).textContent, /Keine Einträge/);
+  assert.equal(app.document.querySelector('[data-favorite-back]'), null);
 });
 
 test('drive root favorites retain an absolute path in the host request', t => {
@@ -51,7 +63,7 @@ test('favorite submenu preserves grouping and current-directory add/remove actio
   app.click(app.document.querySelector('[data-favorites]'));
   app.click(app.document.querySelector('[data-favorite-group]'));
   assert.equal(app.document.querySelector('[data-favorite-entry]').textContent, 'Work');
-  app.key('Escape'); app.click(app.document.querySelector('[data-favorites]'));
+  app.key('Escape');
   app.click(app.document.querySelector('[data-favorite-toggle]'));
   assert.ok(app.messages.some(item => item.type === 'favorite-toggle' && item.path === path));
   assert.equal(app.document.activeElement, app.document.querySelector('[data-favorites]'));

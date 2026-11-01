@@ -8,10 +8,10 @@
 
   const definitions = [
     { key: 'name', label: 'Name', width: 260, minWidth: 80, maxWidth: 1600 },
-    { key: 'type', label: 'Erweiterung', width: 88, minWidth: 48, maxWidth: 400 },
+    { key: 'type', label: 'Ext.', width: 88, minWidth: 48, maxWidth: 400 },
     { key: 'size', label: 'Größe', width: 96, minWidth: 48, maxWidth: 400 },
     { key: 'date', label: 'Datum', width: 154, minWidth: 80, maxWidth: 600 },
-    { key: 'attributes', label: 'Attribute', width: 72, minWidth: 48, maxWidth: 400 }
+    { key: 'attributes', label: 'Attr.', width: 72, minWidth: 48, maxWidth: 400 }
   ];
   const byKey = new Map(definitions.map(column => [column.key, column]));
   const collator = new Intl.Collator('de', { numeric: true, sensitivity: 'base' });
@@ -28,7 +28,7 @@
         const key = saved.key ?? saved.id;
         if (typeof key !== 'string' || !key || seen.has(key)) continue;
         const width = numericWidth(saved.width), definition = { minWidth: 32, maxWidth: 1600 };
-        result.push({ key, label: String(saved.label ?? saved.title ?? key), field: String(saved.field ?? ''), align: ['left', 'right', 'center'].includes(saved.align) ? saved.align : 'left', visible: saved.visible !== false, width: Number.isFinite(width) ? clamp(width, definition) : 120, ...definition });
+        result.push({ key, label: settings.columnTitle(saved), field: String(saved.field ?? ''), align: ['left', 'right', 'center'].includes(saved.align) ? saved.align : 'left', visible: saved.visible !== false, width: Number.isFinite(width) ? clamp(width, definition) : 120, ...definition });
         seen.add(key);
       }
       return result;

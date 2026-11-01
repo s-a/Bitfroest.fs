@@ -20,6 +20,8 @@
 #include <vector>
 #include <sys/stat.h>
 #ifdef _WIN32
+#include <git2/sys/config.h>
+#include <git2/sys/repository.h>
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>
@@ -60,6 +62,13 @@ struct GitStatusJob {
   bool detached = false;
   bool unborn = false;
   bool infoOnly = false;
+  bool summary = false;
+  bool dirty = false;
+  std::string dirtyPath;
+  bool summaryCheckingWorktree = false;
+  bool normalizeCrlf = false;
+  int64_t summaryIndexTime = 0;
+  bool summaryIndexTimeValid = false;
   int indexVersion = 0;
   bool skipWorktree = false;
   bool sparseCheckout = false;
@@ -568,6 +577,32 @@ int VerifyCleanEntries(GitStatusJob* job) {
   return 0;
 }
 
+int StopAfterDirty(const git_diff*, const git_diff_delta* delta, const char*, void* payload) {
+  auto* job = static_cast<GitStatusJob*>(payload);
+  if (job->cancelled.load() || job->state->closed.load()) return GIT_EUSER;
+  if (delta->status == GIT_DELTA_IGNORED) return 1;
+  const char* name = delta->new_file.path ? delta->new_file.path : delta->old_file.path;
+  const git_index_entry* staged = name ? git_index_get_bypath(job->index, name, 0) : nullptr;
+  if (delta->status == GIT_DELTA_UNMODIFIED) {
+    if (job->summaryCheckingWorktree && staged && job->summaryIndexTimeValid && staged->mtime.seconds >= job->summaryIndexTime && (staged->mode & 0170000) == 0100000) {
+      git_oid oid;
+      const int result = HashWorktreeFile(job, name, &oid);
+      if (result < 0) return result;
+      if (!git_oid_equal(&oid, &staged->id)) { job->dirty = true; job->dirtyPath = name; return GIT_EUSER; }
+    }
+    return 1;
+  }
+  if (job->summaryCheckingWorktree && delta->status == GIT_DELTA_MODIFIED && job->normalizeCrlf && staged && (staged->mode & 0170000) == 0100000) {
+    git_oid oid;
+    const int result = HashWorktreeFile(job, name, &oid);
+    if (result < 0) return result;
+    if (git_oid_equal(&oid, &staged->id)) return 1;
+  }
+  job->dirty = true;
+  if (name) job->dirtyPath = name;
+  return GIT_EUSER;
+}
+
 void ExecuteGitStatusImpl(napi_env, void* data) {
   auto* job = static_cast<GitStatusJob*>(data);
   if (job->cancelled.load() || job->state->closed.load()) return;
@@ -581,6 +616,21 @@ void ExecuteGitStatusImpl(napi_env, void* data) {
     return;
   }
   job->repository_found = true;
+#ifdef _WIN32
+  git_config* pathConfig = nullptr;
+  git_config_backend* pathBackend = nullptr;
+  static constexpr char pathOptions[] = "[core]\nlongpaths = true\n";
+  int pathResult = git_repository_config_snapshot(&pathConfig, job->repository);
+  if (pathResult == 0) pathResult = git_config_backend_from_string(&pathBackend, pathOptions, sizeof(pathOptions) - 1, nullptr);
+  if (pathResult == 0) {
+    pathResult = git_config_add_backend(pathConfig, pathBackend, GIT_CONFIG_LEVEL_APP, job->repository, 0);
+    if (pathResult == 0) pathBackend = nullptr;
+  }
+  if (pathResult == 0) pathResult = git_repository_set_config(job->repository, pathConfig);
+  if (pathBackend) pathBackend->free(pathBackend);
+  git_config_free(pathConfig);
+  if (pathResult < 0) { SetError(job, pathResult, "Long-path support could not be initialized."); return; }
+#endif
   const char* workdir = git_repository_workdir(job->repository);
   const char* gitdir = git_repository_path(job->repository);
   job->root = workdir ? workdir : "";
@@ -680,6 +730,13 @@ void ExecuteGitStatusImpl(napi_env, void* data) {
   if (autocrlfResult == 0 && autocrlf) job->autocrlf = autocrlf;
   else if (autocrlfResult != GIT_ENOTFOUND) { git_config_free(config); SetError(job, autocrlfResult, "The autocrlf setting is invalid."); return; }
   git_config_free(config);
+  if (job->summary) {
+    std::string value = job->autocrlf;
+    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char item) { return static_cast<char>(std::tolower(item)); });
+    job->normalizeCrlf = value == "true" || value == "input";
+    job->summaryIndexTimeValid = StatMtimeSeconds(std::filesystem::u8path(job->gitdir) / "index", &job->summaryIndexTime);
+    if (job->scope == "." && job->includeScopes.empty() && job->excludeScopes.empty() && git_index_has_conflicts(job->index)) { job->dirty = true; return; }
+  }
   if (!BuildPathspecs(job)) return;
   git_diff_options staged{};
   git_diff_options worktree{};
@@ -690,8 +747,10 @@ void ExecuteGitStatusImpl(napi_env, void* data) {
   staged.flags = GIT_DIFF_INCLUDE_UNMODIFIED | GIT_DIFF_DISABLE_PATHSPEC_MATCH;
   staged.progress_cb = CancelOnProgress;
   staged.payload = job;
-  worktree.flags = GIT_DIFF_INCLUDE_UNMODIFIED | GIT_DIFF_INCLUDE_UNTRACKED | GIT_DIFF_RECURSE_UNTRACKED_DIRS | GIT_DIFF_DISABLE_PATHSPEC_MATCH;
-  if (job->include_ignored) worktree.flags |= GIT_DIFF_INCLUDE_IGNORED | GIT_DIFF_RECURSE_IGNORED_DIRS;
+  worktree.flags = GIT_DIFF_INCLUDE_UNMODIFIED | GIT_DIFF_INCLUDE_UNTRACKED | GIT_DIFF_DISABLE_PATHSPEC_MATCH;
+  worktree.flags |= GIT_DIFF_RECURSE_UNTRACKED_DIRS;
+  if (job->include_ignored && !job->summary) worktree.flags |= GIT_DIFF_INCLUDE_IGNORED | GIT_DIFF_RECURSE_IGNORED_DIRS;
+  if (job->summary) { staged.notify_cb = StopAfterDirty; worktree.notify_cb = StopAfterDirty; }
   worktree.progress_cb = CancelOnProgress;
   worktree.payload = job;
   staged.pathspec.strings = job->pathspecPointers.data();
@@ -701,11 +760,15 @@ void ExecuteGitStatusImpl(napi_env, void* data) {
   if (job->cancelled.load() || job->state->closed.load()) return;
   if (!job->noSelectedPaths) {
     job->result = git_diff_tree_to_index(&job->stagedDiff, job->repository, job->headTree, job->index, &staged);
+    if (job->summary && job->dirty && !job->cancelled.load() && !job->state->closed.load()) { job->result = 0; return; }
     if (job->result < 0) { if (!job->cancelled.load()) SetError(job, job->result, "The staged repository changes could not be read."); return; }
     if (job->cancelled.load() || job->state->closed.load()) return;
+    job->summaryCheckingWorktree = true;
     job->result = git_diff_index_to_workdir(&job->worktreeDiff, job->repository, job->index, &worktree);
+    if (job->summary && job->dirty && !job->cancelled.load() && !job->state->closed.load()) { job->result = 0; return; }
     if (job->result < 0) { if (!job->cancelled.load()) SetError(job, job->result, "The working tree changes could not be read."); return; }
   }
+  if (job->summary) return;
   const size_t staged_count = job->stagedDiff ? git_diff_num_deltas(job->stagedDiff) : 0;
   for (size_t i = 0; i < staged_count; i++) {
     const git_diff_delta* delta = git_diff_get_delta(job->stagedDiff, i);
@@ -783,6 +846,8 @@ napi_value GitStatusResult(napi_env env, GitStatusJob* job) {
       !Set(env, result, "sparseCheckout", Boolean(env, job->sparseCheckout)) ||
       !Set(env, result, "autocrlf", String(env, job->autocrlf))) return nullptr;
   uint32_t index = 0;
+  if (job->summary && (!Set(env, result, "summary", Boolean(env, true)) || !Set(env, result, "dirty", Boolean(env, job->dirty)))) return nullptr;
+  if (job->summary && !job->dirtyPath.empty() && !Set(env, result, "dirtyPath", String(env, job->dirtyPath))) return nullptr;
   for (const auto& [name, source] : job->entries) {
     napi_value entry;
     if (napi_create_object(env, &entry) != napi_ok) return nullptr;
@@ -957,6 +1022,9 @@ napi_value StartGitRequest(napi_env env, const std::shared_ptr<SessionState>& st
     return nullptr;
   }
   job->include_ignored = !infoOnly && ReadBoolean(env, request, "showIgnored", false);
+  if (!infoOnly && !ValidBoolean(env, request, "summary")) { napi_throw_error(env, "InvalidRequest", "The summary option must be a boolean."); return nullptr; }
+  job->summary = !infoOnly && ReadBoolean(env, request, "summary", false);
+  if (job->summary) job->include_ignored = false;
   job->recursive = infoOnly || ReadBoolean(env, request, "recursive", true);
   napi_value promise;
   if (napi_create_promise(env, &job->deferred, &promise) != napi_ok) return nullptr;

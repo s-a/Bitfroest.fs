@@ -114,9 +114,9 @@ function createZipFilesystem(base, options = {}) {
       const directories = (settings.directories || []).filter(value => !archivePath(value));
       return directories.length ? overlay(await base.prepare(real(before), { ...settings, directories })) : overlay(real(before));
     },
-    async remove(before, request) {
+    async remove(before, request, settings) {
       if (request.paths?.some(archivePath)) throw new Error('Änderungen innerhalb von ZIP-Archiven sind im Pilot nicht verfügbar.');
-      return overlay(await base.remove(real(before), request));
+      return overlay(await base.remove(real(before), request, settings));
     },
     measureFolder: (before, directory, settings) => base.measureFolder(real(before), directory, settings),
     clear() { views.clear(); archives.clear(); operations.clear(); },

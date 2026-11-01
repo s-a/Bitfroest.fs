@@ -1,6 +1,8 @@
+import type { ProgressEvent } from './media/commander-progress';
+
 export type NativeOperation =
   | 'files.copy' | 'files.rename'
-  | 'clipboard.readFiles' | 'clipboard.writeFiles' | 'clipboard.acknowledge'
+  | 'clipboard.readFiles' | 'clipboard.writeFiles' | 'clipboard.acknowledge' | 'clipboard.cancelFiles'
   | 'shell.showContextMenu' | 'shell.openAssociated' | 'shell.openTrash' | 'shell.openTerminal'
   | 'icons.resolve' | 'metadata.query' | 'paths.resolveNetwork'
   | 'encoding.describe' | 'encoding.decodeBlock' | 'encoding.decodeChunk'
@@ -10,15 +12,17 @@ export type NativeOperation =
   | 'git.status' | 'git.info';
 
 export interface NativeCapability {
+  readonly dirtySummary?: boolean;
   readonly status: 'supported' | 'conditional' | 'unsupported';
   readonly reason?: string;
   readonly maxBytes?: number;
 }
 
 export interface NativeMetadata {
+  readonly dosName?: string;
   readonly provenance: 'win32.fileAttributes';
   readonly attributes: Readonly<Record<
-    'readonly' | 'hidden' | 'system' | 'directory' | 'archive' | 'compressed' | 'encrypted', boolean>>;
+    'readonly' | 'hidden' | 'system' | 'directory' | 'archive' | 'compressed' | 'encrypted' | 'sparse' | 'offline', boolean>>;
 }
 
 export interface NativeCompletion {
@@ -74,6 +78,10 @@ export interface NativeClipboardWriteRequest {
   readonly mode: NativeClipboardMode;
 }
 
+export interface NativeClipboardCancelRequest extends NativeClipboardWriteRequest {
+  readonly token: string;
+}
+
 export interface NativeClipboardAcknowledgeRequest extends NativeClipboardWriteRequest {
   readonly token: string;
   readonly remainingPaths: readonly string[];
@@ -91,11 +99,14 @@ export interface NativeGitStatusEntry {
   readonly ignored: boolean;
 }
 
-export interface NativeGitStatusProgress extends NativeCompletion {
+export interface NativeGitStatusProgress extends NativeCompletion, ProgressEvent {
   readonly path: string;
 }
 
 export interface NativeGitStatusResult {
+  readonly summary?: boolean;
+  readonly dirty?: boolean;
+  readonly dirtyPath?: string;
   readonly ok: boolean;
   readonly repository: boolean;
   readonly root?: string;
@@ -157,7 +168,7 @@ export interface NativeCopyProgress {
 
 export interface NativeCopyOptions {
   readonly signal?: AbortSignal;
-  readonly onProgress?: (event: NativeCopyProgress & NativeCompletion) => void;
+  readonly onProgress?: (event: NativeCopyProgress & NativeCompletion & ProgressEvent) => void;
 }
 
 export interface NativeIconRequest {
@@ -287,7 +298,7 @@ export interface NativeSession {
   invoke(operation: 'locks.rename', request: NativeLockRenameRequest): Promise<NativeLockResult & NativeCompletion>;
   invoke(operation: 'restartDeletion.prepare', request: { readonly path: string; readonly backup: string }): Promise<NativeLockResult & NativeCompletion>;
   invoke(operation: 'restartDeletion.commit', request: { readonly path: string; readonly backup: string; readonly token: string }): Promise<NativeRestartDeletionResult & NativeCompletion>;
-  invoke(operation: 'metadata.query', request: { readonly path: string }): Promise<NativeMetadata & NativeCompletion>;
+  invoke(operation: 'metadata.query', request: { readonly path: string; readonly shortName?: boolean }): Promise<NativeMetadata & NativeCompletion>;
   invoke(operation: 'files.copy', request: NativeCopyRequest, options?: NativeCopyOptions): Promise<NativeCopyOutcome & NativeCompletion>;
   invoke(operation: 'icons.resolve', request: { readonly requests: readonly NativeIconRequest[] }): Promise<NativeIcons & NativeCompletion>;
   invoke(operation: 'shell.openAssociated', request: NativeAssociationRequest): Promise<NativeAssociationResult & NativeCompletion>;
@@ -300,7 +311,8 @@ export interface NativeSession {
   invoke(operation: 'clipboard.readFiles', request: Record<string, never>): Promise<NativeClipboardSelection & NativeCompletion>;
   invoke(operation: 'clipboard.writeFiles', request: NativeClipboardWriteRequest): Promise<NativeClipboardSelection & NativeCompletion>;
   invoke(operation: 'clipboard.acknowledge', request: NativeClipboardAcknowledgeRequest): Promise<NativeClipboardAcknowledgeResult & NativeCompletion>;
-  invoke(operation: 'git.status', request: { readonly directory: string; readonly scope: string; readonly recursive?: boolean; readonly showIgnored?: boolean; readonly includeScopes?: readonly string[]; readonly excludeScopes?: readonly string[] }, options?: { readonly signal?: AbortSignal; readonly onProgress?: (event: NativeGitStatusProgress) => void }): Promise<NativeGitStatusResult & NativeCompletion>;
+  invoke(operation: 'clipboard.cancelFiles', request: NativeClipboardCancelRequest): Promise<NativeClipboardAcknowledgeResult & NativeCompletion>;
+  invoke(operation: 'git.status', request: { readonly directory: string; readonly scope: string; readonly summary?: boolean; readonly recursive?: boolean; readonly showIgnored?: boolean; readonly includeScopes?: readonly string[]; readonly excludeScopes?: readonly string[] }, options?: { readonly signal?: AbortSignal; readonly onProgress?: (event: NativeGitStatusProgress) => void }): Promise<NativeGitStatusResult & NativeCompletion>;
   invoke(operation: 'git.info', request: { readonly directory: string }, options?: { readonly signal?: AbortSignal }): Promise<NativeGitStatusResult & NativeCompletion>;
   invoke(operation: 'encoding.describe', request: { readonly codepage: number }): Promise<NativeCodepage & NativeCompletion>;
   invoke(operation: 'encoding.decodeBlock', request: NativeDecodeRequest): Promise<NativeDecodedBlock & NativeCompletion>;
@@ -322,7 +334,7 @@ export interface NativeBinding {
   readonly capabilities: Partial<Readonly<Record<NativeOperation, NativeCapability>>>;
   openSession(): {
     readonly generation: bigint;
-    invoke(operation: 'metadata.query', request: { readonly path: string }): Promise<NativeMetadata>;
+    invoke(operation: 'metadata.query', request: { readonly path: string; readonly shortName?: boolean }): Promise<NativeMetadata>;
     invoke(operation: 'files.copy', request: NativeCopyRequest, progress?: (event: NativeCopyProgress) => void): Promise<NativeCopyOutcome> & { cancel(): void; cancelIo(): void };
     invoke(operation: 'icons.resolve', request: { readonly requests: readonly NativeIconRequest[] }): Promise<NativeIcons>;
     invoke(operation: 'shell.openAssociated', request: NativeAssociationRequest): Promise<NativeAssociationResult>;
@@ -335,7 +347,8 @@ export interface NativeBinding {
     invoke(operation: 'clipboard.readFiles', request: Record<string, never>): Promise<NativeClipboardSelection>;
     invoke(operation: 'clipboard.writeFiles', request: NativeClipboardWriteRequest): Promise<NativeClipboardSelection>;
     invoke(operation: 'clipboard.acknowledge', request: NativeClipboardAcknowledgeRequest): Promise<NativeClipboardAcknowledgeResult>;
-    invoke(operation: 'git.status', request: { readonly directory: string; readonly scope: string; readonly recursive?: boolean; readonly showIgnored?: boolean; readonly includeScopes?: readonly string[]; readonly excludeScopes?: readonly string[] }, progress?: (event: { readonly path: string }) => void): Promise<NativeGitStatusResult> & { cancel(): boolean };
+  invoke(operation: 'clipboard.cancelFiles', request: NativeClipboardCancelRequest): Promise<NativeClipboardAcknowledgeResult>;
+    invoke(operation: 'git.status', request: { readonly directory: string; readonly scope: string; readonly summary?: boolean; readonly recursive?: boolean; readonly showIgnored?: boolean; readonly includeScopes?: readonly string[]; readonly excludeScopes?: readonly string[] }, progress?: (event: { readonly path: string }) => void): Promise<NativeGitStatusResult> & { cancel(): boolean };
     invoke(operation: 'git.info', request: { readonly directory: string }): Promise<NativeGitStatusResult> & { cancel(): boolean };
     invoke(operation: 'encoding.describe', request: { readonly codepage: number }): Promise<NativeCodepage>;
     invoke(operation: 'encoding.decodeBlock', request: NativeDecodeRequest): Promise<NativeDecodedBlock>;

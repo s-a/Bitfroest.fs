@@ -29,6 +29,30 @@ test('default groups cover related Office variants and development file families
   assert.notEqual(colors.match('budget.xlsx', defaults), colors.match('talk.pptx', defaults));
 });
 
+test('common media and everyday formats have consistent family colors', () => {
+  const families = [
+    ['song.mp3', 'song.wav', 'song.flac', 'song.aac', 'song.m4a', 'song.ogg', 'song.opus', 'song.wma', 'song.aiff', 'song.mid'],
+    ['clip.mp4', 'clip.mkv', 'clip.mov', 'clip.avi', 'clip.webm', 'clip.m4v', 'clip.wmv', 'clip.mpeg', 'clip.mpg', 'clip.m2ts'],
+    ['captions.srt', 'captions.vtt', 'captions.ass', 'captions.ssa', 'captions.sub'],
+    ['playlist.m3u', 'playlist.m3u8', 'playlist.wpl', 'playlist.xspf'],
+    ['book.epub', 'book.mobi', 'book.azw3', 'book.fb2', 'book.cbz', 'book.cbr'],
+    ['photo.jpg', 'photo.heif', 'photo.jxl', 'photo.dng', 'photo.cr2', 'photo.nef', 'photo.arw', 'image.psd', 'image.xcf'],
+    ['disk.iso', 'disk.img', 'disk.dmg', 'disk.vhdx', 'disk.vmdk', 'disk.qcow2'],
+    ['archive.zip', 'archive.cab', 'archive.lz', 'archive.lzma', 'archive.br']
+  ];
+  for (const names of families) {
+    const expected = colors.match(names[0], defaults);
+    assert.ok(expected, names[0]);
+    for (const name of names) {
+      assert.equal(colors.match(name.toUpperCase(), defaults), expected, name);
+    }
+  }
+  assert.equal(new Set(families.slice(0, 5).map(names => colors.match(names[0], defaults))).size, 5);
+  assert.equal(colors.match('circuit.vhd', defaults), colors.match('circuit.vhdl', defaults));
+  assert.equal(colors.match('module.mts', defaults), colors.match('module.ts', defaults));
+  assert.equal(colors.match('package.pls', defaults), colors.match('package.sql', defaults));
+});
+
 test('grouped source and native settings default agree without duplicate or path rules', () => {
   assert.ok(groups.length >= 15);
   const flat = {}, seen = new Set();

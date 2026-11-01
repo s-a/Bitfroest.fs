@@ -19,10 +19,22 @@ test('trash deletion passes the original name and trash option to the native ada
   const calls = [];
   const { provider, left } = await fixture(t, async (target, options) => { calls.push({ target, options }); await fs.unlink(target); });
   const before = await provider.load();
-  const after = await provider.remove(before, { paths: [`${left}/a.txt`], useTrash: true });
+  const progress = [];
+  const after = await provider.remove(before, { paths: [`${left}/a.txt`], useTrash: true }, { onProgress: event => progress.push(event) });
+  assert.deepEqual(progress.map(event => event.overall.completed), [0, 1]);
+  assert.ok(progress.every(event => event.version === 1 && event.overall.total === 1));
   assert.deepEqual(calls, [{ target: `${left}/a.txt`, options: { recursive: true, useTrash: true } }]);
   assert.ok(!after.folders[left].some(row => row.name === 'a.txt'));
   assert.equal(await fs.readFile(`${left}/b.txt`, 'utf8'), 'b');
+});
+
+test('cancelling deletion preserves the remaining selected roots after the active native call', async t => {
+  const controller = new AbortController();
+  const { provider, left } = await fixture(t, async target => { await fs.unlink(target); controller.abort(); });
+  const before = await provider.load();
+  await assert.rejects(provider.remove(before, { paths: [`${left}/a.txt`, `${left}/b.txt`], useTrash: false }, { signal: controller.signal }), error => error.name === 'AbortError');
+  assert.equal(await fs.readFile(`${left}/b.txt`, 'utf8'), 'b');
+  await assert.rejects(fs.stat(`${left}/a.txt`), { code: 'ENOENT' });
 });
 
 test('unsupported or failed trash leaves files intact and never invokes a permanent fallback', async t => {

@@ -92,9 +92,9 @@ class ClipboardTestBackend final : public ClipboardBackend {
     if (path != L"C:/tmp/first.txt" && path != L"C:/tmp/remaining.txt") return HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND);
     *output = ClipboardFileIdentity{}; output->volume = 19; output->id.Identifier[0] = path == L"C:/tmp/first.txt" ? 1 : 2; return S_OK;
   }
-  HRESULT Replace(const std::vector<std::wstring>& paths, const std::wstring&, bool check, DWORD expected) override {
+  HRESULT Replace(const std::vector<std::wstring>& paths, const std::wstring&, bool check, DWORD expected, DWORD* published_sequence = nullptr) override {
     if (check && sequence_ != expected) return HRESULT_FROM_WIN32(ERROR_RETRY);
-    ++sequence_; Set(paths); return S_OK;
+    ++sequence_; Set(paths); if (published_sequence) *published_sequence = sequence_; return S_OK;
   }
   bool IsClosed() const override { return (state_ && state_->closed.load()) || (gate_ && gate_->closed.load()); }
  private:
