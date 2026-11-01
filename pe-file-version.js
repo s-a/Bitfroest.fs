@@ -31,6 +31,44 @@ function resourceLocation(header, fileSize) {
   return null;
 }
 function resourceVersion(resource, baseRva) {
+  function block(offset, limit) {
+    if (!range(resource, offset, 6)) return null;
+    const end = offset + resource.readUInt16LE(offset), type = resource.readUInt16LE(offset + 4);
+    if (end > limit || end <= offset + 6 || type > 1) return null;
+    let keyEnd = offset + 6;
+    while (keyEnd + 2 <= end && resource.readUInt16LE(keyEnd)) keyEnd += 2;
+    if (keyEnd + 2 > end) return null;
+    const key = resource.toString('utf16le', offset + 6, keyEnd), start = (keyEnd + 5) & ~3;
+    const valueEnd = start + resource.readUInt16LE(offset + 2) * (type ? 2 : 1);
+    if (valueEnd > end) return null;
+    return { key, type, start, valueEnd, end, children: (valueEnd + 3) & ~3 };
+  }
+  function children(parent) {
+    const result = [];
+    for (let offset = parent.children; offset + 6 <= parent.end;) {
+      const child = block(offset, parent.end);
+      if (!child) break;
+      result.push(child); offset = (child.end + 3) & ~3;
+    }
+    return result;
+  }
+  function versionString(start, end) {
+    const root = block(start, end);
+    if (!root) return undefined;
+    const parts = children(root), tables = parts.filter(part => part.key === 'StringFileInfo').flatMap(children);
+    const translations = parts.filter(part => part.key === 'VarFileInfo').flatMap(children).find(part => part.key === 'Translation');
+    const preferred = [];
+    if (translations) for (let i = translations.start; i + 4 <= translations.valueEnd; i += 4) preferred.push(resource.readUInt16LE(i).toString(16).padStart(4, '0') + resource.readUInt16LE(i + 2).toString(16).padStart(4, '0'));
+    const byName = new Map(tables.map(table => [table.key.toLowerCase(), table]));
+    const ordered = [...new Set([...preferred.map(key => byName.get(key)).filter(Boolean), ...tables])];
+    for (const table of ordered) {
+      const entry = children(table).find(item => item.key === 'FileVersion' && item.type === 1);
+      if (!entry) continue;
+      const text = resource.toString('utf16le', entry.start, entry.valueEnd).replace(/\0.*$/s, '');
+      if (text) return text;
+    }
+    return undefined;
+  }
   function entries(offset) {
     if(!range(resource,offset,16)) return [];
     const count=resource.readUInt16LE(offset+12)+resource.readUInt16LE(offset+14);
@@ -46,7 +84,10 @@ function resourceVersion(resource, baseRva) {
     const fixed=start+40;
     if(resource.readUInt32LE(fixed)!==0xFEEF04BD || resource.readUInt32LE(fixed+4)!==0x00010000) return null;
     const ms=resource.readUInt32LE(fixed+8),ls=resource.readUInt32LE(fixed+12);
-    return [ms>>>16,ms&65535,ls>>>16,ls&65535];
+    const result = { version: [ms>>>16,ms&65535,ls>>>16,ls&65535] };
+    const text = versionString(start, end);
+    if (text !== undefined) result.versionString = text;
+    return result;
   }
   for(const type of entries(0)) {
     if(type.name!==16 || !(type.target&0x80000000)) continue;
@@ -61,14 +102,14 @@ function resourceVersion(resource, baseRva) {
   }
   return null;
 }
-function parseVersion(buffer) {
+function parseVersionInfo(buffer) {
   if(!Buffer.isBuffer(buffer)) return null;
   const offset=headerLocation(buffer,buffer.length);
   if(offset===null) return null;
   const location=resourceLocation(buffer.subarray(offset),buffer.length);
   return location ? resourceVersion(buffer.subarray(location.offset,location.offset+location.size),location.rva) : null;
 }
-async function getFileVersion(filePath, options={}) {
+async function getFileVersionInfo(filePath, options={}) {
   if(typeof filePath!=='string' || !/\.(exe|dll)$/i.test(filePath)) return null;
   let handle;
   try {
@@ -99,4 +140,6 @@ async function getFileVersion(filePath, options={}) {
   } catch { return null; }
   finally { if(handle) { try { await handle.close(); } catch { /* The unavailable version remains nonfatal. */ } } }
 }
-module.exports={parseVersion,getFileVersion};
+function parseVersion(buffer) { return parseVersionInfo(buffer)?.version ?? null; }
+async function getFileVersion(filePath, options = {}) { return (await getFileVersionInfo(filePath, options))?.version ?? null; }
+module.exports={parseVersion,getFileVersion,parseVersionInfo,getFileVersionInfo};
