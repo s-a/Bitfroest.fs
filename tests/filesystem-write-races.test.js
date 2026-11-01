@@ -11,6 +11,77 @@ async function fixture(t, adapter) {
   await fs.mkdir(left); await fs.mkdir(right); await fs.writeFile(`${left}/lower.txt`, 'ORIGINAL');
   return { left, right, provider: createProvider({ roots: [left, right], fs: adapter }) };
 }
+
+test('move retains originals when an earlier publication disappears during a later copy', async t => {
+  const adapter = Object.create(fs);
+  const { provider, left, right } = await fixture(t, adapter);
+  await fs.writeFile(`${left}/z.txt`, 'SECOND');
+  adapter.copyFile = async (source, target, flags) => {
+    if (source.endsWith('/z.txt')) await fs.unlink(`${right}/lower.txt`);
+    return fs.copyFile(source, target, flags);
+  };
+  const before = await provider.load(), after = structuredClone(before);
+  after.folders[left] = []; after.folders[right] = before.folders[left].map((row, index) => ({ ...row, id: `move-${index}` }));
+  await assert.rejects(provider.apply(before, after));
+  assert.equal(await fs.readFile(`${left}/lower.txt`, 'utf8'), 'ORIGINAL');
+  assert.equal(await fs.readFile(`${left}/z.txt`, 'utf8'), 'SECOND');
+});
+
+test('cancelled move does not delete a source whose published target was replaced', async t => {
+  const adapter = Object.create(fs), controller = new AbortController();
+  const { provider, left, right } = await fixture(t, adapter);
+  await fs.writeFile(`${left}/z.txt`, 'SECOND');
+  adapter.copyFile = async (source, target, flags) => {
+    if (source.endsWith('/z.txt')) {
+      await fs.writeFile(`${right}/lower.txt`, 'EXTERNAL'); controller.abort();
+      throw Object.assign(new Error('Cancelled'), { name: 'AbortError' });
+    }
+    return fs.copyFile(source, target, flags);
+  };
+  const before = await provider.load(), after = structuredClone(before);
+  after.folders[left] = []; after.folders[right] = before.folders[left].map((row, index) => ({ ...row, id: `move-${index}` }));
+  await assert.rejects(provider.apply(before, after, { signal: controller.signal, transfer: { mode: 'move', sourcePath: left, sourceSide: 0, ids: before.folders[left].map(row => row.id) } }), /Wiederherstellung/);
+  assert.equal(await fs.readFile(`${left}/lower.txt`, 'utf8'), 'ORIGINAL');
+  assert.equal(await fs.readFile(`${left}/z.txt`, 'utf8'), 'SECOND');
+  assert.equal(await fs.readFile(`${right}/lower.txt`, 'utf8'), 'EXTERNAL');
+});
+
+test('POSIX filesystem moves preserve distinct case-sensitive source names', { skip: process.platform === 'win32' }, async t => {
+  const { provider, left, right } = await fixture(t, Object.create(fs));
+  await fs.writeFile(`${left}/LOWER.txt`, 'SECOND');
+  const before = await provider.load(), after = structuredClone(before);
+  const result = await require('../media/commander-transfer').execute({ folders: after.folders, sourcePath: left, targetPath: right, ids: before.folders[left].map(row => row.id), mode: 'move', policy: 'overwrite-all' });
+  assert.equal(result.completed, 2);
+  await provider.apply(before, after);
+  assert.deepEqual(await fs.readdir(left), []);
+  assert.equal(await fs.readFile(`${right}/lower.txt`, 'utf8'), 'ORIGINAL');
+  assert.equal(await fs.readFile(`${right}/LOWER.txt`, 'utf8'), 'SECOND');
+});
+
+test('rollback never replaces a file created after its final missing-target check', async t => {
+  const adapter = Object.create(fs); let failed = false, checks = 0;
+  const { provider, left, right } = await fixture(t, adapter);
+  await fs.writeFile(`${right}/lower.txt`, 'OLD TARGET');
+  adapter.copyFile = async () => { failed = true; throw new Error('Copy failed'); };
+  adapter.lstat = async (...args) => {
+    try { return await fs.lstat(...args); }
+    catch (error) {
+      if (failed && path.resolve(args[0]) === path.resolve(`${right}/lower.txt`) && error.code === 'ENOENT' && ++checks === 2) await fs.writeFile(args[0], 'EXTERNAL');
+      throw error;
+    }
+  };
+  const before = await provider.load(), after = structuredClone(before);
+  after.folders[right] = [{ ...before.folders[left][0], id: 'copy' }];
+  let failure;
+  try { await provider.apply(before, after); } catch (error) { failure = error; }
+  assert.ok(checks >= 2, 'a competing file was created after the missing-target check');
+  assert.equal(await fs.readFile(`${right}/lower.txt`, 'utf8'), 'EXTERNAL');
+  assert.match(failure.message, /Wiederherstellung unvollständig/);
+  const backups = (await fs.readdir(right)).filter(name => name.startsWith('.bitfroest-rollback-'));
+  assert.equal(backups.length, 1);
+  const saved = await fs.readdir(`${right}/${backups[0]}`);
+  assert.equal(await fs.readFile(`${right}/${backups[0]}/${saved[0]}`, 'utf8'), 'OLD TARGET');
+});
 test('case-only rename bypasses the unsafe temporary Node rename sequence', { skip: process.platform !== 'win32' }, async t => {
   const adapter = Object.create(fs); let injected = false;
   adapter.rename = async (from, to) => {

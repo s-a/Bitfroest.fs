@@ -1,6 +1,13 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
+test('integrity and recovery failures are localized in English', () => {
+  const { t } = create('en');
+  assert.equal(t('Veröffentlichtes Kopierziel fehlt oder wurde extern geändert.'), 'The published copy destination is missing or changed externally.');
+  assert.equal(t('Das gespeicherte ZIP-Archiv fehlt oder wurde geändert.'), 'The saved ZIP archive is missing or changed.');
+  assert.equal(t('Die Veröffentlichungsquelle ist unvollständig.'), 'The publication source is incomplete.');
+});
+
 test('release integrity and startup errors have explicit English translations', () => {
   const { t } = require('../media/commander-i18n').create('en');
   assert.equal(t('Datei während der Kopierprüfung extern geändert.'), 'A file changed externally during copy verification.');

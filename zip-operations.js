@@ -7,6 +7,7 @@ const zip = require('@zip.js/zip.js');
 const Progress = require('./media/commander-progress');
 const { signature, stop, noLinks, safeName, publish } = require('./zip-io');
 const { resolvePassword } = require('./zip-password');
+const { createOperationError } = require('./operation-errors');
 require('./zip-codecs');
 
 const tree = (name, root) => name === root || name.startsWith(`${root}/`);
@@ -106,7 +107,7 @@ function createZipOperations(options = {}) {
     const removal = (request.remove || []).map(normalize), renames = (request.rename || []).map(item => ({ from: normalize(item.from), to: normalize(item.to) }));
     const { files, roots } = await collect(request, archive, settings);
     const stage = path.join(path.dirname(archive), `.zip-write-${crypto.randomUUID()}.tmp`);
-    let input, source, output, writer, backup, originalComment, committedResult, publishedStat;
+    let input, source, output, writer, backup, backupStat, originalComment, committedResult, publishedStat;
     const skipped = new Set(); let completed = 0, packedBytes = 0, packingTotal, plannedEntries = 0, processedEntries = 0;
     const itemSize = item => {
       const size = item.directory ? 0 : item.stat ? Number(item.stat.size) : typeof item.data === 'string' ? Buffer.byteLength(item.data) : Buffer.isBuffer(item.data) || item.data instanceof Uint8Array ? item.data.byteLength : undefined;
@@ -128,6 +129,11 @@ function createZipOperations(options = {}) {
           if (afterCleanup && ['dev', 'ino', 'size', 'mtimeNs'].every(key => afterCleanup[key] === publishedStat[key])) committedResult.revision = revision(afterCleanup);
         }
       }
+    }
+    async function verifyPublication() {
+      await noLinks(archive);
+      const current = await exists(archive);
+      if (!current || signature(current) !== signature(publishedStat)) throw new Error('Das gespeicherte ZIP-Archiv fehlt oder wurde geändert.');
     }
     try {
       let previous = [];
@@ -214,24 +220,32 @@ function createZipOperations(options = {}) {
       await noLinks(archive);
       const current = await exists(archive);
       if (original ? !current || signature(current) !== signature(original) : current) throw new Error('Das ZIP-Archiv wurde geändert.');
-      if (original) { backup = stage + '.backup'; await fs.rename(archive, backup); }
-      try { await publish(stage, archive, signal); }
+      if (original) { const target = stage + '.backup'; await fs.rename(archive, target); backup = target; backupStat = await fs.lstat(backup, { bigint: true }); }
+      try { publishedStat = await publish(stage, archive, signal, event => progress('publishing', archive, event.transferred, event.total)); }
       catch (error) {
         if (backup) { try { await publish(backup, archive); await fs.unlink(backup); backup = null; } catch { throw new Error(`Wiederherstellung erforderlich: ${backup}`, { cause: error }); } }
         throw error;
       }
       committedResult = { archive, completed, committed: true };
-      publishedStat = await fs.stat(archive, { bigint: true }); committedResult.revision = revision(publishedStat);
+      committedResult.revision = revision(publishedStat);
       await fs.unlink(stage);
-      publishedStat = await fs.stat(archive, { bigint: true }); committedResult.revision = revision(publishedStat);
-      if (backup) { await fs.unlink(backup); backup = null; }
+      const afterStageCleanup = await fs.lstat(archive, { bigint: true });
+      if (!['dev', 'ino', 'size', 'mtimeNs'].every(key => afterStageCleanup[key] === publishedStat[key])) throw new Error('Das gespeicherte ZIP-Archiv fehlt oder wurde geändert.');
+      publishedStat = afterStageCleanup; committedResult.revision = revision(publishedStat);
       stop(signal);
       if (request.verify !== false) await testArchive(archive, { ...settings, password: request.password });
+      await verifyPublication();
+      if (backup) {
+        await noLinks(backup);
+        if (signature(await fs.lstat(backup, { bigint: true })) !== signature(backupStat)) throw new Error('Sicherungsdatei extern verändert.');
+        await fs.unlink(backup); backup = null;
+      }
       if (request.move) {
         for (const item of files.filter(item => item.source && !item.directory && !skipped.has(normalize(item.name)))) {
           progress('removing-sources', item.source); stop(signal);
           await noLinks(item.source);
           if (signature(await fs.lstat(item.source, { bigint: true })) !== signature(item.stat)) throw new Error('Archiv gespeichert; geänderte Quelldatei wurde nicht entfernt.');
+          await verifyPublication();
           await fs.unlink(item.source);
         }
         for (const item of files.filter(item => item.directory && item.source).sort((a, b) => b.source.length - a.source.length)) await fs.rmdir(item.source).catch(error => { if (!['ENOTEMPTY', 'EEXIST'].includes(error.code)) throw error; });
@@ -240,6 +254,12 @@ function createZipOperations(options = {}) {
       stop(signal);
       return committedResult;
     } catch (error) {
+      if (backup) {
+        const retained = createOperationError('recovery-incomplete', { cause: error, paths: [backup] });
+        retained.name = error.name;
+        if (committedResult) retained.committedResult = committedResult;
+        throw retained;
+      }
       if (committedResult) error.committedResult = committedResult;
       throw error;
     } finally { await cleanup(); }

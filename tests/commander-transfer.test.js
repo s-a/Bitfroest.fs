@@ -2,6 +2,31 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const transfer = require('../media/commander-transfer');
 
+test('moving distinct POSIX names keeps both files with overwrite-all', async () => {
+  const folders = { '/source': [file('lower', 'a.txt', 'lower'), file('upper', 'A.txt', 'upper')], '/target': [] };
+  const result = await transfer.execute({ folders, sourcePath: '/source', targetPath: '/target', ids: ['lower', 'upper'], mode: 'move', policy: 'overwrite-all' });
+  assert.equal(result.completed, 2);
+  assert.deepEqual(folders['/source'], []);
+  assert.deepEqual(folders['/target'].map(row => [row.name, row.content]), [['a.txt', 'lower'], ['A.txt', 'upper']]);
+});
+
+test('Windows drive and UNC destinations retain case-insensitive conflict handling', async () => {
+  for (const root of ['C:', '//server/share']) {
+    const sourcePath = `${root}/source`, targetPath = `${root}/target`;
+    const folders = { [sourcePath]: [file('source', 'a.txt', 'new')], [targetPath]: [file('target', 'A.txt', 'old')] };
+    const result = await transfer.execute({ folders, sourcePath, targetPath, ids: ['source'], mode: 'move', policy: 'overwrite-all' });
+    assert.equal(result.completed, 1); assert.deepEqual(folders[sourcePath], []);
+    assert.deepEqual(folders[targetPath].map(row => row.content), ['new']);
+  }
+});
+
+test('collision name suggestions keep their legacy default and use explicit destination semantics', () => {
+  const rows = [{ name: 'FILE.txt' }];
+  assert.equal(transfer.uniqueName(rows, 'file.txt'), 'file (2).txt');
+  assert.equal(transfer.uniqueName(rows, 'file.txt', 'C:/target'), 'file (2).txt');
+  assert.equal(transfer.uniqueName(rows, 'file.txt', '/target'), 'file.txt');
+});
+
 function file(id, name, content = id, extra = {}) { return { id, name, type: 'text', content, size: content.length, date: '29.10.2026 14:32', ...extra }; }
 function setup(extra = {}) {
   return { folders: { '/source': [file('s', 'same.txt', 'new')], '/target': [file('t', 'same.txt', 'old')], ...extra }, sourcePath: '/source', targetPath: '/target', ids: ['s'], mode: 'copy' };

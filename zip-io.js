@@ -1,5 +1,6 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
+const Progress = require('./media/commander-progress');
 
 const signature = stat => [stat.dev, stat.ino, stat.size, stat.mtimeNs, stat.ctimeNs].join(':');
 const stop = signal => { if (signal?.aborted) throw new DOMException('Entpacken abgebrochen.', 'AbortError'); };
@@ -22,27 +23,52 @@ async function noLinks(target) {
 function safeName(value) {
   if (typeof value !== 'string' || !value || value.includes('\0') || value.includes('\\') || value.startsWith('/') || /^[a-z]:/i.test(value) || value.split('/').some(part => !part || part === '..' || part === '.')) throw new Error('Ungültiger Archivpfad.');
 }
-async function publish(source, destination, signal) {
+async function publish(source, destination, signal, onProgress) {
   stop(signal);
-  try { await fs.link(source, destination); return; }
+  const original = await fs.lstat(source, { bigint: true });
+  if (!original.isFile() || original.isSymbolicLink()) throw new Error('Eine gewöhnliche Veröffentlichungsquelle ist erforderlich.');
+  try {
+    await fs.link(source, destination);
+    const published = await fs.lstat(destination, { bigint: true });
+    if (!['dev', 'ino', 'size', 'mtimeNs'].every(key => published[key] === original[key])) throw new Error('Das Veröffentlichungsziel wurde ausgetauscht.');
+    return published;
+  }
   catch (error) {
     if (!['ENOTSUP', 'EOPNOTSUPP', 'EPERM', 'EXDEV', 'ENOSYS'].includes(error.code)) throw error;
   }
   stop(signal);
-    const output = await fs.open(destination, 'wx', 0o600);
+    const output = await fs.open(destination, 'wx+', 0o600);
     let input;
     try {
       input = await fs.open(source, 'r');
+      if (signature(await input.stat({ bigint: true })) !== signature(original)) throw new Error('Die Veröffentlichungsquelle wurde geändert.');
       const buffer = Buffer.alloc(256 * 1024);
-      while (true) {
+      let position = 0;
+      const report = () => onProgress?.(Progress.event({ phase: 'publishing', transferred: position, total: Number(original.size), overall: Progress.known('bytes', position, Number(original.size)), current: Progress.known('bytes', position, Number(original.size)) }));
+      report();
+      while (position < Number(original.size)) {
         stop(signal);
-        const { bytesRead } = await input.read(buffer, 0, buffer.length, null);
-        if (!bytesRead) break;
+        const { bytesRead } = await input.read(buffer, 0, Math.min(buffer.length, Number(original.size) - position), position);
+        if (!bytesRead) throw new Error('Die Veröffentlichungsquelle ist unvollständig.');
         let offset = 0;
         while (offset < bytesRead) { stop(signal); const result = await output.write(buffer, offset, bytesRead - offset); if (!result.bytesWritten) throw new Error('Entpackziel konnte nicht geschrieben werden.'); offset += result.bytesWritten; }
+        const copied = Buffer.alloc(bytesRead); let checked = 0;
+        while (checked < bytesRead) {
+          stop(signal);
+          const result = await output.read(copied, checked, bytesRead - checked, position + checked);
+          if (!result.bytesRead) throw new Error('Das Veröffentlichungsziel ist unvollständig.');
+          checked += result.bytesRead;
+        }
+        if (!buffer.subarray(0, bytesRead).equals(copied)) throw new Error('Die Kopierprüfung des Veröffentlichungsziels ist fehlgeschlagen.');
+        position += bytesRead;
+        report();
       }
+      if (signature(await input.stat({ bigint: true })) !== signature(original) || signature(await fs.lstat(source, { bigint: true })) !== signature(original) || (await output.stat({ bigint: true })).size !== original.size) throw new Error('Quelle oder Ziel während der Veröffentlichung geändert.');
       const stat = await input.stat(); await output.utimes(stat.atime, stat.mtime);
+      await noLinks(destination);
+      if (signature(await output.stat({ bigint: true })) !== signature(await fs.lstat(destination, { bigint: true }))) throw new Error('Das Veröffentlichungsziel wurde ausgetauscht.');
       stop(signal);
+      return await output.stat({ bigint: true });
     } catch (failure) {
       const owned = signature(await output.stat({ bigint: true }));
       await output.close();

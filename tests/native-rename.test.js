@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
-const { renameCase } = require('../native-rename');
+const { renameCase, renameNoReplace } = require('../native-rename');
 async function fixture(t) {
   const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'bitfroest-native-rename-')));
   t.after(async () => { assert.ok(root.startsWith(await fs.realpath(os.tmpdir()))); await fs.rm(root, { recursive: true, force: true }); });
@@ -13,6 +13,42 @@ async function request(root, source, target) {
   const stat = await fs.lstat(source, { bigint: true });
   return { roots: [root], source, target, expected: { dev: String(stat.dev), ino: String(stat.ino), size: String(stat.size), mtimeNs: String(stat.mtimeNs), ctimeNs: String(stat.ctimeNs) } };
 }
+
+test('native restoration never replaces occupied file or directory targets', { skip: process.platform !== 'win32' }, async t => {
+  const root = await fixture(t);
+  for (const directory of [false, true]) {
+    const source = path.join(root, directory ? 'saved-folder' : 'saved-file'), target = source + '-target';
+    if (directory) { await fs.mkdir(source); await fs.mkdir(target); await fs.writeFile(path.join(source, 'child'), 'ORIGINAL'); await fs.writeFile(path.join(target, 'child'), 'EXTERNAL'); }
+    else { await fs.writeFile(source, 'ORIGINAL'); await fs.writeFile(target, 'EXTERNAL'); }
+    const input = await request(root, source, target);
+    await assert.rejects(renameNoReplace(input));
+    assert.equal(await fs.readFile(directory ? path.join(target, 'child') : target, 'utf8'), 'EXTERNAL');
+    assert.equal(await fs.readFile(directory ? path.join(source, 'child') : source, 'utf8'), 'ORIGINAL');
+    await fs.rm(target, { recursive: directory });
+    await renameNoReplace(input);
+    assert.equal(await fs.readFile(directory ? path.join(target, 'child') : target, 'utf8'), 'ORIGINAL');
+    assert.equal(String((await fs.stat(target, { bigint: true })).ino), input.expected.ino);
+  }
+});
+
+test('restoration closes its native session for success, rejection and committed close outcomes', async t => {
+  const root = await fixture(t), source = path.join(root, 'saved'), target = path.join(root, 'target'); await fs.writeFile(source, 'ORIGINAL');
+  const input = await request(root, source, target);
+  for (const outcome of ['success', 'failure', 'committed-close', 'unknown']) {
+    let closed = false;
+    const nativeApi = { capabilities: { 'locks.rename': { status: 'conditional' } }, openSession: () => ({
+      async invoke(operation, request) {
+        assert.equal(operation, 'locks.rename'); assert.equal(request.expected.ino, input.expected.ino);
+        assert.equal(request.expectedParent.ino, String((await fs.stat(root, { bigint: true })).ino));
+        if (outcome === 'failure' || outcome === 'committed-close') throw Object.assign(new Error('Native request failed'), { outcome: { status: outcome === 'failure' ? 'unchanged' : 'committed', changed: outcome === 'failure' ? 0 : 1 } });
+        return outcome === 'unknown' ? {} : { changed: 1, errors: [] };
+      }, async closeAsync() { closed = true; }
+    }) };
+    if (outcome === 'failure' || outcome === 'unknown') await assert.rejects(renameNoReplace(input, { nativeApi }));
+    else await renameNoReplace(input, { nativeApi });
+    assert.equal(closed, true);
+  }
+});
 test('a file case rename preserves its bytes without a temporary rename', { skip: process.platform !== 'win32' }, async t => {
   const root = await fixture(t), source = path.join(root, 'lower.txt'), target = path.join(root, 'LOWER.txt');
   await fs.writeFile(source, 'ORIGINAL');

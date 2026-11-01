@@ -5,6 +5,19 @@
 })(typeof globalThis === 'object' ? globalThis : this, function () {
   'use strict';
   const pairs = {
+    'Veröffentlichtes Kopierziel fehlt oder wurde extern geändert.': 'The published copy destination is missing or changed externally.',
+    'Das gespeicherte ZIP-Archiv fehlt oder wurde geändert.': 'The saved ZIP archive is missing or changed.',
+    'Eine erwartete Dateiidentität und verschiedene Pfade sind erforderlich.': 'An expected file identity and distinct paths are required.',
+    'Ein echter Zielordner ist erforderlich.': 'A real destination directory is required.',
+    'Die sichere Wiederherstellung ist auf diesem Dateisystem nicht verfügbar.': 'Safe restoration is unavailable on this file system.',
+    'Die sichere Wiederherstellung wurde nicht bestätigt.': 'Safe restoration was not confirmed.',
+    'Eine gewöhnliche Veröffentlichungsquelle ist erforderlich.': 'A regular publication source is required.',
+    'Die Veröffentlichungsquelle wurde geändert.': 'The publication source changed.',
+    'Die Veröffentlichungsquelle ist unvollständig.': 'The publication source is incomplete.',
+    'Das Veröffentlichungsziel ist unvollständig.': 'The publication destination is incomplete.',
+    'Die Kopierprüfung des Veröffentlichungsziels ist fehlgeschlagen.': 'Content verification of the publication destination failed.',
+    'Quelle oder Ziel während der Veröffentlichung geändert.': 'The source or destination changed during publication.',
+    'Das Veröffentlichungsziel wurde ausgetauscht.': 'The publication destination was replaced.',
     'Startprotokoll kopiert.': 'Startup diagnostics copied.',
     'Startprotokoll kopieren': 'Copy startup diagnostics',
     'Die Dateiverwaltung meldet noch keine Bereitschaft. Das Startprotokoll enthält den letzten Ladeschritt.': 'The file manager has not reported readiness yet. Startup diagnostics contain the last loading step.',

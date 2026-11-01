@@ -18,6 +18,84 @@ async function contents(file, password) {
   finally { await reader.close(); }
 }
 
+test('ZIP move retains sources if the verified archive disappears before source removal', async t => {
+  const { root, archive, operations } = await fixture(t), source = path.join(root, 'source.txt');
+  await fs.writeFile(source, 'ORIGINAL');
+  await assert.rejects(operations.write({ archive, sources: [source], move: true }, { onProgress: event => {
+    if (event.phase === 'removing-sources') require('node:fs').unlinkSync(archive);
+  } }));
+  assert.equal(await fs.readFile(source, 'utf8'), 'ORIGINAL');
+});
+
+test('ZIP move never adopts a foreign valid archive substituted during publication', async t => {
+  const { root, archive, operations } = await fixture(t), source = path.join(root, 'source.txt');
+  await fs.writeFile(source, 'ORIGINAL');
+  const writer = new zip.ZipWriter(new zip.Uint8ArrayWriter(), { useWebWorkers: false });
+  await writer.add('foreign.txt', new zip.TextReader('EXTERNAL')); const foreign = await writer.close();
+  const link = fs.link; let replaced = false;
+  fs.link = async (from, to) => {
+    await link(from, to);
+    if (to === archive) { await fs.unlink(to); await fs.writeFile(to, foreign); replaced = true; }
+  };
+  try { await assert.rejects(operations.write({ archive, sources: [source], move: true })); }
+  finally { fs.link = link; }
+  assert.equal(replaced, true); assert.equal(await fs.readFile(source, 'utf8'), 'ORIGINAL');
+  assert.deepEqual(await fs.readFile(archive), Buffer.from(foreign));
+});
+
+test('ZIP update retains a backup changed during verification and reports its path', async t => {
+  const { root, archive, operations } = await fixture(t);
+  await operations.write({ archive, additions: [{ name: 'old.txt', data: 'ORIGINAL' }] });
+  let backup;
+  await assert.rejects(operations.write({ archive, additions: [{ name: 'new.txt', data: 'NEW' }] }, { onProgress: event => {
+    if (event.phase === 'verifying' && !backup) {
+      const name = require('node:fs').readdirSync(root).find(name => name.endsWith('.backup'));
+      if (name) { backup = path.join(root, name); require('node:fs').appendFileSync(backup, 'EXTERNAL'); }
+    }
+  } }), error => Boolean(backup && error.presentation?.paths.includes(backup)));
+  assert.ok(backup); assert.ok((await fs.readFile(backup)).subarray(-8).equals(Buffer.from('EXTERNAL')));
+  assert.deepEqual((await contents(archive)).map(row => row.name).sort(), ['new.txt', 'old.txt']);
+});
+
+test('cancelling verification of a ZIP update retains its original backup and reports cancellation', async t => {
+  const { root, archive, operations } = await fixture(t), controller = new AbortController();
+  await operations.write({ archive, additions: [{ name: 'old.txt', data: 'ORIGINAL' }] });
+  const original = await fs.readFile(archive); let backup;
+  await assert.rejects(operations.write({ archive, additions: [{ name: 'new.txt', data: 'NEW' }] }, { signal: controller.signal, onProgress: event => { if (event.phase === 'verifying') controller.abort(); } }), error => {
+    backup = error.presentation?.paths[0]; return error.name === 'AbortError' && error.committedResult?.committed && Boolean(backup);
+  });
+  assert.deepEqual(await fs.readFile(backup), original);
+  assert.deepEqual((await contents(archive)).map(row => row.name).sort(), ['new.txt', 'old.txt']);
+  assert.equal((await fs.readdir(root)).filter(name => name.endsWith('.backup')).length, 1);
+});
+
+test('ZIP verification failure retains the valid original and exposes its backup path', async t => {
+  const { root, archive, operations } = await fixture(t);
+  await operations.write({ archive, additions: [{ name: 'a.txt', data: 'VALID ORIGINAL' }], level: 0 });
+  const original = await fs.readFile(archive), open = fs.open; let changed = false;
+  fs.open = async (...args) => {
+    const handle = await open(...args);
+    if (args[1] === 'wx' && /\.zip-write-/.test(args[0])) {
+      const close = handle.close.bind(handle);
+      handle.close = async () => {
+        await close();
+        if (!changed) {
+          const bytes = await fs.readFile(args[0]), offset = bytes.indexOf(Buffer.from('NEW CONTENT'));
+          assert.ok(offset >= 0); bytes[offset] ^= 1; await fs.writeFile(args[0], bytes); changed = true;
+        }
+      };
+    }
+    return handle;
+  };
+  let failure;
+  try { await assert.rejects(operations.write({ archive, additions: [{ name: 'a.txt', data: 'NEW CONTENT' }], policy: 'overwrite', level: 0 }), error => { failure = error; return /CRC32/.test(error.message); }); }
+  finally { fs.open = open; }
+  const backup = (await fs.readdir(root)).find(name => name.endsWith('.backup'));
+  assert.ok(backup, 'the valid original must survive failed verification');
+  assert.deepEqual(await fs.readFile(path.join(root, backup)), original);
+  assert.ok(failure.presentation.paths.includes(path.join(root, backup)));
+});
+
 test('packing reports its own phase and verification announces empty entries before reading', async t => {
   const { archive, operations } = await fixture(t), events = [];
   await operations.write({ archive, additions: [{ name: 'first.txt', data: 'content' }, { name: 'empty.txt', data: '' }] }, { onProgress: event => events.push(event) });

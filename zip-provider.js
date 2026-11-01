@@ -7,6 +7,7 @@ const { WritableStream, TransformStream } = require('node:stream/web');
 const zip = require('@zip.js/zip.js');
 
 const { signature, stop, location, archivePath, noLinks, safeName, publish } = require('./zip-io');
+const { createOperationError } = require('./operation-errors');
 const { resolvePassword } = require('./zip-password');
 const { matches } = require('./zip-filter');
 const { readableMethod } = require('./zip-codecs');
@@ -215,7 +216,7 @@ function createZipProvider(options = {}) {
           await fs.mkdir(path.dirname(destination), { recursive: true }); await noLinks(destination);
           const stage = path.join(path.dirname(destination), `.zip-${crypto.randomUUID()}.tmp`);
           const output = await fs.open(stage, 'wx', 0o600);
-          let written = 0, backup;
+          let written = 0, backup, backupStat;
           try {
             const writer = new WritableStream({ async write(bytes) { stop(settings.signal); if (written + bytes.length > metadata.uncompressedSize) throw new Error('Ungültige entpackte Dateigröße.'); let offset = 0; while (offset < bytes.length) { const result = await output.write(bytes, offset, bytes.length - offset); if (!result.bytesWritten) throw new Error('Entpackziel konnte nicht geschrieben werden.'); offset += result.bytesWritten; } written += bytes.length; report(name, written, metadata.uncompressedSize); } });
             const entry = actual.get(name), password = await resolvePassword(entry, settings);
@@ -225,11 +226,19 @@ function createZipProvider(options = {}) {
             await output.close(); stop(settings.signal); await verify(); await noLinks(destination);
             if (existing) {
               if (signature(await fs.lstat(destination, { bigint: true })) !== signature(existing)) throw new Error('Das Entpackziel wurde geändert.');
-              backup = `${stage}.backup`; await fs.rename(destination, backup);
+              const target = `${stage}.backup`; await fs.rename(destination, target); backup = target;
+              backupStat = await fs.lstat(backup, { bigint: true });
             }
-            try { await publish(stage, destination, settings.signal); }
+            let published;
+            try { published = await publish(stage, destination, settings.signal, event => settings.onProgress?.(Progress.event({ phase: 'publishing', currentPath: name, overall: Progress.unknown('requests', completed, 'native-operation'), current: Progress.known('bytes', event.transferred, event.total) }))); }
             catch (error) { if (backup) { try { await publish(backup, destination); await fs.unlink(backup); backup = null; } catch { throw new Error(`Wiederherstellung erforderlich: ${backup}`, { cause: error }); } } throw error; }
-            if (backup) { await fs.unlink(backup); backup = null; }
+            if (backup) {
+              try {
+                await noLinks(destination); await noLinks(backup);
+                if (signature(await fs.lstat(destination, { bigint: true })) !== signature(published) || signature(await fs.lstat(backup, { bigint: true })) !== signature(backupStat)) throw new Error('Quelle oder Ziel während der Veröffentlichung geändert.');
+                await fs.unlink(backup); backup = null;
+              } catch (cause) { throw createOperationError('recovery-incomplete', { cause, paths: [backup] }); }
+            }
             report(name, written, metadata.uncompressedSize);
             completed++; completedBytes += written;
           } finally { await output.close().catch(() => {}); await fs.unlink(stage).catch(error => { if (error.code !== 'ENOENT') throw error; }); }

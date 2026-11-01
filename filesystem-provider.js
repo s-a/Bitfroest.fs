@@ -7,7 +7,7 @@ const Progress = require('./media/commander-progress');
 const { createOperationError } = require('./operation-errors');
 const { getFileVersionInfo } = require('./pe-file-version');
 const { readDirectoryComments } = require('./content-comments');
-const { renameCase } = require('./native-rename');
+const { renameCase, renameNoReplace } = require('./native-rename');
 const { createCopySession, abortError, throwIfAborted } = require('./native-copy');
 const { normalizePath } = require('./media/commander-paths');
 
@@ -560,6 +560,21 @@ function createProvider(options = {}) {
     async function verifyEntry(item, signal) {
       await validateEntries(baseline, [item], signal);
     }
+    async function verifyPublications(originalPath, signal) {
+      for (const file of createdFiles.filter(file => file.completed)) {
+        if (originalPath && !below(file.path, originalPath) && ![file.source, ...(file.appendSources || [])].some(source => source && below(source.path, originalPath))) continue;
+        throwIfAborted(signal);
+        await assertComponents(file.path);
+        if (statSignature(await fs.lstat(file.path, { bigint: true })) !== file.createdSignature) throw new Error('Veröffentlichtes Kopierziel fehlt oder wurde extern geändert.');
+      }
+    }
+    async function restore(item) {
+      const original = baseline.entries.get(identity(item.path));
+      await assertComponents(item.backup);
+      const stat = await fs.lstat(item.backup, { bigint: true });
+      if (`${stat.dev}:${stat.ino}` !== original.signature.split(':').slice(0, 2).join(':')) throw new Error('Sicherungsdatei extern verändert.');
+      await (options.renameNoReplace || renameNoReplace)({ source: item.backup, target: item.path, expected: { dev: String(stat.dev), ino: String(stat.ino) } }, { fs });
+    }
     async function backupDirectory(target) {
       const root = permittedRoots().find(root => below(target, root));
       if (!backups.has(root)) {
@@ -653,6 +668,7 @@ function createProvider(options = {}) {
       }
       for (const item of deferredSources) {
         throwIfAborted(operation.signal);
+        await verifyPublications(item.path, operation.signal);
         await verifyEntry(item, operation.signal);
         const backup = `${await backupDirectory(item.path)}/${crypto.randomUUID()}`;
         await fs.rename(item.path, backup); moved.push({ path: item.path, backup });
@@ -673,6 +689,7 @@ function createProvider(options = {}) {
         });
         const retainedPaths = [];
         try {
+          await verifyPublications();
           for (const file of createdFiles.filter(file => !file.completed).reverse()) {
             await assertComponents(file.path);
             const stat = await fs.lstat(file.path, { bigint: true });
@@ -685,13 +702,14 @@ function createProvider(options = {}) {
           for (const item of moved.filter(item => !isPublished(item.path) && !isCompletedSource(item.path)).reverse()) {
             await assertComponents(item.path, true);
             try { await fs.lstat(item.path); throw new Error('Wiederherstellungsziel bereits vorhanden.', { cause: error }); } catch (error) { if (error.code !== 'ENOENT') throw error; }
-            await fs.rename(item.backup, item.path); item.restored = true;
+            await restore(item); item.restored = true;
           }
           if (transfer.mode === 'move') {
             const sourceEntries = new Map(completedFiles.flatMap(file => origins(file)).map(source => [identity(source), baseline.entries.get(identity(source))]));
             for (const entry of sourceEntries.values()) {
               if (!entry || desired.has(identity(entry.path)) || moved.some(item => identity(item.path) === identity(entry.path))) continue;
               await verifyEntry(entry);
+              await verifyPublications(entry.path);
               const backup = `${await backupDirectory(entry.path)}/${crypto.randomUUID()}`;
               await fs.rename(entry.path, backup); moved.push({ path: entry.path, backup });
             }
@@ -736,7 +754,7 @@ function createProvider(options = {}) {
         try {
           await assertComponents(item.path, true);
           try { await fs.lstat(item.path); throw new Error('Wiederherstellungsziel bereits vorhanden.', { cause: error }); } catch (error) { if (error.code !== 'ENOENT') throw error; }
-          await fs.rename(item.backup, item.path);
+          await restore(item);
         } catch { rollbackFailed = true; }
       }
       for (const change of renamedCases.reverse()) {
@@ -758,6 +776,7 @@ function createProvider(options = {}) {
       const stat = await fs.lstat(backupPath, { bigint: true });
       if (original.type === 'file') {
         if (!stat.isFile() || contentSignature(stat) !== original.contentSignature || original.hash && hash(await fs.readFile(backupPath)) !== original.hash) throw new Error('Sicherungsdatei extern verändert.');
+        await verifyPublications(originalPath);
         await fs.unlink(backupPath);
         return;
       }

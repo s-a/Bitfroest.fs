@@ -11,7 +11,7 @@
   const parent = paths.parentPath;
   const base = paths.baseName;
   const validName = name => typeof name === 'string' && Boolean(name.trim()) && !/[\\/:*?"<>|]/.test(name) && !['.', '..'].includes(name) && !/[. ]$/.test(name);
-  const sameName = (a, b) => a.toLocaleLowerCase() === b.toLocaleLowerCase();
+  const sameName = (a, b, directory) => directory === undefined || paths.isWindowsPath(directory) ? a.toLowerCase() === b.toLowerCase() : a === b;
   const inTree = (key, value, archive) => {
     if (/^[a-z]:\//i.test(value)) { key = key.toLowerCase(); value = value.toLowerCase(); }
     return key === value || key.startsWith(`${value}/`) || archive && (key === `${value}!` || key.startsWith(`${value}!/`));
@@ -23,14 +23,14 @@
     return paths.normalizePath(value, { base: source, input: true });
   }
 
-  function uniqueName(items, name) {
+  function uniqueName(items, name, directory) {
     const dot = name.lastIndexOf('.');
     let stem = dot > 0 ? name.slice(0, dot) : name;
     const extension = dot > 0 ? name.slice(dot) : '';
     const numbered = /^(.*?) ?\((\d+)\)$/.exec(stem);
     let counter = numbered ? BigInt(numbered[2]) + 1n : 2n, candidate = name;
     if (numbered) stem = numbered[1];
-    while (items.some(item => sameName(item.name, candidate))) candidate = `${stem} (${counter++})${extension}`;
+    while (items.some(item => sameName(item.name, candidate, directory))) candidate = `${stem} (${counter++})${extension}`;
     return candidate;
   }
 
@@ -160,9 +160,9 @@
       if (source.type !== 'folder' && !matches(source.name, options.filter)) { result.skipped++; return; }
       let name = requestedName || source.name;
       const items = folders[targetDirectory];
-      let existing = items.find(item => sameName(item.name, name));
-      const samePath = targetDirectory === sourceDirectory && sameName(source.name, name);
-      if (samePath && existing === source && mode === 'move' && source.name !== name && !items.some(item => item !== source && sameName(item.name, name))) {
+      let existing = items.find(item => sameName(item.name, name, targetDirectory));
+      const samePath = targetDirectory === sourceDirectory && sameName(source.name, name, targetDirectory);
+      if (samePath && existing === source && mode === 'move' && source.name !== name && !items.some(item => item !== source && sameName(item.name, name, targetDirectory))) {
         relocateTree(join(sourceDirectory, source.name), join(targetDirectory, name), source.type === 'archive');
         source.name = name;
         if (source.type === 'folder') result.directories++; else result.completed++;
@@ -174,7 +174,7 @@
           if (await options.onBeforeDecision?.(result) === false || cancelled()) { result.cancelled = true; return; }
           if (!folders[sourceDirectory]?.includes(source) || source.type !== sourceType) throw new Error('Die Quellauswahl wurde während der Übertragung geändert.');
           if (folders[targetDirectory] !== items) throw new Error('Der Zielordner wurde während der Übertragung geändert.');
-          existing = items.find(item => sameName(item.name, name));
+          existing = items.find(item => sameName(item.name, name, targetDirectory));
           if (!existing) return put(sourceDirectory, source, targetDirectory, name);
           if (existing.type !== targetType) throw new Error('Der Zieltyp wurde während der Übertragung geändert.');
         }
@@ -188,12 +188,12 @@
         if (policies.includes(action) && action !== 'ask') policy = action;
         if (action === 'skip' || action === 'skip-all' || !allowedOverwrite(action, source, existing)) { result.skipped++; return; }
         if (action === 'rename-source' || action === 'autorename-source') {
-          name = action === 'autorename-source' ? uniqueName(items, name) : decision.name;
-          if (!validName(name) || items.some(item => sameName(item.name, name))) { result.errors.push('Der neue Dateiname ist ungültig oder bereits vorhanden.'); result.skipped++; return; }
+          name = action === 'autorename-source' ? uniqueName(items, name, targetDirectory) : decision.name;
+          if (!validName(name) || items.some(item => sameName(item.name, name, targetDirectory))) { result.errors.push('Der neue Dateiname ist ungültig oder bereits vorhanden.'); result.skipped++; return; }
           existing = undefined;
         } else if (action === 'rename-target' || action === 'autorename-target' || action === 'rename-older-target') {
-          const renamed = action !== 'rename-target' ? uniqueName(items, name) : decision.name;
-          if (samePath || !validName(renamed) || items.some(item => sameName(item.name, renamed))) { result.errors.push('Die Zieldatei kann unter diesem Namen nicht umbenannt werden.'); result.skipped++; return; }
+          const renamed = action !== 'rename-target' ? uniqueName(items, name, targetDirectory) : decision.name;
+          if (samePath || !validName(renamed) || items.some(item => sameName(item.name, renamed, targetDirectory))) { result.errors.push('Die Zieldatei kann unter diesem Namen nicht umbenannt werden.'); result.skipped++; return; }
           relocateTree(join(targetDirectory, existing.name), join(targetDirectory, renamed), existing.type === 'archive');
           existing.name = renamed; existing = undefined;
         } else if (samePath) { result.errors.push('Quelle und Ziel sind identisch.'); result.skipped++; return; }

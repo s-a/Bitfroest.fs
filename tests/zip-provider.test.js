@@ -104,13 +104,109 @@ test('ZIP extraction cannot overwrite its source archive or a hardlink alias', a
   await assert.rejects(provider.copy({ path: opened.path, ids: [aliasRow.id], target: root }, { onConflict: async () => 'overwrite' }), /Quellarchiv/);
   assert.deepEqual(await fs.readFile(alias), original);
 });
+test('ZIP publication rejects a truncated fallback source and restores the previous target', async t => {
+  const { archive, target, provider } = await fixture(t, { 'file.txt': Buffer.alloc(600000, 65) });
+  const destination = path.join(target, 'file.txt'); await fs.writeFile(destination, 'OLD TARGET');
+  const opened = await provider.open(archive), link = fs.link, open = fs.open; let shortened = false;
+  fs.link = async (source, output) => {
+    if (output === destination) throw Object.assign(new Error('No hardlinks'), { code: 'ENOTSUP' });
+    return link(source, output);
+  };
+  fs.open = async (...args) => {
+    const handle = await open(...args);
+    if (args[1] === 'r' && /\.zip-.*\.tmp$/.test(args[0])) {
+      const read = handle.read.bind(handle); let seen = false;
+      handle.read = async (...values) => {
+        if (seen && !shortened) { await fs.truncate(args[0], 262144); shortened = true; }
+        seen = true; return read(...values);
+      };
+    }
+    return handle;
+  };
+  try { await assert.rejects(provider.copy({ path: opened.path, ids: opened.folders[opened.path].map(row => row.id), target }, { onConflict: async () => 'overwrite' })); }
+  finally { fs.link = link; fs.open = open; }
+  assert.equal(shortened, true);
+  assert.equal(await fs.readFile(destination, 'utf8'), 'OLD TARGET');
+  assert.deepEqual(await fs.readdir(target), ['file.txt']);
+});
+
+test('ZIP fallback rejects a replaced destination and retains the external file and original backup', async t => {
+  const { archive, target, provider } = await fixture(t, { 'file.txt': Buffer.alloc(600000, 65) });
+  const destination = path.join(target, 'file.txt'); await fs.writeFile(destination, 'OLD TARGET');
+  const opened = await provider.open(archive), link = fs.link, open = fs.open; let replaced = false;
+  fs.link = async (source, output) => {
+    if (output === destination) throw Object.assign(new Error('No hardlinks'), { code: 'ENOTSUP' });
+    return link(source, output);
+  };
+  fs.open = async (...args) => {
+    const handle = await open(...args);
+    if (args[0] === destination && args[1] === 'wx+') {
+      const write = handle.write.bind(handle);
+      handle.write = async (...values) => {
+        const result = await write(...values);
+        if (!replaced) { await fs.rename(destination, destination + '.displaced'); await fs.writeFile(destination, 'EXTERNAL'); replaced = true; }
+        return result;
+      };
+    }
+    return handle;
+  };
+  try { await assert.rejects(provider.copy({ path: opened.path, ids: opened.folders[opened.path].map(row => row.id), target }, { onConflict: async () => 'overwrite' }), /Wiederherstellung/); }
+  finally { fs.link = link; fs.open = open; }
+  assert.equal(replaced, true);
+  assert.equal(await fs.readFile(destination, 'utf8'), 'EXTERNAL');
+  const backup = (await fs.readdir(target)).find(name => name.endsWith('.backup'));
+  assert.ok(backup); assert.equal(await fs.readFile(path.join(target, backup), 'utf8'), 'OLD TARGET');
+});
+
+test('ZIP extraction reports the original backup when a published destination disappears', async t => {
+  const { archive, target, provider } = await fixture(t, { 'file.txt': 'NEW' });
+  const destination = path.join(target, 'file.txt'); await fs.writeFile(destination, 'OLD TARGET');
+  const opened = await provider.open(archive), link = fs.link, lstat = fs.lstat; let published = false, checks = 0, backup;
+  fs.link = async (...args) => { const result = await link(...args); if (args[1] === destination) published = true; return result; };
+  fs.lstat = async (...args) => {
+    if (published && path.resolve(args[0]) === path.resolve(destination) && ++checks === 2) await fs.unlink(destination);
+    return lstat(...args);
+  };
+  try { await assert.rejects(provider.copy({ path: opened.path, ids: opened.folders[opened.path].map(row => row.id), target }, { onConflict: async () => 'overwrite' }), error => { backup = error.presentation?.paths[0]; return Boolean(backup); }); }
+  finally { fs.link = link; fs.lstat = lstat; }
+  assert.equal(await fs.readFile(backup, 'utf8'), 'OLD TARGET');
+});
+
+test('ZIP fallback detects same-size wrong output bytes and restores the previous target', async t => {
+  const { archive, target, provider } = await fixture(t, { 'file.txt': Buffer.alloc(600000, 65) });
+  const destination = path.join(target, 'file.txt'); await fs.writeFile(destination, 'OLD TARGET');
+  const opened = await provider.open(archive), link = fs.link, open = fs.open; let corrupted = false;
+  fs.link = async (source, output) => {
+    if (output === destination) throw Object.assign(new Error('No hardlinks'), { code: 'ENOTSUP' });
+    return link(source, output);
+  };
+  fs.open = async (...args) => {
+    const handle = await open(...args);
+    if (args[0] === destination && args[1] === 'wx+') {
+      const write = handle.write.bind(handle);
+      handle.write = async (buffer, offset, length) => {
+        if (!corrupted) { const wrong = Buffer.from(buffer); wrong[offset] ^= 1; corrupted = true; return write(wrong, offset, length); }
+        return write(buffer, offset, length);
+      };
+    }
+    return handle;
+  };
+  try { await assert.rejects(provider.copy({ path: opened.path, ids: opened.folders[opened.path].map(row => row.id), target }, { onConflict: async () => 'overwrite' }), /Kopierprüfung/); }
+  finally { fs.link = link; fs.open = open; }
+  assert.equal(corrupted, true); assert.equal(await fs.readFile(destination, 'utf8'), 'OLD TARGET');
+  assert.deepEqual(await fs.readdir(target), ['file.txt']);
+});
+
 test('ZIP extraction supports destinations without hardlink support', async t => {
   const { archive, target, provider } = await fixture(t, { 'file.txt': 'hello' });
-  const opened = await provider.open(archive), originalLink = fs.link;
+  const opened = await provider.open(archive), originalLink = fs.link, events = [];
   fs.link = async (source, destination) => { if (source.startsWith(target + path.sep)) throw Object.assign(new Error('unsupported'), { code: 'ENOTSUP' }); return originalLink(source, destination); };
   try {
-    await provider.copy({ path: opened.path, ids: [opened.folders[opened.path][0].id], target });
+    await provider.copy({ path: opened.path, ids: [opened.folders[opened.path][0].id], target }, { onProgress: event => events.push(event) });
     assert.equal(await fs.readFile(path.join(target, 'file.txt'), 'utf8'), 'hello');
+    const publication = events.filter(event => event.phase === 'publishing');
+    assert.deepEqual(publication.map(event => event.current.completed), [0, 5]);
+    assert.ok(publication.every(event => event.current.unit === 'bytes' && event.current.total === 5));
   } finally { fs.link = originalLink; }
 });
 test('ZIP publication cancellation cannot report success on the copy fallback', async t => {
@@ -155,7 +251,7 @@ test('ZIP fallback cancellation during publication removes its partial file and 
   fs.link = async (source, destination) => { if (source.startsWith(target + path.sep)) throw Object.assign(new Error('unsupported'), { code: 'ENOTSUP' }); return originalLink(source, destination); };
   fs.open = async (...args) => {
     const handle = await originalOpen(...args);
-    if (args[0] === destination && args[1] === 'wx' && !interrupted) {
+    if (args[0] === destination && args[1] === 'wx+' && !interrupted) {
       const write = handle.write.bind(handle);
       handle.write = async (...values) => { const result = await write(...values); interrupted = true; controller.abort(); return result; };
     }
