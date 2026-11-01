@@ -33,6 +33,11 @@ function validatePackageEntries(names) {
   if (!names.includes('extension/package.json') || !names.includes('extension/extension.js')) throw new Error('Extension entry point or manifest is missing.');
 }
 
+function validateMarketplaceIcon(bytes) {
+  if (!bytes?.length) throw new Error('Marketplace icon is missing or empty.');
+  if (bytes.length > 1024 * 1024) throw new Error('Marketplace icon exceeds the 1024 KB upload limit.');
+}
+
 function verifiedReleaseAssets(directory, context, commit) {
   const assets = [];
   for (const target of ['win32-x64', 'linux-x64']) {
@@ -47,4 +52,4 @@ function verifiedReleaseAssets(directory, context, commit) {
   return assets;
 }
 
-module.exports = { releaseContext, targetFor, validatePackageEntries, verifiedReleaseAssets };
+module.exports = { releaseContext, targetFor, validatePackageEntries, verifiedReleaseAssets, validateMarketplaceIcon };

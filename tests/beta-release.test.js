@@ -7,6 +7,10 @@ const root = path.resolve(__dirname, '..');
 const read = name => fs.readFileSync(path.join(root, name), 'utf8');
 const manifest = JSON.parse(read('package.json'));
 
+test('the actual Marketplace icon fits the one MiB upload limit', () => {
+  assert.ok(fs.statSync(path.join(root, manifest.icon)).size <= 1024 * 1024, 'Marketplace rejects icons larger than 1024 KB');
+});
+
 test('Marketplace metadata identifies the extension as a beta preview', () => {
   assert.match(manifest.displayName, /\bBeta\b/);
   assert.equal(manifest.preview, true);

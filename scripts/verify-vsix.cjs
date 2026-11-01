@@ -4,7 +4,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { spawnSync } = require('node:child_process');
 const zip = require('@zip.js/zip.js');
-const { releaseContext, targetFor, validatePackageEntries } = require('./release-policy.cjs');
+const { releaseContext, targetFor, validatePackageEntries, validateMarketplaceIcon } = require('./release-policy.cjs');
 
 async function main() {
   const context = releaseContext(process.env.GITHUB_REF || '', JSON.parse(fs.readFileSync('package.json', 'utf8')), JSON.parse(fs.readFileSync('package-lock.json', 'utf8')));
@@ -27,6 +27,8 @@ async function main() {
     const extension = path.join(extracted, 'extension');
     const packagedManifest = JSON.parse(fs.readFileSync(path.join(extension, 'package.json'), 'utf8'));
     if (packagedManifest.version !== context.version) throw new Error('Packaged version does not match.');
+    if (typeof packagedManifest.icon !== 'string') throw new Error('Marketplace icon is missing.');
+    validateMarketplaceIcon(fs.readFileSync(path.join(extension, packagedManifest.icon)));
     if (!fs.readFileSync(path.join(extension, 'native/binding.node')).equals(fs.readFileSync('native/binding.node'))) throw new Error('Packaged binding differs from the tested build.');
     const result = spawnSync(process.execPath, ['--test', 'tests/packaged-runtime.test.js'], { stdio: 'inherit', env: { ...process.env, EXTENSION_PACKAGE_TEST_PATH: extension } });
     if (result.status !== 0) throw new Error('Isolated package activation check failed.');

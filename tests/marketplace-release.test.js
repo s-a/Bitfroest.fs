@@ -5,6 +5,17 @@ const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
 
+test('manual Marketplace publication cannot cancel an unrelated main build', () => {
+  const workflow = fs.readFileSync(path.join(__dirname, '../.github/workflows/release.yml'), 'utf8');
+  const template = workflow.match(/^ {2}group: (.+)$/m)[1];
+  const group = tag => template.replace(/\$\{\{\s*(.*?)\s*\}\}/g, (_, expression) => {
+    const context = { 'github.ref': 'refs/heads/main', 'inputs.marketplace_tag': tag };
+    return expression.split('||').map(term => context[term.trim()]).find(Boolean) || '';
+  });
+  assert.notEqual(group('v0.0.39'), group(''));
+  assert.notEqual(group('v0.0.39'), group('v0.0.40'));
+});
+
 function fixture(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'marketplace-release-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));

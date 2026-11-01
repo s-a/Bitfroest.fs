@@ -4,10 +4,16 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
-const { releaseContext, targetFor, validatePackageEntries } = require('../scripts/release-policy.cjs');
+const { releaseContext, targetFor, validatePackageEntries, validateMarketplaceIcon } = require('../scripts/release-policy.cjs');
 
 const manifest = { version: '0.0.28', preview: true };
 const lock = { version: '0.0.28', packages: { '': { version: '0.0.28' } } };
+
+test('the package gate rejects missing and oversized Marketplace icons at the exact size boundary', () => {
+  assert.throws(() => validateMarketplaceIcon(Buffer.alloc(0)), /icon/);
+  assert.doesNotThrow(() => validateMarketplaceIcon(Buffer.alloc(1024 * 1024)));
+  assert.throws(() => validateMarketplaceIcon(Buffer.alloc(1024 * 1024 + 1)), /1024 KB/);
+});
 
 test('version tags must match both package and lockfile versions', () => {
   assert.deepEqual(releaseContext('refs/tags/v0.0.28', manifest, lock), { version: '0.0.28', release: true, prerelease: true });
