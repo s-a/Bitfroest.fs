@@ -35,6 +35,8 @@
     'Protokoll wird kopiert…': 'Copying log…',
     'Protokoll konnte nicht kopiert werden.': 'Could not copy the log.',
     'Kopiert': 'Copied',
+    'Rechtsklick: Pfad kopieren': 'Right-click: copy path',
+    'Pfad in Zwischenablage kopiert.': 'Path copied to clipboard.',
     'Kopieren fehlgeschlagen': 'Copy failed',
     'Ungültiges Arbeitsprotokoll.': 'Invalid activity log.',
     'Keine Antwort auf die Zwischenablage-Anfrage.': 'No reply to the clipboard request.',

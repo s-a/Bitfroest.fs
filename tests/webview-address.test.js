@@ -98,6 +98,58 @@ test('roots and archive segments preserve navigable identities and escaped label
   assert.equal(app.state().panes[1].tabs[0], root);
 });
 const send = (app, data) => app.window.dispatchEvent(new app.window.MessageEvent('message', { data }));
+
+test('address right-click copies the complete clicked pane path and confirms only acknowledged writes', t => {
+  for (const language of ['de', 'en']) for (const side of [0, 1]) for (const selector of ['[data-breadcrumb]', '[data-path-edit]', '.path-breadcrumbs']) {
+    const saved = fixture(); saved.panes[1].tabs = ['/work'];
+    const app = createApp(t, saved, { language });
+    const section = app.document.querySelector(`[data-pane="${side}"]`), target = section.querySelector(selector);
+    const directory = saved.panes[side].tabs[0];
+    assert.equal(target.getAttribute('title') || target.closest('[title]')?.title, directory + '\n' + (language === 'de' ? 'Rechtsklick: Pfad kopieren' : 'Right-click: copy path'));
+    const event = new app.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 });
+    target.dispatchEvent(event);
+    assert.equal(event.defaultPrevented, true);
+    const request = app.messages.filter(message => message.type === 'selection-io').at(-1);
+    assert.ok(request); assert.equal(request.action, 'copy'); assert.equal(request.text, directory);
+    const status = app.document.querySelector('#status-message');
+    assert.notEqual(status.dataset.outcome, 'success');
+    send(app, { type: 'selection-io-result', requestId: 'unrelated', ok: true });
+    assert.notEqual(status.dataset.outcome, 'success');
+    send(app, { type: 'selection-io-result', requestId: request.requestId, ok: true });
+    assert.equal(status.dataset.outcome, 'success');
+    assert.equal(status.textContent, language === 'de' ? 'Pfad in Zwischenablage kopiert.' : 'Path copied to clipboard.');
+    target.dispatchEvent(new app.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }));
+    const failed = app.messages.filter(message => message.type === 'selection-io').at(-1);
+    send(app, { type: 'selection-io-result', requestId: failed.requestId, ok: false, error: 'Clipboard unavailable' });
+    assert.equal(status.dataset.outcome, 'error'); assert.match(status.textContent, /Clipboard unavailable/);
+    assert.equal(app.document.querySelector('[data-context-menu]:not([hidden])'), null);
+    assert.deepEqual(app.state().panes.map(p => p.tabs), saved.panes.map(p => p.tabs));
+  }
+});
+
+test('address keyboard context and editable text never trigger full path copy', t => {
+  const app = createApp(t, fixture());
+  const crumb = pane(app).querySelector('[data-breadcrumb]'); crumb.focus();
+  app.key('F10', { shiftKey: true }, crumb);
+  app.click(pane(app).querySelector('[data-path-edit]'));
+  const input = pane(app).querySelector('.path-input');
+  const event = new app.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 });
+  input.dispatchEvent(event);
+  assert.equal(event.defaultPrevented, false);
+  assert.equal(app.messages.some(message => message.type === 'selection-io'), false);
+});
+
+test('address copies preserve Windows, UNC, root and archive display paths', t => {
+  for (const [directory, expected] of [['C:/work/<one>', 'C:\\work\\<one>'], ['//server/share/work', '\\\\server\\share\\work'], ['/', '/'], ['zip:C%3A%2Ftmp%2Fa.zip!/nested', 'C:\\tmp\\a.zip!\\nested']]) {
+    const saved = fixture(directory);
+    if (directory.startsWith('zip:')) saved.archiveLocations = { [directory]: { archive: 'C:/tmp/a.zip', parent: 'C:/tmp' } };
+    const app = createApp(t, saved);
+    const target = pane(app).querySelector('[data-breadcrumb]');
+    target.dispatchEvent(new app.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }));
+    assert.equal(app.messages.filter(message => message.type === 'selection-io').at(-1).text, expected);
+    assert.equal(target.title.split('\n')[0], expected);
+  }
+});
 test('Ctrl breadcrumb validates a real target before opening and ignores failed or stale replies', t => {
   for (const outcome of ['success', 'failure', 'stale']) {
     const saved = fixture(); saved.realFilesystem = true; saved.snapshotId = 'address';

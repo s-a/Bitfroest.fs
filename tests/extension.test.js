@@ -37,6 +37,17 @@ test('generated host HTML suppresses file-action context menus while retaining n
   input.dispatchEvent(edit);
   assert.equal(edit.defaultPrevented, false);
   assert.equal(JSON.parse(input.dataset.vscodeContext).preventDefaultContextMenuItems, false);
+  const address = view.document.querySelector('[data-pane="1"] [data-breadcrumb]');
+  address.dispatchEvent(new view.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }));
+  const copy = view.messages.filter(message => message.type === 'selection-io').at(-1);
+  assert.ok(copy);
+  assert.notEqual(view.document.querySelector('#status-message').dataset.outcome, 'success');
+  await panel.receive(copy);
+  assert.deepEqual(app.clipboardCalls.at(-1), { action: 'writeText', text: copy.text });
+  const confirmation = panel.messages.find(message => message.type === 'selection-io-result' && message.requestId === copy.requestId);
+  assert.equal(confirmation.ok, true);
+  view.window.dispatchEvent(new view.window.MessageEvent('message', { data: confirmation }));
+  assert.match(view.document.querySelector('#status-message').textContent, /Pfad in Zwischenablage kopiert/);
   for (const pane of view.document.querySelectorAll('.pane')) {
     assert.equal(pane.querySelector('[data-parent] .filename').textContent, '…');
     assert.equal(pane.querySelector('[data-parent] [data-icon-reviewed]'), null);
