@@ -307,14 +307,13 @@ test('native Git status completions carry unique session-bound request identitie
   } finally { api.shutdown(); }
 });
 
-test('Git status cancellation rejects the request before returning a partial result', async t => {
+test('Git status cancellation before native completion rejects without a partial result', async t => {
   const directory = await fixture(t);
-  for (let index = 0; index < 3000; index++) await fs.writeFile(path.join(directory, `cancel-${index}.txt`), 'new\n');
   const api = createNativeApi(require(binary));
   const session = api.openSession(), controller = new AbortController();
   try {
     const pending = session.invoke('git.status', { directory, scope: '.', recursive: true }, { signal: controller.signal });
-    setTimeout(() => controller.abort(), 0);
+    controller.abort();
     await assert.rejects(pending, error => error.code === 'Cancelled' && error.operation === 'git.status');
   } finally { api.shutdown(); }
 });

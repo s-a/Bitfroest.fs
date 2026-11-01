@@ -5,6 +5,36 @@ const os = require('node:os');
 const path = require('node:path');
 const { createNativeApi } = require('../native-api');
 
+test('Git status forwards cancellation after progress and preserves a completed result', async () => {
+  const requests = [];
+  const api = createNativeApi({ apiVersion: { major: 1, minor: 0 }, capabilities: { 'git.status': { status: 'supported' } }, openSession: () => ({
+    generation: 7n, close() {}, invoke(_operation, _request, progress) {
+      let resolve, reject;
+      const promise = new Promise((accept, fail) => { resolve = accept; reject = fail; });
+      const request = { progress, resolve, cancelCount: 0 };
+      promise.cancel = () => { request.cancelCount++; reject(Object.assign(new Error('cancelled'), { code: 'Cancelled' })); };
+      requests.push(request);
+      return promise;
+    }
+  }) });
+  const session = api.openSession(), controller = new AbortController(), visited = [];
+  try {
+    const pending = session.invoke('git.status', {}, { signal: controller.signal, onProgress: event => { visited.push(event.path); controller.abort(); } });
+    requests[0].progress({ path: 'changed.txt' });
+    await assert.rejects(pending, error => error.code === 'Cancelled' && error.operation === 'git.status');
+    assert.deepEqual(visited, ['changed.txt']);
+    assert.equal(requests[0].cancelCount, 1);
+
+    const completedController = new AbortController();
+    const completed = session.invoke('git.status', {}, { signal: completedController.signal });
+    requests[1].resolve({ repository: true, entries: [{ path: 'changed.txt' }] });
+    const result = await completed;
+    completedController.abort();
+    assert.deepEqual(result.entries, [{ path: 'changed.txt' }]);
+    assert.equal(requests[1].cancelCount, 0);
+  } finally { api.shutdown(); }
+});
+
 test('a dirty-summary request never falls back to a full scan with an older native module', () => {
   let invoked = false;
   const api = createNativeApi({ apiVersion: { major: 1, minor: 1 }, capabilities: { 'git.status': { status: 'supported' } }, openSession: () => ({ close() {}, invoke() { invoked = true; return Promise.resolve({}); } }) });
