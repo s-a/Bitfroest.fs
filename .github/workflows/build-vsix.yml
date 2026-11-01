@@ -50,7 +50,7 @@ jobs:
       - name: Check architecture and release policy
         run: |
           npm run test:architecture
-          node --test tests/repository-privacy.test.js tests/beta-release.test.js tests/release-policy.test.js
+          node --test tests/repository-privacy.test.js tests/beta-release.test.js tests/release-policy.test.js tests/marketplace-release.test.js
       - name: Run platform tests
         run: |
           case "$BUILD_TARGET" in

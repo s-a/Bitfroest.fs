@@ -1,3 +1,6 @@
+const fs = require('node:fs');
+const path = require('node:path');
+const crypto = require('node:crypto');
 const versionPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 
 function releaseContext(ref, manifest, lock) {
@@ -30,4 +33,18 @@ function validatePackageEntries(names) {
   if (!names.includes('extension/package.json') || !names.includes('extension/extension.js')) throw new Error('Extension entry point or manifest is missing.');
 }
 
-module.exports = { releaseContext, targetFor, validatePackageEntries };
+function verifiedReleaseAssets(directory, context, commit) {
+  const assets = [];
+  for (const target of ['win32-x64', 'linux-x64']) {
+    const filename = path.join(directory, `bitfroest-fs-${context.version}-${target}.vsix`);
+    const metadata = JSON.parse(fs.readFileSync(`${filename}.json`, 'utf8'));
+    const hash = crypto.createHash('sha256').update(fs.readFileSync(filename)).digest('hex');
+    if (metadata.target !== target || metadata.experimental !== false || metadata.version !== context.version || metadata.commit !== commit || metadata.sha256 !== hash) throw new Error(`Release provenance mismatch for ${target}.`);
+    if (fs.readFileSync(`${filename}.sha256`, 'utf8') !== `${hash}  ${path.basename(filename)}\n`) throw new Error(`Checksum mismatch for ${target}.`);
+    assets.push(filename, `${filename}.sha256`, `${filename}.json`);
+  }
+  if (fs.readdirSync(directory).length !== assets.length) throw new Error('Unexpected or experimental release assets.');
+  return assets;
+}
+
+module.exports = { releaseContext, targetFor, validatePackageEntries, verifiedReleaseAssets };
