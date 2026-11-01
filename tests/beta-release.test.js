@@ -11,6 +11,13 @@ test('the actual Marketplace icon fits the one MiB upload limit', () => {
   assert.ok(fs.statSync(path.join(root, manifest.icon)).size <= 1024 * 1024, 'Marketplace rejects icons larger than 1024 KB');
 });
 
+test('the actual Marketplace PNG icon fits the supported pixel dimensions', () => {
+  const bytes = fs.readFileSync(path.join(root, manifest.icon));
+  for (const dimension of [bytes.readUInt32BE(16), bytes.readUInt32BE(20)]) {
+    assert.ok(dimension >= 128 && dimension <= 1024, `Marketplace icon dimension ${dimension} must be between 128 and 1024 pixels`);
+  }
+});
+
 test('Marketplace metadata identifies the extension as a beta preview', () => {
   assert.match(manifest.displayName, /\bBeta\b/);
   assert.equal(manifest.preview, true);

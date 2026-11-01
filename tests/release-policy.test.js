@@ -9,10 +9,26 @@ const { releaseContext, targetFor, validatePackageEntries, validateMarketplaceIc
 const manifest = { version: '0.0.28', preview: true };
 const lock = { version: '0.0.28', packages: { '': { version: '0.0.28' } } };
 
+function pngHeader(width, height, length = 33) {
+  const bytes = Buffer.alloc(length);
+  Buffer.from('89504e470d0a1a0a', 'hex').copy(bytes);
+  bytes.writeUInt32BE(13, 8);
+  bytes.write('IHDR', 12);
+  bytes.writeUInt32BE(width, 16);
+  bytes.writeUInt32BE(height, 20);
+  return bytes;
+}
+
+test('the package gate validates both PNG dimensions and rejects malformed headers', () => {
+  for (const dimensions of [[128, 128], [1024, 1024], [128, 1024]]) assert.doesNotThrow(() => validateMarketplaceIcon(pngHeader(...dimensions)));
+  for (const dimensions of [[0, 128], [127, 128], [128, 127], [1025, 128], [128, 1025]]) assert.throws(() => validateMarketplaceIcon(pngHeader(...dimensions)), /128|1024/);
+  for (const bytes of [Buffer.alloc(10), Buffer.alloc(33), pngHeader(128, 128).subarray(0, 24)]) assert.throws(() => validateMarketplaceIcon(bytes), /PNG/);
+});
+
 test('the package gate rejects missing and oversized Marketplace icons at the exact size boundary', () => {
   assert.throws(() => validateMarketplaceIcon(Buffer.alloc(0)), /icon/);
-  assert.doesNotThrow(() => validateMarketplaceIcon(Buffer.alloc(1024 * 1024)));
-  assert.throws(() => validateMarketplaceIcon(Buffer.alloc(1024 * 1024 + 1)), /1024 KB/);
+  assert.doesNotThrow(() => validateMarketplaceIcon(pngHeader(128, 128, 1024 * 1024)));
+  assert.throws(() => validateMarketplaceIcon(pngHeader(128, 128, 1024 * 1024 + 1)), /1024 KB/);
 });
 
 test('version tags must match both package and lockfile versions', () => {

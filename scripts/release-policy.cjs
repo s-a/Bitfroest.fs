@@ -36,6 +36,10 @@ function validatePackageEntries(names) {
 function validateMarketplaceIcon(bytes) {
   if (!bytes?.length) throw new Error('Marketplace icon is missing or empty.');
   if (bytes.length > 1024 * 1024) throw new Error('Marketplace icon exceeds the 1024 KB upload limit.');
+  if (bytes.length < 33 || !bytes.subarray(0, 8).equals(Buffer.from('89504e470d0a1a0a', 'hex')) || bytes.readUInt32BE(8) !== 13 || bytes.toString('ascii', 12, 16) !== 'IHDR') throw new Error('Marketplace icon must have a valid PNG header.');
+  for (const dimension of [bytes.readUInt32BE(16), bytes.readUInt32BE(20)]) {
+    if (dimension < 128 || dimension > 1024) throw new Error('Marketplace icon dimensions must be between 128 and 1024 pixels.');
+  }
 }
 
 function verifiedReleaseAssets(directory, context, commit) {
