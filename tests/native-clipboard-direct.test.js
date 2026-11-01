@@ -5,9 +5,29 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
+const { Worker } = require('node:worker_threads');
+const { once } = require('node:events');
 const { test } = require('node:test');
 
 const bindingPath = process.env.NATIVE_BINDING_TEST_PATH || path.join(__dirname, '../native/binding.node');
+
+function blockedOwnerWorkerSource(localBinding) {
+  return `const {parentPort}=require('node:worker_threads');const binding=require(${JSON.stringify(localBinding)});parentPort.postMessage('ready');const operations=Array.from({length:4},()=>binding.startBlockedOwner());parentPort.once('message',message=>{if(message!=='close')throw new Error('unexpected command');const closes=operations.map((_,index)=>binding.closeBlockedOwner(index));parentPort.postMessage('closing');setTimeout(()=>parentPort.postMessage('timer'),0);Promise.allSettled([...operations,...closes]).then(()=>parentPort.postMessage('settled'));});parentPort.postMessage('started');`;
+}
+
+test('blocked owner worker waits for an explicit close command', { timeout: 5000 }, async t => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'clipboard-worker-protocol-'));
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const stub = path.join(directory, 'binding.cjs');
+  fs.writeFileSync(stub, "exports.startBlockedOwner=()=>new Promise(()=>{});exports.closeBlockedOwner=()=>new Promise(()=>{});");
+  const worker = new Worker(blockedOwnerWorkerSource(stub), { eval: true });
+  t.after(() => worker.terminate());
+  assert.equal((await once(worker, 'message'))[0], 'ready');
+  assert.equal((await once(worker, 'message'))[0], 'started');
+  const closing = once(worker, 'message');
+  worker.postMessage('close');
+  assert.equal((await closing)[0], 'closing');
+});
 
 test('packaged Windows binding exposes separate conditional clipboard cancellation', { skip: process.platform !== 'win32' }, () => {
   const binding = require('../native/binding.node');
@@ -41,11 +61,12 @@ test('worker termination releases its environment while a fake clipboard owner i
   try {
     const localBinding = path.join(directory, 'binding.node');
     fs.copyFileSync(testBindingPath, localBinding);
-    const workerSource = `const {parentPort}=require('node:worker_threads');const binding=require(${JSON.stringify(localBinding)});parentPort.postMessage('ready');const operations=Array.from({length:4},()=>binding.startBlockedOwner());const closes=operations.map((_,index)=>binding.closeBlockedOwner(index));parentPort.postMessage('closing');setTimeout(()=>parentPort.postMessage('timer'),0);Promise.allSettled([...operations,...closes]).then(()=>parentPort.postMessage('settled'));`;
+    const workerSource = blockedOwnerWorkerSource(localBinding);
     const script = `const assert=require('node:assert/strict');const fs=require('node:fs');const {Worker}=require('node:worker_threads');const binding=require(${JSON.stringify(localBinding)});binding.prepareBlockedOwners(4);` +
       `const worker=new Worker(${JSON.stringify(workerSource)},{eval:true});let settled=false;worker.on('message',m=>{if(m==='settled')settled=true});` +
       `(async()=>{await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error('worker did not start')),3000);worker.once('message',()=>{clearTimeout(timer);resolve()})});` +
-      `assert.equal(binding.waitBlockedOwner(5000),true,'four STAs reached the controlled FakeOwner wait');await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error('close did not return to JavaScript')),3000);worker.once('message',m=>{if(m==='closing'){clearTimeout(timer);resolve()}})});assert.equal(settled,false,'close and read promises remain pending while FakeOwner calls are blocked');` +
+      `await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error('operations did not start')),3000);worker.once('message',m=>{clearTimeout(timer);if(m==='started')resolve();else reject(new Error('unexpected worker message: '+m))})});` +
+      `assert.equal(binding.waitBlockedOwner(5000),true,'four STAs reached the controlled FakeOwner wait');await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error('close did not return to JavaScript')),3000);worker.once('message',m=>{clearTimeout(timer);if(m==='closing')resolve();else reject(new Error('unexpected worker message: '+m))});worker.postMessage('close')});assert.equal(settled,false,'close and read promises remain pending while FakeOwner calls are blocked');` +
       `await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error('close work starved the libuv pool')),2000);fs.readFile(${JSON.stringify(localBinding)},error=>{clearTimeout(timer);if(error)reject(error);else resolve()})});` +
       `const termination=worker.terminate();let timeout;const prompt=await Promise.race([termination.then(()=>true),new Promise(resolve=>{timeout=setTimeout(()=>resolve(false),2000)})]);clearTimeout(timeout);` +
       `binding.releaseBlockedOwner();assert.equal(prompt,true,'Worker.terminate does not wait for blocked foreign IDataObject::GetData');await termination;` +
