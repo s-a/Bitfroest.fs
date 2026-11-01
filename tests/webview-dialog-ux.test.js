@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { createApp } = require('./support/webview.cjs');
+const { createApp, resolveThemeCss } = require('./support/webview.cjs');
 const tick = () => new Promise(resolve => setImmediate(resolve));
 function fixture(real = false) {
   const pane = path => ({ tabs: [path], tab: 0, selected: [], cursor: null, filter: '', sort: 'name' });
@@ -60,7 +60,9 @@ test('a delayed close event from the transfer form cannot cancel its newly opene
   assert.equal(app.document.querySelector('#modal').open, true);
   assert.equal(app.document.querySelector('#modal-title').textContent, 'Datei bereits vorhanden');
   assert.equal(app.state().folders['/right'][0].content, 'old');
-  app.click(app.document.querySelector('#modal-cancel')); await tick();
+  assert.equal(app.document.querySelector('#modal-cancel').hidden, true);
+  assert.equal(app.document.querySelector('#modal-close').hidden, false);
+  app.click(app.document.querySelector('#modal-close')); await tick();
   assert.equal(app.document.querySelector('#modal').open, false);
 });
 
@@ -68,9 +70,7 @@ test('dark and contrast dialogs avoid permanent comparison and individual action
   for (const theme of ['vscode-dark', 'vscode-high-contrast']) {
     const app = createApp(t, fixture());
     const style = app.document.createElement('style');
-    let css = fs.readFileSync(path.join(__dirname, '../media/app.css'), 'utf8');
-    while (css.includes('var(')) css = css.replace(/var\([^()]*\)/g, '#666666');
-    style.textContent = css;
+    style.textContent = resolveThemeCss(fs.readFileSync(path.join(__dirname, '../media/app.css'), 'utf8'));
     app.document.head.append(style);
     app.document.body.className = theme;
     copy(app); submit(app); await tick();

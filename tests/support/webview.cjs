@@ -3,6 +3,43 @@ const path = require('node:path');
 const vm = require('node:vm');
 const assert = require('node:assert/strict');
 const { JSDOM } = require('jsdom');
+function resolveThemeCss(css, tokens = {}, chain = []) {
+  function quotedEnd(start) {
+    for (let i = start + 1; i < css.length; i++) {
+      if (css[i] === '\\') i++;
+      else if (css[i] === css[start]) return i;
+    }
+    throw new SyntaxError('Invalid CSS string');
+  }
+  let result = '', cursor = 0;
+  for (let i = 0; i < css.length; i++) {
+    if (css[i] === '"' || css[i] === "'") { i = quotedEnd(i); continue; }
+    if (css.startsWith('/*', i)) {
+      const end = css.indexOf('*/', i + 2);
+      if (end < 0) throw new SyntaxError('Invalid CSS comment');
+      i = end + 1; continue;
+    }
+    if (!css.startsWith('var(', i) || /[\w-]/.test(css[i - 1] || '')) continue;
+    let end = i + 4, depth = 1, comma = -1;
+    for (; end < css.length; end++) {
+      if (css[end] === '"' || css[end] === "'") { end = quotedEnd(end); continue; }
+      if (css[end] === '(') depth++;
+      else if (css[end] === ')' && --depth === 0) break;
+      else if (css[end] === ',' && depth === 1 && comma < 0) comma = end;
+    }
+    const name = css.slice(i + 4, comma < 0 ? end : comma).trim();
+    if (depth || !/^--[\w-]+$/.test(name)) throw new SyntaxError('Invalid CSS variable');
+    const key = name.startsWith('--vscode-') ? name.slice(9) : name;
+    let replacement;
+    if (Object.hasOwn(tokens, key)) {
+      if (chain.includes(name)) throw new Error(`Cyclic CSS variable: ${name}`);
+      replacement = resolveThemeCss(tokens[key], tokens, [...chain, name]);
+    } else replacement = comma < 0 ? 'transparent' : resolveThemeCss(css.slice(comma + 1, end).trim(), tokens, chain);
+    result += css.slice(cursor, i) + replacement;
+    cursor = end + 1; i = end;
+  }
+  return result + css.slice(cursor);
+}
 function createApp(t, saved, options = {}) {
   const root = path.resolve(__dirname, '../..');
   const dom = new JSDOM(options.html || fs.readFileSync(path.join(root, 'media/index.html'), 'utf8'), { runScripts: 'outside-only', url: 'https://prototype.invalid/' });
@@ -40,4 +77,4 @@ function createApp(t, saved, options = {}) {
 }
 
 
-module.exports = { createApp };
+module.exports = { createApp, resolveThemeCss };

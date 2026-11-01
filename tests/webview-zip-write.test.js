@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createApp } = require('./support/webview.cjs');
+const Progress = require('../media/commander-progress');
 function state(inside = false) {
   const root = 'zip:C%3A%2Ftmp%2Ftest.zip!';
   const pane = path => ({ tabs: [path], tab: 0, selected: [], cursor: null, filter: '', sort: 'name', descending: false });
@@ -9,6 +10,38 @@ function state(inside = false) {
     archiveLocations: { [root]: { archive: 'C:/tmp/test.zip', parent: 'C:/tmp' } } };
 }
 const submit = app => app.document.querySelector('#modal-form').dispatchEvent(new app.window.Event('submit', { bubbles: true, cancelable: true }));
+
+test('empty ZIP verification waits for the matching host result and preserves success, error and cancellation', t => {
+  for (const language of ['de', 'en']) for (const outcome of ['success', 'error', 'cancelled']) {
+    const saved = state(); saved.folders['C:/tmp'][0] = { id: 'source', name: 'empty.txt', type: 'text', fsSource: 'C:/tmp/empty.txt', size: 0 };
+    const app = createApp(t, saved, { language }); app.click(app.row('empty.txt')); app.action('pack'); submit(app);
+    const request = app.messages.find(message => message.type === 'zip-write'); assert.ok(request);
+    const send = data => app.window.dispatchEvent(new app.window.MessageEvent('message', { data }));
+    const progress = Progress.event({ phase: 'verifying', currentPath: 'empty.txt', transferred: 0, total: 0, completedBytes: 0, totalBytes: 0, overall: Progress.known('bytes', 0, 0), current: Progress.known('bytes', 0, 0) });
+    send({ type: 'filesystem-progress', operationId: request.operationId, progress });
+    const meter = app.document.querySelector('#status-progress-file');
+    assert.equal(meter.style.width, '0%');
+    assert.equal(meter.hasAttribute('aria-valuenow'), false); assert.equal(meter.hasAttribute('aria-valuemax'), false);
+    assert.match(meter.getAttribute('aria-valuetext'), language === 'de' ? /0 Bytes.*Hostbestätigung/ : /0 bytes.*Host acknowledgment/);
+    assert.equal(app.document.querySelector('#status-percent').textContent, '—/—');
+    assert.equal(app.document.querySelectorAll('[data-job-row]').length, 1);
+    assert.notEqual(app.document.querySelector('#status-message').dataset.outcome, 'success');
+    send({ type: 'filesystem-result', operationId: 'foreign', ok: true, state: saved });
+    assert.equal(app.document.querySelectorAll('[data-job-row]').length, 1);
+    if (outcome === 'cancelled') {
+      app.click(app.document.querySelector('#status-cancel'));
+      assert.equal(app.messages.filter(message => message.type === 'filesystem-cancel' && message.operationId === request.operationId).length, 1);
+      assert.equal(app.document.querySelectorAll('[data-job-row]').length, 1);
+    }
+    send({ type: 'filesystem-result', operationId: request.operationId, ok: outcome !== 'error', cancelled: outcome === 'cancelled', ...(outcome === 'error' ? { error: 'CRC mismatch' } : {}), state: saved });
+    assert.equal(app.document.querySelectorAll('[data-job-row]').length, 0);
+    assert.equal(app.document.querySelector('#status-message').dataset.outcome, outcome);
+    const finishedMessage = app.document.querySelector('#status-message').textContent;
+    send({ type: 'filesystem-progress', operationId: request.operationId, progress });
+    assert.equal(app.document.querySelectorAll('[data-job-row]').length, 0);
+    assert.equal(app.document.querySelector('#status-message').textContent, finishedMessage);
+  }
+});
 
 test('ZIP preparation reports collected entries and packing uses both known progress totals', t => {
   for (const language of ['de', 'en']) {
@@ -48,7 +81,9 @@ test('ZIP progress names packing and verification, shows literal entries and res
     assert.equal(app.document.querySelector('#status-progress-file').getAttribute('aria-valuenow'), '0');
     send({ phase: 'verifying', currentPath: 'empty.txt', transferred: 0, total: 0, completedBytes: 100, totalBytes: 100 });
     assert.match(app.document.querySelector('#status-message').textContent, /empty\.txt/);
-    assert.equal(app.document.querySelector('#status-progress-file').style.width, '100%');
+    assert.equal(app.document.querySelector('#status-progress-file').style.width, '0%');
+    assert.equal(app.document.querySelector('#status-progress-file').hasAttribute('aria-valuenow'), false);
+    assert.match(app.document.querySelector('#status-progress-file').getAttribute('aria-valuetext'), language === 'de' ? /Hostbestätigung/ : /Host acknowledgment/);
     app.click(app.document.querySelector('#status-cancel'));
     assert.equal(app.messages.filter(message => message.type === 'filesystem-cancel').length, 1);
     assert.equal(app.document.querySelector('#status-message').textContent, language === 'de' ? 'Abbruch wird ausgeführt… · empty.txt' : 'Cancelling… · empty.txt');

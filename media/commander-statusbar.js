@@ -120,6 +120,12 @@
       renderClock();
     }
     const activity = bar.querySelector('#status-activity');
+    function measurementText(measurement) {
+      const units = { bytes: 'Bytes', items: 'Einträge', requests: 'Bestätigte Aufträge', steps: 'Programmschritte' };
+      const reasons = { enumerating: 'Gesamtmenge wird ermittelt', 'stream-size-unknown': 'Streamgröße unbekannt', 'native-operation': 'Betriebssystemvorgang ohne Mengenangabe', 'awaiting-confirmation': 'Hostbestätigung' };
+      const known = measurement.kind === 'determinate';
+      return `${measurement.completed}${known ? ` / ${measurement.total}` : ''} ${t(units[measurement.unit])}${known ? '' : ` · ${t(reasons[measurement.reason])}`}`;
+    }
     function setActivity(message, progress = null) {
       if (disposed) return;
       if (message) Progress.readStatus(progress);
@@ -147,9 +153,7 @@
         meter.classList.toggle('indeterminate', !known && meter === overallMeter);
         meter.setAttribute('aria-valuemin', '0');
         meter.setAttribute('aria-label', t(meter === overallMeter ? 'Gesamtfortschritt' : 'Fortschritt des aktuellen Schritts'));
-        const units = { bytes: 'Bytes', items: 'Einträge', requests: 'Bestätigte Aufträge', steps: 'Programmschritte' };
-        const reasons = { enumerating: 'Gesamtmenge wird ermittelt', 'stream-size-unknown': 'Streamgröße unbekannt', 'native-operation': 'Betriebssystemvorgang ohne Mengenangabe', 'awaiting-confirmation': 'Hostbestätigung' };
-        const description = `${measurement.completed}${known ? ` / ${measurement.total}` : ''} ${t(units[measurement.unit])}${known ? '' : ` · ${t(reasons[measurement.reason])}`}`;
+        const description = measurementText(measurement);
         meter.setAttribute('aria-valuetext', description); descriptions.push(description);
         if (known) { meter.setAttribute('aria-valuenow', String(measurement.completed)); meter.setAttribute('aria-valuemax', String(measurement.total)); }
         else { meter.removeAttribute('aria-valuenow'); meter.removeAttribute('aria-valuemax'); }
@@ -296,8 +300,9 @@
       eta.title = t('Geschätzte Restdauer'); elapsed.title = t('Bisherige Laufzeit');
       updateEstimate(total, completed, phase, cancelRequested);
       overallMeter.setAttribute('aria-label', t('Gesamtfortschritt')); currentMeter.setAttribute('aria-label', t('Fortschritt des aktuellen Schritts'));
-      overallMeter.setAttribute('aria-valuetext', overallValueText ? `${title}, ${overallValueText}` : title);
-      currentMeter.setAttribute('aria-valuetext', fileValueText ? `${title}, ${fileValueText}` : title);
+      const valueText = (measurement, supplied) => measurement.kind === 'indeterminate' ? `${title}, ${measurementText(measurement)}` : supplied ? `${title}, ${supplied}` : title;
+      overallMeter.setAttribute('aria-valuetext', valueText(event.overall, overallValueText));
+      currentMeter.setAttribute('aria-valuetext', valueText(event.current, fileValueText));
       if (Number.isFinite(total) && total >= 0 && Number.isFinite(completed)) {
         const worked = completed;
         if (operation.total !== total) { operation.total = total; operation.worked = 0; operation.handle.progress.total(total); }
@@ -305,9 +310,9 @@
         overallMeter.dataset.value = String(worked); overallMeter.dataset.maximum = String(total); overallMeter.style.width = `${event.display.overallPercent}%`;
         overallMeter.classList.remove('indeterminate');
         overallMeter.setAttribute('aria-valuenow', String(worked)); overallMeter.setAttribute('aria-valuemax', String(total));
-      } else { operation.handle.progress.infinite(); overallMeter.style.width = '0%'; overallMeter.classList.add('indeterminate'); overallMeter.setAttribute('aria-valuetext', overallValueText ? `${title}, ${overallValueText}` : title); overallMeter.removeAttribute('aria-valuenow'); overallMeter.removeAttribute('aria-valuemax'); }
+      } else { operation.handle.progress.infinite(); overallMeter.style.width = '0%'; overallMeter.classList.add('indeterminate'); overallMeter.removeAttribute('aria-valuenow'); overallMeter.removeAttribute('aria-valuemax'); }
       if (Number.isFinite(fileTotal) && fileTotal >= 0 && Number.isFinite(fileCompleted)) { const value = fileCompleted; currentMeter.dataset.value = String(value); currentMeter.dataset.maximum = String(fileTotal); currentMeter.style.width = `${event.display.currentPercent}%`; currentMeter.setAttribute('aria-valuenow', String(value)); currentMeter.setAttribute('aria-valuemax', String(fileTotal)); }
-      else { currentMeter.style.width = '0%'; currentMeter.removeAttribute('aria-valuenow'); currentMeter.removeAttribute('aria-valuemax'); currentMeter.setAttribute('aria-valuetext', fileValueText ? `${title}, ${fileValueText}` : title); }
+      else { currentMeter.style.width = '0%'; currentMeter.removeAttribute('aria-valuenow'); currentMeter.removeAttribute('aria-valuemax'); }
       const percentage = value => value === null ? '—' : `${Math.floor(value)}%`;
       percent.textContent = `${percentage(event.display.overallPercent)}/${percentage(event.display.currentPercent)}`;
       overallMeter.setAttribute('aria-valuemin', '0'); currentMeter.setAttribute('aria-valuemin', '0');
