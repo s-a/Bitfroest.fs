@@ -5,6 +5,7 @@ native/src/**
 native/CMakeLists.txt
 !native/binding.node
 Docs/**
+DEVELOPMENT.md
 scripts/**
 tests/**
 coverage/**
