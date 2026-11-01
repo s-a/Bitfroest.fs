@@ -89,6 +89,16 @@ test('generated host HTML preserves complete column captions and accessible sort
   const view = require('./support/webview.cjs').createApp(t, initial, { html: panel.webview.html });
   assert.match(panel.webview.html, /Content-Security-Policy/);
   for (const pane of view.document.querySelectorAll('.pane')) {
+    const arrow = pane.querySelector('[data-column="name"] [data-history="back"]');
+    assert.ok(arrow.querySelector('[data-icon-reviewed="status:forward"]'));
+    assert.ok(arrow.querySelector('[data-icon-reviewed="status:forward-fill"]'));
+    arrow.dispatchEvent(new view.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }));
+    assert.ok(view.document.querySelector('[data-history-index][aria-current="location"]'));
+    view.key('Escape');
+    assert.equal(view.document.querySelector('[data-context-menu]'), null);
+    assert.equal(view.document.activeElement, arrow);
+  }
+  for (const pane of view.document.querySelectorAll('.pane')) {
     const tab = pane.querySelector('.tab');
     assert.equal(tab.firstElementChild.getAttribute('data-icon-reviewed'), 'font:folder');
     assert.equal(tab.firstElementChild.getAttribute('aria-hidden'), 'true');

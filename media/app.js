@@ -1559,9 +1559,11 @@
         for (const header of table.querySelectorAll('th[data-column]')) {
           const key = header.dataset.column;
           if (forcedKey !== undefined ? key !== forcedKey : manual[key]) continue;
-          const button = header.querySelector('button'), headerStyle = getComputedStyle(button);
+          const button = header.querySelector('[data-sort]'), headerStyle = getComputedStyle(button);
           context.font = headerStyle.font || `${headerStyle.fontSize || '12px'} ${headerStyle.fontFamily || 'sans-serif'}`;
-          const inset = header.classList.contains('filename-column') ? fileIconSize + grid.gap + markerWidth + (markerWidth ? grid.gap : 0) : 0;
+          const controls = header.querySelector('.history-controls');
+          const inset = controls ? [...controls.children].reduce((width, button) => width + (parseFloat(getComputedStyle(button).width) || 0), 0)
+            : header.classList.contains('filename-column') ? fileIconSize + grid.gap + markerWidth + (markerWidth ? grid.gap : 0) : 0;
           const padding = 10 + (button.querySelector('.column-sort') ? fileIconSize + grid.gap : 0);
           widths.set(key, context.measureText(button.querySelector('.column-caption').textContent).width + padding + inset);
         }
@@ -1643,7 +1645,7 @@
       <div class="tabs" data-vscode-context='{"webviewSection":"address","preventDefaultContextMenuItems":true}' role="tablist" aria-label="Ordner-Tabs ${index === 0 ? t('links') : t('rechts')}">${p.tabs.map((path, tab) => ui`<div class="tab-wrap ${p.tab === tab ? 'selected' : ''}" draggable="true" data-tab-drag="${tab}"><button class="tab" role="tab" aria-selected="${p.tab === tab}" data-tab="${tab}" title="${escape(displayArchivePath(path))} · Doppelklick schließt">${window.CommanderIcons.font('folder', { class: 'tab-icon' })}<span data-tab-label>${escape(p.tabStates[tab].searchResult?.label || archiveTabName(path))}</span></button></div>`).join('')}<button class="add-tab" data-new-tab title="Ordner-Tab hinzufügen" aria-label="Ordner-Tab hinzufügen">+</button></div>
       <div class="pathbar" data-vscode-context='{"webviewSection":"address","preventDefaultContextMenuItems":true}'><button data-favorites title="${escape(t('Ortsmenü: Favoriten und Aktionen'))}" aria-label="${escape(t('Ortsmenü: Favoriten und Aktionen'))}" aria-haspopup="menu" aria-expanded="false">${locationMarkup(p)}</button><div class="path"><div class="path-address"><div class="path-breadcrumbs">${breadcrumbMarkup(p)}<span data-path-edit></span></div><input class="path-input" data-vscode-context='{"webviewSection":"textInput","preventDefaultContextMenuItems":false}' aria-label="Pfad ${index === 0 ? t('links') : t('rechts')}" value="${escape(displayArchivePath(currentPath(p)))}" spellcheck="false"></div><span data-git-location>${branchMarkup(p)}</span></div><button data-refresh title="Liste aktualisieren" aria-label="Liste aktualisieren">${window.CommanderIcons.font('refresh', { 'data-refresh-icon': '' })}</button></div>
       <div class="pane-jobs" role="region" aria-label="${escape(t('Aufträge'))}" hidden></div>
-      <div class="list" tabindex="0" aria-label="Dateien ${index === 0 ? t('links') : t('rechts')}"><table class="file-table" aria-label="Dateien und Ordner ${index === 0 ? t('links') : t('rechts')}"><colgroup>${displayColumns.map(column => `<col data-col="${escape(column.key)}" width="${column.width}">`).join('')}</colgroup><thead data-vscode-context='{"webviewSection":"columns","preventDefaultContextMenuItems":true}'><tr>${displayColumns.map(column => ui`<th data-column="${escape(column.key)}" class="column-align-${column.align || 'left'} ${isFilenameColumn(column) ? 'filename-column' : ''}" draggable="true" aria-sort="${p.sort === column.key ? p.descending ? 'descending' : 'ascending' : 'none'}"><button data-sort="${escape(column.key)}" title="${escape(t(column.label))}" aria-label="${escape(t(column.label))}"><span class="column-caption">${escape(t(column.label))}</span>${p.sort === column.key ? `${window.CommanderIcons.font(p.descending ? 'arrow-down' : 'arrow-up', { class: 'column-sort' }, p.descending ? ' ↓' : ' ↑')}` : ''}</button><span class="column-resize" data-resize="${escape(column.key)}" role="separator" aria-label="Breite ${escape(t(column.label))}" title="Ziehen: Breite ändern · Doppelklick: an Inhalt anpassen"></span></th>`).join('')}</tr></thead><tbody><tr class="parent-row" data-parent aria-label="${escape(t('Übergeordnetes Verzeichnis'))}" title="${escape(t('Übergeordnetes Verzeichnis'))}">${displayColumns.map(column => `<td data-cell="${escape(column.key)}">${column.key === 'name' ? '<span class="filename"><span>…</span></span>' : ''}</td>`).join('')}</tr>${list.map((file, rowIndex) => `<tr data-id="${escape(file.id)}" draggable="${!resultView(p)}" aria-selected="${selectedIds.has(file.id)}" class="${resultView(p)?.groups && rowIndex > 0 && resultView(p).groups[file.fsSource] !== resultView(p).groups[list[rowIndex - 1].fsSource] ? 'search-group-start' : ''} ${selectedIds.has(file.id) ? 'selected' : ''} ${spaceIds.has(file.id) ? 'space-marked' : ''} ${p.cursor === file.id ? 'focused' : ''}">${displayColumns.map(column => cell(file, column)).join('')}</tr>`).join('')}</tbody></table>${!displayColumns.length ? `<div class="empty">${t('Keine sichtbaren Spalten')}</div>` : list.length ? '' : ui(['<div class="empty">Keine Einträge</div>'])}</div>
+      <div class="list" tabindex="0" aria-label="Dateien ${index === 0 ? t('links') : t('rechts')}"><table class="file-table" aria-label="Dateien und Ordner ${index === 0 ? t('links') : t('rechts')}"><colgroup>${displayColumns.map(column => `<col data-col="${escape(column.key)}" width="${column.width}">`).join('')}</colgroup><thead data-vscode-context='{"webviewSection":"columns","preventDefaultContextMenuItems":true}'><tr>${displayColumns.map(column => ui`<th data-column="${escape(column.key)}" class="column-align-${column.align || 'left'} ${isFilenameColumn(column) ? 'filename-column' : ''}" draggable="true" aria-sort="${p.sort === column.key ? p.descending ? 'descending' : 'ascending' : 'none'}"><div class="column-heading">${column.key === 'name' ? historyMarkup(p) : ''}<button data-sort="${escape(column.key)}" title="${escape(t(column.label))}" aria-label="${escape(t(column.label))}"><span class="column-caption">${escape(t(column.label))}</span>${p.sort === column.key ? `${window.CommanderIcons.font(p.descending ? 'arrow-down' : 'arrow-up', { class: 'column-sort' }, p.descending ? ' ↓' : ' ↑')}` : ''}</button></div><span class="column-resize" data-resize="${escape(column.key)}" role="separator" aria-label="Breite ${escape(t(column.label))}" title="Ziehen: Breite ändern · Doppelklick: an Inhalt anpassen"></span></th>`).join('')}</tr></thead><tbody><tr class="parent-row" data-parent aria-label="${escape(t('Übergeordnetes Verzeichnis'))}" title="${escape(t('Übergeordnetes Verzeichnis'))}">${displayColumns.map(column => `<td data-cell="${escape(column.key)}">${column.key === 'name' ? '<span class="filename"><span>…</span></span>' : ''}</td>`).join('')}</tr>${list.map((file, rowIndex) => `<tr data-id="${escape(file.id)}" draggable="${!resultView(p)}" aria-selected="${selectedIds.has(file.id)}" class="${resultView(p)?.groups && rowIndex > 0 && resultView(p).groups[file.fsSource] !== resultView(p).groups[list[rowIndex - 1].fsSource] ? 'search-group-start' : ''} ${selectedIds.has(file.id) ? 'selected' : ''} ${spaceIds.has(file.id) ? 'space-marked' : ''} ${p.cursor === file.id ? 'focused' : ''}">${displayColumns.map(column => cell(file, column)).join('')}</tr>`).join('')}</tbody></table>${!displayColumns.length ? `<div class="empty">${t('Keine sichtbaren Spalten')}</div>` : list.length ? '' : ui(['<div class="empty">Keine Einträge</div>'])}</div>
       <div class="pane-status"><span><strong>${marked.length ? ui`${marked.length} markiert` : count('file', files(p).filter(f => f.type !== 'folder').length)}</strong> · ${count('folder', files(p).filter(f => f.type === 'folder').length)}</span><span>${size((marked.length ? marked : files(p)).reduce((sum, f) => sum + displayBytes(f, p), 0))}</span></div></section>`;
   }
   function selectedFor(p) { const ids = new Set(p.selected); return files(p).filter(file => ids.has(file.id)); }
@@ -2001,6 +2003,14 @@
     }
     if (!Object.hasOwn(state.folders, path)) return toast(t('Dieser Pfad ist in den Beispieldaten nicht vorhanden.'));
     rememberScroll(); const previousViews = state.panes.map(paneDisplayState); delete pane().tabStates[pane().tab].searchResult; tabs.navigate(pane(), path); render(true, previousViews); toast(t('Verzeichnis geöffnet: {path}', { path: displayArchivePath(path) }), 'success');
+  }
+  function historyMarkup(p) {
+    const tab = p.tabStates[p.tab];
+    return '<span class="history-controls">' + ['back', 'forward'].map(direction => {
+      const unavailable = direction === 'back' ? tab.historyIndex === 0 : tab.historyIndex === tab.history.length - 1;
+      const label = t(direction === 'back' ? 'Zurück' : 'Vorwärts');
+      return '<button type="button" data-history="' + direction + '" aria-label="' + escape(label) + '" aria-haspopup="menu" aria-disabled="' + unavailable + '" title="' + escape(label) + ' · ' + escape(t('Rechtsklick: Verlauf')) + '"><span class="history-outline">' + window.CommanderIcons.svg('status', 'forward') + '</span><span class="history-filled">' + window.CommanderIcons.svg('status', 'forward-fill') + '</span></button>';
+    }).join('') + '</span>';
   }
   function breadcrumbMarkup(p) {
     const segments = [], seen = new Set();
@@ -2844,7 +2854,7 @@
   function run(command, reverseDirectories = false, contextSelection) {
     if (command === 'git-diff') { requestGitDiff(contextSelection); return; }
     if (typeof command !== 'string') return;
-    if (navigationRequests.size && !window.CommanderJobs.commandForAction(command)?.supportsBackgroundOperation.enabled && !['parent', 'up', 'back', 'forward', 'new-tab', 'background-tab', 'close-tab', 'next-tab', 'previous-tab', 'open-dir-tab', 'open-dir-other-tab', 'open', 'filter', 'path', 'toggle-selection-next', 'select-all', 'clear', 'invert'].includes(command) && !command.startsWith('sort:')) return;
+    if (navigationRequests.size && !window.CommanderJobs.commandForAction(command)?.supportsBackgroundOperation.enabled && !['parent', 'up', 'back', 'forward', 'history-jump', 'new-tab', 'background-tab', 'close-tab', 'next-tab', 'previous-tab', 'open-dir-tab', 'open-dir-other-tab', 'open', 'filter', 'path', 'toggle-selection-next', 'select-all', 'clear', 'invert'].includes(command) && !command.startsWith('sort:')) return;
     if (command === 'open-terminal') {
       if ($('#modal').open || document.activeElement?.matches('input,textarea,select,[contenteditable="true"]') || !document.activeElement?.closest('.list') || filesystemPending) return;
       if (state.archiveLocations?.[currentPath(pane())] || currentPath(pane()).startsWith('zip:')) return toast(t('Diese Aktion ist innerhalb eines ZIP-Archivs nicht verfügbar.'));
@@ -2893,12 +2903,18 @@
       rememberScroll(); const left = currentPath(state.panes[0]), right = currentPath(state.panes[1]);
       tabs.navigate(state.panes[0], right); tabs.navigate(state.panes[1], left); render(true); toast(t('Pfade getauscht.'), 'success'); return;
     }
-    if (['new-tab', 'background-tab', 'close-tab', 'next-tab', 'previous-tab', 'open-dir-tab', 'open-dir-other-tab', 'back', 'forward'].includes(command)) {
+    if (['new-tab', 'background-tab', 'close-tab', 'next-tab', 'previous-tab', 'open-dir-tab', 'open-dir-other-tab', 'back', 'forward', 'history-jump'].includes(command)) {
       rememberScroll(); const p = pane(), previousViews = state.panes.map(paneDisplayState), previousPath = currentPath(p), previousTab = p.tabStates[p.tab].id, previousSide = state.active;
       if (command === 'new-tab' || command === 'background-tab') tabs.duplicate(p, { background: command === 'background-tab' });
       if (command === 'close-tab' && !tabs.close(p, contextSelection?.tabId ? p.tabStates.findIndex(tab => tab.id === contextSelection.tabId) : p.tab)) return toast(t('Der letzte Ordner-Tab bleibt geöffnet.'));
       if (command === 'next-tab' || command === 'previous-tab') tabs.step(p, command === 'next-tab' ? 1 : -1);
       if (command === 'back' || command === 'forward') tabs[command](p);
+      if (command === 'history-jump') {
+        const tab = p.tabStates[p.tab], index = contextSelection?.historyIndex;
+        if (!Number.isInteger(index) || index < 0 || index >= tab.history.length) return;
+        tabs.navigate(p, tab.history[index], { recordHistory: false });
+        tab.historyIndex = index;
+      }
       if (command === 'open-dir-tab' || command === 'open-dir-other-tab') {
         const file = files(p).find(item => item.id === p.cursor);
         if (!file || !['folder', 'archive'].includes(file.type)) return;
@@ -2953,6 +2969,8 @@
         else requestGitStatus();
         return;
       }
+      const historyButton = target.closest('[data-history]');
+      if (historyButton) { if (historyButton.getAttribute('aria-disabled') !== 'true') run(historyButton.dataset.history); return; }
       if (target.closest('[data-new-tab]')) { run('new-tab'); return; }
       if (target.closest('[data-git-branch]')) { host?.postMessage({ type: 'git-branches', path: currentPath(p), snapshotId: state.snapshotId }); return; }
       if (target.closest('[data-favorites]')) { showFavorites(target.closest('[data-favorites]')); return; }
@@ -3097,7 +3115,7 @@
     return { side, path: destination, element: file?.type === 'folder' ? row : section.querySelector('.list') };
   }
   $('#panes').addEventListener('dragstart', event => {
-    if (rightPointer || filesystemPending) { event.preventDefault(); return; }
+    if (rightPointer || filesystemPending || event.target.closest('[data-history]')) { event.preventDefault(); return; }
     const tab = event.target.closest('[data-tab-drag]'), header = event.target.closest('[data-column]'), row = event.target.closest('tr[data-id]');
     if (!tab && !header && !row || event.target.closest('[data-resize]')) return;
     clearTimeout(renameTimer);
@@ -3263,15 +3281,19 @@
       if (event.key === 'Escape') { if (event.target.classList.contains('path-input')) event.target.value = displayArchivePath(currentPath(pane())); render(true); }
       return;
     }
-    if ((event.key === 'ContextMenu' && !event.ctrlKey && !event.metaKey && !event.altKey || event.key === 'F10' && event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey) && event.target.closest('[data-pane]') && (fileSettings.useSystemContextMenu !== true || ['linux', 'darwin'].includes(document.body.dataset.platform) || !event.target.closest('.list'))) {
+    const historyButton = event.target.closest('[data-history]');
+    if (historyButton && ['Enter', ' '].includes(event.key) && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) {
+      event.preventDefault(); historyButton.click(); return;
+    }
+    if ((event.key === 'ContextMenu' && !event.ctrlKey && !event.metaKey && !event.altKey || event.key === 'F10' && event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey) && event.target.closest('[data-pane]') && (historyButton || fileSettings.useSystemContextMenu !== true || ['linux', 'darwin'].includes(document.body.dataset.platform) || !event.target.closest('.list'))) {
       event.preventDefault();
-      const target = event.target.closest('.list') ? activeRow(pane().cursor) || event.target : event.target;
+      const target = historyButton || (event.target.closest('.list') ? activeRow(pane().cursor) || event.target : event.target);
       target.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true })); return;
     }
     if (event.ctrlKey && !event.metaKey && !event.altKey && event.key === 'Tab' && event.target.closest('[data-pane]') && !event.target.closest('[data-lister]')) {
       event.preventDefault(); run(event.shiftKey ? 'previous-tab' : 'next-tab'); return;
     }
-    if (!event.target.closest('.list')) return;
+    if (historyButton || !event.target.closest('.list')) return;
     if (event.key === 'Escape' && folderSizeRequests.size) { event.preventDefault(); cancelFolderSizes(); return; }
     if (event.key === 'Enter' && event.altKey && event.shiftKey && !event.ctrlKey && !event.metaKey) {
       event.preventDefault();
@@ -3687,13 +3709,14 @@
     window.dispatchEvent(new CustomEvent('commander-menu-open', { detail: 'context' }));
     const side = Number(section.dataset.pane), p = state.panes[side];
     const directory = currentPath(p), snapshotId = state.snapshotId, tabId = p.tabStates[p.tab].id;
+    const history = kind === 'history' ? [...p.tabStates[p.tab].history] : null;
     const clickedTab = event.target.closest('[data-tab]');
     const clickedTabId = clickedTab ? p.tabStates[Number(clickedTab.dataset.tab)].id : tabId;
     const contextDirectory = clickedTab ? p.tabs[Number(clickedTab.dataset.tab)] : directory;
     const origin = event.target.closest('button, .list') || section.querySelector('.list');
     const definitions = kind === 'tabs' ? [['copy-path', 'Pfad kopieren', []], ['close-tab', 'Ordner-Tab schließen', ['ctrl+w']]]
       : kind === 'columns' ? [['configure-columns', 'Spalten konfigurieren', []]]
-        : [...(selection.ids.length ? [['clipboard-copy', 'Kopieren', ['ctrl+c']], ['clipboard-cut', 'Ausschneiden', ['ctrl+x']]] : []), ['clipboard-paste', 'Einfügen', ['ctrl+v']]];
+        : kind === 'history' ? [] : [...(selection.ids.length ? [['clipboard-copy', 'Kopieren', ['ctrl+c']], ['clipboard-cut', 'Ausschneiden', ['ctrl+x']]] : []), ['clipboard-paste', 'Einfügen', ['ctrl+v']]];
     if (kind === 'files' && selection.ids.length === 1) {
       const file = files(p).find(file => file.id === selection.ids[0]);
       if (file?.type === 'folder' && nativeDesktopSupported && !directory.startsWith('zip:')) definitions.push(['inspect-folder-locks', 'Ordnersperren untersuchen', []]);
@@ -3707,7 +3730,9 @@
         disabled: paste && (!clipboardAvailable || directory.startsWith('zip:') || Boolean(state.archiveLocations?.[directory])),
         ...(children ? { children: children.map(describe) } : {}) };
     }
-    const popup = menus.create({ items: definitions.map(describe), label: t('Kontextmenü'), decorateKeys: decorateShortcut,
+    const popup = menus.create({ items: history ? history.map((path, index) => ({ id: `history:${index}`, label: displayArchivePath(path),
+      attrs: { 'data-history-index': String(index), ...(index === p.tabStates[p.tab].historyIndex ? { 'aria-current': 'location' } : {}) }
+    })) : definitions.map(describe), label: history ? t('Ordnerverlauf') : t('Kontextmenü'), decorateKeys: decorateShortcut,
       onClose: restore => closeContextMenu(restore), onAction: entry => {
         const action = entry.id;
         closeContextMenu(true);
@@ -3715,6 +3740,10 @@
         if (selection && selection.ids.some(id => !files(p).some(file => file.id === id))) return;
         if (!p.tabStates.some(tab => tab.id === clickedTabId)) return;
         state.active = side;
+        if (history) {
+          if (JSON.stringify(p.tabStates[p.tab].history) !== JSON.stringify(history)) return;
+          run('history-jump', false, { historyIndex: Number(action.slice('history:'.length)) }); return;
+        }
         if (action === 'copy-path') { selectionIO('copy', displayArchivePath(contextDirectory)); return; }
         if (action === 'configure-columns') { host?.postMessage({ type: 'configure-columns' }); return; }
         if (action === 'inspect-folder-locks') { requestShellMenu(true, true, selection); return; }
@@ -3744,6 +3773,7 @@
       else { event.preventDefault(); event.stopPropagation(); }
       return;
     }
+    if (event.target.closest('[data-history]')) { showContextMenu(event, section, 'history'); return; }
     if (event.target.closest('thead')) { showContextMenu(event, section, 'columns'); return; }
     const row = event.target.closest('tr[data-id]');
     if (row && !pane().selected.includes(row.dataset.id)) { pane().selected = [row.dataset.id]; pane().cursor = row.dataset.id; }

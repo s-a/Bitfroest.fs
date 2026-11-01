@@ -166,6 +166,7 @@
     'Favoriten': 'Favorites', 'Favorit hinzufügen': 'Add favorite', 'Name des Favoriten': 'Favorite name',
     'Aktuelles Verzeichnis hinzufügen…': 'Add current directory…', 'Aktuelles Verzeichnis entfernen': 'Remove current directory',
     'Favoriten konfigurieren…': 'Configure favorites…', 'Zurück': 'Back',
+    'Vorwärts': 'Forward', 'Ordnerverlauf': 'Folder history', 'Rechtsklick: Verlauf': 'Right-click: history',
     'Ein Name ist erforderlich.': 'A name is required.', 'Dieser Name ist bereits vergeben.': 'This name is already in use.',
     'Kein Arbeitsbereich geöffnet.': 'No workspace is open.',
     'Vollständiger Dateiname': 'Full filename', 'Vollständiger Pfad': 'Full path', 'Änderungszeit': 'Modified time',

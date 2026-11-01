@@ -17,7 +17,7 @@ test('column captions retain complete names and independent sort indicators in b
   const app = styledApp(t);
   for (const pane of app.document.querySelectorAll('.pane')) {
     const header = pane.querySelector('[data-column="name"]');
-    const button = header.querySelector('button');
+    const button = header.querySelector('[data-sort]');
     const label = button.querySelector('.column-caption');
     assert.ok(label);
     assert.equal(button.title, label.textContent);
