@@ -30,7 +30,7 @@
   report('document-start', { timeOrigin: performance.timeOrigin });
   for (const name of ['DOMContentLoaded', 'readystatechange', 'visibilitychange']) document.addEventListener(name, () => { report(name); frame(); });
   for (const name of ['load', 'pageshow', 'pagehide', 'focus', 'blur', 'resize']) window.addEventListener(name, event => {
-    if (event.target !== window && name === 'load') return;
+    if (event.target !== window && event.target !== document && name === 'load') return;
     report(name); frame();
   });
   window.addEventListener('commander-started', () => { report('application-ready'); frame(); });

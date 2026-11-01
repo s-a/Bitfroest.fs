@@ -2268,11 +2268,34 @@ test('compact readiness waits until native setup finishes without entering fulls
   assert.equal(app.calls.filter(call => call.id === 'workbench.action.enableCompactAuxiliaryWindow').length, 1);
 });
 
+test('a newly opened active panel restores focus after replacing its loading document', async t => {
+  const loading = deferred();
+  const app = harness(t, { manualReadiness: true, filesystemLoad: () => loading.promise });
+  const opening = app.command('bitfroest.openPrototype'); await tick();
+  const panel = app.panels[0]; panel.active = true;
+  loading.resolve(clipboardFixture()); await opening;
+  assert.equal(panel.reveals, 1);
+  await panel.receive({ type: 'app-ready' });
+  const check = panel.messages.find(message => message.type === 'auxiliary-compact-check');
+  assert.ok(check);
+  await panel.receive({ type: 'auxiliary-compact-ready', requestId: check.requestId });
+  assert.equal(app.calls.filter(call => call.id === 'workbench.action.enableCompactAuxiliaryWindow').length, 1);
+});
+
+test('opening completion does not focus an inactive panel', async t => {
+  const loading = deferred();
+  const app = harness(t, { manualReadiness: true, filesystemLoad: () => loading.promise });
+  const opening = app.command('bitfroest.openPrototype'); await tick();
+  const panel = app.panels[0]; panel.active = false;
+  loading.resolve(clipboardFixture()); await opening;
+  assert.equal(panel.reveals, 0);
+});
+
 test('compact auxiliary mode waits for webview readiness after the move and ignores stale replies', async t => {
   const move = deferred(); let moveStarted;
   const started = new Promise(resolve => { moveStarted = resolve; });
   const app = harness(t, { manualReadiness: true, commandEffect: async id => { if (id === 'workbench.action.moveEditorToNewWindow') { moveStarted(); await move.promise; } } });
-  const opening = app.commands.get('bitfroest.openPrototype')(); await started;
+  const opening = app.commands.get('bitfroest.openPrototype')(); await started; await tick();
   const panel = app.panels[0]; await panel.receive({ type: 'app-ready' });
   const compact = () => app.calls.filter(call => call.id === 'workbench.action.enableCompactAuxiliaryWindow').length;
   assert.equal(compact(), 0);
@@ -2965,8 +2988,8 @@ test('host startup diagnostics can be copied while directory loading blocks the 
 });
 
 test('startup document events persist with identity and reject stale or oversized messages', async t => {
-  const logs = [], loading = deferred();
-  const app = harness(t, { manualReadiness: true, filesystemLoad: () => loading.promise, onInfoLog: line => logs.push(JSON.parse(line)) });
+  const logs = [], errors = [], loading = deferred();
+  const app = harness(t, { manualReadiness: true, filesystemLoad: () => loading.promise, onInfoLog: line => logs.push(JSON.parse(line)), onLog: (_name, _config, line) => errors.push(JSON.parse(line)) });
   const panel = app.restoredPanel(); const opening = app.restore(panel, null);
   const { JSDOM } = require('jsdom');
   const dom = new JSDOM(panel.webview.html); t.after(() => dom.window.close());
@@ -2980,7 +3003,48 @@ test('startup document events persist with identity and reject stale or oversize
   await panel.receive({ ...message, sequence: 2, event: { ...message.event, message: 'x'.repeat(40000) } });
   assert.equal(logs.filter(row => row.kind === 'webview-event').length, 1);
   assert.ok(logs.every(row => row.startupId && Number.isSafeInteger(row.sequence) && Number.isFinite(row.elapsed)));
-  loading.resolve(clipboardFixture()); await opening; await app.command('bitfroest.show'); panel.dispose();
+  loading.resolve(clipboardFixture()); await opening; await app.command('bitfroest.show');
+  const full = new JSDOM(panel.webview.html); t.after(() => full.window.close());
+  const fullId = full.window.document.documentElement.dataset.documentId;
+  assert.notEqual(fullId, documentId);
+  await panel.receive({ ...message, sequence: 2 });
+  assert.equal(logs.filter(row => row.kind === 'webview-event').length, 1);
+  for (let sequence = 1; sequence <= 513; sequence++) await panel.receive({ ...message, documentId: fullId, sequence });
+  assert.equal(logs.filter(row => row.kind === 'diagnostic-limit').length, 1);
+  assert.equal(logs.filter(row => row.kind === 'webview-event').length, 513);
+  await panel.receive({ ...message, documentId: fullId, sequence: 514, event: { name: 'runtime-error', elapsed: 9, message: 'late exception' } });
+  assert.ok(errors.some(row => row.operation === 'webview-diagnostic' && row.message === 'late exception'));
+  panel.dispose();
+  const count = errors.length;
+  await panel.receive({ ...message, documentId: fullId, sequence: 515, event: { name: 'runtime-error', elapsed: 10, message: 'disposed' } });
+  assert.equal(errors.length, count);
+});
+
+test('window maximization starts during loading for new and visible restored windows', async t => {
+  for (const restored of [false, true]) {
+    const loading = deferred();
+    const app = harness(t, { filesystemLoad: () => loading.promise });
+    const panel = restored ? app.restoredPanel() : null;
+    const opening = restored ? app.restore(panel, null) : app.command('bitfroest.openPrototype');
+    await tick();
+    assert.equal(app.nativeCalls.length, 1);
+    assert.match(app.panels[0].webview.html, /id="host-startup"/);
+    assert.equal(app.calls.filter(call => call.id === 'workbench.action.moveEditorToNewWindow').length, restored ? 0 : 1);
+    loading.resolve(clipboardFixture()); await opening; await app.command('bitfroest.show');
+    assert.equal(app.nativeCalls.length, 1);
+    app.panels[0].dispose();
+  }
+});
+
+test('restoring an invisible file manager does not maximize its containing window', async t => {
+  const loading = deferred();
+  const app = harness(t, { filesystemLoad: () => loading.promise });
+  const panel = app.restoredPanel(); panel.visible = false; panel.active = false;
+  const opening = app.restore(panel, null); await tick();
+  assert.equal(app.nativeCalls.length, 0);
+  loading.resolve(clipboardFixture()); await opening;
+  assert.equal(app.nativeCalls.length, 0);
+  panel.dispose();
 });
 
 test('the full startup view copies host diagnostics before readiness and after failure', async t => {

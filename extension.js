@@ -1,4 +1,5 @@
 const vscode = require('vscode');
+const moduleStartedAt = performance.now();
 const Progress = require('./media/commander-progress');
 const { productIcon } = require('./product-icons');
 const extensionVersion = require('./package.json').version;
@@ -72,6 +73,7 @@ const os = require('node:os');
 let flushPersistence = () => Promise.resolve();
 
 function activate(context) {
+  const activationStartedAt = performance.now();
   const displayLanguage = () => {
     const configured = vscode.workspace.getConfiguration('bitfroest').get('language', 'auto');
     return ['de', 'en'].includes(configured) ? configured : vscode.env.language;
@@ -410,7 +412,8 @@ function activate(context) {
     currentStartup = { id: crypto.randomUUID(), restored: Boolean(restoredPanel), startedAt: new Date().toISOString() };
     logStartup('start', currentStartup);
     logStartup('runtime', { extensionVersion, vscodeVersion: vscode.version, node: process.version, electron: process.versions.electron || null, platform: process.platform, architecture: process.arch, osRelease: os.release(), remoteName: vscode.env.remoteName || null,
-      processId: process.pid, extensionDigest: crypto.createHash('sha256').update(fs.readFileSync(__filename)).digest('hex') });
+      processId: process.pid, moduleToActivationMs: activationStartedAt - moduleStartedAt, activationToOpenMs: startupOrigin - activationStartedAt,
+      extensionDigest: crypto.createHash('sha256').update(fs.readFileSync(__filename)).digest('hex') });
     const startupWatchdog = setTimeout(() => {
       const message = t('Die Dateiverwaltung meldet noch keine Bereitschaft. Das Startprotokoll enthält den letzten Ladeschritt.');
       logStartup('waiting', { message });
@@ -454,6 +457,7 @@ function activate(context) {
     const escapeStartup = value => String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     const loadingPanel = restoredPanel || vscode.window.createWebviewPanel('bitfroestPrototype', title(), vscode.ViewColumn.Active, { enableScripts: true, localResourceRoots: [], retainContextWhenHidden: true });
     let restoredDisposed = false, startupSubscription;
+    let windowSetupPending = false, windowSetup = Promise.resolve();
     const restoringSubscription = loadingPanel?.onDidDispose(() => { logStartup('panel-disposed', { documentId }); restoredDisposed = true; clearTimeout(startupWatchdog); });
     const publishStartup = event => {
       if (loadingPanel && !restoredDisposed) void loadingPanel.webview.postMessage({ type: 'host-startup', ...event });
@@ -473,6 +477,33 @@ function activate(context) {
       logStartup('document-assigned', { documentId, stage: 'loading' });
       loadingPanel.webview.html = `<!DOCTYPE html><html data-startup-id="${currentStartup.id}" data-document-id="${documentId}"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}'"><style nonce="${nonce}">body{font-family:var(--vscode-font-family);font-size:var(--vscode-font-size);color:var(--vscode-foreground);background:var(--vscode-editor-background);padding:24px}ol{padding-left:24px}li{margin:8px 0}button{font:inherit;color:var(--vscode-button-foreground);background:var(--vscode-button-background);border:1px solid var(--vscode-button-border,transparent);padding:6px 10px}button:focus-visible{outline:1px solid var(--vscode-focusBorder);outline-offset:2px}</style></head><body><main id="host-startup"><h1>${escapeStartup(t('Dateiverwaltung wird geladen…'))}</h1><p id="host-startup-current" role="status">${escapeStartup(t('Tastaturkonfiguration wird übernommen'))}</p><button id="host-startup-copy" type="button">${escapeStartup(t('Startprotokoll kopieren'))}</button><ol id="host-startup-log" role="log"></ol></main><script nonce="${nonce}">${diagnosticsScript}
 window.addEventListener('message',event=>{const update=event.data;if(update?.type!=='host-startup')return;document.getElementById('host-startup-current').textContent=update.message;const row=document.createElement('li');row.textContent='['+(update.elapsed/1000).toFixed(3)+' s] '+update.message;document.getElementById('host-startup-log').append(row);});const host=window.CommanderHost;document.getElementById('host-startup-copy').onclick=()=>host.postMessage({type:'startup-log-copy'});host.postMessage({type:'host-startup-ready'});</script></body></html>`;
+    }
+    if (!restoredPanel || (loadingPanel.visible && loadingPanel.active !== false)) {
+      const token = crypto.randomUUID();
+      const windowDocumentId = documentId;
+      const windowLog = (kind, detail = {}) => logStartup(kind, { ...detail, startupId, documentId: windowDocumentId, elapsed: Math.max(0, performance.now() - startupOrigin) });
+      windowSetupPending = true;
+      loadingPanel.title = `${title()} [${token}]`;
+      windowSetup = (async () => {
+        try {
+          if (!restoredPanel) {
+            windowLog('window-move-start');
+            await vscode.commands.executeCommand('workbench.action.moveEditorToNewWindow');
+            windowLog('window-move-complete');
+          }
+          if (!restoredDisposed && process.platform === 'win32') {
+            windowLog('window-maximize-start');
+            await maximizeWindow(token);
+            windowLog('window-maximize-complete');
+          }
+        } catch (error) {
+          windowLog('error', { operation: 'window-setup', message: error.message, stack: error.stack });
+          void vscode.window.showErrorMessage(t('Das Commander-Fenster konnte nicht vollständig eingerichtet werden: {error}', { error: t(error.message) }));
+        } finally {
+          windowSetupPending = false;
+          if (!restoredDisposed) loadingPanel.title = title();
+        }
+      })();
     }
     startupStep(t('Tastaturkonfiguration wird übernommen'));
     await initialShortcutsReady;
@@ -518,7 +549,7 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
     panel.onDidDispose(() => lockInspector.dispose());
     context.subscriptions.push(shellMenu);
     let shellMenuBusy = false;
-    let auxiliaryMoveCompleted = Boolean(restoredPanel), auxiliaryReady = false, auxiliaryCheckSent = false, auxiliaryCompactApplied = false;
+    let auxiliaryMoveCompleted = false, auxiliaryReady = false, auxiliaryCheckSent = false, auxiliaryCompactApplied = false;
     let auxiliaryCheckId = crypto.randomUUID();
     const hasSingleEditor = () => {
       if (messagePanel.viewColumn === undefined) return false;
@@ -552,7 +583,7 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
     const bootstrap = fs.readFileSync(path.join(context.extensionPath, 'media', 'webview-bootstrap.js'), 'utf8');
     const renderHtml = () => {
       language = displayLanguage();
-      panel.title = title();
+      if (!windowSetupPending) panel.title = title();
       status.tooltip = t('Dateiverwaltung öffnen oder nach vorn holen');
       startupStep(t('Warten auf die Initialisierung der Webview'));
       const elapsed = Math.max(0, performance.now() - startupOrigin);
@@ -1526,26 +1557,11 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
       } catch (error) { await replyUiAction(message, { ok: false, error: t(error.message) }); vscode.window.showErrorMessage(t(error.message)); }
     }, null, context.subscriptions);
     renderHtml();
-    if (restoredPanel) return;
-    const current = panel;
-    const token = crypto.randomUUID();
-    current.title = `${title()} [${token}]`;
-    try {
-      logStartup('window-move-start', { documentId });
-      await vscode.commands.executeCommand('workbench.action.moveEditorToNewWindow');
-      logStartup('window-move-complete', { documentId });
-      try {
-        if (process.platform === 'win32') {
-          await maximizeWindow(token);
-        }
-      } finally {
-        auxiliaryMoveCompleted = true;
-        requestAuxiliaryReady();
-      }
-    } catch (error) {
-      vscode.window.showErrorMessage(t('Das Commander-Fenster konnte nicht vollständig eingerichtet werden: {error}', { error: t(error.message) }));
-    } finally {
-      if (panel === current) current.title = title();
+    await windowSetup;
+    if (!restoredDisposed) {
+      auxiliaryMoveCompleted = true;
+      if (!restoredPanel && messagePanel.visible && messagePanel.active) messagePanel.reveal(messagePanel.viewColumn);
+      requestAuxiliaryReady();
     }
     } catch (error) {
       clearTimeout(startupWatchdog);
