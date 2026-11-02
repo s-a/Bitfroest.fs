@@ -111,7 +111,9 @@ function createProvider(options = {}) {
   async function readSnapshot(settings = {}) {
     const folders = settings.baseline ? clone(settings.baseline.folders) : {}, entries = new Map(settings.baseline?.entries);
     const loadedDirectories = new Set(settings.baseline?.loadedDirectories);
+    const scannedDirectories = new Set(), discardedDirectories = new Set();
     function discardSubtree(directory, retainEntry = false) {
+      discardedDirectories.add(directory);
       for (const key of Object.keys(folders)) if (below(key, directory)) delete folders[key];
       for (const key of loadedDirectories) if (below(key, directory)) loadedDirectories.delete(key);
       for (const [key, entry] of entries) if (below(entry.path, directory) && (!retainEntry || identity(entry.path) !== identity(directory))) entries.delete(key);
@@ -143,6 +145,7 @@ function createProvider(options = {}) {
         return;
       }
       await assertComponents(directory);
+      scannedDirectories.add(directory);
       const stat = await fs.lstat(directory, { bigint: true });
       if (!stat.isDirectory()) throw new Error('Ein Root- oder Ordnerpfad ist kein Verzeichnis.');
       const existing = entries.get(identity(directory));
@@ -261,7 +264,7 @@ function createProvider(options = {}) {
     const unloadedFolders = [...entries.values()].filter(entry => entry.type === 'folder' && !loadedDirectories.has(entry.path)).map(entry => entry.path);
     settings.onProgress?.(Progress.event({ phase: settings.phase || 'preparing', filesScanned: count, done: true, overall: Progress.known('items', processedEntries, processedEntries), current: Progress.known('items', processedEntries, processedEntries) }));
     throwIfAborted(settings.signal);
-    return { folders, entries, loadedDirectories: [...loadedDirectories], unloadedFolders };
+    return { folders, entries, loadedDirectories: [...loadedDirectories], unloadedFolders, scannedDirectories, discardedDirectories };
   }
 
   function pane(directory) { return { tabs: [directory], tab: 0, selected: [], cursor: null, filter: '', sort: 'name', descending: false }; }
@@ -278,9 +281,30 @@ function createProvider(options = {}) {
 
   async function load(settings = {}) {
     const left = allowed(settings.left || roots[0]), right = allowed(settings.right || roots[1] || roots[0]);
-    const previous = snapshot;
+    let previous = snapshot;
     const visibleOnly = settings.baseline ? true : settings.visibleOnly ?? previous?.visibleOnly ?? false;
     const result = await readSnapshot({ ...settings, visibleOnly, directories: visibleOnly || settings.baseline ? settings.directories || [] : [...(settings.directories || []), left, right] });
+    if (settings.getVisibleDirectories) settings = { ...settings, visibleDirectories: settings.getVisibleDirectories() };
+    if (settings.baseline && snapshot !== previous) {
+      const scanned = result.scannedDirectories;
+      const discarded = new Set([...result.discardedDirectories].filter(directory => {
+        const current = snapshot.entries.get(identity(directory)), incoming = result.entries.get(identity(directory));
+        return !snapshot.loadedDirectories.includes(directory) || current?.type !== 'folder' || incoming?.type !== 'folder' || incoming.row?.type === 'link' || current.signature.split(':').slice(0, 3).join(':') !== incoming.signature.split(':').slice(0, 3).join(':');
+      }));
+      const removed = target => [...discarded].some(directory => below(target, directory));
+      const replacedEntry = entry => scanned.has(slash(path.dirname(entry.path))) || removed(entry.path);
+      const folders = clone(snapshot.folders), entries = new Map(snapshot.entries);
+      for (const directory of Object.keys(folders)) if (removed(directory)) delete folders[directory];
+      for (const [directory, rows] of Object.entries(result.folders)) {
+        if (scanned.has(directory) || removed(directory) || scanned.has(slash(path.dirname(directory))) && !Object.hasOwn(folders, directory)) folders[directory] = rows;
+      }
+      for (const [key, entry] of entries) if (replacedEntry(entry)) entries.delete(key);
+      for (const [key, entry] of result.entries) if (replacedEntry(entry) || scanned.has(entry.path)) entries.set(key, entry);
+      result.folders = folders; result.entries = entries;
+      result.loadedDirectories = [...new Set([...snapshot.loadedDirectories.filter(directory => !scanned.has(directory) && !removed(directory)), ...result.loadedDirectories.filter(directory => scanned.has(directory) || removed(directory))])];
+      result.unloadedFolders = [...entries.values()].filter(entry => entry.type === 'folder' && !result.loadedDirectories.includes(entry.path)).map(entry => entry.path);
+      previous = snapshot;
+    }
     if (settings.visibleDirectories) {
       for (const directory of settings.directories || []) directoryHistory.set(directory, ++directoryClock);
       const inactive = Object.keys(result.folders).filter(directory => !settings.visibleDirectories.includes(directory));
@@ -845,9 +869,9 @@ function createProvider(options = {}) {
     if (busy) throw new Error('Eine Dateisystemoperation läuft bereits.');
     if (!settings.navigation && (!snapshot || before?.snapshotId !== snapshot.state.snapshotId || filesystemDigest(before) !== snapshot.digest)) throw new Error('Der Dateisystem-Snapshot ist veraltet oder wurde verändert.');
     const directories = (settings.directories || []).map(allowed);
-    const fresh = await load({ directories: settings.navigation ? directories : [...(snapshot.visibleOnly ? activeDirectories(before) : snapshot.loadedDirectories), ...directories], ...(settings.navigation ? { baseline: snapshot, refreshDirectories: directories, visibleDirectories: settings.visibleDirectories, onDirectory: settings.onDirectory } : {}), recursiveDirectories: settings.recursive ? directories : [], signal: settings.signal, onProgress: settings.onProgress });
+    const fresh = await load({ directories: settings.navigation ? directories : [...(snapshot.visibleOnly ? activeDirectories(before) : snapshot.loadedDirectories), ...directories], ...(settings.navigation ? { baseline: snapshot, refreshDirectories: directories, visibleDirectories: settings.visibleDirectories, getVisibleDirectories: settings.getVisibleDirectories, onDirectory: settings.onDirectory } : {}), recursiveDirectories: settings.recursive ? directories : [], signal: settings.signal, onProgress: settings.onProgress });
     const state = inheritedPanes(fresh, before);
-    snapshot.state = clone(state);
+    if (snapshot.state.snapshotId === fresh.snapshotId) snapshot.state = clone(state);
     return state;
   }
   async function remove(before, request = {}, settings = {}) {

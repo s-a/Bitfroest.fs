@@ -171,13 +171,13 @@ test('cached return restores the directory scroll position immediately', t => {
   assert.equal(app.document.querySelector('.pane.active .list').scrollTop, 77);
 });
 
-test('a late first-visit response cannot steal the other panel or navigate a different tab', t => {
+test('a late first-visit response completes its own tab without stealing the other panel', t => {
   const state = fixture(); state.unloadedFolders = ['/root/child']; state.folders['/root/child'] = [];
   const app = createApp(t, state); enter(app);
   const request = app.messages.filter(m => m.type === 'filesystem-navigate').at(-1);
   app.click(app.document.querySelector('[data-pane="1"] .list'));
   send(app, { type: 'filesystem-result', ok: true, navigationRequestId: request.navigationRequestId, state: fixture() });
-  assert.equal(app.state().active, 1); assert.equal(app.state().panes[0].tabs[0], '/root');
+  assert.equal(app.state().active, 1); assert.equal(app.state().panes[0].tabs[0], '/root/child');
 });
 
 test('only the refresh glyph rotates and Git text pulses with a reduced-motion override', t => {

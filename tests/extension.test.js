@@ -2018,24 +2018,36 @@ test('navigation publishes the exact authoritative folders after cache eviction 
   panel.dispose();
 });
 
-test('concurrent directory reads serialize the authoritative provider without blocking later navigation', async t => {
+test('concurrent directory reads finish independently while mutations wait for both reads', async t => {
   let entered, release;
   const started = new Promise(resolve => { entered = resolve; });
   const barrier = new Promise(resolve => { release = resolve; });
-  let reads = 0, concurrent = 0, maximum = 0;
+  let reads = 0, concurrent = 0, maximum = 0, writes = 0, visiblePaths;
   const initial = clipboardFixture();
-  const app = harness(t, { filesystemLoad: async () => initial, filesystemPrepare: async before => {
+  initial.panes.forEach((pane, side) => { pane.tabStates = [{ id: `tab-${side}`, path: pane.tabs[pane.tab] }]; });
+  const app = harness(t, { filesystemLoad: async () => initial, filesystemApply: async before => { writes++; return before; }, filesystemPrepare: async (before, settings) => {
     maximum = Math.max(maximum, ++concurrent);
-    if (++reads === 1) { entered(); await barrier; }
+    if (++reads === 1) { visiblePaths = settings.getVisibleDirectories; entered(); await barrier; }
     concurrent--; return before;
   } });
   await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
-  const first = panel.receive({ type: 'filesystem-navigate', state: initial, path: 'C:/temp', side: 0, navigationRequestId: 'directory-1' });
+  const first = panel.receive({ type: 'filesystem-navigate', state: initial, path: 'C:/temp', side: 0, navigationRequestId: 'directory-1', navigationTabId: 'tab-0' });
   await started;
-  const second = panel.receive({ type: 'filesystem-navigate', state: initial, path: 'C:/tmp', side: 1, navigationRequestId: 'directory-2' });
-  await tick(); release(); await Promise.all([first, second]);
-  assert.equal(maximum, 1);
-  for (const id of ['directory-1', 'directory-2']) assert.equal(panel.messages.find(message => message.type === 'filesystem-result' && message.navigationRequestId === id)?.ok, true);
+  const second = panel.receive({ type: 'filesystem-navigate', state: initial, path: 'C:/tmp', side: 1, navigationRequestId: 'directory-2', navigationTabId: 'tab-1' });
+  let mutation;
+  try {
+    await tick();
+    assert.equal(maximum, 2, 'opposite navigation must start while the first read is pending');
+    assert.equal(panel.messages.find(message => message.type === 'filesystem-result' && message.navigationRequestId === 'directory-2')?.ok, true);
+    const panes = structuredClone(initial.panes); panes[1].tabs[panes[1].tab] = 'C:/tmp';
+    await panel.receive({ type: 'view-state', panes, active: 1 });
+    assert.deepEqual(visiblePaths(), ['C:/temp', 'C:/tmp']);
+    mutation = panel.receive({ type: 'filesystem-apply', state: initial }); await tick();
+    assert.equal(writes, 0, 'a write must wait until every pending directory read completes');
+  } finally { release(); await Promise.all([first, second, mutation]); }
+  assert.equal(writes, 1);
+  assert.equal(panel.messages.find(message => message.type === 'filesystem-result' && message.navigationRequestId === 'directory-1')?.ok, true);
+  assert.equal(panel.messages.find(message => message.type === 'filesystem-result' && message.navigationRequestId === 'directory-2')?.ok, true);
   panel.dispose();
 });
 
@@ -3586,8 +3598,9 @@ test('lazy navigation prepares only its requested directory and resumes the orig
   const app = harness(t,{filesystemLoad:async()=>state,filesystemPrepare:async(before,options)=>{preparations.push({before,options});await options.onDirectory({path:'C:/tmp/docs',names:['a.txt'],rows:[],completed:0,total:1});await options.onDirectory({path:'C:/tmp/docs',rows:[{id:'a',name:'a.txt'}],completed:1,total:1});return {...state,snapshotId:'two',unloadedFolders:[],folders:{...state.folders,'C:/tmp/docs':[{id:'a',name:'a.txt'}]}};}});
   await app.command('bitfroest.openPrototype');
   await app.panels[0].receive({type:'filesystem-navigate',navigationRequestId:'directory-progress-1',path:'C:/tmp/docs',side:0,state});
-  const {onDirectory,...settings}=preparations[0].options;
+  const {onDirectory,getVisibleDirectories,...settings}=preparations[0].options;
   assert.equal(typeof onDirectory,'function');
+  assert.deepEqual(getVisibleDirectories(), ['C:/tmp/docs','C:/temp']);
   assert.deepEqual(settings,{directories:['C:/tmp/docs'],recursive:false,navigation:true,visibleDirectories:['C:/tmp/docs','C:/temp']});
   const progress=app.panels[0].messages.filter(message=>message.type==='filesystem-directory');
   assert.deepEqual(progress.map(message=>[message.completed,message.total]),[[0,1],[1,1]]);

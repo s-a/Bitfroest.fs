@@ -5,6 +5,76 @@ const os = require('node:os');
 const path = require('node:path');
 const { createProvider } = require('../filesystem-provider');
 
+test('concurrent navigation retains both directory results and the next write remains valid', async t => {
+  const { left, right } = await setup(t);
+  let release, entered;
+  const barrier = new Promise(resolve => { release = resolve; });
+  const started = new Promise(resolve => { entered = resolve; });
+  let block = false;
+  const provider = createProvider({ roots: [left, right], fs: { ...fs, readdir: async (directory, ...args) => {
+    if (block && slash(String(directory)) === `${left}/docs`) { entered(); await barrier; }
+    return fs.readdir(directory, ...args);
+  } } });
+  const initial = await provider.load({ directories: [left, right], visibleOnly: true });
+  await fs.writeFile(`${right}/fresh.txt`, 'fresh');
+  block = true;
+  const first = provider.prepare(initial, { navigation: true, directories: [`${left}/docs`], visibleDirectories: [`${left}/docs`, right] });
+  await started;
+  await provider.prepare(initial, { navigation: true, directories: [right], visibleDirectories: [`${left}/docs`, right] });
+  release(); const final = await first;
+  assert.ok(final.folders[right].some(row => row.name === 'fresh.txt'), 'the slower read must retain the other completed listing');
+  assert.ok(final.folders[`${left}/docs`].length);
+  const after = clone(final);
+  after.folders[right].push({ id: 'created', name: 'created.txt', type: 'text', content: 'created' });
+  await provider.apply(final, after);
+  assert.equal(await fs.readFile(`${right}/fresh.txt`, 'utf8'), 'fresh');
+  assert.equal(await fs.readFile(`${right}/created.txt`, 'utf8'), 'created');
+});
+
+test('a delayed navigation keeps the newly visible opposite directory within a zero cache budget', async t => {
+  const { left, right } = await setup(t), destination = `${right}/next`;
+  await fs.mkdir(destination); await fs.writeFile(`${destination}/visible.txt`, 'visible');
+  let release, entered, block = false;
+  const barrier = new Promise(resolve => { release = resolve; });
+  const started = new Promise(resolve => { entered = resolve; });
+  t.after(() => release());
+  let visible = [`${left}/docs`, right];
+  const provider = createProvider({ roots: [left, right], directoryCacheBytes: 0, fs: { ...fs, readdir: async (directory, ...args) => {
+    if (block && slash(String(directory)) === `${left}/docs`) { entered(); await barrier; }
+    return fs.readdir(directory, ...args);
+  } } });
+  const initial = await provider.load({ directories: [left, right], visibleOnly: true }); block = true;
+  const first = provider.prepare(initial, { navigation: true, directories: [`${left}/docs`], visibleDirectories: [...visible], getVisibleDirectories: () => visible });
+  await started;
+  await provider.prepare(initial, { navigation: true, directories: [destination], visibleDirectories: [left, destination] });
+  visible = [`${left}/docs`, destination]; release();
+  const final = await first;
+  assert.ok(final.folders[destination].some(row => row.name === 'visible.txt'));
+  assert.equal(final.unloadedFolders.includes(destination), false);
+});
+
+test('a delayed parent read retains a newer child listing with the same replacement identity', async t => {
+  const { left, right } = await setup(t), child = `${left}/docs`;
+  let release, entered, block = false;
+  const barrier = new Promise(resolve => { release = resolve; });
+  const started = new Promise(resolve => { entered = resolve; });
+  t.after(() => release());
+  const provider = createProvider({ roots: [left, right], fs: { ...fs, lstat: async (target, ...args) => {
+    const stat = await fs.lstat(target, ...args);
+    if (block && slash(String(target)) === child && args[0]?.bigint) { block = false; entered(); await barrier; }
+    return stat;
+  } } });
+  const initial = await provider.load({ directories: [left, child, right], visibleOnly: true });
+  await fs.rename(child, `${left}/old-docs`); await fs.mkdir(child); await fs.writeFile(`${child}/replacement.txt`, 'new');
+  block = true;
+  const first = provider.prepare(initial, { navigation: true, directories: [left], visibleDirectories: [left, child] });
+  await started;
+  await provider.prepare(initial, { navigation: true, directories: [child], visibleDirectories: [left, child] });
+  release(); const final = await first;
+  assert.ok(final.folders[child].some(row => row.name === 'replacement.txt'));
+  assert.equal(final.unloadedFolders.includes(child), false);
+});
+
 test('cold startup retains explicitly saved inactive tabs without reading their directories', async t => {
   const { left, right } = await setup(t), inactive = `${left}/docs/archive`, reads = [], inspected = [];
   await fs.mkdir(inactive, { recursive: true });

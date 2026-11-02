@@ -302,6 +302,7 @@ function activate(context) {
   }
   let filesystemState;
   let filesystemQueue = Promise.resolve();
+  let navigationQueueTail, navigationReadBase;
   let filesystemRequests = 0;
   const transferJobs = new Map();
   const directoryJobs = new Map();
@@ -1475,7 +1476,8 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
         };
         filesystemRequests++;
         const isolatedNavigation = Boolean(directoryJob && transferJobs.size);
-        const execution = (isolatedNavigation ? Promise.resolve() : filesystemQueue).then(async () => {
+        if (directoryJob && !isolatedNavigation && filesystemQueue !== navigationQueueTail) navigationReadBase = filesystemQueue;
+        const execution = (isolatedNavigation ? Promise.resolve() : directoryJob ? navigationReadBase : filesystemQueue).then(async () => {
           const initialNavigationRevision = navigationRevision;
           let ok = true;
           let cancelled = false;
@@ -1492,11 +1494,11 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
               const directories = message.type === 'filesystem-navigate' ? [message.path] : message.paths;
               if (!Array.isArray(directories) || directories.length > 128 || directories.some(target => typeof target !== 'string' || target.length > 4096 || !provider.canNavigate(target))) throw new Error(t('Ungültiger Datei- oder Ordnername.'));
               if (message.type === 'filesystem-navigate' && ![0, 1].includes(message.side)) throw new Error(t('Ungültiger Datei- oder Ordnername.'));
-              const view = directoryView();
-              const visibleDirectories = view?.panes?.map((pane, side) => side === message.side && (!message.navigationTabId || pane.tabStates?.[pane.tab]?.id === message.navigationTabId) ? message.path : pane.tabs[pane.tab]);
+              const visiblePaths = () => directoryView()?.panes?.map((pane, side) => side === message.side && (!message.navigationTabId || pane.tabStates?.[pane.tab]?.id === message.navigationTabId) ? message.path : pane.tabs[pane.tab]);
+              const visibleDirectories = visiblePaths();
               fresh = isolatedNavigation ? await navigationProvider.load({ directories: visibleDirectories, visibleOnly: true, signal: directoryJob?.controller.signal, onDirectory: update => { if (panel === current) return current.webview.postMessage({ type: 'filesystem-directory', navigationRequestId: message.navigationRequestId, ...update }); } }) : await provider.prepare(filesystemState, { directories, recursive: message.type === 'filesystem-prepare' && message.recursive !== false, ...(message.type === 'filesystem-navigate' ? { navigation: true, visibleDirectories, onDirectory: update => {
                 if (message.navigationRequestId && panel === current) return current.webview.postMessage({ type: 'filesystem-directory', navigationRequestId: message.navigationRequestId, ...update });
-              }, ...(directoryJob ? { signal: directoryJob.controller.signal } : {}) } : {}), ...(job ? { signal: job.controller.signal, onProgress } : {}) });
+              }, getVisibleDirectories: visiblePaths, ...(directoryJob ? { signal: directoryJob.controller.signal } : {}) } : {}), ...(job ? { signal: job.controller.signal, onProgress } : {}) });
             } else fresh = await loadView(message.state || savedState, message.type === 'filesystem-refresh' && typeof message.refreshRequestId === 'string' ? { onDirectory: update => {
               if (panel === current) return current.webview.postMessage({ type: 'filesystem-refresh-step', emittedAt: Date.now(), refreshRequestId: message.refreshRequestId, path: update.path, phase: update.phase || (update.done ? 'done' : 'metadata'), completed: update.completed, total: update.total, ...(update.progress ? { progress: Progress.read(update.progress) } : {}) });
             } } : {});
@@ -1552,7 +1554,10 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
           if (directoryJob && directoryJobs.get(directoryKey) === directoryJob) directoryJobs.delete(directoryKey);
           if (current && panel === current) await current.webview.postMessage({ type: 'filesystem-result', ok, state: filesystemState, ...(typeof message.refreshRequestId === 'string' ? { refreshRequestId: message.refreshRequestId } : {}), ...(message.taskRequestId ? { taskRequestId: message.taskRequestId } : {}), ...(message.navigationRequestId ? { navigationRequestId: message.navigationRequestId } : {}), ...(updatedDirectories?.length ? { refreshGitDirectories: updatedDirectories } : {}), ...(cancelled ? { cancelled: true } : {}), ...(operationId ? { operationId, operationOutcome: filesystemState?.operationOutcome } : {}), ...(!ok ? { error: operationError, diagnostic } : {}), ...(ok && !cancelled && message.type === 'filesystem-navigate' ? { resumeNavigation: { path: message.path, side: message.side } } : {}), ...(ok && !cancelled && message.type === 'filesystem-prepare' ? { resumeAction: message.action } : {}) });
         }).finally(() => { filesystemRequests--; });
-        if (!isolatedNavigation) filesystemQueue = execution.catch(() => {});
+        if (!isolatedNavigation) {
+          filesystemQueue = Promise.all([filesystemQueue, execution]).then(() => {}, () => {});
+          if (directoryJob) navigationQueueTail = filesystemQueue;
+        }
         await execution;
         return;
       }

@@ -6,6 +6,40 @@ function fixture() {
  return {version:1,realFilesystem:true,snapshotId:'old',active:0,panes:[pane('C:/tmp'),pane('C:/temp')],unloadedFolders:['C:/tmp/docs','C:/temp/incoming'],folders:{'C:/tmp':[{id:'docs',name:'docs',type:'folder',fsSource:'C:/tmp/docs'},{id:'a',name:'a.txt',type:'text',content:'a',size:1,fsSource:'C:/tmp/a.txt'}],'C:/temp':[{id:'incoming',name:'incoming',type:'folder'}],'C:/tmp/docs':[],'C:/temp/incoming':[]}};
 }
 function select(app,name){app.click(app.row(name).querySelector('[data-filename]'));}
+for (const readingSide of [0, 1]) test(`directory reads on side ${readingSide} leave the opposite pane usable`, t => {
+ const app = createApp(t, fixture());
+ const row = side => app.document.querySelector(`[data-pane="${side}"] tr[data-id="${side ? 'incoming' : 'docs'}"] [data-filename]`);
+ app.click(row(readingSide)); app.key('Enter');
+ const first = app.messages.find(message => message.type === 'filesystem-navigate'); assert.ok(first);
+ app.click(row(1 - readingSide));
+ app.action('path');
+ assert.equal(app.document.activeElement, app.document.querySelector(`[data-pane="${1 - readingSide}"] .path-input`), 'the other path input remains available');
+ app.key('Escape', {}, app.document.activeElement);
+ app.key('Enter', {}, app.document.querySelector(`[data-pane="${1 - readingSide}"] .list`));
+ const requests = app.messages.filter(message => message.type === 'filesystem-navigate');
+ assert.equal(requests.length, 2, 'both panes must issue a read before either result arrives');
+ const second = requests[1]; assert.equal(second.side, 1 - readingSide);
+ let stolenFocus = 0;
+ app.document.addEventListener('focusin', event => { if (event.target.closest(`[data-pane="${readingSide}"]`)) stolenFocus++; });
+ for (const request of [second, first]) {
+  const fresh = app.state(); fresh.unloadedFolders = fresh.unloadedFolders.filter(path => path !== request.path);
+  app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-result', ok: true, navigationRequestId: request.navigationRequestId, state: fresh } }));
+  assert.equal(app.state().panes[request.side].tabs[0], request.path);
+  assert.equal(app.state().active, 1 - readingSide, 'a background completion must preserve the active pane');
+ }
+ assert.equal(stolenFocus, 0, 'a background completion must not temporarily focus its pane');
+});
+for (const readingSide of [0, 1]) test(`viewing a file opposite a pending read on side ${readingSide} remains available`, t => {
+ const initial = fixture(), other = 1 - readingSide, directory = initial.panes[other].tabs[0];
+ initial.folders[directory].push({ id: 'view-file', name: 'view.txt', type: 'text', size: 3, fsSource: `${directory}/view.txt` });
+ const app = createApp(t, initial);
+ app.click(app.document.querySelector(`[data-pane="${readingSide}"] tr[data-id="${readingSide ? 'incoming' : 'docs'}"] [data-filename]`)); app.key('Enter');
+ app.click(app.document.querySelector(`[data-pane="${other}"] tr[data-id="view-file"] [data-filename]`));
+ app.action('open-terminal');
+ assert.equal(app.messages.find(message => message.type === 'open-terminal')?.path, directory);
+ app.action('view');
+ assert.equal(app.messages.find(message => message.type === 'lister-open')?.path, `${directory}/view.txt`);
+});
 function result(app, extra={}) {const fresh=app.state();fresh.snapshotId='new';fresh.unloadedFolders=[];fresh.folders['C:/tmp/docs']=[{id:'child',name:'child.txt',type:'text',size:1,fsSource:'C:/tmp/docs/child.txt'}];app.window.dispatchEvent(new app.window.MessageEvent('message',{data:{type:'filesystem-result',ok:true,state:fresh,...extra}}));}
 test('opening an unloaded folder waits for its shallow snapshot before changing directory',t=>{
  const app=createApp(t,fixture());select(app,'docs');app.key('Enter');

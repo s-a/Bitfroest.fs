@@ -520,7 +520,7 @@
   const navigationByTab = new Map();
   const deferredNavigationReads = new Map();
   const navigationKey = request => `${request.side}:${request.tabId}`;
-  let navigationSequence = 0, validatedNavigation;
+  let navigationSequence = 0, validatedNavigation, backgroundNavigation = false;
   function cacheDirectories() {
     for (const p of state.panes) {
       const path = p.tabs[p.tab];
@@ -967,7 +967,7 @@
     if (!request) return Boolean(data.navigationRequestId);
     const latest = navigationByTab.get(navigationKey(request)) === request;
     const origin = state.panes[request.side];
-    const contextValid = latest && origin.tabStates[origin.tab].id === request.tabId && [request.originPath, request.path].includes(currentPath(origin)) && state.active === request.activeAtStart;
+    const contextValid = latest && origin.tabStates[origin.tab].id === request.tabId && [request.originPath, request.path].includes(currentPath(origin));
     const displayed = currentPath(state.panes[request.side]) === request.path;
     if (data.type === 'filesystem-directory') {
       if (!latest || origin.tabStates[origin.tab].id !== request.tabId || !displayed || data.path !== request.path) return true;
@@ -1005,8 +1005,19 @@
     if (request.pathNavigation) request.pathNavigation.valid = contextValid && request.pathNavigation.generation === pathRequestGeneration && document.activeElement === request.pathNavigation.input;
     if (contextValid && success) {
       validatedNavigation = request.path;
+      const active = state.active, focused = document.activeElement;
+      backgroundNavigation = active !== request.activeAtStart;
+      if (backgroundNavigation) state.active = request.activeAtStart;
       try { if (request.resume) request.resume(); }
-      finally { validatedNavigation = undefined; }
+      finally {
+        validatedNavigation = undefined;
+        backgroundNavigation = false;
+        if (active !== request.activeAtStart) {
+          state.active = active; render(false, undefined, false);
+          if (focused?.isConnected) focused.focus();
+          else document.querySelector(`[data-pane="${active}"] .list`)?.focus();
+        }
+      }
     } else if (latest && origin.tabStates[origin.tab].id === request.tabId && !data.ok) toast(data.error || t('Dateioperation fehlgeschlagen.'), 'error');
     requestGitStatus(); updateDirectoryActivity(); flushQueuedOperation(); flushFocusRefresh();
     return true;
@@ -1818,6 +1829,7 @@
     while (cursor) { const removed = cursor; cursor = cursor.nextSibling; removed.remove(); }
   }
   function render(focusList = false, previousViews, git = true) {
+    if (backgroundNavigation) focusList = false;
     const container = $('#panes');
     const cachedSides = state.panes.flatMap((p, index) => {
       tabs.ensure(p);
@@ -2128,14 +2140,14 @@
   document.addEventListener('input', () => { pathRequestGeneration++; });
   document.addEventListener('focusin', () => { pathRequestGeneration++; });
   function focusPath(fromClipboard = false) {
-    if ($('#modal').open || document.querySelector('.inline-rename') || filesystemPending || navigationRequests.size || transferPending) return;
+    if ($('#modal').open || document.querySelector('.inline-rename') || filesystemPending || transferPending) return;
     const input = document.querySelectorAll('.path-input')[state.active];
     input.closest('.path-address').classList.add('is-editing');
     input.focus(); input.select();
     const generation = ++pathRequestGeneration, side = state.active, activePane = pane(), originalPath = currentPath(activePane);
     if (!fromClipboard || !host) return;
     clipboardRequest({ type: 'clipboard-path-read' }, response => {
-      if (generation !== pathRequestGeneration || document.activeElement !== input || state.active !== side || pane() !== activePane || currentPath(activePane) !== originalPath || $('#modal').open || filesystemPending || navigationRequests.size || transferPending) return;
+      if (generation !== pathRequestGeneration || document.activeElement !== input || state.active !== side || pane() !== activePane || currentPath(activePane) !== originalPath || $('#modal').open || filesystemPending || transferPending) return;
       if (!response.ok) { toast(response.error); return; }
       input.value = displayPath(response.path); input.select();
       if (state.realFilesystem) {
@@ -2656,7 +2668,7 @@
   }
   function action(kind, frozen) {
     const command = window.CommanderJobs.commandForAction(kind);
-    if ((filesystemPending && !((operationQueue?.active || refreshingFilesystem) && (command?.supportsBackgroundOperation.enabled || ['parent', 'up', 'open'].includes(kind)))) || navigationRequests.size && !command?.supportsBackgroundOperation.enabled || transferPending) return;
+    if ((filesystemPending && !((operationQueue?.active || refreshingFilesystem) && (command?.supportsBackgroundOperation.enabled || ['parent', 'up', 'open'].includes(kind)))) || navigationRequests.size && !command?.supportsBackgroundOperation.enabled && !['parent', 'up', 'open', 'view', 'edit'].includes(kind) || transferPending) return;
     if (frozen && !validDraggedFiles(frozen)) return toast(t('Die gezogene Auswahl wurde geändert. Bitte erneut ziehen.'));
     if (state.realFilesystem && kind === 'reset') return toast(t('Diese Aktion ist für das reale Dateisystem noch nicht verfügbar.'));
     const p = frozen ? state.panes[frozen.side] : pane(), source = currentPath(p), marked = selected(), picked = frozen ? files(p).filter(file => frozen.ids.includes(file.id)) : marked.length ? marked : files(p).filter(file => file.id === p.cursor);
@@ -2917,7 +2929,6 @@
   function run(command, reverseDirectories = false, contextSelection) {
     if (command === 'git-diff') { requestGitDiff(contextSelection); return; }
     if (typeof command !== 'string') return;
-    if (navigationRequests.size && !window.CommanderJobs.commandForAction(command)?.supportsBackgroundOperation.enabled && !['parent', 'up', 'back', 'forward', 'history-jump', 'new-tab', 'background-tab', 'close-tab', 'next-tab', 'previous-tab', 'open-dir-tab', 'open-dir-other-tab', 'open', 'filter', 'path', 'toggle-selection-next', 'select-all', 'clear', 'invert'].includes(command) && !command.startsWith('sort:')) return;
     if (command === 'open-terminal') {
       if ($('#modal').open || document.activeElement?.matches('input,textarea,select,[contenteditable="true"]') || !document.activeElement?.closest('.list') || filesystemPending) return;
       if (state.archiveLocations?.[currentPath(pane())] || currentPath(pane()).startsWith('zip:')) return toast(t('Diese Aktion ist innerhalb eines ZIP-Archivs nicht verfügbar.'));
