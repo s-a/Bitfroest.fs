@@ -5,6 +5,7 @@
 #include <shellapi.h>
 #include <shlobj.h>
 #include "../native/src/clipboard-ole-engine.h"
+#include "../native/src/clipboard-file-identity.h"
 #include <algorithm>
 #include <atomic>
 #include <memory>
@@ -15,6 +16,27 @@
 #include <utility>
 
 namespace {
+DWORD extended_error = ERROR_INVALID_PARAMETER;
+bool empty_basic_identity = false;
+const wchar_t* volume_name = L"NTFS";
+BOOL WINAPI UnsupportedExtendedIdentity(HANDLE, FILE_INFO_BY_HANDLE_CLASS, LPVOID, DWORD) {
+  SetLastError(extended_error); return FALSE;
+}
+BOOL WINAPI BasicIdentity(HANDLE, LPBY_HANDLE_FILE_INFORMATION info) {
+  *info = {}; info->dwVolumeSerialNumber = 41; info->nFileIndexHigh = 7; info->nFileIndexLow = empty_basic_identity ? 0 : 9;
+  if (empty_basic_identity) info->nFileIndexHigh = 0;
+  return TRUE;
+}
+BOOL WINAPI NtfsVolume(HANDLE, LPWSTR, DWORD, LPDWORD, LPDWORD, LPDWORD, LPWSTR name, DWORD capacity) {
+  return wcscpy_s(name, capacity, volume_name) == 0;
+}
+BOOL WINAPI ExtendedIdentity(HANDLE, FILE_INFO_BY_HANDLE_CLASS, LPVOID output, DWORD) {
+  auto* info = static_cast<FILE_ID_INFO*>(output); *info = {};
+  info->VolumeSerialNumber = 0x123456789ULL; info->FileId.Identifier[15] = 0x80;
+  return TRUE;
+}
+BOOL WINAPI DeniedBasicIdentity(HANDLE, LPBY_HANDLE_FILE_INFORMATION) { SetLastError(ERROR_ACCESS_DENIED); return FALSE; }
+BOOL WINAPI FailedVolume(HANDLE, LPWSTR, DWORD, LPDWORD, LPDWORD, LPDWORD, LPWSTR, DWORD) { SetLastError(ERROR_BAD_NETPATH); return FALSE; }
 CLIPFORMAT ClipboardFormat(const wchar_t* name) {
   return static_cast<CLIPFORMAT>(static_cast<SHORT>(RegisterClipboardFormatW(name)));
 }
@@ -182,6 +204,7 @@ class FakeBackend final : public ClipboardBackend {
     }
   }
   void Remove(const std::wstring& path) { identities.erase(path); }
+  void ChangeIdentityKind(const std::wstring& path) { identities[path].kind = ClipboardFileIdentity::Kind::FileIndex64; }
   void ReplaceIdentity(const std::wstring& path) {
     auto& identity = identities[path];
     identity.volume = 88;
@@ -209,6 +232,45 @@ int Run() {
   HRESULT com = OleInitialize(nullptr);
   if (FAILED(com)) return 2;
   int failures = 0;
+  {
+    ClipboardFileIdentity identity{};
+    const HRESULT status = ReadClipboardFileIdentity(INVALID_HANDLE_VALUE, &identity, UnsupportedExtendedIdentity, BasicIdentity, NtfsVolume);
+    if (!Check(SUCCEEDED(status) && identity.volume == 41, "unsupported extended identity accepts a complete NTFS file index")) ++failures;
+    ULONGLONG index = 0; std::memcpy(&index, identity.id.Identifier, sizeof(index));
+    if (!Check(identity.kind == ClipboardFileIdentity::Kind::FileIndex64 && index == ((7ULL << 32) | 9), "legacy identity preserves every file-index bit and its scheme")) ++failures;
+    for (const auto* filesystem : {L"ReFS", L"unknown"}) {
+      volume_name = filesystem;
+      if (!Check(FAILED(ReadClipboardFileIdentity(INVALID_HANDLE_VALUE, &identity, UnsupportedExtendedIdentity, BasicIdentity, NtfsVolume)), "unproven filesystems do not receive a legacy identity")) ++failures;
+    }
+    volume_name = L"NTFS"; empty_basic_identity = true;
+    if (!Check(FAILED(ReadClipboardFileIdentity(INVALID_HANDLE_VALUE, &identity, UnsupportedExtendedIdentity, BasicIdentity, NtfsVolume)), "missing legacy file identity remains an error")) ++failures;
+    empty_basic_identity = false; extended_error = ERROR_ACCESS_DENIED;
+    if (!Check(ReadClipboardFileIdentity(INVALID_HANDLE_VALUE, &identity, UnsupportedExtendedIdentity, BasicIdentity, NtfsVolume) == HRESULT_FROM_WIN32(ERROR_ACCESS_DENIED), "access denial cannot activate the compatibility path")) ++failures;
+    extended_error = ERROR_INVALID_PARAMETER;
+    if (!Check(ReadClipboardFileIdentity(INVALID_HANDLE_VALUE, &identity, UnsupportedExtendedIdentity, DeniedBasicIdentity, NtfsVolume) == HRESULT_FROM_WIN32(ERROR_ACCESS_DENIED), "failed basic identity cannot authorize clipboard publication")) ++failures;
+    if (!Check(ReadClipboardFileIdentity(INVALID_HANDLE_VALUE, &identity, UnsupportedExtendedIdentity, BasicIdentity, FailedVolume) == HRESULT_FROM_WIN32(ERROR_BAD_NETPATH), "an unverified volume preserves its original error")) ++failures;
+    for (const DWORD error : {ERROR_NOT_SUPPORTED, ERROR_INVALID_FUNCTION}) {
+      extended_error = error;
+      if (!Check(SUCCEEDED(ReadClipboardFileIdentity(INVALID_HANDLE_VALUE, &identity, UnsupportedExtendedIdentity, BasicIdentity, NtfsVolume)), "unsupported identity classes use the verified compatibility path")) ++failures;
+    }
+    extended_error = ERROR_INVALID_PARAMETER;
+    const HRESULT extended = ReadClipboardFileIdentity(INVALID_HANDLE_VALUE, &identity, ExtendedIdentity, BasicIdentity, FailedVolume);
+    if (!Check(SUCCEEDED(extended) && identity.kind == ClipboardFileIdentity::Kind::Extended128 && identity.volume == 0x123456789ULL && identity.id.Identifier[15] == 0x80, "supported extended identities retain all bits without querying the compatibility volume")) ++failures;
+  }
+  {
+    FakeBackend backend;
+    ClipboardOleEngine engine(&backend);
+    ClipboardSelection selection; engine.Read(&selection);
+    backend.ChangeIdentityKind(selection.paths[0]);
+    bool matched = false;
+    std::vector<std::string> errors;
+    HRESULT status = engine.Acknowledge(selection.token, selection.paths, selection.mode, selection.paths, &matched, &errors);
+    if (!Check(SUCCEEDED(status) && !matched && backend.replacements.empty(), "an identity scheme change cannot acknowledge a transfer")) ++failures;
+    ClipboardSelection updated; engine.Read(&updated);
+    if (!Check(updated.token != selection.token, "a changed identity scheme invalidates the previous selection token")) ++failures;
+    status = engine.Cancel(selection.token, selection.paths, selection.mode, &matched);
+    if (!Check(SUCCEEDED(status) && !matched && backend.replacements.empty(), "an old identity token cannot cancel a new selection")) ++failures;
+  }
   {
     auto gate = std::make_shared<FakeOwnerGate>();
     FakeBackend backend(gate);

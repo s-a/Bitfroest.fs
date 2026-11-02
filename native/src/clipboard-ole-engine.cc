@@ -30,7 +30,7 @@ std::wstring NormalizePath(std::wstring value) {
 }
 
 bool SameIdentity(const ClipboardFileIdentity& left, const ClipboardFileIdentity& right) {
-  return left.volume == right.volume && left.directory == right.directory &&
+  return left.kind == right.kind && left.volume == right.volume && left.directory == right.directory &&
       std::memcmp(left.id.Identifier, right.id.Identifier, sizeof(left.id.Identifier)) == 0;
 }
 

@@ -7,9 +7,11 @@
 #include <vector>
 
 struct ClipboardFileIdentity {
+  enum class Kind { Extended128, FileIndex64 };
   ULONGLONG volume = 0;
   FILE_ID_128 id{};
   bool directory = false;
+  Kind kind = Kind::Extended128;
 };
 
 struct ClipboardSelection {

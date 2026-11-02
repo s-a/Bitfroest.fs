@@ -1,5 +1,6 @@
 #include "clipboard-win.h"
 #include "clipboard-ole-engine.h"
+#include "clipboard-file-identity.h"
 #include <windows.h>
 #include <shellapi.h>
 #include <shlobj.h>
@@ -109,11 +110,9 @@ class SystemBackend final : public ClipboardBackend {
     std::wstring path = value; std::replace(path.begin(), path.end(), L'/', L'\\');
     HANDLE file = CreateFileW(path.c_str(), FILE_READ_ATTRIBUTES, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
     if (file == INVALID_HANDLE_VALUE) return HRESULT_FROM_WIN32(GetLastError());
-    FILE_ID_INFO info{}; BY_HANDLE_FILE_INFORMATION basic{};
-    const BOOL id_ok = GetFileInformationByHandleEx(file, FileIdInfo, &info, sizeof(info)); const DWORD id_error = id_ok ? ERROR_SUCCESS : GetLastError();
-    const BOOL basic_ok = GetFileInformationByHandle(file, &basic); const DWORD basic_error = basic_ok ? ERROR_SUCCESS : GetLastError(); CloseHandle(file);
-    if (!id_ok) return HRESULT_FROM_WIN32(id_error); if (!basic_ok) return HRESULT_FROM_WIN32(basic_error);
-    identity->volume = info.VolumeSerialNumber; identity->id = info.FileId; identity->directory = (basic.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0; return S_OK;
+    const HRESULT result = ReadClipboardFileIdentity(file, identity);
+    CloseHandle(file);
+    return result;
   }
   HRESULT Replace(const std::vector<std::wstring>& paths, const std::wstring& mode, bool check, DWORD expected, DWORD* published_sequence = nullptr) override {
     HGLOBAL drop = nullptr, effect = nullptr;
