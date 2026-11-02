@@ -177,6 +177,7 @@ test('browser sample mode does not request filesystem refresh on focus', t => {
 test('returning focus during a copy conflict preserves the dialog until cancellation and coalesces refresh', async t => {
   const saved = fixture();
   saved.folders['C:/temp'].push({ id: 'target', name: 'keep.txt', fsSource: 'C:/temp/keep.txt', type: 'text', size: 3 });
+  const folders = JSON.parse(JSON.stringify(saved.folders));
   const app = createApp(t, saved);
   app.action('copy');
   app.document.querySelector('#modal-form').requestSubmit();
@@ -188,8 +189,13 @@ test('returning focus during a copy conflict preserves the dialog until cancella
   assert.equal(app.document.querySelector('#modal').open, true);
   assert.equal(input.value, 'custom.txt');
   assert.equal(app.messages.some(message => message.type === 'filesystem-apply'), false);
-  app.click(app.document.querySelector('[data-conflict-action="cancel"]'));
+  const close = app.document.querySelector('#modal-close');
+  assert.equal(close.hidden, false);
+  app.click(close);
   await new Promise(resolve => setImmediate(resolve));
+  assert.equal(app.document.querySelector('#modal').open, false);
   assert.equal(refreshes(app).length, 1);
+  assert.equal(app.messages.some(message => message.type === 'filesystem-apply'), false);
+  assert.deepEqual(JSON.parse(JSON.stringify(app.state().folders)), folders);
   assert.deepEqual(Array.from(app.state().panes[0].selected), ['file']);
 });
