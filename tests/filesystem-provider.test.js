@@ -253,6 +253,40 @@ test('mutations after scoped navigation refresh visible paths without scanning i
   assert.ok(result.panes[0].tabs.includes(left));
 });
 
+test('moving one file after cache eviction retains authorization for the previous tab placeholder', async t => {
+  const { left, right } = await setup(t);
+  const nested = `${left}/docs/season`;
+  await fs.mkdir(nested); await fs.writeFile(`${nested}/episode.bin`, Buffer.from([0, 255, 4, 9]));
+  const provider = createProvider({ roots: [left, right], directoryCacheBytes: 0, fs });
+  let before = await provider.load({ directories: [left, right], visibleOnly: true });
+  for (const directory of [`${left}/docs`, nested]) {
+    before = await provider.prepare(before, { directories: [directory], navigation: true, recursive: false, visibleDirectories: [directory, right] });
+    before.panes[0].tabs = [directory];
+    if (directory !== nested) before = await provider.apply(before, clone(before));
+  }
+  assert.deepEqual(before.folders[`${left}/docs`], []);
+  assert.ok(before.unloadedFolders.includes(`${left}/docs`));
+  const forged = clone(before);
+  forged.folders[`${left}/docs`].push({ id: 'unprepared-write', name: 'unexpected.txt', type: 'text', content: 'untrusted' });
+  await assert.rejects(provider.apply(before, forged), /vollständig eingelesen und vorbereitet/);
+  await assert.rejects(fs.stat(`${left}/docs/unexpected.txt`), { code: 'ENOENT' });
+  const after = clone(before), source = row(after, nested, 'episode.bin');
+  after.folders[nested] = []; after.folders[right].push({ ...source, id: 'moved-episode' });
+  await provider.apply(before, after, { transfer: { mode: 'move', sourcePath: nested, sourceSide: 0, ids: [source.id] } });
+  assert.deepEqual(await fs.readFile(`${right}/episode.bin`), Buffer.from([0, 255, 4, 9]));
+  await assert.rejects(fs.stat(`${nested}/episode.bin`), { code: 'ENOENT' });
+  assert.deepEqual(await fs.readdir(right), ['episode.bin']);
+});
+
+test('foreign directory rejection identifies its path without modifying files', async t => {
+  const { provider, left, right } = await setup(t);
+  const before = await provider.load(), after = clone(before), foreign = `${left}/foreign`;
+  after.folders[foreign] = [];
+  await assert.rejects(provider.apply(before, after), error => /virtueller Archiv|fremder Ordner/.test(error.message) && error.path === foreign);
+  assert.deepEqual(await fs.readdir(right), []);
+  assert.equal(await fs.readFile(`${left}/plain.txt`, 'utf8'), 'original text');
+});
+
 test('post-operation reconciliation does not rescan invisible prepared subtrees', async t => {
   const { left, right } = await setup(t), reads = [];
   const provider = createProvider({ roots: [left, right], fs: { ...fs, readdir: async (directory, ...args) => { reads.push(slash(String(directory))); return fs.readdir(directory, ...args); } } });
@@ -333,9 +367,43 @@ test('directory identity changes and recursive scan mutations retain technical s
       assert.equal(error.code, 'DirectoryChangedDuringScan');
       assert.equal(error.path, left);
       assert.equal(error.scanPhase, 'directory-validation');
+      assert.equal(error.changedFields, recursive ? 'mtimeNs' : 'ino');
+      assert.notEqual(error.expectedDirectory, error.observedDirectory);
       return true;
     });
   }
+});
+
+test('deletion retains trash for local targets and revalidates after network confirmation', async t => {
+  const calls = [];
+  const { left, right } = await setup(t);
+  const targets = [`${left}/plain.txt`, `${right}/local.txt`];
+  await fs.writeFile(targets[1], 'local');
+  let change = false;
+  const provider = createProvider({ roots: [left, right],
+    prepareDelete: async (paths, useTrash) => {
+      assert.deepEqual(paths, targets); assert.equal(useTrash, true);
+      if (change) await fs.writeFile(targets[0], 'changed during confirmation');
+      return [targets[0]];
+    },
+    deletePath: async (target, options) => { calls.push([target, options.useTrash]); }
+  });
+  await provider.remove(await provider.load(), { paths: targets, useTrash: true });
+  assert.deepEqual(calls, [[targets[0], false], [targets[1], true]]);
+  calls.length = 0; change = true;
+  await assert.rejects(provider.remove(await provider.load(), { paths: targets, useTrash: true }), /extern geändert/);
+  assert.deepEqual(calls, []);
+});
+
+test('cancelling during permanent deletion confirmation prevents every delete call', async t => {
+  const { left, right } = await setup(t);
+  const controller = new AbortController();
+  const provider = createProvider({ roots: [left, right],
+    prepareDelete: async paths => { controller.abort(); return paths; },
+    deletePath: () => assert.fail('Cancelled deletion must not run')
+  });
+  await assert.rejects(provider.remove(await provider.load(), { paths: [`${left}/plain.txt`], useTrash: true }, { signal: controller.signal }), { name: 'AbortError' });
+  assert.equal(await fs.readFile(`${left}/plain.txt`, 'utf8'), 'original text');
 });
 
 test('raw directory read failures retain their original cause and receive scan context', async t => {

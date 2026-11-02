@@ -31,4 +31,14 @@ async function resolveUncPaths(paths, options = {}) {
   } catch { return [...paths]; }
 }
 
-module.exports = { resolveUncPaths };
+async function prepareNetworkDeletion(paths, useTrash, options = {}) {
+  if (!useTrash || (options.platform || process.platform) !== 'win32') return [];
+  const resolved = await (options.resolvePaths || resolveUncPaths)(paths);
+  const isNetwork = value => /^(?:\\\\|\/\/)(?![?.][\\/])/.test(value) || /^(?:\\\\|\/\/)\?[/\\]UNC[/\\]/i.test(value);
+  const targets = paths.filter((target, index) => isNetwork(target) || isNetwork(resolved[index]));
+  if (!targets.length) return [];
+  if (!await options.confirm(targets)) throw Object.assign(new Error('Löschen abgebrochen.'), { name: 'AbortError' });
+  return targets;
+}
+
+module.exports = { resolveUncPaths, prepareNetworkDeletion };

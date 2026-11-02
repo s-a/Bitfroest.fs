@@ -1,9 +1,31 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { resolveUncPaths } = require('../network-paths');
+const { prepareNetworkDeletion } = require('../network-paths');
 const fs = require('node:fs');
 const path = require('node:path');
 const { inspectRuntimeSource } = require('./support/runtime-architecture.cjs');
+
+test('network deletion confirms only mapped and UNC targets before permitting permanent deletion', async () => {
+  const paths = ['Z:/team/a', 'C:/local/b', '//server/share/c'];
+  const network = [paths[0], paths[2]];
+  const result = await prepareNetworkDeletion(paths, true, {
+    platform: 'win32', resolvePaths: async () => ['\\\\server\\share\\team\\a', paths[1], paths[2]],
+    confirm: async targets => { assert.deepEqual(targets, network); return true; }
+  });
+  assert.deepEqual(result, network);
+});
+
+test('declined network deletion aborts and local or explicitly permanent deletion needs no extra confirmation', async () => {
+  await assert.rejects(prepareNetworkDeletion(['\\\\server\\share\\a'], true, {
+    platform: 'win32', confirm: async () => false
+  }), { name: 'AbortError' });
+  for (const [paths, useTrash, platform] of [[['C:/local/a'], true, 'win32'], [['Z:/a'], false, 'win32'], [['/mnt/share/a'], true, 'linux']]) {
+    assert.deepEqual(await prepareNetworkDeletion(paths, useTrash, {
+      platform, resolvePaths: async values => values, confirm: () => assert.fail('Unexpected confirmation')
+    }), []);
+  }
+});
 
 test('replaced network interpreter adapter is absent', () => {
   assert.equal(fs.existsSync(path.join(__dirname, '../native/network-paths.ps1')), false);

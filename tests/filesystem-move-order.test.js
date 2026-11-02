@@ -17,6 +17,66 @@ async function fixture(t, copy, options = {}) {
   after.folders[left] = []; after.folders[right].push({ ...file, id: 'moved' });
   return { provider, before, after, left, right };
 }
+test('staged copies keep the intended filename when an incomplete copy must be retained', async t => {
+  let stage;
+  const { provider, before, after, left, right } = await fixture(t, async (_source, target) => {
+    stage = target; await fs.writeFile(target, 'partial', { flag: 'wx' }); throw new Error('Interrupted copy');
+  });
+  after.folders[right][0].name = 'Renamed episode.mp4';
+  await assert.rejects(provider.apply(before, after), error => /Interrupted copy/.test(error.message) && error.message.includes(stage));
+  assert.equal(path.basename(stage), 'Renamed episode.mp4');
+  assert.equal(await fs.readFile(stage, 'utf8'), 'partial');
+  assert.deepEqual(await fs.readFile(`${left}/source.bin`), Buffer.from([0, 2, 4, 6]));
+  await assert.rejects(fs.stat(`${right}/Renamed episode.mp4`), { code: 'ENOENT' });
+});
+
+test('parent-directory transfers resolve an existing target and commit actual bytes without hiding a copied source', async t => {
+  for (const mode of ['copy', 'move']) {
+    const { provider, left, right } = await fixture(t, fs.copyFile);
+    const sourcePath = `${left}/temp`;
+    await fs.mkdir(sourcePath); await fs.rename(`${left}/source.bin`, `${sourcePath}/source.bin`);
+    await fs.writeFile(`${left}/source.bin`, 'old target');
+    const before = await provider.load({ directories: [sourcePath] }), after = structuredClone(before), source = after.folders[sourcePath][0];
+    let conflicts = 0;
+    const result = await require('../media/commander-transfer').execute({ folders: after.folders, sourcePath, targetPath: left, ids: [source.id], mode, onConflict: () => { conflicts++; return { action: 'overwrite' }; } });
+    assert.equal(conflicts, 1); assert.equal(result.completed, 1);
+    await provider.apply(before, after, { transfer: { mode, sourcePath, sourceSide: 0, ids: [source.id] } });
+    assert.deepEqual(await fs.readFile(`${left}/source.bin`), Buffer.from([0, 2, 4, 6]));
+    if (mode === 'copy') assert.deepEqual(await fs.readFile(`${sourcePath}/source.bin`), Buffer.from([0, 2, 4, 6]));
+    else await assert.rejects(fs.stat(`${sourcePath}/source.bin`), { code: 'ENOENT' });
+    assert.deepEqual(await fs.readdir(right), []);
+  }
+});
+
+test('move closes the staging read handle before removing its directory', async t => {
+  const openStages = new Set();
+  let removals = 0;
+  const { provider, before, after, left, right } = await fixture(t, fs.copyFile, { configure(adapter) {
+    adapter.open = async (target, ...args) => {
+      const handle = await fs.open(target, ...args);
+      if (target.includes('/.bitfroest-copy-')) {
+        openStages.add(target);
+        const close = handle.close.bind(handle);
+        handle.close = async () => { await close(); openStages.delete(target); };
+      }
+      return handle;
+    };
+    adapter.rmdir = async target => {
+      if (target.includes('/.bitfroest-copy-')) {
+        removals++;
+        assert.equal([...openStages].some(value => value.startsWith(`${target}/`)), false, 'staging read handle is still open');
+      }
+      return fs.rmdir(target);
+    };
+  } });
+  await provider.apply(before, after);
+  assert.equal(removals, 1);
+  assert.equal(openStages.size, 0);
+  assert.deepEqual(await fs.readFile(`${right}/source.bin`), Buffer.from([0, 2, 4, 6]));
+  assert.deepEqual(await fs.readdir(right), ['source.bin']);
+  await assert.rejects(fs.stat(`${left}/source.bin`), { code: 'ENOENT' });
+});
+
 test('a slow move keeps its original source path until the verified destination exists', async t => {
   let release, entered;
   const copying = new Promise(resolve => { entered = resolve; });

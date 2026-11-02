@@ -234,7 +234,9 @@ function createProvider(options = {}) {
       await settings.onDirectory?.({ path: directory, phase: 'validation', rows: [], completed: names.length, total: names.length });
       const finalStat = await fs.lstat(directory, { bigint: true });
       if (!finalStat.isDirectory() || finalStat.isSymbolicLink() || finalStat.dev !== stat.dev || finalStat.ino !== stat.ino || finalStat.mode !== stat.mode || strict && statSignature(finalStat) !== statSignature(stat)) {
-        throw Object.assign(new Error('Ordner während der Bestandsaufnahme geändert.'), { code: 'DirectoryChangedDuringScan', path: directory, scanPhase: 'directory-validation' });
+        const fields = ['dev', 'ino', 'mode', 'size', 'mtimeNs', 'ctimeNs'];
+        const describe = value => JSON.stringify(Object.fromEntries(fields.map(key => [key, String(value[key])])));
+        throw Object.assign(new Error('Ordner während der Bestandsaufnahme geändert.'), { code: 'DirectoryChangedDuringScan', path: directory, scanPhase: 'directory-validation', expectedDirectory: describe(stat), observedDirectory: describe(finalStat), changedFields: fields.filter(key => stat[key] !== finalStat[key]).join(', ') });
       }
       await publish(true);
       await settings.onDirectory?.({ path: directory, done: true, rows: [], completed: names.length, total: names.length });
@@ -332,7 +334,7 @@ function createProvider(options = {}) {
     const inactiveDirectories = settings.visibleDirectories ? result.loadedDirectories.filter(directory => !settings.visibleDirectories.includes(directory)) : [];
     result.loadedDirectories = result.loadedDirectories.filter(directory => !inactiveDirectories.includes(directory));
     const requestedDeferred = new Set((settings.deferredDirectories || []).flatMap(directory => { try { return [allowed(directory)]; } catch { return []; } }));
-    const deferredDirectories = [...new Set([...(visibleOnly ? roots : []), ...inactiveDirectories, ...(settings.deferredDirectories || previous?.deferredDirectories || [])].flatMap(directory => { try { return [allowed(directory)]; } catch { return []; } }))].filter(directory => (requestedDeferred.has(directory) || roots.includes(directory) || Object.hasOwn(result.folders, directory) || Object.hasOwn(previous?.folders || {}, directory)) && !result.loadedDirectories.includes(directory));
+    const deferredDirectories = [...new Set([...(visibleOnly ? roots : []), ...inactiveDirectories, ...(settings.baseline?.state.panes || []).flatMap(pane => pane.tabs), ...(settings.deferredDirectories || previous?.deferredDirectories || [])].flatMap(directory => { try { return [allowed(directory)]; } catch { return []; } }))].filter(directory => (requestedDeferred.has(directory) || roots.includes(directory) || Object.hasOwn(result.folders, directory) || Object.hasOwn(previous?.folders || {}, directory)) && !result.loadedDirectories.includes(directory));
     for (const directory of deferredDirectories) {
       if (!settings.baseline) {
         const refreshed = target => result.loadedDirectories.some(loaded => below(target, loaded));
@@ -367,7 +369,7 @@ function createProvider(options = {}) {
       }
     }
     for (const directory of Object.keys(state.folders)) {
-      if (!roots.some(root => identity(root) === identity(directory)) && !snapshot?.deferredDirectories?.includes(directory) && !snapshot?.entries.get(identity(directory))?.root && entries.get(identity(directory))?.type !== 'folder') throw new Error('Ein virtueller Archiv- oder fremder Ordnerpfad ist nicht erlaubt.');
+      if (!roots.some(root => identity(root) === identity(directory)) && !snapshot?.deferredDirectories?.includes(directory) && !snapshot?.entries.get(identity(directory))?.root && entries.get(identity(directory))?.type !== 'folder') throw Object.assign(new Error('Ein virtueller Archiv- oder fremder Ordnerpfad ist nicht erlaubt.'), { path: directory });
     }
     for (const root of roots) if (!Object.hasOwn(state.folders, root)) throw new Error('Root-Ordner dürfen nicht entfernt werden.');
     for (const item of entries.values()) if (item.type === 'folder' && !Object.hasOwn(state.folders, item.path)) throw new Error('Ein Ordner ist nicht vollständig im Zielzustand enthalten.');
@@ -576,15 +578,16 @@ function createProvider(options = {}) {
       if (`${stat.dev}:${stat.ino}` !== original.signature.split(':').slice(0, 2).join(':') || !rollback && statSignature(stat) !== original.signature) throw new Error('Die Quelle wurde vor der Umbenennung geändert.');
       await (options.renameCase || renameCase)({ roots: permittedRoots(), source: from, target: to, expected: { dev: String(stat.dev), ino: String(stat.ino), size: String(stat.size), mtimeNs: String(stat.mtimeNs), ctimeNs: String(stat.ctimeNs) } });
     }
-    async function removeStage(stage) {
+    async function removeStage(stage, keepDirectory = false) {
       if (stage.cleaned) return;
       await assertComponents(stage.directory);
       const names = await fs.readdir(stage.directory);
       if (!names.length) { await fs.rmdir(stage.directory); stage.cleaned = true; return; }
-      if (!stage.signature || names.length !== 1 || names[0] !== 'content') throw new Error('Sicherungsdatei extern verändert.');
+      if (!stage.signature || names.length !== 1 || names[0] !== path.basename(stage.path)) throw new Error('Sicherungsdatei extern verändert.');
       await assertComponents(stage.path);
       if (statSignature(await fs.lstat(stage.path, { bigint: true })) !== stage.signature || stage.hash && hash(await fs.readFile(stage.path)) !== stage.hash) throw new Error('Sicherungsdatei extern verändert.');
-      await fs.unlink(stage.path); await fs.rmdir(stage.directory); stage.cleaned = true;
+      await fs.unlink(stage.path);
+      if (!keepDirectory) { await fs.rmdir(stage.directory); stage.cleaned = true; }
     }
     async function verifyEntry(item, signal) {
       await validateEntries(baseline, [item], signal);
@@ -645,7 +648,7 @@ function createProvider(options = {}) {
           const root = permittedRoots().find(root => below(file.path, root));
           const directory = `${root}/.bitfroest-copy-${crypto.randomUUID()}`;
           await fs.mkdir(directory);
-          const stage = { directory, path: `${directory}/content` }; stages.push(stage);
+          const stage = { directory, path: `${directory}/${path.basename(file.path)}` }; stages.push(stage);
           await assertComponents(sourcePath);
           const sourceStat = await fs.lstat(sourcePath, { bigint: true });
           const sourceIsQuarantined = Boolean(movedSource);
@@ -676,9 +679,10 @@ function createProvider(options = {}) {
             file.createdHash = stage.hash;
             createdFiles.push(file);
             stage.signature = statSignature(await input.stat({ bigint: true }));
-            await removeStage(stage);
+            await removeStage(stage, true);
             file.createdSignature = statSignature(await input.stat({ bigint: true }));
           } finally { await input.close(); }
+          await removeStage(stage);
         }
         const createdStat = await fs.lstat(file.path, { bigint: true });
         if (`${createdStat.dev}:${createdStat.ino}` !== file.createdIdentity || (file.data ? statSignature(createdStat) !== file.createdSignature : contentSignature(createdStat) !== file.createdContentSignature)) throw new Error('Neue Datei extern verändert.');
@@ -895,12 +899,15 @@ function createProvider(options = {}) {
     busy = true;
     let completed = 0;
     try {
-      await validateEntries(baseline, targets);
+      throwIfAborted(settings.signal);
+      const permanentPaths = new Set(typeof options.prepareDelete === 'function' ? await options.prepareDelete(targets.map(item => item.path), request.useTrash) : []);
+      throwIfAborted(settings.signal);
+      await validateEntries(baseline, targets, settings.signal);
       for (const item of targets) {
         throwIfAborted(settings.signal);
         settings.onProgress?.(Progress.event({ phase: 'deleting', path: item.path, overall: Progress.known('items', completed, targets.length), current: Progress.unknown('items', 0, 'native-operation') }));
         await validateEntries(baseline, [item]);
-        await options.deletePath(item.path, { recursive: true, useTrash: request.useTrash });
+        await options.deletePath(item.path, { recursive: true, useTrash: request.useTrash && !permanentPaths.has(item.path) });
         completed++;
         settings.onProgress?.(Progress.event({ phase: 'deleting', path: item.path, overall: Progress.known('items', completed, targets.length), current: Progress.known('items', 1, 1) }));
       }
