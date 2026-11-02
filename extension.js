@@ -28,7 +28,7 @@ const { renderOperationError } = require('./operation-errors');
 const { openTrash } = require('./open-trash');
 const { openTerminal } = require('./open-terminal');
 const { openAssociatedFile } = require('./open-file');
-const { maximizeWindow } = require('./native-window');
+const { maximizeWindow, inspectWindows } = require('./native-window');
 const { createListerProvider } = require('./lister-provider');
 const { createSearchProvider } = require('./search-provider');
 const { validateSettings: validateSearchSettings } = require('./file-search');
@@ -231,14 +231,16 @@ function activate(context) {
   let panelReady = false, panelFailed = false;
   let startupLog;
   const startupDiagnostics = [];
+  let latestBrowserState = null, firstBrowserError = null, latestNativeWindowState = null, diagnosticBuild = null, diagnosticRun = null;
   let omittedStartupEvents = 0, currentStartup, startupClock = performance.now(), logSequence = 0;
+  const diagnosticJSON = (value, space) => JSON.stringify(value, (_key, entry) => typeof entry === 'bigint' ? entry.toString() : entry, space);
   function logStartup(kind, details = {}) {
     const event = { version: 1, timestamp: new Date().toISOString(), startupId: currentStartup?.id || null,
       sequence: ++logSequence, elapsed: Math.max(0, performance.now() - startupClock), kind, ...details };
     startupDiagnostics.push(event);
     if (startupDiagnostics.length > 256) { startupDiagnostics.shift(); omittedStartupEvents++; }
     if (!startupLog) { startupLog = vscode.window.createOutputChannel('Bitfroest.fs', { log: true }); context.subscriptions.push(startupLog); }
-    const line = JSON.stringify(event);
+    const line = diagnosticJSON(event);
     if (kind === 'error') startupLog.error(line); else startupLog.info(line);
   }
   async function copyStartupLog() {
@@ -246,9 +248,11 @@ function activate(context) {
       runtime: { node: process.version, electron: process.versions.electron, platform: process.platform, architecture: process.arch, osRelease: os.release(), remoteName: vscode.env.remoteName },
       startup: currentStartup, webviewReady: panelReady, webviewFailed: panelFailed, opening,
       panel: panel ? { visible: panel.visible, viewColumn: panel.viewColumn } : null,
-      panelPaths: (savedState?.panes || []).map(pane => pane.tabs?.[pane.tab || 0]), omittedEvents: omittedStartupEvents, events: startupDiagnostics };
+      panelPaths: (savedState?.panes || []).map(pane => pane.tabs?.[pane.tab || 0]), latestBrowserState, firstBrowserError,
+      latestNativeWindowState, build: diagnosticBuild, run: diagnosticRun,
+      omittedEvents: omittedStartupEvents, events: startupDiagnostics };
     try {
-      await vscode.env.clipboard.writeText(JSON.stringify(report, null, 2));
+      await vscode.env.clipboard.writeText(diagnosticJSON(report, 2));
       void vscode.window.showInformationMessage(t('Startprotokoll kopiert.'));
       return true;
     } catch (error) {
@@ -408,11 +412,23 @@ function activate(context) {
     if (panel) { if (restoredPanel) restoredPanel.dispose(); else panel.reveal(); return; }
     opening = true;
     const startupOrigin = performance.now(), startupEvents = [], directoryEvents = new Map();
+    const bundleFiles = ['extension.js', 'media/app.js', 'media/app.css', 'media/startup-diagnostics.js', 'native/binding.node'];
+    const digests = Object.fromEntries(bundleFiles.map(name => {
+      try { return [name, crypto.createHash('sha256').update(fs.readFileSync(path.join(context.extensionPath, name))).digest('hex')]; }
+      catch (error) { return [name, { unavailable: error.code || error.message }]; }
+    }));
+    const bundleDigest = crypto.createHash('sha256').update(JSON.stringify(digests)).digest('hex');
+    let installationCreatedAt = null;
+    try { installationCreatedAt = fs.statSync(context.extensionPath).birthtime.toISOString(); } catch { /* The bundle digest remains available without directory timestamps. */ }
+    const build = { bundleDigest, digests, installationCreatedAt,
+      installationId: crypto.createHash('sha256').update(JSON.stringify([bundleDigest, installationCreatedAt])).digest('hex') };
+    diagnosticBuild = build; diagnosticRun = null; latestNativeWindowState = null;
     startupClock = startupOrigin;
     currentStartup = { id: crypto.randomUUID(), restored: Boolean(restoredPanel), startedAt: new Date().toISOString() };
     logStartup('start', currentStartup);
     logStartup('runtime', { extensionVersion, vscodeVersion: vscode.version, node: process.version, electron: process.versions.electron || null, platform: process.platform, architecture: process.arch, osRelease: os.release(), remoteName: vscode.env.remoteName || null,
-      processId: process.pid, moduleToActivationMs: activationStartedAt - moduleStartedAt, activationToOpenMs: startupOrigin - activationStartedAt,
+      processId: process.pid, parentProcessId: process.ppid, diagnosticRevision: 5, build, previousRun: context.globalState.get('windowDiagnosticRun') || null,
+      moduleToActivationMs: activationStartedAt - moduleStartedAt, activationToOpenMs: startupOrigin - activationStartedAt,
       extensionDigest: crypto.createHash('sha256').update(fs.readFileSync(__filename)).digest('hex') });
     const startupWatchdog = setTimeout(() => {
       const message = t('Die Dateiverwaltung meldet noch keine Bereitschaft. Das Startprotokoll enthält den letzten Ladeschritt.');
@@ -427,16 +443,37 @@ function activate(context) {
     const nonce = crypto.randomBytes(18).toString('base64');
     const diagnosticsScript = fs.readFileSync(path.join(context.extensionPath, 'media', 'startup-diagnostics.js'), 'utf8').replace(/<\/script/gi, '<\\/script');
     let documentId = crypto.randomUUID(), documentSequence = 0, diagnosticCount = 0, criticalCount = 0, lastBrowserEvent = null, lastFrame = null;
+    let diagnosticWindow = performance.now();
+    latestBrowserState = null; firstBrowserError = null;
+    const diagnosticProbes = new Map();
+    function diagnosticTree(value, depth = 0, budget = { remaining: 22000 }) {
+      budget.remaining -= 16;
+      if (budget.remaining < 0 || depth > 9) return { truncated: true };
+      if (typeof value === 'string') { const text = value.slice(0, Math.min(2000, budget.remaining)); budget.remaining -= text.length; return text; }
+      if (value === null || typeof value === 'boolean' || typeof value === 'number' && Number.isFinite(value)) return value;
+      if (Array.isArray(value)) return value.slice(0, 64).map(item => diagnosticTree(item, depth + 1, budget));
+      if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).filter(([key]) => !['__proto__', 'constructor', 'prototype'].includes(key)).slice(0, 64).map(([key, item]) => [key, diagnosticTree(item, depth + 1, budget)]));
+      return null;
+    }
     const startupId = currentStartup.id;
     const receiveDiagnostic = message => {
       if (message?.type !== 'startup-diagnostic') return false;
       if (restoredDisposed || message.version !== 1 || message.startupId !== startupId || currentStartup?.id !== startupId || message.documentId !== documentId) return true;
       if (!Number.isSafeInteger(message.sequence) || message.sequence <= documentSequence || !message.event || typeof message.event !== 'object') return true;
-      if (JSON.stringify(message).length > 32000) { logStartup('diagnostic-rejected', { reason: 'message-too-large', documentId }); return true; }
+      let serialized;
+      try { serialized = JSON.stringify(message); }
+      catch { logStartup('diagnostic-rejected', { reason: 'unserializable-message', documentId }); return true; }
+      if (serialized.length > 32000) { logStartup('diagnostic-rejected', { reason: 'message-too-large', documentId }); return true; }
       const event = message.event;
       if (typeof event.name !== 'string' || event.name.length > 80 || !Number.isFinite(event.elapsed) || event.elapsed < 0) return true;
       documentSequence = message.sequence;
-      const critical = ['runtime-error', 'resource-error', 'unhandled-rejection', 'csp-violation'].includes(event.name);
+      if (performance.now() - diagnosticWindow >= 1000) {
+        if (diagnosticCount > 512 || criticalCount > 32) logStartup('diagnostic-window-summary', { documentId,
+          suppressedEvents: Math.max(0, diagnosticCount - 512), suppressedErrors: Math.max(0, criticalCount - 32) });
+        diagnosticWindow = performance.now(); diagnosticCount = 0; criticalCount = 0;
+      }
+      const failure = ['runtime-error', 'resource-error', 'unhandled-rejection', 'csp-violation', 'git-protocol-error'].includes(event.name);
+      const critical = failure || event.name === 'failure-context';
       if (critical && ++criticalCount > 32) { if (criticalCount === 33) logStartup('diagnostic-limit', { documentId, limit: 32, category: 'errors' }); return true; }
       if (!critical && ++diagnosticCount > 512) {
         if (diagnosticCount === 513) logStartup('diagnostic-limit', { documentId, limit: 512 });
@@ -444,19 +481,68 @@ function activate(context) {
       }
       lastBrowserEvent = event.name;
       const detail = {};
-      for (const key of ['name', 'readyState', 'visibility', 'focused', 'resource', 'tag', 'message', 'source', 'stack', 'directive', 'width', 'height', 'region', 'regionWidth', 'regionHeight', 'display', 'cssVisibility', 'opacity', 'background', 'timeOrigin', 'line', 'column']) {
+      for (const key of ['name', 'readyState', 'visibility', 'focused', 'resource', 'tag', 'message', 'source', 'stack', 'directive', 'width', 'height', 'region', 'regionWidth', 'regionHeight', 'display', 'cssVisibility', 'opacity', 'background', 'timeOrigin', 'line', 'column', 'directory', 'requestId', 'snapshotId', 'frameDelayMs', 'framePending', 'frameAgeMs', 'relatedSequence', 'detailsTruncated', 'diagnosticRevision']) {
         const value = event[key];
         if (typeof value === 'string') detail[key] = value.slice(0, key === 'stack' ? 16000 : key === 'message' ? 8000 : 2000);
         else if (typeof value === 'boolean' || (typeof value === 'number' && Number.isFinite(value))) detail[key] = value;
       }
+      for (const key of ['layout', 'application', 'protocol', 'recentMessages', 'intersection']) if (event[key] && typeof event[key] === 'object') detail[key] = diagnosticTree(event[key]);
+      if (event.layout || event.application) latestBrowserState = { documentId, documentSequence, timestamp: new Date().toISOString(), ...detail };
+      if (failure && !firstBrowserError) firstBrowserError = { documentId, documentSequence, ...detail };
+      if (event.name === 'probe-received' && diagnosticProbes.has(event.requestId)) { clearTimeout(diagnosticProbes.get(event.requestId)); diagnosticProbes.delete(event.requestId); }
       logStartup('webview-event', { documentId, documentSequence, browserElapsed: event.elapsed, event: detail });
       if (event.name === 'frame-observed') lastFrame = detail;
-      if (critical) logStartup('error', { operation: 'webview-diagnostic', documentId, documentSequence, browserElapsed: event.elapsed, ...detail });
+      if (failure) logStartup('error', { operation: 'webview-diagnostic', documentId, documentSequence, browserElapsed: event.elapsed, ...detail });
       return true;
     };
     const escapeStartup = value => String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     const loadingPanel = restoredPanel || vscode.window.createWebviewPanel('bitfroestPrototype', title(), vscode.ViewColumn.Active, { enableScripts: true, localResourceRoots: [], retainContextWhenHidden: true });
+    let nativeSamplePending = false, recordedNativeRun = false;
+    const sampleNativeWindows = async requestId => {
+      if (process.platform !== 'win32' || nativeSamplePending || restoredDisposed || currentStartup?.id !== startupId) return;
+      nativeSamplePending = true; const sampledDocument = documentId, sampleStarted = performance.now();
+      try {
+        const snapshot = await inspectWindows();
+        if (restoredDisposed || currentStartup?.id !== startupId) return;
+        const { requestId: nativeRequestId, generation: nativeGeneration, ...nativeState } = snapshot;
+        latestNativeWindowState = { ...nativeState, documentId: sampledDocument, requestId, nativeRequestId, nativeGeneration,
+          timestamp: new Date().toISOString(), durationMs: performance.now() - sampleStarted };
+        logStartup('native-window-state', latestNativeWindowState);
+        if (!recordedNativeRun) {
+          const owner = snapshot.windows?.find(window => window.processId === process.ppid && window.identityStable === true && /^\d+$/.test(window.processCreated));
+          if (owner) {
+            const previous = context.globalState.get('windowDiagnosticRun'), sameInstallation = previous?.installationId === build.installationId;
+            const sameProcess = sameInstallation && previous.parentProcessId === owner.processId && previous.processCreated === owner.processCreated;
+            const processRunOrdinal = sameProcess ? previous.processRunOrdinal : sameInstallation ? (previous.processRunOrdinal || 0) + 1 : 1;
+            const run = { installationId: build.installationId, bundleDigest, parentProcessId: owner.processId, processCreated: owner.processCreated,
+              processRunOrdinal, startupId, timestamp: new Date().toISOString() };
+            await context.globalState.update('windowDiagnosticRun', run);
+            recordedNativeRun = true;
+            diagnosticRun = run;
+            logStartup('diagnostic-run', { ...run, change: sameProcess ? 'same-process' : sameInstallation ? 'new-process' : 'new-installation', previous: previous || null });
+          } else logStartup('diagnostic-owner-unresolved', { requestId, parentProcessId: process.ppid });
+        }
+      } catch (error) { logStartup('native-window-inspection-error', { documentId: sampledDocument, requestId, message: error.message, code: error.code, durationMs: performance.now() - sampleStarted }); }
+      finally { nativeSamplePending = false; }
+    };
+    let probeSequence = 0;
+    const probeInterval = setInterval(() => {
+      if (restoredDisposed || !loadingPanel.visible || currentStartup?.id !== startupId) return;
+      const requestId = `probe-${++probeSequence}`, probedDocument = documentId;
+      logStartup('probe-sent', { documentId, requestId, lastBrowserEvent });
+      void sampleNativeWindows(requestId);
+      const timer = setTimeout(() => {
+        diagnosticProbes.delete(requestId);
+        if (!restoredDisposed && documentId === probedDocument) logStartup('probe-timeout', { documentId, requestId, lastBrowserEvent, lastFrame });
+      }, 2000);
+      timer.unref?.(); diagnosticProbes.set(requestId, timer);
+      Promise.resolve(loadingPanel.webview.postMessage({ type: 'diagnostic-probe', startupId, documentId, requestId })).catch(error => logStartup('probe-send-failed', { documentId: probedDocument, requestId, message: error.message }));
+    }, 5000);
+    probeInterval.unref?.();
+    const stopProbes = () => { clearInterval(probeInterval); for (const timer of diagnosticProbes.values()) clearTimeout(timer); diagnosticProbes.clear(); };
+    loadingPanel.onDidDispose(stopProbes); context.subscriptions.push({ dispose: stopProbes });
     let restoredDisposed = false, startupSubscription;
+    void sampleNativeWindows('startup');
     let windowSetupPending = false, windowSetup = Promise.resolve();
     const restoringSubscription = loadingPanel?.onDidDispose(() => { logStartup('panel-disposed', { documentId }); restoredDisposed = true; clearTimeout(startupWatchdog); });
     const publishStartup = event => {
@@ -483,7 +569,6 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
       const windowDocumentId = documentId;
       const windowLog = (kind, detail = {}) => logStartup(kind, { ...detail, startupId, documentId: windowDocumentId, elapsed: Math.max(0, performance.now() - startupOrigin) });
       windowSetupPending = true;
-      loadingPanel.title = `${title()} [${token}]`;
       windowSetup = (async () => {
         try {
           if (!restoredPanel) {
@@ -492,19 +577,24 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
             windowLog('window-move-complete');
           }
           if (!restoredDisposed && process.platform === 'win32') {
-            windowLog('window-maximize-start');
+            loadingPanel.title = `${title()} [${token}]`;
+            windowLog('window-maximize-start', { titleToken: token, viewColumn: loadingPanel.viewColumn });
             await maximizeWindow(token);
             windowLog('window-maximize-complete');
           }
         } catch (error) {
-          windowLog('error', { operation: 'window-setup', message: error.message, stack: error.stack });
+          windowLog('error', { operation: 'window-setup', message: error.message, stack: error.stack,
+            code: error.code, nativeCode: error.nativeCode, nativeOperation: error.operation,
+            requestId: error.requestId, generation: error.generation, details: diagnosticTree(error.details),
+            titleToken: token, panelDisposed: restoredDisposed, visible: loadingPanel.visible,
+            active: loadingPanel.active, viewColumn: loadingPanel.viewColumn });
           void vscode.window.showErrorMessage(t('Das Commander-Fenster konnte nicht vollständig eingerichtet werden: {error}', { error: t(error.message) }));
         } finally {
           windowSetupPending = false;
           if (!restoredDisposed) loadingPanel.title = title();
         }
       })();
-    }
+    } else logStartup('window-setup-deferred', { documentId, visible: loadingPanel.visible, active: loadingPanel.active, viewColumn: loadingPanel.viewColumn });
     startupStep(t('Tastaturkonfiguration wird übernommen'));
     await initialShortcutsReady;
     startupStep(t('Tastaturkonfiguration übernommen'));
@@ -564,7 +654,15 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
     const applyCompactWhenReady = () => {
       if (!auxiliaryMoveCompleted || !panelReady || !auxiliaryReady || auxiliaryCompactApplied || panel !== messagePanel || !hasSingleEditor()) return;
       auxiliaryCompactApplied = true;
-      Promise.resolve(vscode.commands.executeCommand('workbench.action.enableCompactAuxiliaryWindow')).catch(() => {});
+      const command = 'workbench.action.enableCompactAuxiliaryWindow', requestId = crypto.randomUUID();
+      const state = () => ({ command, requestId, documentId, panelActive: messagePanel.active, panelVisible: messagePanel.visible,
+        panelViewColumn: messagePanel.viewColumn, activeGroupViewColumn: vscode.window.tabGroups.activeTabGroup?.viewColumn,
+        singleEditor: hasSingleEditor(), panelReady, auxiliaryReady });
+      logStartup('window-command-start', state());
+      Promise.resolve(vscode.commands.executeCommand(command)).then(
+        () => logStartup('window-command-complete', state()),
+        error => logStartup('window-command-error', { ...state(), message: error.message, stack: error.stack })
+      );
     };
     panelFailed = false;
     setReady(false);
@@ -635,7 +733,7 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
       return Object.fromEntries(Object.entries({ enabled: true, showClean: true, showUntracked: true, showIgnored: true, recursive: true, untrackedAsModified: false, allowNetwork: false, includePaths: [], excludePaths: [] }).map(([key, fallback]) => [key, settings.get(`gitStatus.${key}`, fallback) ?? fallback]));
     };
     const validGitPath = directory => typeof directory === 'string' && directory.length <= 4096 && !directory.includes('\0') && !filesystemState?.archiveLocations?.[directory] && !directory.startsWith('zip:') && provider.contains(directory) && Object.hasOwn(filesystemState?.folders || {}, directory) && !filesystemState.unloadedFolders?.includes(directory);
-    const gitService = createGitStatusProvider({});
+    const gitService = createGitStatusProvider({ onDiagnostic: detail => logStartup('git-provider', detail) });
     const closeGit = () => { if (gitDisposed) return; gitDisposed = true; gitQuery = undefined; gitDirectoryQueries.clear(); gitService.dispose(); };
     messagePanel.onDidDispose(closeGit); context.subscriptions.push({ dispose: closeGit });
     function currentGitDirectory(query, directory) {
@@ -649,12 +747,18 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
     async function publishGit(query = gitQuery) {
       if (gitDisposed || !query || gitUpdating.has(query)) return;
       gitUpdating.add(query);
+      logStartup('git-query-start', { requestId: query.requestId, snapshotId: query.snapshotId, directories: query.directories });
       const settings = gitSettings();
       try {
         const allowed = query.directories.filter(directory => validGitPath(directory) && allowedGitPath(directory, settings) && (settings.allowNetwork || !/^(?:\\\\|\/\/)/.test(directory)));
         let directories = {};
         if (settings.enabled && allowed.length) directories = await gitService.inspect(allowed, settings, updates => {
           const filtered = Object.fromEntries(Object.entries(updates).filter(([directory]) => allowed.includes(directory) && currentGitDirectory(query, directory)).map(([directory, info]) => [directory, { ...info, statuses: Object.fromEntries(Object.entries(info.statuses || {}).filter(([, status]) => (settings.showClean || status !== 'clean') && (settings.showUntracked || status !== 'untracked'))) }]));
+          logStartup('git-progress', { requestId: query.requestId, snapshotId: query.snapshotId, delivered: Object.keys(filtered),
+            directories: Object.entries(updates).map(([directory, info]) => ({ directory, phase: info?.phase, stage: info?.stage,
+              ok: info?.ok, loading: info?.loading, statusCount: Object.keys(info?.statuses || {}).length,
+              repositoryChecks: info?.repositoryChecks, repositoryResult: info?.repositoryResult,
+              nativeChecks: info?.nativeChecks && { total: info.nativeChecks.total, completed: info.nativeChecks.completed, pathsCount: info.nativeChecks.paths?.length } })) });
           if (!Object.keys(filtered).length) return;
           query.repositories ||= new Set();
           for (const [directory, info] of Object.entries(filtered)) { if (info.ok && info.repository) query.repositories.add(directory); else query.repositories.delete(directory); }
@@ -665,6 +769,7 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
           info.statuses = Object.fromEntries(Object.entries(info.statuses).filter(([, status]) => (settings.showClean || status !== 'clean') && (settings.showUntracked || status !== 'untracked')));
         }
         directories = Object.fromEntries(Object.entries(directories).filter(([directory]) => currentGitDirectory(query, directory)));
+        logStartup('git-query-complete', { requestId: query.requestId, snapshotId: query.snapshotId, directories: Object.entries(directories).map(([directory, info]) => ({ directory, ok: info?.ok, error: info?.error })) });
         query.repositories ||= new Set();
         for (const [directory, info] of Object.entries(directories)) { if (info.ok && info.repository) query.repositories.add(directory); else query.repositories.delete(directory); }
         if (!gitDisposed && panel === messagePanel) await messagePanel.webview.postMessage({ type: 'git-status-result', emittedAt: Date.now(), requestId: query.requestId, snapshotId: query.snapshotId, directories });

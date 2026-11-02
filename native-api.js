@@ -4,7 +4,7 @@ const OPERATIONS = Object.freeze([
   'clipboard.acknowledge', 'clipboard.cancelFiles', 'shell.showContextMenu', 'shell.openAssociated',
   'shell.openTrash', 'shell.openTerminal', 'icons.resolve', 'metadata.query', 'paths.resolveNetwork',
   'encoding.describe', 'encoding.decodeBlock', 'encoding.decodeChunk', 'windows.resolveOwner',
-  'windows.maximize', 'locks.scan', 'locks.releaseHandles', 'locks.unloadModules', 'locks.rename', 'git.status', 'git.info',
+  'windows.maximize', 'windows.inspect', 'locks.scan', 'locks.releaseHandles', 'locks.unloadModules', 'locks.rename', 'git.status', 'git.info',
   'processes.terminate', 'restartDeletion.prepare', 'restartDeletion.commit'
 ]);
 

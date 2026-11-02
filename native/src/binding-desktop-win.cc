@@ -16,6 +16,7 @@ struct DesktopJob {
   bool inspect_only = false;
   DesktopAssociationResult result;
   DWORD native_error = ERROR_SUCCESS;
+  WindowActionDetails window_details;
   const char* error = nullptr;
   napi_deferred deferred = nullptr;
 };
@@ -74,7 +75,7 @@ void ExecuteNative(DesktopJob* job) {
         : job->action == Action::Trash
         ? ResolveTrashView(job->inspect_only, job->state->closed, &job->native_error)
         : job->action == Action::Maximize
-        ? MaximizeOwnedWindow(job->path, job->state->closed, &job->native_error)
+        ? MaximizeOwnedWindow(job->path, job->state->closed, &job->native_error, &job->window_details)
         : ResolveDesktopAssociation(job->path, job->inspect_only, &job->result, &job->native_error, &job->state->closed);
     if (!success) {
       job->error = ErrorCode(job->native_error);
@@ -85,13 +86,34 @@ void ExecuteNative(DesktopJob* job) {
 void Execute(napi_env, void* data) { ExecuteNative(static_cast<DesktopJob*>(data)); }
 void Reject(napi_env env, DesktopJob* job, const char* code) {
   napi_value code_value, message, error, operation, number;
+  const char* text = job->action == Action::Maximize ? "Native window maximization failed." : "Native desktop association failed.";
   if (napi_create_string_utf8(env, code, NAPI_AUTO_LENGTH, &code_value) != napi_ok ||
-      napi_create_string_utf8(env, "Native desktop association failed.", NAPI_AUTO_LENGTH, &message) != napi_ok ||
+      napi_create_string_utf8(env, text, NAPI_AUTO_LENGTH, &message) != napi_ok ||
       napi_create_error(env, code_value, message, &error) != napi_ok) return;
   if (napi_create_string_utf8(env, job->operation, NAPI_AUTO_LENGTH, &operation) != napi_ok ||
       napi_create_uint32(env, job->native_error, &number) != napi_ok ||
       napi_set_named_property(env, error, "operation", operation) != napi_ok ||
       napi_set_named_property(env, error, "nativeCode", number) != napi_ok) return;
+  if (job->action == Action::Maximize) {
+    const auto& data = job->window_details;
+    napi_value details, value;
+    if (napi_create_object(env, &details) != napi_ok) return;
+    const auto text_property = [&](const char* key, const char* content) {
+      return napi_create_string_utf8(env, content, NAPI_AUTO_LENGTH, &value) == napi_ok && napi_set_named_property(env, details, key, value) == napi_ok;
+    };
+    const auto number_property = [&](const char* key, unsigned int content) {
+      return napi_create_uint32(env, content, &value) == napi_ok && napi_set_named_property(env, details, key, value) == napi_ok;
+    };
+    const auto bool_property = [&](const char* key, bool content) {
+      return napi_get_boolean(env, content, &value) == napi_ok && napi_set_named_property(env, details, key, value) == napi_ok;
+    };
+    const auto handle = std::to_string(reinterpret_cast<uintptr_t>(data.window));
+    if (!text_property("stage", data.stage) || !text_property("handle", handle.c_str()) ||
+        !number_property("attempts", data.attempts) || !number_property("matches", data.matches) || !number_property("processId", data.process_id) ||
+        !bool_property("visible", data.visible) || !bool_property("maximized", data.maximized) ||
+        !bool_property("identityStable", data.identity_stable) || !bool_property("titleMatches", data.title_matches) ||
+        !bool_property("actionStarted", data.action_started) || napi_set_named_property(env, error, "details", details) != napi_ok) return;
+  }
   napi_reject_deferred(env, job->deferred, error);
 }
 void Complete(napi_env env, napi_status status, void* data) {

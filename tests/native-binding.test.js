@@ -26,6 +26,21 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const binary = process.env.NATIVE_BINDING_TEST_PATH || path.join(__dirname, '../native/binding.node');
 
+test('a missing marked window reports the native search stage without a desktop association error', { skip: process.platform !== 'win32' }, async () => {
+  const session = require(binary).openSession();
+  try {
+    await assert.rejects(session.invoke('windows.maximize', { titleToken: require('node:crypto').randomUUID() }), error => {
+      assert.equal(error.operation, 'windows.maximize');
+      assert.equal(error.nativeCode, 1168);
+      assert.equal(error.details.stage, 'find-window');
+      assert.equal(error.details.attempts, 30);
+      assert.equal(error.details.matches, 0);
+      assert.doesNotMatch(error.message, /association/i);
+      return true;
+    });
+  } finally { session.close(); }
+});
+
 test('compiled binding exposes an honest versioned capability contract', () => {
   const binding = require(binary);
   assert.deepEqual(binding.apiVersion, { major: 1, minor: 4 });
@@ -42,6 +57,8 @@ test('compiled binding exposes an honest versioned capability contract', () => {
       assert.equal(capability.status, 'conditional');
       assert.equal(capability.reason, 'SingleDoubleByteUtf8AndGB18030Codepages');
     } else if (['git.status', 'git.info'].includes(operation) || (process.platform === 'win32' && ['metadata.query', 'paths.resolveNetwork', 'encoding.describe', 'icons.resolve', 'files.copy', 'shell.openAssociated', 'shell.openTrash', 'shell.openTerminal', 'shell.showContextMenu', 'windows.maximize', 'clipboard.readFiles', 'clipboard.writeFiles', 'clipboard.acknowledge', 'clipboard.cancelFiles'].includes(operation))) {
+      assert.equal(capability.status, 'supported');
+    } else if (process.platform === 'win32' && operation === 'windows.inspect') {
       assert.equal(capability.status, 'supported');
     } else {
       assert.equal(capability.status, 'unsupported');

@@ -3,6 +3,22 @@ const assert = require('node:assert/strict');
 const { stubPackagedNativeBinding } = require('./support/native-binding.cjs');
 const token = '9c379752-2049-4716-bb59-2d8116374693';
 
+test('read-only window inspection never invokes maximization and closes its own session', async () => {
+  const calls = []; let closed = false;
+  const nativeApi = { openSession: () => ({ invoke: async (operation, request) => {
+    calls.push({ operation, request }); return { version: 1, readOnly: true, windows: [], truncated: false };
+  }, close() { closed = true; } }) };
+  const result = await require('../native-window').inspectWindows({ nativeApi });
+  assert.equal(result.readOnly, true);
+  assert.deepEqual(calls, [{ operation: 'windows.inspect', request: {} }]); assert.equal(closed, true);
+});
+
+test('older bindings report unavailable inspection without substituting a window action', async () => {
+  const nativeApi = { capabilities: { 'windows.inspect': { status: 'unsupported' } }, openSession: () => assert.fail('An unavailable inspection cannot open a native session.') };
+  const result = await require('../native-window').inspectWindows({ nativeApi });
+  assert.equal(result.available, false);
+});
+
 test('window maximization default uses one scoped native request and releases its session', async t => {
   const app = stubPackagedNativeBinding(t, { 'windows.maximize': () => ({ maximized: true }) });
   const { maximizeWindow } = require('../native-window');

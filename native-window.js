@@ -20,4 +20,18 @@ async function maximizeWindow(titleToken, options = {}) {
   }
 }
 
-module.exports = { maximizeWindow };
+async function inspectWindows(options = {}) {
+  const api = options.nativeApi || loadNativeApi();
+  if (api.capabilities?.['windows.inspect']?.status === 'unsupported') return { available: false, reason: 'UnsupportedOperation', apiVersion: api.apiVersion, capability: api.capabilities['windows.inspect'] };
+  const session = api.openSession(); let timer;
+  try {
+    const result = await Promise.race([
+      session.invoke('windows.inspect', {}),
+      new Promise((_, reject) => { timer = setTimeout(() => reject(Object.assign(new Error('Window inspection timed out.'), { code: 'WindowTimeout' })), options.timeout ?? 2000); })
+    ]);
+    if (result?.version !== 1 || result.readOnly !== true || !Array.isArray(result.windows) || result.windows.length > 64) throw Object.assign(new Error('The window inspection response is invalid.'), { code: 'InvalidNativeResponse' });
+    return { ...result, available: true, apiVersion: api.apiVersion, capability: api.capabilities?.['windows.inspect'] };
+  } finally { clearTimeout(timer); session.close(); }
+}
+
+module.exports = { maximizeWindow, inspectWindows };

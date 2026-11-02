@@ -976,7 +976,7 @@ function harness(t, options = {}) {
       if (request === './open-file') return { openAssociatedFile: async target => { openCalls.push(target); if (options.openError) throw new Error(options.openError); return { editor: Boolean(options.associatedEditor) }; } };
       if (request === './search-provider' && options.searchRoots) return { createSearchProvider: args => require('../search-provider').createSearchProvider({ ...args, roots: options.searchRoots }) };
       if (request === './icon-theme') return { loadIconTheme: async () => { themeCalls++; return options.theme ? options.theme(themeCalls, icons) : icons; } };
-      if (request === './native-window') return { maximizeWindow: native };
+      if (request === './native-window') return { maximizeWindow: native, inspectWindows: async () => options.nativeInspect ? options.nativeInspect() : ({ version: 1, readOnly: true, windows: [], truncated: false }) };
       if (request === 'node:child_process') throw new Error('Window setup must use the native module.');
       if (request === './filesystem-icons') return { getFilesystemIcons: async requests => options.filesystemIcons ? options.filesystemIcons(requests) : {}, clearFilesystemIconCache: () => options.clearFilesystemIconCache?.() };
       if (request === './git-status-provider' && !options.realGitProvider) return { createGitStatusProvider: creation => ({
@@ -2302,6 +2302,33 @@ test('native window setup uses only the marked window and restores a stable titl
   assert.equal(app.errors.length, 0);
 });
 
+test('a stale source window title cannot claim maximization after an editor move', async t => {
+  const moved = deferred();
+  const source = { title: '' }, destination = { title: '' };
+  let selected, panelTitle, owner = source;
+  const app = harness(t, {
+    commandEffect: async (id, _args, panels) => {
+      if (id !== 'workbench.action.moveEditorToNewWindow') return;
+      const panel = panels[0];
+      panelTitle = panel.title; source.title = panelTitle;
+      Object.defineProperty(panel, 'title', { get: () => panelTitle, set(value) { panelTitle = value; owner.title = value; } });
+      await moved.promise;
+      destination.title = panelTitle; owner = destination;
+    },
+    native: callback => {
+      const token = app.nativeCalls.at(-1).titleToken;
+      selected = [source, destination].find(window => window.title.includes(token));
+      callback(null);
+    }
+  });
+  const opening = app.command('bitfroest.openPrototype'); await tick();
+  assert.equal(app.nativeCalls.length, 0);
+  moved.resolve(); await opening;
+  assert.equal(selected, destination, 'Only the destination may receive the native action.');
+  assert.equal(source.title.includes(app.nativeCalls[0].titleToken), false);
+  app.panels[0].dispose();
+});
+
 test('compact readiness waits until native setup finishes without entering fullscreen', async t => {
   let finish;
   const app = harness(t, { manualReadiness: true, native: callback => { finish = callback; }, commandError: 'workbench.action.toggleFullScreen' });
@@ -2419,7 +2446,7 @@ test('focused file list hides the auxiliary status strip through generated host 
 });
 
 test('restored single editor hides native tabs and status strip through generated host readiness', async t => {
-  const app = harness(t, { manualReadiness: true });
+  const logs = [], app = harness(t, { manualReadiness: true, onInfoLog: line => logs.push(JSON.parse(line)) });
   const panel = app.restoredPanel();
   await app.restore(panel);
   const view = require('./support/webview.cjs').createApp(t, undefined, { html: panel.webview.html });
@@ -2431,6 +2458,11 @@ test('restored single editor hides native tabs and status strip through generate
   view.window.dispatchEvent(new view.window.MessageEvent('message', { data: check }));
   await panel.receive(view.messages.find(message => message.type === 'auxiliary-compact-ready'));
   assert.equal(app.calls.filter(call => call.id === 'workbench.action.enableCompactAuxiliaryWindow').length, 1);
+  const command = logs.find(row => row.kind === 'window-command-start' && row.command === 'workbench.action.enableCompactAuxiliaryWindow');
+  assert.ok(command);
+  assert.equal(command.panelActive, panel.active);
+  await tick();
+  assert.ok(logs.some(row => row.kind === 'window-command-complete' && row.requestId === command.requestId));
   assert.equal(app.calls.some(call => call.id === 'workbench.action.moveEditorToNewWindow'), false);
   assert.equal(app.calls.some(call => call.id === 'workbench.action.toggleFullScreen'), false);
   assert.equal(app.updateCalls.length, 0);
@@ -2620,6 +2652,26 @@ test('native maximization failures are reported without abandoning the usable pa
   assert.match(app.errors[0], /Window not found/);
   assert.equal(app.panels[0].title, 'Bitfroest.fs · Arbeitsbereich');
   assert.equal(app.panels[0].disposed, false);
+});
+
+test('window setup diagnostics retain the native failure and the affected panel identity', async t => {
+  const logs = [];
+  const details = { stage: 'confirm-title', handle: '1234', processId: 42, visible: true, maximized: true };
+  const failure = Object.assign(new Error('Window action failed.'), { code: 'NativeFailure', nativeCode: 1400,
+    operation: 'windows.maximize', requestId: 7n, generation: 3n, details });
+  const app = harness(t, { native: callback => callback(failure), onLog: (_name, _config, line) => logs.push(JSON.parse(line)) });
+  await app.command('bitfroest.openPrototype');
+  const event = logs.find(row => row.kind === 'error' && row.operation === 'window-setup');
+  assert.equal(event.code, 'NativeFailure');
+  assert.equal(event.nativeCode, 1400);
+  assert.equal(event.nativeOperation, 'windows.maximize');
+  assert.equal(event.requestId, '7');
+  assert.equal(event.generation, '3');
+  assert.deepEqual(event.details, details);
+  assert.match(event.titleToken, /^[a-f0-9-]{36}$/);
+  assert.equal(event.panelDisposed, false);
+  assert.equal(app.panels[0].disposed, false);
+  app.panels[0].dispose();
 });
 
 test('a failed window command does not launch a native helper', async t => {
@@ -3073,6 +3125,114 @@ test('startup document events persist with identity and reject stale or oversize
   assert.equal(errors.length, count);
 });
 
+test('host diagnostics retain layout, application and failed Git message context after readiness', async t => {
+  const logs = [], errors = [];
+  const app = harness(t, { onInfoLog: line => logs.push(JSON.parse(line)), onLog: (_name, _config, line) => errors.push(JSON.parse(line)) });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  const { JSDOM } = require('jsdom'), dom = new JSDOM(panel.webview.html); t.after(() => dom.window.close());
+  const { startupId, documentId } = dom.window.document.documentElement.dataset;
+  await panel.receive({ type: 'startup-diagnostic', version: 1, startupId, documentId, sequence: 1,
+    event: { name: 'probe-received', elapsed: 1, requestId: 'probe-1', framePending: true,
+      layout: { paneCount: 2, panes: [{ rows: 4, hit: { withinPane: false, element: { id: 'cover' } } }] },
+      application: { ready: true, snapshotId: 'current' } } });
+  const view = logs.findLast(row => row.kind === 'webview-event');
+  assert.equal(view.event.layout.panes[0].hit.element.id, 'cover');
+  assert.equal(view.event.application.snapshotId, 'current');
+  await panel.receive({ type: 'startup-diagnostic', version: 1, startupId, documentId, sequence: 2,
+    event: { name: 'git-protocol-error', elapsed: 2, message: 'Repository check identities are missing', directory: '/repo', requestId: 'git-2',
+      protocol: { repositoryChecks: { total: 3, completed: 1 } } } });
+  assert.ok(errors.some(row => row.message === 'Repository check identities are missing' && row.requestId === 'git-2'));
+  await panel.receive({ type: 'startup-log-copy' });
+  const report = JSON.parse(app.clipboardCalls.findLast(call => call.action === 'writeText').text);
+  assert.equal(report.latestBrowserState.application.snapshotId, 'current');
+  assert.equal(report.firstBrowserError.message, 'Repository check identities are missing');
+  panel.dispose();
+});
+
+test('diagnostic probes distinguish missing replies and stop when their panel is disposed', async t => {
+  let probe;
+  const deadlines = [], logs = [], interval = { unref() {} };
+  const nativeInterval = global.setInterval, nativeTimeout = global.setTimeout, nativeClearTimeout = global.clearTimeout;
+  t.mock.method(global, 'setInterval', (callback, delay, ...args) => {
+    if (delay === 5000) { probe = callback; return interval; }
+    return nativeInterval(callback, delay, ...args);
+  });
+  t.mock.method(global, 'setTimeout', (callback, delay, ...args) => {
+    if (delay === 2000) { const timer = { callback, cleared: false, unref() {} }; deadlines.push(timer); return timer; }
+    return nativeTimeout(callback, delay, ...args);
+  });
+  t.mock.method(global, 'clearTimeout', timer => { if (deadlines.includes(timer)) timer.cleared = true; else nativeClearTimeout(timer); });
+  const app = harness(t, { onInfoLog: line => logs.push(JSON.parse(line)) });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  probe(); const request = panel.messages.at(-1);
+  assert.equal(request.type, 'diagnostic-probe');
+  await panel.receive({ ...request, type: 'startup-diagnostic', version: 1, sequence: 1,
+    event: { name: 'probe-received', requestId: request.requestId, elapsed: 1 } });
+  assert.equal(deadlines[0].cleared, true);
+  probe(); deadlines[1].callback();
+  assert.ok(logs.some(row => row.kind === 'probe-timeout' && row.documentId === request.documentId));
+  panel.dispose(); const count = panel.messages.length; probe();
+  assert.equal(panel.messages.length, count);
+});
+
+test('diagnostics correlate native window states with installation and consecutive application starts', async t => {
+  const firstLogs = [];
+  const inspect = created => async () => ({ version: 1, readOnly: true, windows: [{ processId: process.ppid, processCreated: created, identityStable: true, handle: '42', rect: { x: -5, y: 0, width: 417, height: 279 } }], truncated: false });
+  const first = harness(t, { nativeInspect: inspect('1001'), onInfoLog: line => firstLogs.push(JSON.parse(line)) });
+  await first.command('bitfroest.openPrototype'); await tick();
+  const recorded = first.context.globalState.get('windowDiagnosticRun');
+  assert.equal(recorded.processRunOrdinal, 1);
+  assert.ok(firstLogs.some(row => row.kind === 'native-window-state' && row.windows[0].rect.width === 417));
+  assert.ok(firstLogs.find(row => row.kind === 'runtime').build.bundleDigest);
+  first.panels[0].dispose();
+  const secondLogs = [];
+  const second = harness(t, { globalState: { windowDiagnosticRun: recorded }, nativeInspect: inspect('1002'), onInfoLog: line => secondLogs.push(JSON.parse(line)) });
+  await second.command('bitfroest.openPrototype'); await tick();
+  assert.equal(second.context.globalState.get('windowDiagnosticRun').processRunOrdinal, 2);
+  assert.equal(second.context.globalState.get('windowDiagnosticRun').installationId, recorded.installationId);
+  assert.ok(secondLogs.some(row => row.kind === 'diagnostic-run' && row.change === 'new-process' && row.processRunOrdinal === 2));
+  second.panels[0].dispose();
+  const continued = second.context.globalState.get('windowDiagnosticRun');
+  const third = harness(t, { globalState: { windowDiagnosticRun: continued }, nativeInspect: inspect('1002') });
+  await third.command('bitfroest.openPrototype'); await tick();
+  assert.equal(third.context.globalState.get('windowDiagnosticRun').processRunOrdinal, 2);
+  third.panels[0].dispose();
+});
+
+test('native diagnostics survive actual facade identities and retain the browser probe identity', async t => {
+  const { createNativeApi } = require('../native-api'), { inspectWindows } = require('../native-window');
+  const api = createNativeApi({ apiVersion: { major: 1, minor: 4 }, capabilities: { 'windows.inspect': { status: 'supported' } },
+    openSession: () => ({ generation: 9007199254740995n, close() {}, invoke: async () => ({ version: 1, readOnly: true, windows: [], truncated: false }) }) });
+  t.after(() => api.shutdown());
+  const logs = [], app = harness(t, { nativeInspect: () => inspectWindows({ nativeApi: api }), onInfoLog: line => logs.push(JSON.parse(line)) });
+  await app.command('bitfroest.openPrototype'); await tick();
+  const sample = logs.find(row => row.kind === 'native-window-state');
+  assert.ok(sample, 'The real native facade result must reach the persistent log.');
+  assert.equal(sample.requestId, 'startup');
+  assert.equal(sample.nativeRequestId, '1');
+  assert.equal(sample.nativeGeneration, '9007199254740995');
+  await app.panels[0].receive({ type: 'startup-log-copy' });
+  const report = JSON.parse(app.clipboardCalls.findLast(call => call.action === 'writeText').text);
+  assert.equal(report.latestNativeWindowState.nativeGeneration, '9007199254740995');
+  app.panels[0].dispose();
+});
+
+test('Git diagnostics preserve plan identity before filtering progress for the webview', async t => {
+  const logs = [], state = clipboardFixture();
+  const app = harness(t, { filesystemLoad: async () => state, onInfoLog: line => logs.push(JSON.parse(line)),
+    gitInspect: async (_directories, _settings, _creation, progress) => {
+      progress({ 'C:/tmp': { ok: true, loading: true, phase: 'git-dirty-check', stage: 'inspect', repositoryChecks: { paths: ['C:/tmp/a'], total: 1, completed: 0, active: null } } });
+      return { 'C:/tmp': { ok: true, repository: false, statuses: {} } };
+    } });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  await panel.receive({ type: 'git-status', requestId: 'git-plan', snapshotId: state.snapshotId, directories: ['C:/tmp'] });
+  const event = logs.find(row => row.kind === 'git-progress');
+  assert.equal(event.requestId, 'git-plan');
+  assert.deepEqual(event.directories[0].repositoryChecks.paths, ['C:/tmp/a']);
+  assert.deepEqual(event.delivered, ['C:/tmp']);
+  panel.dispose();
+});
+
 test('window maximization starts during loading for new and visible restored windows', async t => {
   for (const restored of [false, true]) {
     const loading = deferred();
@@ -3097,6 +3257,24 @@ test('restoring an invisible file manager does not maximize its containing windo
   assert.equal(app.nativeCalls.length, 0);
   loading.resolve(clipboardFixture()); await opening;
   assert.equal(app.nativeCalls.length, 0);
+  panel.dispose();
+});
+
+for (const visible of [true, false]) test(`diagnosing a restored ${visible ? 'inactive' : 'hidden'} file manager preserves its current window behaviour`, async t => {
+  const logs = [], app = harness(t, { onInfoLog: line => logs.push(JSON.parse(line)) });
+  const panel = app.restoredPanel(); panel.visible = visible; panel.active = false;
+  await app.restore(panel, null);
+  assert.equal(app.nativeCalls.length, 0);
+  const html = panel.webview.html;
+  panel.active = true; panel.changeVisibility(true); await tick();
+  assert.equal(app.nativeCalls.length, 0);
+  assert.ok(logs.some(row => row.kind === 'window-setup-deferred'));
+  assert.equal(panel.webview.html, html);
+  panel.active = false; panel.changeVisibility(false);
+  panel.active = true; panel.changeVisibility(true); await tick();
+  assert.equal(app.nativeCalls.length, 0);
+  assert.equal(app.calls.some(call => call.id === 'workbench.action.moveEditorToNewWindow'), false);
+  assert.equal(logs.some(row => row.kind === 'window-maximize-complete'), false);
   panel.dispose();
 });
 

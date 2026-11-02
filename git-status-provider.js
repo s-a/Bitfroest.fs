@@ -4,7 +4,9 @@ const { Worker } = require('node:worker_threads');
 function createGitStatusProvider(options = {}) {
   let worker, closed = false, sequence = 0;
   const pending = new Map(), shared = new Map();
+  const diagnose = detail => { try { options.onDiagnostic?.(detail); } catch { /* Logging cannot interrupt a Git request. */ } };
   function stop(error) {
+    diagnose({ event: 'worker-stop', message: error.message, pending: [...pending.keys()] });
     const current = worker; worker = undefined;
     for (const job of pending.values()) { clearTimeout(job.timer); job.reject(error); }
     pending.clear(); shared.clear();
@@ -18,8 +20,9 @@ function createGitStatusProvider(options = {}) {
       if (worker !== current) return;
       const job = pending.get(message.id);
       if (!job) return;
-      if (message.type === 'progress') { for (const listener of job.listeners) listener(message.result); return; }
+      if (message.type === 'progress') { job.progressReceived = (job.progressReceived || 0) + 1; for (const listener of job.listeners) listener(message.result); return; }
       pending.delete(message.id); clearTimeout(job.timer);
+      diagnose({ event: 'query-complete', workerRequestId: message.id, error: message.error || null, progressReceived: job.progressReceived || 0 });
       message.error ? job.reject(new Error(message.error)) : job.resolve(message.result);
     });
     current.on('error', error => { if (worker === current) stop(error); });
@@ -30,18 +33,20 @@ function createGitStatusProvider(options = {}) {
     const key = JSON.stringify([type, payload]);
     if (shared.has(key)) {
       const job = shared.get(key);
+      diagnose({ event: 'query-shared', workerRequestId: job.id, progressReceived: pending.get(job.id)?.progressReceived || 0, subscribers: job.listeners.size + (onProgress && !job.listeners.has(onProgress) ? 1 : 0) });
       if (onProgress) job.listeners.add(onProgress);
       return job.promise;
     }
     start();
     const id = ++sequence;
+    diagnose({ event: 'query-created', workerRequestId: id, type, directories: payload.directories });
     const listeners = new Set(onProgress ? [onProgress] : []);
     const promise = new Promise((resolve, reject) => {
       const timer = setTimeout(() => stop(new Error('Git status timed out')), options.timeout || 20000);
       timer.unref?.(); pending.set(id, { resolve, reject, timer, listeners });
       worker.postMessage({ id, type, ...payload });
     });
-    const job = { promise, listeners };
+    const job = { promise, listeners, id };
     shared.set(key, job);
     promise.finally(() => { if (shared.get(key) === job) shared.delete(key); }).catch(() => {});
     return promise;

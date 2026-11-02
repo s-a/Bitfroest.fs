@@ -662,6 +662,22 @@
     }
     plan.update(job.active, progress);
   }
+  function failGitDirectory(directory, data, error) {
+    const request = gitBindings.get(directory);
+    if (!request || request.requestId !== data.requestId || request.snapshotId !== data.snapshotId) return;
+    request.failed = true; gitPending.delete(directory);
+    const previous = gitInfo(directory);
+    gitDirectories.set(directory, { ...previous, ok: Boolean(previous?.ok), loading: false, error: error.message });
+    const planned = refreshPlan?.gitRequest;
+    if (planned?.requestId === data.requestId && planned.snapshotId === data.snapshotId && planned.pending.has(directory)) {
+      const job = refreshPlan.repositories.get(directory);
+      const node = refreshPlan.progress.analyze().steps.find(step => step.id === job?.root);
+      if (node && ['pending', 'running'].includes(node.state)) refreshPlan.progress.fail(job.root, error.message);
+      planned.pending.delete(directory);
+    }
+    try { window.CommanderDiagnostics?.report('git-protocol-error', { directory, requestId: data.requestId, snapshotId: data.snapshotId,
+      message: error.message, stack: error.stack, protocol: { info: data.directories?.[directory] } }); } catch { /* Diagnostics cannot replace the failed Git result. */ }
+  }
   const folderSizes = new Map(), folderSizeRequests = new Map();
   let folderSizeSequence = 0;
   let folderSizeBatch = null;
@@ -3645,9 +3661,10 @@
       if (!event.data.directories || typeof event.data.directories !== 'object') return;
       let displayChanged = false;
       for (const [directory, request] of gitBindings) {
-        if (event.data.requestId !== request.requestId || event.data.snapshotId !== request.snapshotId) continue;
+        if (event.data.requestId !== request.requestId || event.data.snapshotId !== request.snapshotId || request.failed) continue;
         const info = event.data.directories[directory];
-        if (info?.version === 1) request.progress = Progress.read(info);
+        try { if (info?.version === 1) request.progress = Progress.read(info); }
+        catch (error) { failGitDirectory(directory, event.data, error); displayChanged = true; continue; }
         if (!event.data.partial || info && !info.loading) gitPending.delete(directory);
         if (info) {
           const previous = gitInfo(directory);
@@ -3666,7 +3683,8 @@
       if (planned && planned.requestId === event.data.requestId && planned.snapshotId === event.data.snapshotId) {
         for (const directory of planned.pending) {
           const info = event.data.directories[directory];
-          updateRefreshGit(directory, info);
+          try { updateRefreshGit(directory, info); }
+          catch (error) { failGitDirectory(directory, event.data, error); displayChanged = true; continue; }
           if (!event.data.partial || info && !info.loading) {
             if (!info?.ok) {
               refreshPlan.progress.fail(refreshPlan.repositories.get(directory).root, info?.error || t('Git-Status nicht verfügbar: {error}', { error: directory }));
@@ -3681,7 +3699,11 @@
           }
         }
       }
-      if (displayChanged) refreshGitDisplay(); else updateDirectoryActivity();
+      try { if (displayChanged) refreshGitDisplay(); else updateDirectoryActivity(); }
+      catch (error) {
+        for (const [directory, request] of gitBindings) if (!request.failed) failGitDirectory(directory, event.data, error);
+        try { updateDirectoryActivity(); } catch { /* Existing file lists remain available when the Git status view fails. */ }
+      }
       return;
     }
     if (host && event.data?.type === 'column-settings') { hostColumnSettings = event.data.settings || {}; render(); return; }
@@ -3888,6 +3910,16 @@
   });
   $('#modal').addEventListener('close', reportFocus);
   window.CommanderStartupResource?.step('rendering');
+  window.CommanderDiagnostics?.registerState?.(() => {
+    const analysis = refreshPlan?.progress.analyze();
+    const { steps, ...plan } = analysis || {};
+    return { ready: startupReady, snapshotId: state.snapshotId, realFilesystem: state.realFilesystem, active: state.active,
+      filesystemPending, refreshingFilesystem, pendingFilesystemKind, navigationRequests: navigationRequests.size,
+      panes: state.panes.map(p => ({ path: currentPath(p), tab: p.tab, tabs: p.tabs.length, entries: files(p).length, selected: p.selected.length, columns: p.columns?.filter(column => column.visible !== false).length })),
+      gitPending: [...gitPending], gitBindings: [...gitBindings].map(([directory, request]) => ({ directory, requestId: request.requestId, snapshotId: request.snapshotId, failed: Boolean(request.failed) })),
+      refresh: refreshPlan && { ...plan, stepCount: steps.length, filesystemDone: refreshPlan.filesystemDone, pendingGit: [...refreshPlan.gitRequest?.pending || []],
+        repositories: [...refreshPlan.repositories].map(([directory, job]) => ({ directory, root: job.root, active: job.active, repositoryCompleted: job.repositoryCompleted, repositorySteps: job.repositorySteps?.size, repositoryPaths: job.repositoryPaths })) } };
+  });
   render(true);
   window.dispatchEvent(new Event('commander-started'));
   if (host) host.postMessage({ type: 'app-ready' });

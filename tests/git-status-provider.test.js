@@ -32,6 +32,20 @@ test('same pending query shares one worker job and disposal settles pending work
   await assert.rejects(pending, /closed/i);
 });
 
+test('diagnostics identify a subscriber joining a Git job after progress has started', async t => {
+  const worker = new EventEmitter(), sent = [], diagnostics = [];
+  worker.postMessage = message => sent.push(message); worker.terminate = async () => 0;
+  const provider = createGitStatusProvider({ createWorker: () => worker, onDiagnostic: event => diagnostics.push(event) });
+  t.after(() => provider.dispose());
+  const first = provider.inspect(['/repo'], {}, () => {});
+  worker.emit('message', { id: sent[0].id, type: 'progress', result: { '/repo': { phase: 'git-dirty-check' } } });
+  const second = provider.inspect(['/repo'], {}, () => {});
+  const shared = diagnostics.find(event => event.event === 'query-shared');
+  assert.equal(shared.workerRequestId, sent[0].id); assert.equal(shared.progressReceived, 1);
+  worker.emit('message', { id: sent[0].id, result: { '/repo': { ok: true } } });
+  await Promise.all([first, second]);
+});
+
 test('suspending releases the worker and allows a new lazy worker on reactivation', async () => {
   let created = 0, terminated = 0;
   const provider = createGitStatusProvider({ createWorker: () => {

@@ -27,6 +27,7 @@
 #include "windows-rename.h"
 #include "binding-icons-win.h"
 #include "binding-desktop-win.h"
+#include "window-inspection-win.h"
 #include "shell-context-win.h"
 #include "windows-async-work.h"
 #include "binding-transfer-win.h"
@@ -41,7 +42,7 @@ constexpr const char* operations[] = {
   "clipboard.acknowledge", "clipboard.cancelFiles", "shell.showContextMenu", "shell.openAssociated",
   "shell.openTrash", "shell.openTerminal", "icons.resolve", "metadata.query", "paths.resolveNetwork",
   "encoding.describe", "encoding.decodeBlock", "encoding.decodeChunk", "windows.resolveOwner",
-  "windows.maximize", "locks.scan", "locks.releaseHandles", "locks.unloadModules", "locks.rename",
+  "windows.maximize", "windows.inspect", "locks.scan", "locks.releaseHandles", "locks.unloadModules", "locks.rename",
   "processes.terminate", "restartDeletion.prepare", "restartDeletion.commit", "git.status", "git.info"
 };
 const napi_type_tag session_tag = {0xc08f3d2b2abe4601ULL, 0xa16d35e8dc1a4b94ULL};
@@ -332,6 +333,10 @@ napi_value Invoke(napi_env env, napi_callback_info info) {
         if (count != 2) return Fail(env, "InvalidRequest", "A window request is required.");
         return StartNativeMaximize(env, session->state, args[1]);
       }
+      if (std::strcmp(known, "windows.inspect") == 0) {
+        if (count != 2) return Fail(env, "InvalidRequest", "An inspection request is required.");
+        return StartWindowInspection(env, session->state, args[1]);
+      }
       if (std::strcmp(known, "icons.resolve") == 0) {
         if (count != 2) return Fail(env, "InvalidRequest", "An icon request is required.");
         return StartNativeIcons(env, session->state, args[1]);
@@ -447,6 +452,7 @@ napi_value Init(napi_env env, napi_value exports) {
 #ifdef _WIN32
     supported = std::strcmp(operation, "shell.openTerminal") == 0 || std::strcmp(operation, "git.status") == 0 || std::strcmp(operation, "git.info") == 0 || std::strcmp(operation, "metadata.query") == 0 || std::strcmp(operation, "files.rename") == 0 || std::strcmp(operation, "files.copy") == 0 || std::strcmp(operation, "icons.resolve") == 0 || std::strcmp(operation, "shell.openAssociated") == 0 || std::strcmp(operation, "shell.openTrash") == 0 || std::strcmp(operation, "shell.showContextMenu") == 0 || std::strcmp(operation, "windows.maximize") == 0 || IsWindowsQuery(operation) || IsWindowsClipboardOperation(operation);
     locks = IsLocksOperation(operation) && NativeLocksSupported();
+    supported = supported || std::strcmp(operation, "windows.inspect") == 0;
     supported = supported || locks;
 #endif
     const bool rename = std::strcmp(operation, "files.rename") == 0 && supported;

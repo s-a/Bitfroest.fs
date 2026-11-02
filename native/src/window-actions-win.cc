@@ -34,38 +34,54 @@ BOOL CALLBACK Collect(HWND window, LPARAM value) noexcept {
     return TRUE;
   } catch (...) { lookup->error = ERROR_NOT_ENOUGH_MEMORY; return FALSE; }
 }
-bool StillMatches(const Match& match, const std::wstring& token, const std::wstring& executable) {
-  if (!IsWindow(match.window) || !IsWindowVisible(match.window)) return false;
+bool StillMatches(const Match& match, const std::wstring& token, const std::wstring& executable, WindowActionDetails* details) {
+  details->window = match.window;
+  details->process_id = match.pid;
+  details->visible = IsWindowVisible(match.window) != FALSE;
+  details->maximized = IsZoomed(match.window) != FALSE;
+  details->identity_stable = false;
+  details->title_matches = false;
+  if (!IsWindow(match.window) || !details->visible) return false;
   DWORD pid = 0;
   GetWindowThreadProcessId(match.window, &pid);
   FILETIME created{};
   if (pid != match.pid || !ProcessMatches(pid, executable, &created) || CompareFileTime(&created, &match.created) != 0) return false;
+  details->identity_stable = true;
   std::array<wchar_t, 2048> title{};
   const int length = GetWindowTextW(match.window, title.data(), static_cast<int>(title.size()));
-  return length > 0 && std::wstring(title.data(), static_cast<size_t>(length)).find(token) != std::wstring::npos;
+  details->title_matches = length > 0 && std::wstring(title.data(), static_cast<size_t>(length)).find(token) != std::wstring::npos;
+  return details->title_matches;
 }
 }
 
-bool MaximizeOwnedWindow(const std::wstring& token, const std::atomic<bool>& closed, DWORD* error) {
+bool MaximizeOwnedWindow(const std::wstring& token, const std::atomic<bool>& closed, DWORD* error, WindowActionDetails* details) {
   const auto fail = [error](DWORD code) { if (error) *error = code; return false; };
   if (error) *error = ERROR_SUCCESS;
   if (token.size() < 16 || token.size() > 128 || token.find(L'\0') != std::wstring::npos) return fail(ERROR_INVALID_PARAMETER);
+  details->stage = "resolve-process-image";
   std::array<wchar_t, 32768> path{};
   DWORD length = static_cast<DWORD>(path.size());
   if (!QueryFullProcessImageNameW(GetCurrentProcess(), 0, path.data(), &length) || !length || length >= path.size()) return fail(ERROR_BAD_PATHNAME);
   const std::wstring executable(path.data(), length);
   for (unsigned int attempt = 0; attempt < 30; ++attempt) {
+    details->stage = "find-window";
+    details->attempts = attempt + 1;
     if (closed.load()) return fail(ERROR_CANCELLED);
     Lookup lookup{&token, &executable, {}, 0};
     if (!EnumWindows(Collect, reinterpret_cast<LPARAM>(&lookup))) return fail(lookup.error ? lookup.error : GetLastError());
+    details->matches = static_cast<unsigned int>(lookup.matches.size());
     if (lookup.matches.size() == 1) {
       const auto match = lookup.matches.front();
       if (closed.load()) return fail(ERROR_CANCELLED);
-      if (!StillMatches(match, token, executable)) return fail(ERROR_INVALID_WINDOW_HANDLE);
+      details->stage = "validate-before-maximize";
+      if (!StillMatches(match, token, executable, details)) return fail(ERROR_INVALID_WINDOW_HANDLE);
+      details->stage = "request-maximize";
       if (!ShowWindowAsync(match.window, SW_MAXIMIZE)) return fail(GetLastError() ? GetLastError() : ERROR_INVALID_WINDOW_HANDLE);
+      details->action_started = true;
+      details->stage = "confirm-maximize";
       for (unsigned int confirmation = 0; confirmation < 20; ++confirmation) {
         if (closed.load()) return fail(ERROR_CANCELLED);
-        if (!StillMatches(match, token, executable)) return fail(ERROR_INVALID_WINDOW_HANDLE);
+        if (!StillMatches(match, token, executable, details)) return fail(ERROR_INVALID_WINDOW_HANDLE);
         if (IsZoomed(match.window)) return true;
         Sleep(50);
       }
