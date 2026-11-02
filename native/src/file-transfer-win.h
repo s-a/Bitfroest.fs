@@ -46,6 +46,8 @@ struct FileTransferResult {
   std::string code;
   std::string message;
   std::optional<FileTransferOwnedDestination> owned_destination;
+  std::optional<FileTransferIdentity> expected_source;
+  std::optional<FileTransferIdentity> observed_source;
 };
 
 class FileTransferSession {

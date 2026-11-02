@@ -267,8 +267,12 @@ bool Validate(const FileTransferRequest& request, FileTransferResult* result, st
     BY_HANDLE_FILE_INFORMATION info{};
     if (!GetFileInformationByHandle(source->value, &info)) throw GetLastError();
     if (info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) throw static_cast<DWORD>(ERROR_DIRECTORY);
-    if (!SameIdentity(Identity(source->value), request.expected_source)) {
-      Unchanged(result, "IdentityChanged", "The source changed before copying.", ERROR_FILE_INVALID); return false;
+    const auto observed = Identity(source->value);
+    if (!SameIdentity(observed, request.expected_source)) {
+      Unchanged(result, "IdentityChanged", "The source changed before copying.", ERROR_FILE_INVALID);
+      result->expected_source = request.expected_source;
+      result->observed_source = observed.reported;
+      return false;
     }
   } catch (DWORD error) {
     Unchanged(result, error == ERROR_CANT_ACCESS_FILE ? "ReparsePoint" : "NativeFailure",

@@ -22,6 +22,22 @@ test('native copy preserves bytes, alternate data stream and source timestamp', 
   assert.equal((await fs.stat(f.target)).mtimeMs, (await fs.stat(f.source)).mtimeMs);
   assert.ok(progress.length);
 });
+
+test('native source identity rejection reports expected and observed fields without copying', { skip: process.platform !== 'win32' }, async t => {
+  const f = await fixture(t);
+  for (const key of ['dev', 'ino', 'size', 'mtimeNs', 'ctimeNs']) {
+    const expected = { ...f.input.expected, [key]: String(BigInt(f.input.expected[key]) + 1n) };
+    await assert.rejects(copyFileCancellable({ ...f.input, expected }), error => {
+      assert.equal(error.code, 'IdentityChanged');
+      assert.equal(error.outcome.status, 'unchanged');
+      assert.deepEqual(error.outcome.sourceIdentity.expected, expected);
+      assert.deepEqual(error.outcome.sourceIdentity.observed, f.input.expected);
+      return true;
+    });
+    await assert.rejects(fs.stat(f.target), { code: 'ENOENT' });
+    assert.equal((await fs.stat(f.source)).size, 1024);
+  }
+});
 test('native callback abort stops mid-file and leaves no partial destination', { skip: process.platform !== 'win32' }, async t => {
   const f = await fixture(t, 32 * 1024 * 1024), controller = new AbortController();
   let progressSeen = false;

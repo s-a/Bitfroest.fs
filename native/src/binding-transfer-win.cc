@@ -130,6 +130,13 @@ napi_value Outcome(napi_env env, const CopyJob& job) {
   CHECK(napi_set_named_property(env, result, "copied", copied));
   CHECK(napi_set_named_property(env, result, "cancelled", cancelled));
   if (job.result.owned_destination) CHECK(napi_set_named_property(env, result, "ownedDestination", Identity(env, job.result.owned_destination->identity)));
+  if (job.result.expected_source && job.result.observed_source) {
+    napi_value source;
+    CHECK(napi_create_object(env, &source));
+    CHECK(napi_set_named_property(env, source, "expected", Identity(env, *job.result.expected_source)));
+    CHECK(napi_set_named_property(env, source, "observed", Identity(env, *job.result.observed_source)));
+    CHECK(napi_set_named_property(env, result, "sourceIdentity", source));
+  }
   return result;
 }
 void FinishSessionCopy(CopyJob* job) {
