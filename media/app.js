@@ -1516,7 +1516,8 @@
     let finished = false;
     function finish(commit, completed) {
       if (finished) return;
-      const name = input.value;
+      const extension = columns.splitName(file).extension;
+      const name = input.value && !input.value.includes('.') && extension ? `${input.value}.${extension}` : input.value;
       const reserved = /^[a-z]:\//i.test(source) && /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i.test(name.split('.')[0].trimEnd());
       if (commit && name !== oldName && (!validName(name) || [...name].some(character => character.charCodeAt(0) < 32) || reserved || (state.folders[source] || []).some(other => other !== file && other.name.toLowerCase() === name.toLowerCase()))) { toast(t('Der Name ist ungültig oder bereits vergeben.')); input.focus(); return; }
       if (commit && name !== oldName && file.type === 'folder') {

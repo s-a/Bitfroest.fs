@@ -27,6 +27,37 @@ test('F2 edits the current filename and Enter sends the existing rename operatio
   assert.equal(app.state().folders['C:/tmp'][0].name, 'renamed.txt');
 });
 
+test('inline rename retains the original extension when the replacement has no dot', t => {
+  for (const [original, type, entered, expected] of [
+    ['original.txt', 'text', 'renamed', 'renamed.txt'],
+    ['original.TXT', 'text', 'renamed', 'renamed.TXT'],
+    ['original.tar.gz', 'archive', 'renamed', 'renamed.gz'],
+    ['original.txt', 'text', 'renamed.md', 'renamed.md'],
+    ['original.txt', 'text', '.hidden', '.hidden'],
+    ['README', 'text', 'renamed', 'renamed'],
+    ['.gitignore', 'text', 'renamed', 'renamed'],
+    ['original.txt', 'folder', 'renamed', 'renamed']
+  ]) {
+    const state = fixture();
+    Object.assign(state.folders['C:/tmp'][0], { name: original, type, fsSource: `C:/tmp/${original}` });
+    const app = createApp(t, state); app.action('rename-one');
+    const input = app.document.querySelector('.inline-rename'); input.value = entered; app.key('Enter', {}, input);
+    assert.equal(app.state().folders['C:/tmp'][0].name, expected, `${original} -> ${entered}`);
+    assert.ok(app.messages.some(item => item.type === 'filesystem-apply'));
+  }
+});
+
+test('inline rename validates collisions and unchanged names after restoring the extension', t => {
+  for (const entered of ['occupied', 'original']) {
+    const app = createApp(t, fixture()); app.action('rename-one');
+    const input = app.document.querySelector('.inline-rename'); input.value = entered; app.key('Enter', {}, input);
+    assert.equal(app.state().folders['C:/tmp'][0].name, 'original.txt');
+    assert.equal(app.messages.some(item => item.type === 'filesystem-apply'), false);
+    assert.equal(Boolean(app.document.querySelector('.inline-rename')), entered === 'occupied');
+    if (entered === 'occupied') { assert.equal(input.value, entered); assert.equal(app.document.activeElement, input); }
+  }
+});
+
 test('F2 rename cancels without changing files and does not start in text fields or dialogs', t => {
   const app = createApp(t, fixture());
   app.document.querySelector('.list').focus(); app.key('F2');
