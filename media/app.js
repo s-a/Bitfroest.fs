@@ -461,6 +461,7 @@
     clipboardPasteRequestId = requestId;
   }
   const nativeIcons = new Map();
+  let iconGeneration = 0;
   const requestedIcons = new Set();
   let iconTheme = {};
   try { iconTheme = JSON.parse(decodeURIComponent(document.body.dataset.iconTheme || '%7B%7D')); } catch { iconTheme = {}; }
@@ -557,6 +558,9 @@
     updateDirectoryActivity();
   }
   function beginDirectoryRefresh() {
+    iconGeneration++;
+    for (const key of requestedIcons) if (!nativeIcons.has(key)) requestedIcons.delete(key);
+    state.panes.forEach(p => files(p).forEach(file => { if (file.type === 'folder') requestedIcons.delete(entryPath(p, file)); }));
     refreshingFilesystem = true; refreshStartedAt = performance.now(); refreshStages.clear(); refreshMeasurements.clear(); refreshRequestId = `refresh-${++refreshSequence}`;
     const directories = [...new Set(state.panes.filter(p => !resultView(p)).map(currentPath))];
     if (!directories.length) { refreshPlan = null; return; }
@@ -1194,6 +1198,38 @@
     refreshSelection();
   }
   const fileColorCache = new Map();
+  const nativeIconPixels = new Map();
+  let nativeIconBackgrounds = {};
+  function refreshNativeIconContrast(image) {
+    if (!image.complete || !image.naturalWidth || !image.naturalHeight) return;
+    const source = image.getAttribute('src');
+    if (!nativeIconPixels.has(source)) {
+      let pixels = null;
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = canvas.height = 32;
+        const context = canvas.getContext('2d', { willReadFrequently: true });
+        context.drawImage(image, 0, 0, 32, 32);
+        pixels = context.getImageData(0, 0, 32, 32).data;
+      } catch { /* An unreadable image retains its original appearance. */ }
+      nativeIconPixels.set(source, { pixels, filters: new Map() });
+      while (nativeIconPixels.size > 512) nativeIconPixels.delete(nativeIconPixels.keys().next().value);
+    }
+    const cached = nativeIconPixels.get(source);
+    for (const [state, background] of Object.entries(nativeIconBackgrounds)) {
+      if (!cached.filters.has(background)) {
+        const color = window.CommanderContrast.nativeIconOutline(cached.pixels, background);
+        cached.filters.set(background, color ? `drop-shadow(0 0 1px ${color}) drop-shadow(0 0 1px ${color})` : 'none');
+        while (cached.filters.size > 16) cached.filters.delete(cached.filters.keys().next().value);
+      }
+      const filter = cached.filters.get(background);
+      const property = `--native-icon-outline-${state}`;
+      if (image.style.getPropertyValue(property) !== filter) image.style.setProperty(property, filter);
+    }
+  }
+  document.addEventListener('load', event => {
+    if (event.target.matches?.('img.native-icon')) refreshNativeIconContrast(event.target);
+  }, true);
   let fileColorRuleSource, matchFileColor;
   function refreshLocationColors() {
     const colors = window.CommanderFileColors;
@@ -1239,6 +1275,11 @@
     const foreground = variable('--vscode-sideBar-foreground') || variable('--vscode-foreground') || body.color;
     const hoverSource = variable('--vscode-list-hoverBackground') || variable('--hover');
     const hover = colors.composite(colors.parse(hoverSource) ? hoverSource : '#2a2d2e', background);
+    nativeIconBackgrounds = {
+      base: background, hover,
+      active: colors.composite(variable('--vscode-list-activeSelectionBackground') || '#094771', background),
+      inactive: colors.composite(variable('--vscode-list-inactiveSelectionBackground') || '#37373d', background)
+    };
     const contrast = document.body.classList.contains('vscode-high-contrast') || document.body.classList.contains('vscode-high-contrast-light');
     const badgeColors = {
       clean: ['gitDecoration-addedResourceForeground', '#008000'],
@@ -1287,6 +1328,8 @@
       for (const row of section.querySelectorAll('tr[data-id]')) {
         const file = entries.get(row.dataset.id), name = row.querySelector('[data-filename]');
         if (!file || !name) continue;
+        const nativeImage = row.querySelector('img.native-icon');
+        if (nativeImage) refreshNativeIconContrast(nativeImage);
         const desired = !contrast && settings.enabled !== false && file.type !== 'folder' ? matchFileColor(file.name) : null;
         const error = gitEntryError(currentPath(p), file.name);
         const title = error ? t('Git-Prüfung fehlgeschlagen: {error}', { error }) : emptyGitFolder(currentPath(p), file) ? t('Leer – von Git nicht erfasst') : '';
@@ -1316,9 +1359,9 @@
     if (fileColorCache.size > 512) fileColorCache.clear();
   }
   function baseIcon(file, directory) {
-    if (file.type === 'folder') return window.CommanderIcons.folder();
     const key = file.iconKey || join(directory || '', file.name);
     if (nativeIcons.get(key)) return window.CommanderIcons.native(nativeIcons.get(key));
+    if (file.type === 'folder') return window.CommanderIcons.folder();
 
     const baseTheme = iconTheme.base || {};
     const override = document.body.classList.contains('vscode-high-contrast') ? iconTheme.highContrast : document.body.classList.contains('vscode-light') || document.body.classList.contains('vscode-high-contrast-light') ? iconTheme.light : {};
@@ -1344,7 +1387,6 @@
     const requests = new Map();
     state.panes.forEach(p => {
       files(p).forEach(file => {
-        if (file.type === 'folder') return;
         const key = entryPath(p, file);
         requests.set(key, { key, path: key, name: file.name, type: file.type === 'folder' ? 'folder' : 'file' });
       });
@@ -1352,10 +1394,10 @@
     const pending = [...requests.values()].filter(item => !requestedIcons.has(item.key)).slice(0, 128);
     if (!pending.length) return;
     pending.forEach(item => requestedIcons.add(item.key));
-    host.postMessage({ type: 'icons', requests: pending });
+    host.postMessage({ type: 'icons', iconGeneration, requests: pending });
   }
   function displayedIconEntries() {
-    return new Map(state.panes.flatMap(p => files(p).filter(file => file.type !== 'folder').map(file => [entryPath(p, file), JSON.stringify(file)])));
+    return new Map(state.panes.flatMap(p => files(p).map(file => [entryPath(p, file), JSON.stringify(file)])));
   }
   function refreshVisibleIcons() {
     document.querySelectorAll('.pane').forEach((section, index) => {
@@ -1367,7 +1409,13 @@
         const fresh = temp.content.firstElementChild;
         const original = element.matches('.fileicon') ? element : element.querySelector('.fileicon');
         const nextOriginal = fresh.matches('.fileicon') ? fresh : fresh.querySelector('.fileicon');
-        if (original.outerHTML !== nextOriginal.outerHTML) original.replaceWith(nextOriginal);
+        let comparable = original;
+        if (original.matches('img.native-icon')) {
+          comparable = original.cloneNode();
+          for (const state of Object.keys(nativeIconBackgrounds)) comparable.style.removeProperty(`--native-icon-outline-${state}`);
+          if (!comparable.getAttribute('style')) comparable.removeAttribute('style');
+        }
+        if (comparable.outerHTML !== nextOriginal.outerHTML) original.replaceWith(nextOriginal);
         const retained = original.isConnected ? original : nextOriginal;
         if (!fresh.matches('.git-icon')) {
           if (element.matches('.git-icon')) element.replaceWith(retained);
@@ -3639,13 +3687,19 @@
     if (host && event.data?.type === 'column-settings') { hostColumnSettings = event.data.settings || {}; render(); return; }
     if (host && event.data?.type === 'favorite-settings') { favoriteSettings = event.data.settings || {}; closeFavorites(false); return; }
     if (host && event.data?.type === 'icons' && event.data.icons && typeof event.data.icons === 'object') {
+      if (event.data.iconGeneration !== undefined && event.data.iconGeneration !== iconGeneration) return;
       for (const [key, value] of Object.entries(event.data.icons)) {
         if (requestedIcons.has(key) && typeof value === 'string' && value.length <= 131072 && /^data:image\/png;base64,[A-Za-z0-9+/]+=*$/.test(value)) nativeIcons.set(key, value);
+        else if (requestedIcons.has(key)) nativeIcons.delete(key);
       }
       refreshVisibleIcons();
+      requestIcons();
       return;
     }
     if (host && event.data?.type === 'restore') {
+      iconGeneration++;
+      if (!event.data.preserveUnchanged) { requestedIcons.clear(); nativeIcons.clear(); }
+      else for (const key of requestedIcons) if (!nativeIcons.has(key)) requestedIcons.delete(key);
       clipboardPasteGeneration = null; clipboardPasteRequestId = null;
       rememberScroll();
       navigationRequests.clear(); navigationByTab.clear(); directoryListings.clear();

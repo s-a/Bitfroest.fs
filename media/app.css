@@ -170,7 +170,10 @@ body.vscode-high-contrast .column-resize::after, body.vscode-high-contrast-light
 .filename [data-filename] { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fileicon { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; width: var(--icon-size); height: var(--icon-size); color: var(--vscode-icon-foreground, var(--muted)); font-size: 9px; }
 .fileicon.folder { position: relative; font-size: 0; color: #dcb67a; }
-.native-icon { object-fit: contain; }
+.native-icon { object-fit: contain; filter: var(--native-icon-outline-base, none); }
+.file-table tbody tr:hover .native-icon { filter: var(--native-icon-outline-hover, none); }
+.file-table tr.selected .native-icon { filter: var(--native-icon-outline-inactive, none); }
+.pane.active .file-table tr.selected .native-icon { filter: var(--native-icon-outline-active, none); }
 .file-table tr.is-cut .fileicon, .file-table tr.is-cut [data-filename] { opacity: 0.5; }
 .cut-marker, .hidden-marker { position: absolute; left: 0; top: 50%; transform: translateY(-50%); color: inherit; }
 .operation-error { margin: 0 0 16px; color: var(--vscode-editorWidget-foreground, var(--text)); }

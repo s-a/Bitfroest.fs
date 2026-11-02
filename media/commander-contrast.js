@@ -33,5 +33,20 @@
     }
     return { foreground: hex(text), fill: hex(fill) };
   }
-  return { highlight, progressColors };
+  function nativeIconOutline(pixels, background) {
+    const back = parse(background);
+    if (!back || !pixels?.length || pixels.length % 4) return null;
+    const base = luminance(back);
+    let visible = 0, lowContrast = 0;
+    for (let i = 0; i < pixels.length; i += 4) {
+      const alpha = pixels[i + 3] / 255;
+      if (!alpha) continue;
+      const front = luminance(back.map((channel, j) => pixels[i + j] * alpha + channel * (1 - alpha)));
+      const ratio = (Math.max(base, front) + .05) / (Math.min(base, front) + .05);
+      visible += alpha;
+      if (ratio < 3) lowContrast += alpha;
+    }
+    return visible && lowContrast / visible >= .6 ? highlight(background).foreground : null;
+  }
+  return { highlight, progressColors, nativeIconOutline };
 });

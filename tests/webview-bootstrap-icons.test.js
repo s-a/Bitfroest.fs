@@ -9,14 +9,43 @@ function reply(app, status = 'clean') {
   const request = app.messages.find(message => message.type === 'git-status');
   app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'git-status-result', requestId: request.requestId, snapshotId: request.snapshotId, directories: { '/repo': { ok: true, repository: true, statuses: { folder: status, 'file.txt': status } } } } }));
 }
-test('late native folder icons never replace the initial folder appearance', t => {
+test('native folder icons replace the fallback without changing selection or Git badges', t => {
   const app = createApp(t, fixture()), first = app.row('folder').querySelector('.fileicon');
-  const html = first.outerHTML;
-  app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'icons', icons: { '/repo/folder': 'data:image/png;base64,Zm9sZGVy' } } }));
-  assert.equal(app.row('folder').querySelector('.fileicon'), first);
-  assert.equal(first.outerHTML, html);
   assert.ok(first.querySelector('svg.bi-folder-fill'));
-  assert.equal(app.messages.filter(message => message.type === 'icons').flatMap(message => message.requests).some(request => request.type === 'folder'), false);
+  const requests = app.messages.filter(message => message.type === 'icons').flatMap(message => message.requests);
+  assert.ok(requests.some(request => request.path === '/repo/folder' && request.type === 'folder'));
+  reply(app, 'modified');
+  const row = app.row('folder'), badge = row.querySelector('[data-git-status]');
+  app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'icons', icons: { '/repo/folder': 'data:image/png;base64,Zm9sZGVy' } } }));
+  assert.equal(app.row('folder'), row);
+  assert.ok(row.querySelector('img.native-icon[data-icon-reviewed="native"]'));
+  assert.equal(row.querySelector('[data-git-status]'), badge);
+});
+
+test('missing and unsolicited folder icons retain the fallback', t => {
+  const app = createApp(t, fixture()), first = app.row('folder').querySelector('.fileicon');
+  app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'icons', icons: { '/repo/folder': null, '/unrequested': 'data:image/png;base64,AAAA' } } }));
+  assert.equal(app.row('folder').querySelector('.fileicon'), first);
+  assert.ok(first.querySelector('svg.bi-folder-fill'));
+});
+
+test('folder icons for more than one batch are requested after the first response', t => {
+  const state = fixture();
+  state.folders['/repo'] = Array.from({ length: 140 }, (_, i) => ({ id: String(i), name: `folder-${i}`, type: 'folder' }));
+  const app = createApp(t, state);
+  const batch = app.messages.find(message => message.type === 'icons');
+  assert.equal(batch.requests.length, 128);
+  app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'icons', icons: Object.fromEntries(batch.requests.map(request => [request.key, null])) } }));
+  const requests = app.messages.filter(message => message.type === 'icons').flatMap(message => message.requests);
+  assert.equal(new Set(requests.map(request => request.key)).size, 140);
+});
+
+test('a folder refresh rejects icons from the previous view generation', t => {
+  const app = createApp(t, fixture());
+  const previous = app.messages.find(message => message.type === 'icons');
+  app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'window-focus', focused: true } }));
+  app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'icons', iconGeneration: previous.iconGeneration, icons: { '/repo/folder': 'data:image/png;base64,AAAA' } } }));
+  assert.equal(app.row('folder').querySelector('img.native-icon'), null);
 });
 test('status uses the chosen filled Bootstrap check directly and resizes without a font transition', t => {
   const app = createApp(t, fixture()); let loads = 0;

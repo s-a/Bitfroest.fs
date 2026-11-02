@@ -121,6 +121,49 @@ test('Linux reads a custom folder icon from bounded directory metadata', async (
   assert.equal(icons.photo, `data:image/png;base64,${png.toString('base64')}`);
 });
 
+test('Linux resolves folder-relative KDE icon paths', async () => {
+  const png = Buffer.from('iVBORw0KGgo=', 'base64');
+  const linux = memoryLinux({
+    '/pictures/.directory': { bytes: Buffer.from('[Desktop Entry]\nIcon=./art/photo.png\n') },
+    '/pictures/art/photo.png': { bytes: png }
+  });
+  const icons = await getFilesystemIcons([{ key: 'relative', path: '/pictures', name: 'pictures', type: 'folder' }], { platform: 'linux', linux });
+  assert.equal(icons.relative, `data:image/png;base64,${png.toString('base64')}`);
+});
+
+for (const platform of ['linux', 'darwin']) {
+  test(`${platform} resolves folder icons through the packaged native API`, async () => {
+    let closed = false;
+    const png = Buffer.from('iVBORw0KGgo=', 'base64');
+    const nativeApi = { openSession() { return {
+      async invoke(operation, request) {
+        assert.equal(operation, 'icons.resolve');
+        assert.equal(request.requests[0].path, '/pictures');
+        assert.equal(request.requests[0].type, 'folder');
+        return { icons: [{ key: 'native-folder', png }] };
+      }, close() { closed = true; }
+    }; } };
+    const icons = await getFilesystemIcons([{ key: 'native-folder', path: '/pictures', name: 'pictures', type: 'folder' }], { platform, nativeApi });
+    assert.equal(icons['native-folder'], `data:image/png;base64,${png.toString('base64')}`);
+    assert.equal(closed, true);
+  });
+}
+
+test('clearing icons during a native request prevents the old result from repopulating the cache', async () => {
+  let finish, calls = 0;
+  const png = Buffer.from('iVBORw0KGgo=', 'base64');
+  const nativeApi = { openSession: () => ({ invoke: async () => {
+    calls++;
+    if (calls === 1) await new Promise(resolve => { finish = resolve; });
+    return { icons: [{ key: 'folder', png }] };
+  }, close() {} }) };
+  const requests = [{ key: 'folder', path: '/pictures', name: 'pictures', type: 'folder' }];
+  const first = getFilesystemIcons(requests, { platform: 'darwin', nativeApi });
+  clearFilesystemIconCache(); finish(); await first;
+  await getFilesystemIcons(requests, { platform: 'darwin', nativeApi });
+  assert.equal(calls, 2);
+});
+
 test('Linux resolves configured theme icons and shares generic lookup cache', async () => {
   const png = Buffer.from('iVBORw0KGgo=', 'base64');
   const linux = memoryLinux({

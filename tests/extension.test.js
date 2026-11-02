@@ -978,7 +978,7 @@ function harness(t, options = {}) {
       if (request === './icon-theme') return { loadIconTheme: async () => { themeCalls++; return options.theme ? options.theme(themeCalls, icons) : icons; } };
       if (request === './native-window') return { maximizeWindow: native };
       if (request === 'node:child_process') throw new Error('Window setup must use the native module.');
-      if (request === './filesystem-icons') return { getFilesystemIcons: async requests => options.filesystemIcons ? options.filesystemIcons(requests) : {} };
+      if (request === './filesystem-icons') return { getFilesystemIcons: async requests => options.filesystemIcons ? options.filesystemIcons(requests) : {}, clearFilesystemIconCache: () => options.clearFilesystemIconCache?.() };
       if (request === './git-status-provider' && !options.realGitProvider) return { createGitStatusProvider: creation => ({
         inspect: async (directories, settings, onProgress) => options.gitInspect ? options.gitInspect(directories, settings, creation, onProgress) : {},
         branches: async directory => options.gitBranches ? options.gitBranches(directory) : { ok: true, count: 0, otherCount: 0 },
@@ -3218,6 +3218,18 @@ test('native icon requests map known mock paths and return their keyed image res
   assert.equal(captured[2].path, path.join(os.homedir(), 'Backups', 'archive.zip'));
   assert.equal(captured[3].path, '');
   assert.deepEqual(app.panels[0].messages.at(-1), { type: 'icons', icons: { '/workspace/bitfroest/README.md': icon } });
+});
+
+test('native folder icon responses retain the view generation and refresh clears cached metadata', async t => {
+  let cleared = 0;
+  const state = clipboardFixture();
+  const app = harness(t, { filesystemLoad: async () => structuredClone(state), clearFilesystemIconCache: () => { cleared++; } });
+  await app.command('bitfroest.openPrototype');
+  const panel = app.panels[0];
+  await panel.receive({ type: 'icons', iconGeneration: 7, requests: [{ key: 'folder', path: '/home/demo/Downloads', name: 'Downloads', type: 'folder' }] });
+  assert.equal(panel.messages.at(-1).iconGeneration, 7);
+  await panel.receive({ type: 'filesystem-refresh', state });
+  assert.equal(cleared, 1);
 });
 
 test('native icons cannot turn remote workspace paths or arbitrary supplied paths into local reads', async t => {

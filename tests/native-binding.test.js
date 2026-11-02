@@ -28,7 +28,7 @@ const binary = process.env.NATIVE_BINDING_TEST_PATH || path.join(__dirname, '../
 
 test('compiled binding exposes an honest versioned capability contract', () => {
   const binding = require(binary);
-  assert.deepEqual(binding.apiVersion, { major: 1, minor: 2 });
+  assert.deepEqual(binding.apiVersion, { major: 1, minor: 4 });
   assert.equal(binding.capabilities['git.status'].dirtySummary, true);
   assert.ok(Object.keys(binding.capabilities).length >= 20);
   for (const [operation, capability] of Object.entries(binding.capabilities)) {

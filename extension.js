@@ -15,7 +15,7 @@ const path = require('node:path');
 const { normalizePath, displayPath, identity: pathIdentity } = require('./media/commander-paths');
 const crypto = require('node:crypto');
 const { loadIconTheme } = require('./icon-theme');
-const { getFilesystemIcons } = require('./filesystem-icons');
+const { getFilesystemIcons, clearFilesystemIconCache } = require('./filesystem-icons');
 const { createProvider } = require('./filesystem-provider');
 const { createSearchMetadata } = require('./search-metadata');
 const { createZipFilesystem } = require('./zip-filesystem');
@@ -1346,6 +1346,7 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
         return;
       }
       if (['filesystem-apply', 'filesystem-refresh', 'filesystem-navigate', 'filesystem-prepare', 'filesystem-delete'].includes(message?.type)) {
+        if (message.type === 'filesystem-refresh') clearFilesystemIconCache();
         if (shellMenuBusy) { await messagePanel.webview.postMessage({ type: 'filesystem-result', ok: false, state: filesystemState, ...(typeof message.refreshRequestId === 'string' ? { refreshRequestId: message.refreshRequestId } : {}), ...(message.operationId ? { operationId: message.operationId } : {}), ...(message.navigationRequestId ? { navigationRequestId: message.navigationRequestId } : {}), ...(message.taskRequestId ? { taskRequestId: message.taskRequestId } : {}), error: t('Eine Dateisystemoperation läuft bereits.') }); return; }
         const current = panel;
         const operationId = (message.type === 'filesystem-apply' && message.transfer || ['filesystem-prepare', 'filesystem-delete'].includes(message.type)) && typeof message.operationId === 'string' && /^[a-zA-Z0-9-]{1,80}$/.test(message.operationId) ? message.operationId : undefined;
@@ -1469,7 +1470,7 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
         });
         let icons = {};
         try { icons = await getFilesystemIcons(requests); } catch { /* The view retains its fallback icons. */ }
-        if (panel === current && current) await current.webview.postMessage({ type: 'icons', icons });
+        if (panel === current && current) await current.webview.postMessage({ type: 'icons', icons, ...(Number.isSafeInteger(message.iconGeneration) ? { iconGeneration: message.iconGeneration } : {}) });
         return;
       }
       if (message?.type === 'inputFocus') {

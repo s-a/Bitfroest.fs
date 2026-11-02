@@ -8,6 +8,7 @@ const MAX_CACHE = 512;
 const MAX_ICON_BYTES = 131072;
 const cache = new Map();
 const linuxCache = new Map();
+let cacheGeneration = 0;
 
 async function boundedFile(filePath, limit, io = fs) {
   const stat = await io.lstat(filePath);
@@ -16,6 +17,7 @@ async function boundedFile(filePath, limit, io = fs) {
 }
 
 async function linuxIcon(request, services = {}) {
+  const generation = cacheGeneration;
   const read = (filePath, limit) => boundedFile(filePath, limit, services.fs || fs);
   const environment = services.env || process.env;
   try {
@@ -30,6 +32,7 @@ async function linuxIcon(request, services = {}) {
         }
       }
     }
+    if (reference.startsWith('./')) reference = path.posix.resolve(request.path, reference);
     if (path.posix.isAbsolute(reference)) return pngData(await read(reference, 65536).catch(() => null));
     if (reference && !/^[\w.+-]+$/.test(reference)) reference = '';
     const suffix = path.posix.extname(request.name).slice(1).toLowerCase();
@@ -37,7 +40,7 @@ async function linuxIcon(request, services = {}) {
     const cached = linuxCache.get(cacheKey);
     if (cached && cached.expires > Date.now()) return cached.value;
     function remember(value) {
-      linuxCache.set(cacheKey, { value, expires: Date.now() + (value ? 60000 : 10000) });
+      if (generation === cacheGeneration) linuxCache.set(cacheKey, { value, expires: Date.now() + (value ? 60000 : 10000) });
       while (linuxCache.size > MAX_CACHE) linuxCache.delete(linuxCache.keys().next().value);
       return value;
     }
@@ -79,6 +82,8 @@ function normalizeRequests(requests) {
 }
 
 async function getFilesystemIcons(requests, options = {}) {
+  const generation = cacheGeneration;
+  const remember = (key, value) => { if (generation === cacheGeneration) cache.set(key, value); };
   const normalized = normalizeRequests(requests);
   const platform = options.platform || process.platform;
   const result = Object.create(null);
@@ -90,16 +95,16 @@ async function getFilesystemIcons(requests, options = {}) {
     else { result[request.key] = null; pending.push({ ...request, identity }); }
   }
   if (!pending.length) return result;
-  if (platform === 'linux') {
+  if (platform === 'linux' && options.linux && !options.nativeApi) {
     for (const request of pending) {
       const value = await linuxIcon(request, options.linux);
       result[request.key] = value;
-      cache.set(request.identity, { value, expires: Date.now() + (value ? 60000 : 10000) });
+      remember(request.identity, { value, expires: Date.now() + (value ? 60000 : 10000) });
       while (cache.size > MAX_CACHE) cache.delete(cache.keys().next().value);
     }
     return result;
   }
-  if (platform === 'win32' && (!options.testLookup || options.nativeApi)) {
+  if (['win32', 'linux', 'darwin'].includes(platform) && (!options.testLookup || options.nativeApi)) {
     for (let offset = 0; offset < pending.length; offset += 24) {
       const batch = pending.slice(offset, offset + 24);
       let session, timer;
@@ -114,13 +119,18 @@ async function getFilesystemIcons(requests, options = {}) {
         const byKey = new Map(rows.filter(row => row && typeof row.key === 'string').map(row => [row.key, row]));
         for (const request of batch) {
           const png = byKey.get(request.key)?.png;
-          const value = Buffer.isBuffer(png) && png.length <= 65536 ? pngData(png) : null;
+          let value = Buffer.isBuffer(png) && png.length <= 65536 ? pngData(png) : null;
+          if (!value && platform === 'linux') value = await linuxIcon(request, options.linux);
           result[request.key] = value && value.length <= MAX_ICON_BYTES ? value : null;
-          cache.set(request.identity, { value: result[request.key], expires: Date.now() + (result[request.key] ? 60000 : 10000) });
+          remember(request.identity, { value: result[request.key], expires: Date.now() + (result[request.key] ? 60000 : 10000) });
           while (cache.size > MAX_CACHE) cache.delete(cache.keys().next().value);
         }
       } catch {
-        for (const request of batch) cache.set(request.identity, { value: null, expires: Date.now() + 5000 });
+        for (const request of batch) {
+          const value = platform === 'linux' ? await linuxIcon(request, options.linux) : null;
+          result[request.key] = value;
+          remember(request.identity, { value, expires: Date.now() + (value ? 60000 : 5000) });
+        }
         while (cache.size > MAX_CACHE) cache.delete(cache.keys().next().value);
       } finally {
         clearTimeout(timer);
@@ -141,17 +151,17 @@ async function getFilesystemIcons(requests, options = {}) {
         const row = rows.find(item => item?.key === request.key);
         const value = typeof row?.icon === 'string' && row.icon.length <= MAX_ICON_BYTES && /^data:image\/png;base64,[A-Za-z0-9+/]+=*$/.test(row.icon) ? row.icon : null;
         result[request.key] = value;
-        cache.set(request.identity, { value, expires: Date.now() + (value ? 60000 : 10000) });
+        remember(request.identity, { value, expires: Date.now() + (value ? 60000 : 10000) });
         while (cache.size > MAX_CACHE) cache.delete(cache.keys().next().value);
       }
     } catch {
-      for (const request of batch) cache.set(request.identity, { value: null, expires: Date.now() + 5000 });
+      for (const request of batch) remember(request.identity, { value: null, expires: Date.now() + 5000 });
       while (cache.size > MAX_CACHE) cache.delete(cache.keys().next().value);
     }
   }
   return result;
 }
 
-function clearFilesystemIconCache() { cache.clear(); linuxCache.clear(); }
+function clearFilesystemIconCache() { cacheGeneration++; cache.clear(); linuxCache.clear(); }
 
 module.exports = { getFilesystemIcons, clearFilesystemIconCache };

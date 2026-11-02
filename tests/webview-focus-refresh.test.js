@@ -114,6 +114,9 @@ test('focus refresh renews the icon of a changed file without clearing unchanged
   const saved = fixture();
   saved.folders['C:/tmp'].push({ id: 'other', name: 'other.txt', fsSource: 'C:/tmp/other.txt', type: 'text', size: 1 });
   const app = createApp(t, saved);
+  app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'icons', icons: {
+    'C:/tmp/keep.txt': 'data:image/png;base64,AAAA', 'C:/tmp/other.txt': 'data:image/png;base64,AAAA'
+  } } }));
   const count = app.messages.filter(message => message.type === 'icons').length;
   focus(app);
   const next = structuredClone(refreshes(app).at(-1).state);

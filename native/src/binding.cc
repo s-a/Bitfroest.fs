@@ -10,6 +10,9 @@
 #include <algorithm>
 #include "session.h"
 #include "git-status-native.h"
+#if defined(__linux__) || defined(__APPLE__)
+#include "folder-icons-posix.h"
+#endif
 #ifdef __linux__
 #include "binding-locks-linux.h"
 #include "locks-linux.h"
@@ -134,7 +137,20 @@ napi_value WhenClosed(napi_env env, napi_callback_info info) {
     return promise;
   }
 #ifdef __linux__
-  return WhenLinuxLocksClosed(env, session->state);
+  napi_value linux_closed = WhenLinuxLocksClosed(env, session->state);
+  napi_value icons_closed = WhenPosixIconsClosed(env, session->state);
+  if (!linux_closed || !icons_closed) return nullptr;
+  napi_value global, constructor, all, promises;
+  CHECK(napi_get_global(env, &global));
+  CHECK(napi_get_named_property(env, global, "Promise", &constructor));
+  CHECK(napi_get_named_property(env, constructor, "all", &all));
+  CHECK(napi_create_array_with_length(env, 2, &promises));
+  CHECK(napi_set_element(env, promises, 0, linux_closed));
+  CHECK(napi_set_element(env, promises, 1, icons_closed));
+  CHECK(napi_call_function(env, constructor, all, 1, &promises, &promise));
+  return promise;
+#elif defined(__APPLE__)
+  return WhenPosixIconsClosed(env, session->state);
 #endif
   napi_deferred deferred;
   napi_value value;
@@ -333,6 +349,12 @@ napi_value Invoke(napi_env env, napi_callback_info info) {
         return QueryMetadata(env, session, args[1]);
       }
 #endif
+#if defined(__linux__) || defined(__APPLE__)
+      if (std::strcmp(known, "icons.resolve") == 0) {
+        if (count != 2) return Fail(env, "InvalidRequest", "An icon request is required.");
+        return StartPosixIcons(env, session->state, args[1]);
+      }
+#endif
 #ifdef __linux__
       if (IsLinuxDesktopOperation(known)) {
         if (count != 2) return Fail(env, "InvalidRequest", "A Linux desktop request is required.");
@@ -398,7 +420,7 @@ napi_value Init(napi_env env, napi_value exports) {
   napi_value version, major, minor, capabilities;
   CHECK(napi_create_object(env, &version));
   CHECK(napi_create_uint32(env, 1, &major));
-  CHECK(napi_create_uint32(env, 2, &minor));
+  CHECK(napi_create_uint32(env, 4, &minor));
   CHECK(napi_set_named_property(env, version, "major", major));
   CHECK(napi_set_named_property(env, version, "minor", minor));
   CHECK(napi_object_freeze(env, version));
@@ -410,6 +432,11 @@ napi_value Init(napi_env env, napi_value exports) {
     bool supported = std::strcmp(operation, "git.status") == 0 || std::strcmp(operation, "git.info") == 0;
     bool locks = false;
     bool desktop = false;
+    bool icons = false;
+#if defined(__linux__) || defined(__APPLE__)
+    icons = std::strcmp(operation, "icons.resolve") == 0 && PosixIconsAvailable();
+    supported = supported || icons;
+#endif
 #ifdef __linux__
     const auto linux_locks = native_linux::ProbeCapabilities();
     locks = (std::strcmp(operation, "locks.rename") == 0 && linux_locks.rename) ||
@@ -424,14 +451,14 @@ napi_value Init(napi_env env, napi_value exports) {
 #endif
     const bool rename = std::strcmp(operation, "files.rename") == 0 && supported;
     const bool codepage = (std::strcmp(operation, "encoding.decodeBlock") == 0 || std::strcmp(operation, "encoding.decodeChunk") == 0) && supported;
-    const bool conditional = codepage || rename || locks || desktop;
+    const bool conditional = codepage || rename || locks || desktop || icons;
     CHECK(napi_set_named_property(env, entry, "status", Text(env, conditional ? "conditional" : supported ? "supported" : "unsupported")));
     if (conditional) {
       const char* lock_reason = "Windows10Or11X64AndProcessAccess";
 #ifdef __linux__
       lock_reason = "LinuxKernelSupportAndProcessAccess";
 #endif
-      CHECK(napi_set_named_property(env, entry, "reason", Text(env, desktop ? "GioDesktopSessionAndAssociation" : locks ? lock_reason : rename ? "CaseOnlySameDirectory" : "SingleDoubleByteUtf8AndGB18030Codepages")));
+      CHECK(napi_set_named_property(env, entry, "reason", Text(env, icons ? "LocalIconMetadataAndInstalledImageLoaders" : desktop ? "GioDesktopSessionAndAssociation" : locks ? lock_reason : rename ? "CaseOnlySameDirectory" : "SingleDoubleByteUtf8AndGB18030Codepages")));
     }
     if (codepage) {
       napi_value max_bytes;
