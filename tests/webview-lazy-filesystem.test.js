@@ -48,11 +48,14 @@ test('opening an unloaded folder waits for its shallow snapshot before changing 
  result(app,{resumeNavigation:{path:'C:/tmp/docs',side:0}});
  assert.equal(app.state().panes[0].tabs[0],'C:/tmp/docs');assert.ok(app.row('child.txt'));
 });
-test('delete and rename prepare their selected subtree before opening a single dialog',t=>{
+test('delete and rename open a single dialog before preparing their selected subtree',t=>{
  for(const action of ['delete','rename']){const app=createApp(t,fixture());select(app,'docs');app.action(action);
+ assert.equal(app.document.querySelector('#modal').open,true);assert.equal(app.messages.some(message=>message.type==='filesystem-prepare'),false);
+ submit(app);
  const request=app.messages.find(message=>message.type==='filesystem-prepare');assert.ok(request,action);assert.deepEqual([...request.paths],['C:/tmp/docs']);
- assert.equal(app.document.querySelector('#modal').open,false);assert.equal(app.messages.some(message=>message.type==='filesystem-apply'),false);
- result(app,{resumeAction:action});assert.equal(app.document.querySelector('#modal').open,true,action);
+ assert.equal(app.messages.some(message=>message.type==='filesystem-apply'),false);
+ result(app,{resumeAction:action});assert.equal(app.document.querySelector('#modal').open,false,action);
+ assert.ok(app.messages.some(message=>message.type===(action==='delete'?'filesystem-delete':'filesystem-apply')));
  assert.equal(app.messages.filter(message=>message.type==='filesystem-prepare').length,1);
  }
 });
@@ -102,9 +105,9 @@ test('cold folder rename does not commit after failed or cancelled preparation o
   assert.equal(app.state().folders['C:/tmp'][0].name,outcome==='replaced'?'replacement':'docs');
  }
 });
-test('failed preparation does not open the deferred operation dialog',t=>{
- const app=createApp(t,fixture());select(app,'docs');app.action('delete');app.window.dispatchEvent(new app.window.MessageEvent('message',{data:{type:'filesystem-result',ok:false,state:app.state()}}));
- assert.equal(app.document.querySelector('#modal-title').textContent,'Dateioperation fehlgeschlagen');assert.ok(app.document.querySelector('.operation-error-text'));assert.equal(app.messages.some(message=>message.type==='filesystem-apply'),false);assert.equal(app.messages.some(message=>message.type==='filesystem-delete'),false);
+test('failed selected subtree preparation preserves the confirmation and does not delete',t=>{
+ const app=createApp(t,fixture());select(app,'docs');app.action('delete');submit(app);app.window.dispatchEvent(new app.window.MessageEvent('message',{data:{type:'filesystem-result',ok:false,state:app.state()}}));
+ assert.equal(app.document.querySelector('#modal-title').textContent,'In den Papierkorb verschieben?');assert.ok(app.document.querySelector('.operation-error-text'));assert.equal(app.messages.some(message=>message.type==='filesystem-apply'),false);assert.equal(app.messages.some(message=>message.type==='filesystem-delete'),false);
 });
 
 const tick=()=>new Promise(resolve=>setImmediate(resolve));

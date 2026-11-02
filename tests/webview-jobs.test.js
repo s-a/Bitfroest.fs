@@ -88,23 +88,25 @@ test('a long process path is bounded before the nonshrinking percentage and time
   assert.match(app.window.getComputedStyle(row.querySelector('.job-content')).gridTemplateColumns, /minmax\(0,\s*1fr\).*max-content/);
   assert.equal(app.window.getComputedStyle(row.querySelector('[data-progress-directory]')).textOverflow, 'ellipsis');
 });
-for (const command of ['pack', 'copy']) test(`the first ${command} confirmation during focus refresh is retained and starts exactly once after its reply`, async t => {
+for (const command of ['pack', 'copy']) test(`the first ${command} confirmation interrupts focus refresh and starts exactly once`, async t => {
   const state = fixture(); state.folders['C:/right'] = [];
   const app = createApp(t, state); app.action('select-all');
   app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'window-focus' } }));
-  assert.ok(app.messages.some(message => message.type === 'filesystem-refresh'));
+  const refresh = app.messages.find(message => message.type === 'filesystem-refresh'); assert.ok(refresh);
   app.action(command); assert.equal(app.document.querySelector('#modal').open, true); submit(app);
-  assert.equal(app.messages.some(message => ['zip-write', 'filesystem-apply'].includes(message.type)), false);
-  app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-result', ok: true, state: structuredClone(state) } }));
+  app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-result', refreshRequestId: refresh.refreshRequestId, ok: true, state: structuredClone(state) } }));
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(app.messages.filter(message => ['zip-write', 'filesystem-apply'].includes(message.type)).length, 1);
 });
-test('cancelling a start deferred by refresh prevents that command from running after the reply', t => {
+test('cancelling a job started during refresh waits for its own cancellation response', t => {
   const app = createApp(t, fixture()); app.action('select-all'); app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'window-focus' } }));
   app.action('pack'); submit(app);
+  const refresh = app.messages.find(message => message.type === 'filesystem-refresh'), operation = app.messages.find(message => message.type === 'zip-write'); assert.ok(operation);
   app.click(app.document.querySelector('[data-job-row] .job-cancel'));
-  app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-result', ok: true, state: fixture() } }));
-  assert.equal(app.messages.some(message => message.type === 'zip-write'), false);
+  assert.equal(app.messages.find(message => message.type === 'filesystem-cancel')?.operationId, operation.operationId);
+  app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-result', refreshRequestId: refresh.refreshRequestId, ok: true, state: fixture() } }));
+  assert.equal(app.messages.filter(message => message.type === 'zip-write').length, 1);
+  app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-result', operationId: operation.operationId, ok: true, cancelled: true, state: fixture() } }));
   assert.equal(app.document.querySelectorAll('[data-job-row]').length, 0);
 });
 test('progress updates preserve the pressed file-list cancel button until the click is delivered', t => {
@@ -190,7 +192,8 @@ test('cancelling a popup job does not navigate or close the popup', t => {
   assert.equal(app.messages.filter(message => message.type === 'zip-write').length, 1);
 });
 for (const activation of ['click', 'keyboard']) test(`a job popup restores its target pane and tab through ${activation}`, async t => {
-  const app = createApp(t, fixture());
+  const saved = fixture(); saved.folders['C:/right'] = [];
+  const app = createApp(t, saved);
   app.document.querySelector('[data-pane="1"] .list').focus(); app.action('new-tab');
   const targetTabIndex = app.state().panes[1].tab, targetTabId = app.state().panes[1].tabStates[targetTabIndex].id;
   app.click(app.document.querySelector('[data-pane="0"] tbody tr[data-id]'));
@@ -211,7 +214,8 @@ for (const activation of ['click', 'keyboard']) test(`a job popup restores its t
   assert.equal(app.messages.filter(message => ['filesystem-apply', 'zip-write'].includes(message.type)).length, operationCount, 'opening the job location does not dispatch another operation');
 });
 test('a job whose target tab was closed opens a new tab on the original target pane', async t => {
-  const app = createApp(t, fixture());
+  const saved = fixture(); saved.folders['C:/right'] = [];
+  const app = createApp(t, saved);
   app.document.querySelector('[data-pane="1"] .list').focus(); app.action('new-tab');
   const targetPane = app.state().panes[1], closedTargetTabId = targetPane.tabStates[targetPane.tab].id;
   app.click(app.document.querySelector('[data-pane="0"] tbody tr[data-id]'));

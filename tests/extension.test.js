@@ -2018,16 +2018,16 @@ test('navigation publishes the exact authoritative folders after cache eviction 
   panel.dispose();
 });
 
-test('concurrent directory reads finish independently while mutations wait for both reads', async t => {
+test('confirmed mutations interrupt pending directory reads and ignore their late results', async t => {
   let entered, release;
   const started = new Promise(resolve => { entered = resolve; });
   const barrier = new Promise(resolve => { release = resolve; });
-  let reads = 0, concurrent = 0, maximum = 0, writes = 0, visiblePaths;
+  let reads = 0, concurrent = 0, maximum = 0, writes = 0, visiblePaths, readSignal;
   const initial = clipboardFixture();
   initial.panes.forEach((pane, side) => { pane.tabStates = [{ id: `tab-${side}`, path: pane.tabs[pane.tab] }]; });
   const app = harness(t, { filesystemLoad: async () => initial, filesystemApply: async before => { writes++; return before; }, filesystemPrepare: async (before, settings) => {
     maximum = Math.max(maximum, ++concurrent);
-    if (++reads === 1) { visiblePaths = settings.getVisibleDirectories; entered(); await barrier; }
+    if (++reads === 1) { visiblePaths = settings.getVisibleDirectories; readSignal = settings.signal; entered(); await barrier; }
     concurrent--; return before;
   } });
   await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
@@ -2043,12 +2043,120 @@ test('concurrent directory reads finish independently while mutations wait for b
     await panel.receive({ type: 'view-state', panes, active: 1 });
     assert.deepEqual(visiblePaths(), ['C:/temp', 'C:/tmp']);
     mutation = panel.receive({ type: 'filesystem-apply', state: initial }); await tick();
-    assert.equal(writes, 0, 'a write must wait until every pending directory read completes');
+    assert.equal(writes, 1, 'a confirmed write must start before the pending read completes');
+    assert.equal(readSignal.aborted, true, 'the superseded directory read must be cancelled');
   } finally { release(); await Promise.all([first, second, mutation]); }
   assert.equal(writes, 1);
-  assert.equal(panel.messages.find(message => message.type === 'filesystem-result' && message.navigationRequestId === 'directory-1')?.ok, true);
+  assert.equal(panel.messages.find(message => message.type === 'filesystem-result' && message.navigationRequestId === 'directory-1')?.cancelled, true);
   assert.equal(panel.messages.find(message => message.type === 'filesystem-result' && message.navigationRequestId === 'directory-2')?.ok, true);
   panel.dispose();
+});
+
+for (const type of ['zip-write', 'zip-unpack']) test(`${type} starts while directory metadata is pending`, async t => {
+  const zipFilesystem = require('../zip-filesystem'), original = zipFilesystem.createZipFilesystem;
+  const reading = deferred(), entered = deferred();
+  let signal, operations = 0;
+  zipFilesystem.createZipFilesystem = base => ({ ...original(base), writeArchive: async () => { operations++; }, unpackArchives: async () => { operations++; } });
+  t.after(() => { zipFilesystem.createZipFilesystem = original; });
+  const initial = clipboardFixture();
+  const app = harness(t, { filesystemLoad: async () => structuredClone(initial), filesystemPrepare: async (before, settings) => { signal = settings.signal; entered.resolve(); await reading.promise; return before; } });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  const navigation = panel.receive({ type: 'filesystem-navigate', state: initial, path: 'C:/temp', side: 1, navigationRequestId: 'directory-1' });
+  await entered.promise;
+  let operation;
+  try {
+    operation = panel.receive({ type, action: 'pack', sourcePath: 'C:/tmp', ids: ['a'], archive: 'C:/temp/out.zip', target: 'C:/temp', operationId: 'zip-during-read', state: initial });
+    await tick(); assert.equal(operations, 1); assert.equal(signal.aborted, true);
+  } finally { reading.resolve(); await Promise.all([navigation, operation]); panel.dispose(); }
+});
+
+test('generated host HTML starts a copy during a pending refresh and rejects the stale refresh result', async t => {
+  const initial = clipboardFixture(), reading = deferred(), entered = deferred();
+  let loads = 0, signal, writes = 0;
+  const app = harness(t, { filesystemLoad: async settings => {
+    if (++loads === 2) { signal = settings.signal; entered.resolve(); await reading.promise; return { ...initial, snapshotId: 'obsolete' }; }
+    return structuredClone(initial);
+  }, filesystemApply: async (_before, after) => { writes++; return { ...after, snapshotId: 'copied' }; } });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  const view = require('./support/webview.cjs').createApp(t, initial, { html: panel.webview.html });
+  assert.match(panel.webview.html, /Content-Security-Policy/);
+  view.action('refresh');
+  const refresh = view.messages.find(message => message.type === 'filesystem-refresh');
+  const refreshRun = panel.receive(refresh); await entered.promise;
+  let copyRun;
+  try {
+    view.click(view.row('a.txt').querySelector('[data-filename]')); view.action('copy');
+    view.document.querySelector('#modal-form').dispatchEvent(new view.window.Event('submit', { bubbles: true, cancelable: true }));
+    await tick();
+    const copy = view.messages.find(message => message.type === 'filesystem-apply'); assert.ok(copy);
+    copyRun = panel.receive(copy); await tick();
+    assert.equal(writes, 1); assert.equal(signal.aborted, true);
+  } finally { reading.resolve(); await Promise.all([refreshRun, copyRun]); }
+  const copyResult = panel.messages.find(message => message.type === 'filesystem-result' && message.operationId);
+  view.window.dispatchEvent(new view.window.MessageEvent('message', { data: copyResult }));
+  const old = panel.messages.find(message => message.type === 'filesystem-result' && message.refreshRequestId);
+  assert.equal(old.cancelled, true);
+  view.window.dispatchEvent(new view.window.MessageEvent('message', { data: old }));
+  assert.equal(view.state().snapshotId, 'copied');
+  assert.ok(view.state().folders['C:/temp'].some(row => row.name === 'a.txt'));
+  panel.dispose();
+});
+
+test('a superseded archive opening cannot publish after a confirmed archive write', async t => {
+  const initial = clipboardFixture(); initial.folders['C:/tmp'].push({ id: 'zip', name: 'archive.zip', type: 'archive', fsSource: 'C:/tmp/archive.zip' });
+  const zipFilesystem = require('../zip-filesystem'), original = zipFilesystem.createZipFilesystem, entered = deferred(), reading = deferred();
+  zipFilesystem.createZipFilesystem = base => ({ ...original(base), openArchive: async () => { entered.resolve(); await reading.promise; return { path: 'zip:C:/tmp/archive.zip!/', state: initial }; }, writeArchive: async () => {} });
+  t.after(() => { zipFilesystem.createZipFilesystem = original; });
+  const app = harness(t, { filesystemLoad: async () => initial }); await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  const opening = panel.receive({ type: 'zip-open', path: 'C:/tmp/archive.zip', side: 0, navigationRequestId: 'directory-1', state: initial }); await entered.promise;
+  await panel.receive({ type: 'zip-write', action: 'pack', sourcePath: 'C:/tmp', ids: ['a'], archive: 'C:/temp/new.zip', operationId: 'pack-after-open', state: initial });
+  reading.resolve(); await opening;
+  assert.equal(panel.messages.find(message => message.navigationRequestId === 'directory-1')?.cancelled, true);
+  panel.dispose();
+});
+
+test('copy content verification is a persistent boolean setting with an off default', async t => {
+  const configurations = manifest.contributes.configuration;
+  const property = (Array.isArray(configurations) ? configurations : [configurations]).map(section => section.properties?.['bitfroest.files.verifyAfterCopy']).find(Boolean);
+  assert.equal(property?.type, 'boolean'); assert.equal(property.default, false);
+  const initial = clipboardFixture(), app = harness(t, { filesystemLoad: async () => initial });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  await panel.receive({ type: 'copy-verification-setting', enabled: true });
+  assert.ok(app.updateCalls.some(update => update.store === 'configuration' && update.key === 'files.verifyAfterCopy' && update.value === true && update.target === 1));
+  await panel.receive({ type: 'copy-verification-setting', enabled: false });
+  assert.equal(app.updateCalls.filter(update => update.key === 'files.verifyAfterCopy').at(-1).value, false);
+  const count = app.updateCalls.length; await panel.receive({ type: 'copy-verification-setting', enabled: 'true' }); assert.equal(app.updateCalls.length, count);
+  await panel.receive({ type: 'copy-verification-setting', enabled: true });
+  panel.dispose();
+  await app.command('bitfroest.openPrototype');
+  const reopened = app.panels.at(-1), value = reopened.webview.html.match(/data-file-settings="([^"]+)"/)[1];
+  assert.equal(JSON.parse(decodeURIComponent(value)).verifyAfterCopy, true);
+  reopened.dispose();
+});
+for (const enabled of [false, true]) test(`host forwards content verification ${enabled} to the copy provider`, async t => {
+  const initial = clipboardFixture(); let received;
+  const app = harness(t, { configuration: { 'files.verifyAfterCopy': !enabled }, filesystemLoad: async () => initial, filesystemApply: async (before, _after, operation) => { received = operation; return before; } });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  await panel.receive({ type: 'filesystem-apply', state: initial, operationId: 'copy-verification', transfer: { mode: 'copy', sourcePath: 'C:/tmp', sourceSide: 0, ids: ['a'], verifyAfterCopy: enabled } });
+  assert.equal(received.verifyAfterCopy, enabled); panel.dispose();
+});
+test('copy verification updates an existing workspace override', async t => {
+  const app = harness(t, { filesystemLoad: async () => clipboardFixture(), configurationScopes: { 'files.verifyAfterCopy': { globalValue: false, workspaceValue: true } } });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  await panel.receive({ type: 'copy-verification-setting', enabled: false });
+  assert.ok(app.updateCalls.some(update => update.key === 'files.verifyAfterCopy' && update.value === false && update.target === 2)); panel.dispose();
+});
+
+test('clipboard reads do not wait for directory metadata', async t => {
+  const initial = clipboardFixture(), reading = deferred(), entered = deferred();
+  const app = harness(t, { filesystemLoad: async () => initial, filesystemPrepare: async before => { entered.resolve(); await reading.promise; return before; } });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  const navigation = panel.receive({ type: 'filesystem-navigate', state: initial, path: 'C:/temp', side: 1, navigationRequestId: 'directory-1' }); await entered.promise;
+  let clipboard;
+  try {
+    clipboard = panel.receive({ type: 'clipboard-read', requestId: 'read-during-navigation' }); await tick();
+    assert.ok(panel.messages.some(message => message.type === 'clipboard-result' && message.requestId === 'read-during-navigation'));
+  } finally { reading.resolve(); await Promise.all([navigation, clipboard]); panel.dispose(); }
 });
 
 test('navigation in another tab does not cancel a pending read of the same pane', async t => {

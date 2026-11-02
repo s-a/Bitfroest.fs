@@ -665,7 +665,7 @@ function createProvider(options = {}) {
             if (file.hash) stage.hash = hash(await input.readFile());
             throwIfAborted(operation.signal);
             if (Number(stat.size) !== (file.expectedSize ?? file.source.row.size) || file.hash && stage.hash !== file.hash) throw new Error('Die Kopierprüfung der Zieldatei ist fehlgeschlagen.');
-            await verifyCopiedBytes(file, sourcePath, input);
+            if (operation.verifyAfterCopy !== false) await verifyCopiedBytes(file, sourcePath, input);
             if (contentSignature(await fs.lstat(sourcePath, { bigint: true })) !== file.source.contentSignature) throw new Error('Datei während des Kopierens extern geändert.');
             for (const source of file.appendSources || []) { await assertComponents(source.path); if (contentSignature(await fs.lstat(source.path, { bigint: true })) !== source.contentSignature) throw new Error('Datei während des Kopierens extern geändert.'); }
             await assertComponents(file.path, true);

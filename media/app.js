@@ -411,7 +411,7 @@
     if (clipboardPasteGeneration !== null) return;
     const targetPath = currentPath(pane()), targetSide = state.active;
     const targetPane = pane(), targetTab = targetPane.tabStates[targetPane.tab].id, snapshotId = state.snapshotId;
-    const validRead = () => !contextPopup && !shellMenuPending && document.activeElement?.closest('.list') === document.querySelectorAll('[data-pane]')[targetSide]?.querySelector('.list') && !document.activeElement?.closest('[data-lister],.lister') && !$('#modal').open && !transferJob && !transferPending && !filesystemPending && state.active === targetSide && state.panes[targetSide] === targetPane && currentPath(targetPane) === targetPath && targetPane.tabStates[targetPane.tab].id === targetTab && state.snapshotId === snapshotId;
+    const validRead = () => !contextPopup && !shellMenuPending && document.activeElement?.closest('.list') === document.querySelectorAll('[data-pane]')[targetSide]?.querySelector('.list') && !document.activeElement?.closest('[data-lister],.lister') && !$('#modal').open && !transferJob && !transferPending && (!filesystemPending || refreshingFilesystem) && state.active === targetSide && state.panes[targetSide] === targetPane && currentPath(targetPane) === targetPath && targetPane.tabStates[targetPane.tab].id === targetTab && state.snapshotId === snapshotId;
     const start = selection => {
       setClipboardSelection(selection);
       if (!selection) { toast(t('Die Zwischenablage enthält keine Dateien.')); return; }
@@ -752,12 +752,13 @@
   function enqueueOperation(request, run, targetPane = state.active) { return operationQueue.add({ ...request, targetLocation: operationTargetLocation(targetPane) }, run); }
   function runQueuedOperation(job, run) {
     if (operationQueue.active !== job) { if (deferredQueueJob === job) { deferredQueueJob = null; deferredQueueRun = null; } return; }
-    if (filesystemPending || navigationRequests.size || transferPlanning) { deferredQueueJob = job; deferredQueueRun = run; return; }
+    prioritizeFilesystemOperation();
+    if (filesystemPending || transferPlanning) { deferredQueueJob = job; deferredQueueRun = run; return; }
     deferredQueueJob = null; deferredQueueRun = null;
     try { run(); } catch (error) { operationQueue.complete(job.id, { ok: false, error: error.message }); }
   }
   function flushDeferredNavigationReads() {
-    if (transferPlanning || transferPending || !deferredNavigationReads.size) return;
+    if (filesystemPending || transferJob || transferPlanning || transferPending || !deferredNavigationReads.size) return;
     const pending = [...deferredNavigationReads.values()]; deferredNavigationReads.clear();
     statusbar.setStatus(operationQueue?.active ? t('Dateioperation läuft…') : '');
     for (const request of pending) {
@@ -767,7 +768,7 @@
     }
   }
   function flushQueuedOperation() {
-    if (filesystemPending || navigationRequests.size || transferPlanning || !deferredQueueJob) return;
+    if (filesystemPending && !refreshingFilesystem || transferPlanning || !deferredQueueJob) return;
     const job = deferredQueueJob, run = deferredQueueRun; runQueuedOperation(job, run);
   }
   function cancelTransfer() {
@@ -903,8 +904,25 @@
       return directories.get(directory).get(path);
     }).filter(Boolean);
   };
+  function prioritizeFilesystemOperation() {
+    if (!navigationRequests.size && !refreshingFilesystem) return;
+    for (const request of navigationRequests.values()) {
+      if (['filesystem-navigate', 'zip-open'].includes(request.type)) deferredNavigationReads.set(navigationKey(request), { message: { type: request.type, path: request.path, side: request.side }, resume: request.resume, tabId: request.tabId });
+    }
+    navigationRequests.clear(); navigationByTab.clear();
+    host?.postMessage({ type: 'filesystem-read-cancel' });
+    if (refreshingFilesystem) {
+      refreshPlan?.progress.terminate('cancelled'); refreshPlan = null;
+      refreshingFilesystem = false; refreshRequestId = null; refreshStages.clear(); refreshMeasurements.clear();
+      filesystemPending = false; pendingFilesystemKind = null; filesystemResume = null;
+      focusRefreshRequested = true;
+      $('#panes').inert = false; $('#functionbar').inert = false;
+    }
+    updateDirectoryActivity();
+  }
   function requestFilesystem(message, resume) {
-    if (message.type === 'zip-open' && operationQueue?.active) {
+    if (!['filesystem-navigate', 'zip-open', 'filesystem-refresh'].includes(message.type)) prioritizeFilesystemOperation();
+    if (message.type === 'zip-open' && (!filesystemPending || operationQueue?.active)) {
       const origin = state.panes[message.side], navigationRequestId = `directory-${++navigationSequence}`;
       const request = { ...message, navigationRequestId, startedAt: performance.now(), tabId: origin.tabStates[origin.tab].id, originPath: currentPath(origin), activeAtStart: state.active, resume: () => { if (request.archivePath) go(request.archivePath); } };
       navigationRequests.set(navigationRequestId, request); navigationByTab.set(navigationKey(request), request);
@@ -936,7 +954,7 @@
       host.postMessage({ ...message, navigationRequestId, navigationTabId: request.tabId, state });
       return true;
     }
-    if (navigationRequests.size) return true;
+    prioritizeFilesystemOperation();
     refreshingFilesystem = message.type === 'filesystem-refresh';
     if (refreshingFilesystem) beginDirectoryRefresh();
     pendingFilesystemKind = message.type;
@@ -1025,13 +1043,20 @@
   const selected = () => selectedFor(pane());
   const size = value => value >= 1048576 ? `${(value / 1048576).toFixed(1)} MB` : value >= 1024 ? `${(value / 1024).toFixed(1)} KB` : `${value} B`;
   function persist() {
-    if (transferPending && !transferCompletion) return;
+    if (transferPending && !transferCompletion) {
+      if (host && state.realFilesystem) {
+        host.setState({ ...state, folders: JSON.parse(confirmedFolders) });
+        host.postMessage({ type: 'view-state', panes: state.panes, active: state.active });
+      }
+      return;
+    }
     state.panes.forEach(p => tabs.remember(p));
     if (host && state.realFilesystem && filesystemPending) host.postMessage({ type: 'view-state', panes: state.panes, active: state.active });
     if (host) {
       host.setState(state);
       const proposedState = transferCompletion?.proposedState || state;
       if (state.realFilesystem && JSON.stringify(proposedState.folders) !== confirmedFolders) {
+        prioritizeFilesystemOperation();
         if (!filesystemPending) { pendingFilesystemKind = 'filesystem-apply'; filesystemPending = true; $('#panes').inert = !operationQueue?.active; $('#functionbar').inert = true; if (!transferJob) { toast(t('Dateioperation läuft…'), 'info'); statusTask('filesystem', t('Dateioperation läuft…') + ` · ${t('Hostbestätigung')}`); } host.postMessage({ type: 'filesystem-apply', state: proposedState, ...(transferJob ? { operationId: transferJob.id, transfer: transferJob.transfer } : {}) }); }
       } else if (!filesystemPending) host.postMessage({ type: 'state', state });
     }
@@ -1509,7 +1534,7 @@
     }
   }
   function startRename(proposal, confirmed) {
-    if (filesystemPending || navigationRequests.size) return;
+    if (filesystemPending && !refreshingFilesystem) return;
     clearTimeout(renameTimer);
     const p = pane(), file = files(p).find(item => item.id === p.cursor) || selected()[0];
     if (!file) return;
@@ -2369,7 +2394,7 @@
   }
   async function executeTransfer(options) {
     if (!host || !state.realFilesystem) return executeTransferNow(options);
-    const captured = { ...options, validateSelection: undefined, ids: [...options.ids] };
+    const captured = { ...options, verifyAfterCopy: options.verifyAfterCopy ?? fileSettings.verifyAfterCopy === true, validateSelection: undefined, ids: [...options.ids] };
     const target = window.CommanderTransfer.planTarget({ ...captured, folders: state.folders }).directory;
     enqueueOperation({ command: options.mode === 'move' ? 'move' : 'copy', title: t(options.mode === 'move' ? 'Verschieben' : 'Kopieren'), target, sources: options.ids.map(id => (state.folders[options.sourcePath] || []).find(file => file.id === id)).filter(Boolean).map(file => file.fsSource || join(options.sourcePath, file.name)) }, job => executeTransferNow(captured).catch(error => {
       failTransferExecution(error, captured.onComplete);
@@ -2379,7 +2404,8 @@
   async function executeTransferNow(options) {
     const queuedJob = operationQueue?.active;
     const failed = error => { failTransferExecution(error, options.onComplete); operationQueue?.complete(queuedJob?.id, { ok: false, error: error.message }); };
-    if (filesystemPending || navigationRequests.size) { runQueuedOperation(queuedJob, () => executeTransferNow(options).catch(failed)); return; }
+    prioritizeFilesystemOperation();
+    if (filesystemPending) { runQueuedOperation(queuedJob, () => executeTransferNow(options).catch(failed)); return; }
     if (options.validateSelection && !options.validateSelection()) throw new Error(t('Die gezogene Auswahl wurde geändert. Bitte erneut ziehen.'));
     if (host && state.realFilesystem && !Object.hasOwn(state.folders, options.sourcePath)) {
       requestFilesystem({ type: 'filesystem-prepare', paths: [options.sourcePath], action: options.mode, recursive: false }, () => executeTransferNow(options).catch(failed));
@@ -2403,7 +2429,7 @@
     planningJob.controller = new AbortController();
     let originalFolders = clone(state.folders);
     let committedResult = { completed: 0, directories: 0, completedIds: [] };
-    const pendingTransfer = () => ({ mode: options.mode, sourcePath: options.sourcePath, sourceSide: options.sourceSide,
+    const pendingTransfer = () => ({ mode: options.mode, sourcePath: options.sourcePath, sourceSide: options.sourceSide, verifyAfterCopy: options.verifyAfterCopy === true,
       ids: options.ids.filter(id => !committedResult.completedIds.includes(id) && (originalFolders[options.sourcePath] || []).some(row => row.id === id)) });
     try {
     const confirmedView = host && state.realFilesystem ? { folders: originalFolders, panes: clone(state.panes) } : null;
@@ -2554,7 +2580,8 @@
     enqueueOperation({ command, title: t(request.messageType === 'zip-test' ? 'Archiv prüfen' : ['zip-unpack', 'zip-copy'].includes(request.messageType) ? 'Entpacken' : 'ZIP erstellen'), target: destination, label: request.archive || destination, sources: sourcePaths }, () => sendZipWriteNow(captured, completed), targetSide);
   }
   function sendZipWriteNow(request, completed, foreground = false) {
-    if (filesystemPending || navigationRequests.size) {
+    prioritizeFilesystemOperation();
+    if (filesystemPending) {
       if (foreground) { toast(t('Während einer Dateisystemoperation ist diese Aktion nicht verfügbar.')); return; }
       runQueuedOperation(operationQueue.active, () => sendZipWriteNow(request, completed)); return;
     }
@@ -2601,13 +2628,13 @@
     if (!picked.length) { toast(t('Zuerst eine Datei oder einen Ordner auswählen.')); onComplete?.({ confirmed: false, completed: 0, completedIds: [], errors: [], cancelled: true }); return; }
     const policies = [['ask', t('Bei Konflikten nachfragen')], ['overwrite-all', t('Alle überschreiben')], ['skip-all', t('Alle vorhandenen überspringen')], ['overwrite-older', t('Alle älteren überschreiben')], ['overwrite-older-equal', t('Alle älteren und gleich alten überschreiben')], ['rename-older-target', t('Ältere Ziele umbenennen, neuere überspringen')], ['autorename-source', t('Kopien automatisch umbenennen')], ['autorename-target', t('Vorhandene Ziele automatisch umbenennen')], ['larger', t('Nur größere Dateien kopieren')], ['smaller', t('Nur kleinere Dateien kopieren')]];
     const cancelled = () => { if ($('#modal').open) return; $('#modal').removeEventListener('close', cancelled); onComplete?.({ confirmed: false, completed: 0, completedIds: [], errors: [], cancelled: true }); };
-    modal(mode === 'move' ? t('Verschieben') : t('Kopieren'), `<p id="modal-description" class="dialog-description">${count('selectedEntry', picked.length)}</p><div class="transfer-source"><span>${t('Quelle')}</span><div data-transfer-source>${escape(displayPath(sourcePath))}</div></div>${field(mode === 'move' ? t('Verschieben nach') : t('Kopieren nach'), targetPath || currentPath(state.panes[1 - sourceSide]))}${field(t('Nur Dateien dieses Typs'), '*.*', 'transfer-filter')}<label><input type="checkbox" id="transfer-individual"> ${t('Jede Datei einzeln umbenennen')}</label><details class="dialog-options"><summary>${t('Optionen')}</summary><div class="field"><label for="transfer-policy">${t('Bei vorhandenen Zieldateien')}</label><select id="transfer-policy">${policies.map(([value, label]) => `<option value="${value}">${label}</option>`).join('')}</select></div><p class="dialog-hint">${t('Bei einer einzelnen Datei kann das Ziel auch einen neuen Dateinamen enthalten. Filter unterstützen * und ? sowie Ausschlüsse hinter |.')}</p></details>`, mode === 'move' ? t('Verschieben') : t('Kopieren'), () => {
+    modal(mode === 'move' ? t('Verschieben') : t('Kopieren'), `<p id="modal-description" class="dialog-description">${count('selectedEntry', picked.length)}</p><div class="transfer-source"><span>${t('Quelle')}</span><div data-transfer-source>${escape(displayPath(sourcePath))}</div></div>${field(mode === 'move' ? t('Verschieben nach') : t('Kopieren nach'), targetPath || currentPath(state.panes[1 - sourceSide]))}${field(t('Nur Dateien dieses Typs'), '*.*', 'transfer-filter')}<label><input type="checkbox" id="transfer-verify"> ${t('Dateiinhalt nach dem Kopieren vergleichen')}</label><label><input type="checkbox" id="transfer-individual"> ${t('Jede Datei einzeln umbenennen')}</label><details class="dialog-options"><summary>${t('Optionen')}</summary><div class="field"><label for="transfer-policy">${t('Bei vorhandenen Zieldateien')}</label><select id="transfer-policy">${policies.map(([value, label]) => `<option value="${value}">${label}</option>`).join('')}</select></div><p class="dialog-hint">${t('Bei einer einzelnen Datei kann das Ziel auch einen neuen Dateinamen enthalten. Filter unterstützen * und ? sowie Ausschlüsse hinter |.')}</p></details>`, mode === 'move' ? t('Verschieben') : t('Kopieren'), () => {
       let destination = $('#value').value;
       if (sourceGroups?.length && sourceGroups.reduce((sum, group) => sum + group.ids.length, 0) > 1 && destination.trim() && !/[\\/]$/.test(destination)) destination += '/';
       if (validateSelection && !validateSelection()) { toast(t('Die gezogene Auswahl wurde geändert. Bitte erneut ziehen.')); return false; }
       try { for (const group of sourceGroups || [{ sourcePath, ids: picked.map(file => file.id) }]) window.CommanderTransfer.planTarget({ folders: state.folders, sourcePath: group.sourcePath, ids: group.ids, targetPath: destination }); }
       catch (error) { toast(error.message); return false; }
-      const options = { sourceSide, targetSide, sourcePath, ids: picked.map(file => file.id), targetPath: destination, mode, individualNames: $('#transfer-individual').checked, filter: $('#transfer-filter').value, policy: $('#transfer-policy').value, onComplete, validateSelection };
+      const options = { sourceSide, targetSide, sourcePath, ids: picked.map(file => file.id), targetPath: destination, mode, verifyAfterCopy: $('#transfer-verify').checked, individualNames: $('#transfer-individual').checked, filter: $('#transfer-filter').value, policy: $('#transfer-policy').value, onComplete, validateSelection };
       if (sourceGroups?.length) {
         options.policyState = { value: options.policy };
         let index = 0;
@@ -2626,6 +2653,11 @@
     });
     if (sourceGroups?.length) { $('#modal-description').textContent = count('selectedEntry', sourceGroups.reduce((sum, group) => sum + group.ids.length, 0)); document.querySelector('[data-transfer-source]').textContent = sourceGroups.map(group => displayPath(group.sourcePath)).join('\n'); }
     $('#value').dataset.transferName = mode;
+    $('#transfer-verify').checked = fileSettings.verifyAfterCopy === true;
+    $('#transfer-verify').addEventListener('change', event => {
+      fileSettings.verifyAfterCopy = event.target.checked;
+      host?.postMessage({ type: 'copy-verification-setting', enabled: event.target.checked });
+    });
     $('#value').required = false;
     reportFocus();
     if (onComplete) $('#modal').addEventListener('close', cancelled);
@@ -2668,7 +2700,7 @@
   }
   function action(kind, frozen) {
     const command = window.CommanderJobs.commandForAction(kind);
-    if ((filesystemPending && !((operationQueue?.active || refreshingFilesystem) && (command?.supportsBackgroundOperation.enabled || ['parent', 'up', 'open'].includes(kind)))) || navigationRequests.size && !command?.supportsBackgroundOperation.enabled && !['parent', 'up', 'open', 'view', 'edit'].includes(kind) || transferPending) return;
+    if ((filesystemPending && !refreshingFilesystem && !(operationQueue?.active && (command?.supportsBackgroundOperation.enabled || ['parent', 'up', 'open'].includes(kind)))) || transferPending) return;
     if (frozen && !validDraggedFiles(frozen)) return toast(t('Die gezogene Auswahl wurde geändert. Bitte erneut ziehen.'));
     if (state.realFilesystem && kind === 'reset') return toast(t('Diese Aktion ist für das reale Dateisystem noch nicht verfügbar.'));
     const p = frozen ? state.panes[frozen.side] : pane(), source = currentPath(p), marked = selected(), picked = frozen ? files(p).filter(file => frozen.ids.includes(file.id)) : marked.length ? marked : files(p).filter(file => file.id === p.cursor);
@@ -2730,12 +2762,12 @@
     }
     if (!picked.length) return toast(t('Zuerst eine oder mehrere Dateien markieren.'));
     if (picked.some(row => row.archive) && !['view', 'edit'].includes(kind)) return toast(t('Dateioperationen innerhalb von Archiven sind nicht verfügbar. F3 zeigt den Inhalt schreibgeschützt an.'));
-    if (['delete', 'delete-alternate', 'delete-permanently', 'rename'].includes(kind) && prepareFolders(picked.filter(file => file.type === 'folder').map(file => resultView(p) ? file.fsSource : join(source, file.name)), kind, () => action(kind, frozen))) return;
     if (kind === 'view' || kind === 'edit') return preview(picked[0], kind === 'edit');
     if (['delete', 'delete-alternate', 'delete-permanently'].includes(kind)) {
       const useTrash = kind === 'delete-permanently' ? false : kind === 'delete-alternate' ? fileSettings.deleteToTrash === false : fileSettings.deleteToTrash !== false;
-      modal(state.realFilesystem ? t(useTrash ? 'In den Papierkorb verschieben?' : 'Endgültig löschen?') : t('Auswahl löschen?'), ui`<p>${count('entry', picked.length)} ${state.realFilesystem ? t(useTrash ? picked.length === 1 ? 'wird in den Papierkorb verschoben.' : 'werden in den Papierkorb verschoben.' : picked.length === 1 ? 'wird endgültig gelöscht.' : 'werden endgültig gelöscht.') : t(picked.length === 1 ? 'wird aus den Beispieldaten entfernt.' : 'werden aus den Beispieldaten entfernt.')}</p><p>${picked.map(file => escape(file.name)).join('<br>')}</p>`, state.realFilesystem ? t(useTrash ? 'In den Papierkorb' : 'Endgültig löschen') : t('Mockup löschen'), () => {
+      modal(state.realFilesystem ? t(useTrash ? 'In den Papierkorb verschieben?' : 'Endgültig löschen?') : t('Auswahl löschen?'), ui`<p>${count('entry', picked.length)} ${state.realFilesystem ? t(useTrash ? picked.length === 1 ? 'wird in den Papierkorb verschoben.' : 'werden in den Papierkorb verschoben.' : picked.length === 1 ? 'wird endgültig gelöscht.' : 'werden endgültig gelöscht.') : t(picked.length === 1 ? 'wird aus den Beispieldaten entfernt.' : 'werden aus den Beispieldaten entfernt.')}</p><p>${picked.map(file => escape(file.name)).join('<br>')}</p>`, state.realFilesystem ? t(useTrash ? 'In den Papierkorb' : 'Endgültig löschen') : t('Mockup löschen'), function removeSelection() {
         if (frozen && !validDraggedFiles(frozen)) { toast(t('Die gezogene Auswahl wurde geändert. Bitte erneut ziehen.')); return false; }
+        if (prepareFolders(picked.filter(file => file.type === 'folder').map(file => resultView(p) ? file.fsSource : join(source, file.name)), kind, removeSelection)) return false;
         if (state.realFilesystem) {
           const paths = picked.map(file => resultView(p) ? file.fsSource : join(source, file.name));
           $('#modal').close();
@@ -2781,7 +2813,11 @@
   }
   function rename(picked, source) {
     const directories = picked.map(file => resultView(pane()) ? parent(file.fsSource) : source);
-    modal(t('Mehrfach-Umbenennen'), ui(['<p>Die Vorschau wird beim Eingeben aktualisiert. [N] = Name, [C] = Zähler.</p><div class="field-row">']) + field(t('Namensmaske'), '[N]_[C]', 'mask') + field(t('Zähler beginnt bei'), '1', 'counter') + '</div><div class="field-row">' + field(t('Suchen (optional)'), '', 'search') + field(t('Ersetzen durch'), '', 'replacement') + ui(['</div><div class="field"><label for="casing">Groß-/Kleinschreibung</label><select id="casing"><option value="keep">Unverändert</option><option value="lower">kleinbuchstaben</option><option value="upper">GROSSBUCHSTABEN</option></select></div><table class="rename-table"><thead><tr><th>Alter Name</th><th>Neuer Name</th></tr></thead><tbody id="rename-preview"></tbody></table>']), t('Umbenennen'), () => {
+    modal(t('Mehrfach-Umbenennen'), ui(['<p>Die Vorschau wird beim Eingeben aktualisiert. [N] = Name, [C] = Zähler.</p><div class="field-row">']) + field(t('Namensmaske'), '[N]_[C]', 'mask') + field(t('Zähler beginnt bei'), '1', 'counter') + '</div><div class="field-row">' + field(t('Suchen (optional)'), '', 'search') + field(t('Ersetzen durch'), '', 'replacement') + ui(['</div><div class="field"><label for="casing">Groß-/Kleinschreibung</label><select id="casing"><option value="keep">Unverändert</option><option value="lower">kleinbuchstaben</option><option value="upper">GROSSBUCHSTABEN</option></select></div><table class="rename-table"><thead><tr><th>Alter Name</th><th>Neuer Name</th></tr></thead><tbody id="rename-preview"></tbody></table>']), t('Umbenennen'), function applyNames() {
+      if (prepareFolders(picked.flatMap((file, index) => file.type === 'folder' ? [join(directories[index], file.name)] : []), 'rename', applyNames)) return false;
+      const current = picked.map((file, index) => (state.folders[directories[index]] || []).find(row => row.id === file.id && row.name === file.name && row.type === file.type));
+      if (current.some(file => !file)) { toast(t('Die gezogene Auswahl wurde geändert. Bitte erneut ziehen.')); return false; }
+      picked = current;
       const names = renamedNames();
       if (names.some(name => !validName(name)) || new Set(names.map((name, index) => join(directories[index], name).toLowerCase())).size !== names.length || names.some((name, index) => (state.folders[directories[index]] || []).some(file => !picked.includes(file) && file.name.toLowerCase() === name.toLowerCase()))) { toast(t('Die Vorschau enthält ungültige Namen oder Namenskonflikte.')); return false; }
       const previous = picked.map(file => file.name);
@@ -2796,7 +2832,7 @@
       const completed = () => toast(`${count('entry', picked.length)} ${t('umbenannt')}${state.realFilesystem ? '' : ui([' · Beispieldaten'])}`, 'success');
       const pending = state.realFilesystem && JSON.stringify(state.folders) !== confirmedFolders;
       if (pending) filesystemResume = completed;
-      render(); if (!pending) completed(); return true;
+      $('#modal').close(); render(); if (!pending) completed(); return true;
     }, t('WERKZEUGE · STRG M'));
     $('#search').required = false; $('#replacement').required = false; $('#counter').type = 'number'; $('#counter').min = '0';
     function renamedNames() {
@@ -2950,7 +2986,7 @@
     if (lister.run(command)) return;
     if (command === 'shell-context-menu') { requestShellMenu(true); return; }
     if (command === 'inspect-folder-locks') { requestShellMenu(true, true); return; }
-    if (filesystemPending && !operationQueue?.active && !(refreshingFilesystem && window.CommanderJobs.commandForAction(command)?.supportsBackgroundOperation.enabled) && (!transferJob || !['toggle-selection-next', 'select-all', 'clear', 'invert', 'filter', 'path', 'new-tab', 'background-tab', 'close-tab', 'next-tab', 'previous-tab'].includes(command))) return;
+    if (filesystemPending && !refreshingFilesystem && !operationQueue?.active && (!transferJob || !['toggle-selection-next', 'select-all', 'clear', 'invert', 'filter', 'path', 'new-tab', 'background-tab', 'close-tab', 'next-tab', 'previous-tab'].includes(command))) return;
     if (filesystemPending && !operationQueue?.active && ['next-tab', 'previous-tab'].includes(command)) {
       const p = pane(), next = (p.tab + (command === 'next-tab' ? 1 : -1) + p.tabs.length) % p.tabs.length;
       if (state.unloadedFolders?.includes(p.tabs[next])) return;
@@ -3019,7 +3055,7 @@
       render(true); toast(message, 'success'); return;
     }
     if (command === 'refresh' && operationQueue?.active) { requestFilesystem({ type: 'filesystem-navigate', path: currentPath(pane()), side: state.active }); return; }
-    if (command === 'refresh') { requestedIcons.clear(); nativeIcons.clear(); if (state.realFilesystem && host) { pendingFilesystemKind = 'filesystem-refresh'; beginDirectoryRefresh(); filesystemPending = true; $('#panes').inert = true; $('#functionbar').inert = true; updateDirectoryActivity(); host.postMessage({ type: 'filesystem-refresh', refreshRequestId, state }); } else { render(true); } return; }
+    if (command === 'refresh') { requestedIcons.clear(); nativeIcons.clear(); if (state.realFilesystem && host) { pendingFilesystemKind = 'filesystem-refresh'; beginDirectoryRefresh(); filesystemPending = true; $('#panes').inert = false; $('#functionbar').inert = false; updateDirectoryActivity(); host.postMessage({ type: 'filesystem-refresh', refreshRequestId, state }); } else { render(true); } return; }
     if (command === 'path' || command === 'path-clipboard') { focusPath(command === 'path-clipboard'); return; }
     if (command === 'filter') { document.querySelectorAll('.list')[state.active].focus(); return; }
     if (command === 'help') modal(t('Tastatur & Prototyp'), ui(['<p>Tab wechselt die Dateiliste. Pfeiltasten navigieren. Enter öffnet Ordner und Archive. Rücktaste geht eine Ebene nach oben. Leertaste markiert; Strg-Klick und Umschalt-Klick erweitern die Auswahl.</p><p>F3–F8 bedienen die Dateiaktionen. Strg+M öffnet das Mehrfach-Umbenennen. Alt+F5 packt, Alt+F9 entpackt.</p><p>Alle Dateiaktionen verändern ausschließlich Beispieldaten. Im VS-Code-Host öffnet F4 ein ungespeichertes Dokument. Aufruf der Erweiterung: Strg+Alt+Umschalt+F12.</p>']), null, null, t('BEDIENUNG'));
@@ -3100,7 +3136,7 @@
     reportFocus(); flushFocusRefresh();
   }
   function chooseRightDrop(source, destination) {
-    if (filesystemPending || navigationRequests.size || transferPending || rightDropChoice || $('#modal').open) return;
+    if (filesystemPending && !refreshingFilesystem || transferPending || rightDropChoice || $('#modal').open) return;
     if (!validFileDropTarget(source, destination)) return;
     const path = destination.path, parentRow = (state.folders[parent(path)] || []).find(file => file.type === 'folder' && file.name === base(path));
     const signature = parentRow && JSON.stringify(parentRow);
@@ -3123,7 +3159,7 @@
     if (event.button !== 2) return;
     suppressRightContext = false;
     const row = event.target.closest('#panes tr[data-id]');
-    if (!row || event.target.closest('input,textarea,select,[contenteditable="true"]') || filesystemPending || navigationRequests.size || transferPending || rightDropChoice || $('#modal').open) return;
+    if (!row || event.target.closest('input,textarea,select,[contenteditable="true"]') || filesystemPending && !refreshingFilesystem || transferPending || rightDropChoice || $('#modal').open) return;
     const side = Number(row.closest('[data-pane]').dataset.pane), p = state.panes[side], ids = p.selected.includes(row.dataset.id) ? [...p.selected] : [row.dataset.id];
     if (resultView(p)) return;
     const source = { kind: 'files', side, sourcePath: currentPath(p), ids, items: files(p).filter(file => ids.includes(file.id)).map(file => ({ id: file.id, signature: JSON.stringify(file) })) };
@@ -3189,7 +3225,7 @@
     return { side, path: destination, element: file?.type === 'folder' ? row : section.querySelector('.list') };
   }
   $('#panes').addEventListener('dragstart', event => {
-    if (rightPointer || filesystemPending || event.target.closest('[data-history]')) { event.preventDefault(); return; }
+    if (rightPointer || filesystemPending && !refreshingFilesystem || event.target.closest('[data-history]')) { event.preventDefault(); return; }
     const tab = event.target.closest('[data-tab-drag]'), header = event.target.closest('[data-column]'), row = event.target.closest('tr[data-id]');
     if (!tab && !header && !row || event.target.closest('[data-resize]')) return;
     clearTimeout(renameTimer);
@@ -3222,12 +3258,12 @@
   $('#panes').addEventListener('dragend', () => { dragged = null; clearDropTarget(); });
   $('#functionbar').addEventListener('dragover', event => {
     const target = event.target.closest('[data-action="delete"]');
-    if (!target || !internalDeleteDrop(event) || !validDraggedFiles(dragged) || filesystemPending || $('#modal').open || event.ctrlKey || event.metaKey || event.altKey) return;
+    if (!target || !internalDeleteDrop(event) || !validDraggedFiles(dragged) || filesystemPending && !refreshingFilesystem || $('#modal').open || event.ctrlKey || event.metaKey || event.altKey) return;
     event.preventDefault(); if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
   });
   $('#functionbar').addEventListener('drop', event => {
     const source = dragged; dragged = null; clearDropTarget();
-    if (!event.target.closest('[data-action="delete"]') || !internalDeleteDrop(event) || filesystemPending || $('#modal').open || event.ctrlKey || event.metaKey || event.altKey) return;
+    if (!event.target.closest('[data-action="delete"]') || !internalDeleteDrop(event) || filesystemPending && !refreshingFilesystem || $('#modal').open || event.ctrlKey || event.metaKey || event.altKey) return;
     if (!validDraggedFiles(source)) { if (source?.kind === 'files') toast(t('Die gezogene Auswahl wurde geändert. Bitte erneut ziehen.')); return; }
     event.preventDefault(); action(event.shiftKey ? 'delete-alternate' : 'delete', source);
   });
@@ -3420,7 +3456,7 @@
     if (event.key === 'Enter' && event.target.closest('.list')) { event.preventDefault(); openFile(files(pane()).find(file => file.id === pane().cursor) || selected()[0]); return; }
     if (event.key === ' ' && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey && event.target.closest('.list')) {
       event.preventDefault();
-      if (filesystemPending || transferPending || event.repeat) return;
+      if (filesystemPending && !refreshingFilesystem || transferPending || event.repeat) return;
       const p = pane(), file = files(p).find(file => file.id === p.cursor);
       if (file) {
         const marks = spaceMarks(p), marked = p.selected.includes(file.id) && (p.cursorSelection !== file.id || p.selected.length !== 1 || marks.includes(file.id));
@@ -3522,6 +3558,7 @@
     if (host && event.data?.type === 'action' && event.data.action === 'transfer-name-start') { startTransferName(); return; }
     if (host && event.data?.type === 'language-changed') { document.body.inert = false; requestLanguageReload(); return; }
     if (host && event.data?.type === 'language-picker-closed') { document.querySelector('#language-toggle').focus(); return; }
+    if (host && event.data?.type === 'copy-verification-setting-error') { toast(event.data.error, 'error'); return; }
     if (host && event.data?.type === 'file-settings') {
       fileSettings = event.data.settings || {};
       const before = window.CommanderIcons.layout().size;
@@ -3664,7 +3701,7 @@
       if (!event.data.ok) showOperationFailure(error, { inline: Boolean(failedRename && restoreRename(failedRename)), diagnostic: event.data.diagnostic, notify: !operationQueue?.active });
       if (pendingGitDiff) { const selection = pendingGitDiff; pendingGitDiff = null; if (event.data.ok) requestGitDiff(selection); else { gitMenuSelection = null; toast(t('Ungültige Dateiauswahl für Git Diff.'), 'error'); } }
     if (completedTransferJob?.queueJobId && operationQueue.active?.id === completedTransferJob.queueJobId && !continuePreparation) operationQueue.complete(completedTransferJob.queueJobId, { ok: event.data.ok, cancelled, message: resultMessage, ...(!event.data.ok ? { error } : {}) });
-      flushQueuedOperation(); flushFocusRefresh(); return;
+      flushQueuedOperation(); flushDeferredNavigationReads(); flushFocusRefresh(); return;
     }
     if (host && event.data?.type === 'git-settings-changed') {
       gitBindings.clear(); gitDirectories.clear(); directoryCache.clearGit(); refreshGitDisplay(); requestGitStatus(); return;

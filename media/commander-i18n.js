@@ -490,6 +490,7 @@
     'Unbekannte Konfliktentscheidung.': 'Unknown conflict decision.'
   };
   pairs['Jede Datei einzeln umbenennen'] = 'Rename each file separately';
+  pairs['Dateiinhalt nach dem Kopieren vergleichen'] = 'Compare file contents after copying';
   Object.assign(pairs, {
     'Spalten zum Umsortieren ziehen. Tastatur: Alt+Pfeil hoch/runter.': 'Drag columns to reorder. Keyboard: Alt+Up/Down.',
     'Alle Unterverzeichnisse (unbegrenzt)': 'All subfolders (unlimited)', '1 Ebene': '1 level', '2 Ebenen': '2 levels', '3 Ebenen': '3 levels', '5 Ebenen': '5 levels', '10 Ebenen': '10 levels', 'Eigene Tiefe festlegen': 'Custom depth', 'Anzahl der Ebenen': 'Number of levels',

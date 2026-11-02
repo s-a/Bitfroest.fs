@@ -182,7 +182,7 @@ function activate(context) {
   }
   const fileSettings = () => {
     const settings = vscode.workspace.getConfiguration('bitfroest');
-    return { useSystemContextMenu: settings.get('files.useSystemContextMenu', false) === true, deleteToTrash: settings.get('files.deleteToTrash', true) !== false, countFolderSizeOnSpace: settings.get('files.countFolderSizeOnSpace', true) !== false, selectDirectories: settings.get('files.selectDirectories', true) !== false,
+    return { verifyAfterCopy: settings.get('files.verifyAfterCopy', false) === true, useSystemContextMenu: settings.get('files.useSystemContextMenu', false) === true, deleteToTrash: settings.get('files.deleteToTrash', true) !== false, countFolderSizeOnSpace: settings.get('files.countFolderSizeOnSpace', true) !== false, selectDirectories: settings.get('files.selectDirectories', true) !== false,
       iconSize: iconLayout.resolve(settings.get('appearance.iconSize', iconLayout.defaults.size)).size,
       colors: { enabled: settings.get('colors.fileTypes', true), git: settings.get('colors.gitStatus', true), rules: settings.get('colors.rules', defaultFileColors) },
       gitStatus: { iconSizePercent: settings.get('gitStatus.iconSizePercent', iconLayout.defaults.badgeRatio * 100) },
@@ -306,10 +306,17 @@ function activate(context) {
   let filesystemState;
   let filesystemQueue = Promise.resolve();
   let navigationQueueTail, navigationReadBase;
+  let filesystemReadBase, refreshRead;
   let filesystemRequests = 0;
+  let copyVerificationQueue = Promise.resolve();
   const transferJobs = new Map();
   const directoryJobs = new Map();
-  const closeDirectoryJobs = () => { for (const job of directoryJobs.values()) job.controller.abort(); directoryJobs.clear(); };
+  const closeDirectoryJobs = () => { for (const job of directoryJobs.values()) job.controller.abort(); directoryJobs.clear(); refreshRead?.abort(); };
+  const interruptFilesystemReads = () => {
+    closeDirectoryJobs(); refreshRead?.abort(); refreshRead = null;
+    if (filesystemReadBase) filesystemQueue = filesystemReadBase;
+    filesystemReadBase = null; navigationQueueTail = null; navigationReadBase = null;
+  };
   const closeMissingDirectoryJobs = panes => {
     for (const job of directoryJobs.values()) {
       const tabs = panes?.[job.side]?.tabStates;
@@ -1280,7 +1287,7 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
         if (shellMenuBusy) { await messagePanel.webview.postMessage({ type: 'clipboard-result', requestId: message.requestId, ok: false, error: t('Eine Dateisystemoperation läuft bereits.') }); return; }
         const current = panel;
         clipboardQueue = clipboardQueue.then(async () => {
-          await filesystemQueue;
+          await (filesystemReadBase || filesystemQueue);
           if (!current || panel !== current) return;
           try {
             if (!filesystemState) throw new Error(t('Kein Dateisystem geladen.'));
@@ -1322,21 +1329,40 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
         const job = transferJobs.get(message.operationId); if (job?.panel === panel) job.controller.abort(); return;
       }
       if (message?.type === 'zip-open' && /^directory-\d{1,12}$/.test(message.navigationRequestId || '')) {
-        const current = panel; let ok = true, error, navigation;
+        const current = panel; let ok = true, error, navigation, cancelled = false;
+        const key = `archive:${message.side}:${message.navigationTabId || ''}`;
+        const job = { controller: new AbortController(), side: message.side, tabId: message.navigationTabId };
+        directoryJobs.get(key)?.controller.abort(); directoryJobs.set(key, job);
         try {
           if (shellMenuBusy || !filesystemState || ![0, 1].includes(message.side) || !knownFilePath(message.path)) throw new Error('Dieses ZIP-Archiv ist nicht verfügbar.');
           const opened = await provider.openArchive(filesystemState, message.path);
+          if (job.controller.signal.aborted) throw Object.assign(new Error('Navigation cancelled.'), { name: 'AbortError' });
           filesystemState = retainView({ ...filesystemState, folders: { ...filesystemState.folders, ...Object.fromEntries(Object.entries(opened.state.folders).filter(([key]) => key.startsWith('zip:'))) }, archiveLocations: { ...filesystemState.archiveLocations, ...opened.state.archiveLocations } }, savedState || message.state);
           navigationRevision++; navigation = { path: opened.path, side: message.side };
           await saveState(filesystemState);
-        } catch (failure) { ok = false; error = renderOperationError(failure, t); }
-        if (panel === current) await current.webview.postMessage({ type: 'filesystem-result', navigationRequestId: message.navigationRequestId, ok, state: filesystemState, ...(navigation ? { resumeNavigation: navigation } : {}), ...(error ? { error } : {}) });
+        } catch (failure) { if (failure.name === 'AbortError') cancelled = true; else { ok = false; error = renderOperationError(failure, t); } }
+        finally { if (directoryJobs.get(key) === job) directoryJobs.delete(key); }
+        if (panel === current) await current.webview.postMessage({ type: 'filesystem-result', navigationRequestId: message.navigationRequestId, ok, state: filesystemState, ...(cancelled ? { cancelled: true } : {}), ...(navigation ? { resumeNavigation: navigation } : {}), ...(error ? { error } : {}) });
         return;
       }
+      if (message?.type === 'copy-verification-setting') {
+        if (typeof message.enabled !== 'boolean') return;
+        copyVerificationQueue = copyVerificationQueue.then(async () => {
+          try {
+            const settings = vscode.workspace.getConfiguration('bitfroest');
+            const target = settings.inspect('files.verifyAfterCopy')?.workspaceValue !== undefined ? vscode.ConfigurationTarget.Workspace : vscode.ConfigurationTarget.Global;
+            await settings.update('files.verifyAfterCopy', message.enabled, target);
+          } catch (error) { await messagePanel.webview.postMessage({ type: 'copy-verification-setting-error', error: renderOperationError(error, t) }); }
+          if (panel === messagePanel) await messagePanel.webview.postMessage({ type: 'file-settings', settings: fileSettings() });
+        });
+        await copyVerificationQueue; return;
+      }
+      if (message?.type === 'filesystem-read-cancel') { interruptFilesystemReads(); return; }
       if (['zip-open', 'zip-copy', 'zip-write', 'zip-unpack', 'zip-test'].includes(message?.type)) {
         const current = panel, copying = message.type !== 'zip-open', writing = message.type === 'zip-write';
         const operationId = copying && typeof message.operationId === 'string' && /^[a-zA-Z0-9-]{1,80}$/.test(message.operationId) ? message.operationId : undefined;
         if (copying && (!operationId || transferJobs.has(operationId))) return;
+        if (copying) interruptFilesystemReads();
         const job = copying ? { controller: new AbortController(), panel: current } : null;
         if (job) transferJobs.set(operationId, job);
         let pendingProgress;
@@ -1464,6 +1490,9 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
         const job = operationId ? { controller: new AbortController(), panel: current } : null;
         const navigationTabId = typeof message.navigationTabId === 'string' && /^[a-zA-Z0-9-]{1,128}$/.test(message.navigationTabId) ? message.navigationTabId : undefined;
         const directoryJob = message.type === 'filesystem-navigate' && typeof message.navigationRequestId === 'string' && /^directory-\d{1,12}$/.test(message.navigationRequestId) && [0, 1].includes(message.side) ? { controller: new AbortController(), side: message.side, tabId: navigationTabId } : null;
+        const refreshController = message.type === 'filesystem-refresh' ? new AbortController() : null;
+        if (!directoryJob && !refreshController) interruptFilesystemReads();
+        if (refreshController) { refreshRead?.abort(); refreshRead = refreshController; }
         const directoryKey = `${message.side}:${navigationTabId || ''}`;
         if (directoryJob) { directoryJobs.get(directoryKey)?.controller.abort(); directoryJobs.set(directoryKey, directoryJob); }
         const directoryView = () => directoryJob && navigationTabId && Array.isArray(savedState?.panes?.[message.side]?.tabStates) ? savedState : message.state || savedState;
@@ -1479,6 +1508,7 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
         };
         filesystemRequests++;
         const isolatedNavigation = Boolean(directoryJob && transferJobs.size);
+        if (!isolatedNavigation && (directoryJob || refreshController) && !filesystemReadBase) filesystemReadBase = filesystemQueue;
         if (directoryJob && !isolatedNavigation && filesystemQueue !== navigationQueueTail) navigationReadBase = filesystemQueue;
         const execution = (isolatedNavigation ? Promise.resolve() : directoryJob ? navigationReadBase : filesystemQueue).then(async () => {
           const initialNavigationRevision = navigationRevision;
@@ -1491,7 +1521,7 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
             if (directoryJob?.controller.signal.aborted) throw Object.assign(new Error('Navigation cancelled.'), { name: 'AbortError' });
             if (!filesystemState) throw new Error(t('Kein Dateisystem geladen.'));
             let fresh;
-            if (message.type === 'filesystem-apply') fresh = await provider.apply(filesystemState, message.state, job ? { signal: job.controller.signal, transfer: message.transfer, onProgress } : {});
+            if (message.type === 'filesystem-apply') fresh = await provider.apply(filesystemState, message.state, { verifyAfterCopy: typeof message.transfer?.verifyAfterCopy === 'boolean' ? message.transfer.verifyAfterCopy : fileSettings().verifyAfterCopy, ...(job ? { signal: job.controller.signal, transfer: message.transfer, onProgress } : {}) });
             else if (message.type === 'filesystem-delete') fresh = await provider.remove(filesystemState, { paths: message.paths, useTrash: message.useTrash }, { ...(job ? { signal: job.controller.signal } : {}), onProgress: progress => { if (panel === current) current.webview.postMessage({ type: 'filesystem-task-progress', operationId, taskRequestId: message.taskRequestId, progress: Progress.read(progress) }); } });
             else if (message.type === 'filesystem-navigate' || message.type === 'filesystem-prepare') {
               const directories = message.type === 'filesystem-navigate' ? [message.path] : message.paths;
@@ -1502,13 +1532,14 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
               fresh = isolatedNavigation ? await navigationProvider.load({ directories: visibleDirectories, visibleOnly: true, signal: directoryJob?.controller.signal, onDirectory: update => { if (panel === current) return current.webview.postMessage({ type: 'filesystem-directory', navigationRequestId: message.navigationRequestId, ...update }); } }) : await provider.prepare(filesystemState, { directories, recursive: message.type === 'filesystem-prepare' && message.recursive !== false, ...(message.type === 'filesystem-navigate' ? { navigation: true, visibleDirectories, onDirectory: update => {
                 if (message.navigationRequestId && panel === current) return current.webview.postMessage({ type: 'filesystem-directory', navigationRequestId: message.navigationRequestId, ...update });
               }, getVisibleDirectories: visiblePaths, ...(directoryJob ? { signal: directoryJob.controller.signal } : {}) } : {}), ...(job ? { signal: job.controller.signal, onProgress } : {}) });
-            } else fresh = await loadView(message.state || savedState, message.type === 'filesystem-refresh' && typeof message.refreshRequestId === 'string' ? { onDirectory: update => {
+            } else fresh = await loadView(message.state || savedState, { ...(refreshController ? { signal: refreshController.signal } : {}), ...(message.type === 'filesystem-refresh' && typeof message.refreshRequestId === 'string' ? { onDirectory: update => {
               if (panel === current) return current.webview.postMessage({ type: 'filesystem-refresh-step', emittedAt: Date.now(), refreshRequestId: message.refreshRequestId, path: update.path, phase: update.phase || (update.done ? 'done' : 'metadata'), completed: update.completed, total: update.total, ...(update.progress ? { progress: Progress.read(update.progress) } : {}) });
-            } } : {});
+            } } : {}) });
             if (!directoryJob && ['filesystem-apply', 'filesystem-delete'].includes(message.type) && initialNavigationRevision !== navigationRevision) fresh = await loadView(savedState);
             updatedDirectories = fresh.updatedDirectories;
             const publishState = async (fresh, authoritativeNavigation) => {
               if (directoryJob?.controller.signal.aborted) throw Object.assign(new Error('Navigation cancelled.'), { name: 'AbortError' });
+              if (refreshController?.signal.aborted) throw Object.assign(new Error('Refresh cancelled.'), { name: 'AbortError' });
               if (directoryJob) {
                 navigationRevision++;
                 if (!authoritativeNavigation) {
@@ -1542,7 +1573,7 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
               await rebase;
             } else await publishState(fresh, !isolatedNavigation);
           } catch (error) {
-            if ((job || directoryJob) && error.name === 'AbortError') { cancelled = true; if (message.type === 'filesystem-delete') filesystemState = retainView(await loadView(savedState), savedState); }
+            if ((job || directoryJob || refreshController) && error.name === 'AbortError') { cancelled = true; if (message.type === 'filesystem-delete') filesystemState = retainView(await loadView(savedState), savedState); }
             else {
             ok = false;
             diagnostic = operationDiagnostic(error, message, message.state || filesystemState);
@@ -1555,6 +1586,7 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
           }
           if (job) transferJobs.delete(operationId);
           if (directoryJob && directoryJobs.get(directoryKey) === directoryJob) directoryJobs.delete(directoryKey);
+          if (refreshController && refreshRead === refreshController) refreshRead = null;
           if (current && panel === current) await current.webview.postMessage({ type: 'filesystem-result', ok, state: filesystemState, ...(typeof message.refreshRequestId === 'string' ? { refreshRequestId: message.refreshRequestId } : {}), ...(message.taskRequestId ? { taskRequestId: message.taskRequestId } : {}), ...(message.navigationRequestId ? { navigationRequestId: message.navigationRequestId } : {}), ...(updatedDirectories?.length ? { refreshGitDirectories: updatedDirectories } : {}), ...(cancelled ? { cancelled: true } : {}), ...(operationId ? { operationId, operationOutcome: filesystemState?.operationOutcome } : {}), ...(!ok ? { error: operationError, diagnostic } : {}), ...(ok && !cancelled && message.type === 'filesystem-navigate' ? { resumeNavigation: { path: message.path, side: message.side } } : {}), ...(ok && !cancelled && message.type === 'filesystem-prepare' ? { resumeAction: message.action } : {}) });
         }).finally(() => { filesystemRequests--; });
         if (!isolatedNavigation) {

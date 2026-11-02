@@ -72,6 +72,7 @@
   "commands.newFile": "Neue Textdatei",
   "commands.deleteAlternate": "Mit alternativem Löschmodus löschen",
   "commands.deletePermanently": "Endgültig löschen",
+  "files.verifyAfterCopy.description": "Quell- und Zielinhalt nach dem Kopieren vergleichen. Die Kopier- und Verschiebemaske speichert die Auswahl für folgende Aktionen. Dateiidentitäts- und Sicherheitsprüfungen bleiben aktiv.",
   "files.deleteToTrash.description": "Dateien standardmäßig in den Papierkorb verschieben. Umschalt+F8 und Umschalt+Entf verwenden jeweils den anderen Modus. Bei nicht verfügbarem Papierkorb erfolgt keine endgültige Ersatzlöschung.",
   "command.bitfroest.conflict-target.title": "Zieldatei im Konflikt anzeigen",
   "command.bitfroest.conflict-source.title": "Quelldatei im Konflikt anzeigen",

@@ -218,10 +218,8 @@ DWORD CALLBACK ProgressRoutine(LARGE_INTEGER total, LARGE_INTEGER transferred, L
   try {
     if (destination && destination != INVALID_HANDLE_VALUE) {
       if (!context->operation_destination.valid()) {
-        HANDLE duplicate = nullptr;
-        if (DuplicateHandle(GetCurrentProcess(), destination, GetCurrentProcess(), &duplicate, 0, FALSE, DUPLICATE_SAME_ACCESS)) {
-          context->operation_destination = Handle(duplicate);
-        }
+        context->operation_destination = Handle(ReOpenFile(destination, FILE_READ_ATTRIBUTES,
+            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, kOpenFlags));
       }
       if (context->operation_destination.valid()) {
         progress.owned_destination = FileTransferOwnedDestination{Identity(context->operation_destination.value).reported};
