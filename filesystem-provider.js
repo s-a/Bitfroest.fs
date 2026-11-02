@@ -151,7 +151,10 @@ function createProvider(options = {}) {
       const existing = entries.get(identity(directory));
       if (existing?.signature && existing.signature.split(':').slice(0, 3).join(':') !== statSignature(stat).split(':').slice(0, 3).join(':')) discardSubtree(directory, true);
       entries.set(identity(directory), { path: directory, type: 'folder', signature: statSignature(stat), root: root || existing?.root, row: existing?.row });
-      const names = (await fs.readdir(directory)).sort();
+      const listing = !strict && options.readDirectory ? await options.readDirectory(directory, settings.signal) : null;
+      if (listing && (listing.dev !== stat.dev || listing.ino !== stat.ino)) throw Object.assign(new Error('Ordner während der Bestandsaufnahme geändert.'), { code: 'DirectoryChangedDuringScan', path: directory, scanPhase: 'directory-identity' });
+      const enumerated = listing && new Map(listing.entries.map(entry => [entry.name, entry]));
+      const names = (enumerated ? [...enumerated.keys()] : await fs.readdir(directory)).sort();
       loadedDirectories.add(directory);
       folders[directory] = [];
       let emitted = 0, emittedAt = Date.now();
@@ -171,9 +174,11 @@ function createProvider(options = {}) {
         if (!entries.has(identity(absolute)) && ++count > limits.entries) throw new Error('Die Eintragsgrenze des Dateisystem-Scans wurde erreicht.');
         let child, versionInfo, attributeFlags;
         try {
-          child = await fs.lstat(absolute, { bigint: true });
-          if (!child.isSymbolicLink()) await assertComponents(absolute);
-          if (options.readAttributes) {
+          const listed = enumerated?.get(name);
+          child = listed?.stat || await fs.lstat(absolute, { bigint: true });
+          if (!listed?.stat && !child.isSymbolicLink()) await assertComponents(absolute);
+          if (listed?.stat) attributeFlags = listed.attributes;
+          else if (options.readAttributes) {
             try { attributeFlags = await options.readAttributes(absolute); }
             catch (cause) {
               const code = { NotFound: 'ENOENT', Denied: 'EACCES' }[cause.code];

@@ -1,6 +1,6 @@
 const Progress = require('./media/commander-progress');
 const OPERATIONS = Object.freeze([
-  'files.copy', 'files.rename', 'clipboard.readFiles', 'clipboard.writeFiles',
+  'files.copy', 'files.rename', 'files.readDirectory', 'clipboard.readFiles', 'clipboard.writeFiles',
   'clipboard.acknowledge', 'clipboard.cancelFiles', 'shell.showContextMenu', 'shell.openAssociated',
   'shell.openTrash', 'shell.openTerminal', 'icons.resolve', 'metadata.query', 'paths.resolveNetwork',
   'encoding.describe', 'encoding.decodeBlock', 'encoding.decodeChunk', 'windows.resolveOwner',

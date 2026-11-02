@@ -24,6 +24,7 @@
 #define NOMINMAX
 #include <windows.h>
 #include "windows-queries.h"
+#include "directory-win.h"
 #include "windows-rename.h"
 #include "binding-icons-win.h"
 #include "binding-desktop-win.h"
@@ -38,7 +39,7 @@
 
 namespace {
 constexpr const char* operations[] = {
-  "files.copy", "files.rename", "clipboard.readFiles", "clipboard.writeFiles",
+  "files.copy", "files.rename", "files.readDirectory", "clipboard.readFiles", "clipboard.writeFiles",
   "clipboard.acknowledge", "clipboard.cancelFiles", "shell.showContextMenu", "shell.openAssociated",
   "shell.openTrash", "shell.openTerminal", "icons.resolve", "metadata.query", "paths.resolveNetwork",
   "encoding.describe", "encoding.decodeBlock", "encoding.decodeChunk", "windows.resolveOwner",
@@ -298,6 +299,10 @@ napi_value Invoke(napi_env env, napi_callback_info info) {
   for (const char* known : operations) {
     if (length == std::strlen(known) && std::memcmp(operation, known, length) == 0) {
 #ifdef _WIN32
+      if (std::strcmp(known, "files.readDirectory") == 0) {
+        if (count != 2) return Fail(env, "InvalidRequest", "A directory request is required.");
+        return StartReadDirectory(env, session->state, args[1]);
+      }
       if (IsLocksOperation(known)) {
         if (count != 2) return Fail(env, "InvalidRequest", "A lock operation request is required.");
         if (!NativeLocksSupported()) return Fail(env, "UnsupportedOperation", "The Windows lock adapter is unavailable.");
@@ -425,7 +430,7 @@ napi_value Init(napi_env env, napi_value exports) {
   napi_value version, major, minor, capabilities;
   CHECK(napi_create_object(env, &version));
   CHECK(napi_create_uint32(env, 1, &major));
-  CHECK(napi_create_uint32(env, 4, &minor));
+  CHECK(napi_create_uint32(env, 5, &minor));
   CHECK(napi_set_named_property(env, version, "major", major));
   CHECK(napi_set_named_property(env, version, "minor", minor));
   CHECK(napi_object_freeze(env, version));
@@ -452,7 +457,7 @@ napi_value Init(napi_env env, napi_value exports) {
 #ifdef _WIN32
     supported = std::strcmp(operation, "shell.openTerminal") == 0 || std::strcmp(operation, "git.status") == 0 || std::strcmp(operation, "git.info") == 0 || std::strcmp(operation, "metadata.query") == 0 || std::strcmp(operation, "files.rename") == 0 || std::strcmp(operation, "files.copy") == 0 || std::strcmp(operation, "icons.resolve") == 0 || std::strcmp(operation, "shell.openAssociated") == 0 || std::strcmp(operation, "shell.openTrash") == 0 || std::strcmp(operation, "shell.showContextMenu") == 0 || std::strcmp(operation, "windows.maximize") == 0 || IsWindowsQuery(operation) || IsWindowsClipboardOperation(operation);
     locks = IsLocksOperation(operation) && NativeLocksSupported();
-    supported = supported || std::strcmp(operation, "windows.inspect") == 0;
+    supported = supported || std::strcmp(operation, "windows.inspect") == 0 || std::strcmp(operation, "files.readDirectory") == 0;
     supported = supported || locks;
 #endif
     const bool rename = std::strcmp(operation, "files.rename") == 0 && supported;

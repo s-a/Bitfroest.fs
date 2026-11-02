@@ -11,6 +11,7 @@ const excluded = new Set(['.git', '.vscode', '.nyc_output', 'node_modules', 'cov
 function files(directory, prefix = '') {
   return fs.readdirSync(directory, { withFileTypes: true }).flatMap(item => {
     if (!prefix && excluded.has(item.name)) return [];
+    if (['build', 'out'].some(name => path.join(directory, item.name) === path.join(root, 'native', name))) return [];
     const relative = prefix ? `${prefix}/${item.name}` : item.name;
     if (item.isDirectory()) return files(path.join(directory, item.name), relative);
     return item.isFile() ? [relative] : [];
@@ -37,6 +38,12 @@ test('packaged native module contains no developer home directory paths', () => 
     const strings = binary.toString(encoding).toLowerCase();
     for (const home of paths) assert.equal(strings.includes(home), false, 'Native build metadata contains a local home directory.');
   }
+  require('../scripts/check-native-build.cjs').checkNativeBuild(path.join(root, 'native/binding.node'));
+});
+
+test('native development directories are excluded from extension packages', () => {
+  const ignore = fs.readFileSync(path.join(root, '.vscodeignore'), 'utf8').split(/\r?\n/);
+  for (const directory of ['build', 'out']) assert.ok(ignore.includes(`native/${directory}/**`));
 });
 
 test('replaced icon adapters are absent from the native distribution', () => {

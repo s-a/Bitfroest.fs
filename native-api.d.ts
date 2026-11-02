@@ -1,7 +1,7 @@
 import type { ProgressEvent } from './media/commander-progress';
 
 export type NativeOperation =
-  | 'files.copy' | 'files.rename'
+  | 'files.copy' | 'files.rename' | 'files.readDirectory'
   | 'clipboard.readFiles' | 'clipboard.writeFiles' | 'clipboard.acknowledge' | 'clipboard.cancelFiles'
   | 'shell.showContextMenu' | 'shell.openAssociated' | 'shell.openTrash' | 'shell.openTerminal'
   | 'icons.resolve' | 'metadata.query' | 'paths.resolveNetwork'
@@ -28,6 +28,25 @@ export interface NativeMetadata {
 export interface NativeCompletion {
   readonly requestId: bigint;
   readonly generation: bigint;
+}
+
+export interface NativeDirectoryEntry {
+  readonly name: string;
+  readonly dosName: string;
+  readonly attributes: number;
+  readonly fileId: bigint;
+  readonly size: bigint;
+  readonly creationTime: bigint;
+  readonly lastAccessTime: bigint;
+  readonly lastWriteTime: bigint;
+  readonly changeTime: bigint;
+}
+
+export interface NativeDirectory {
+  readonly entries: readonly NativeDirectoryEntry[];
+  readonly volume: bigint;
+  readonly directoryId: bigint;
+  readonly batches: number;
 }
 
 export interface NativeCodepage {
@@ -343,6 +362,7 @@ export interface NativeBinding {
     invoke(operation: 'shell.openTrash', request: { readonly inspectOnly?: boolean }): Promise<NativeTrashView>;
     invoke(operation: 'windows.maximize', request: { readonly titleToken: string }): Promise<{ readonly maximized: true }>;
     invoke(operation: 'files.rename', request: NativeCaseRenameRequest): Promise<NativeRenameOutcome>;
+    invoke(operation: 'files.readDirectory', request: { readonly path: string }): Promise<NativeDirectory> & { cancel(): void };
     invoke(operation: 'paths.resolveNetwork', request: { readonly drives: readonly string[] }): Promise<NativeNetworkMappings>;
     invoke(operation: 'clipboard.readFiles', request: Record<string, never>): Promise<NativeClipboardSelection>;
     invoke(operation: 'clipboard.writeFiles', request: NativeClipboardWriteRequest): Promise<NativeClipboardSelection>;

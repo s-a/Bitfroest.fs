@@ -2,6 +2,8 @@
 .github/**
 design/**
 native/src/**
+native/build/**
+native/out/**
 native/CMakeLists.txt
 !native/binding.node
 Docs/**
