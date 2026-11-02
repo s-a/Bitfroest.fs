@@ -26,11 +26,12 @@ test('tab middle click closes it and column dragging changes persisted order', t
   assert.equal(app.state().panes[0].columns[0].key, 'attributes');
 });
 
-test('typing a substring selects its file without filtering or opening a dialog', t => {
+test('typing a substring focuses its file without changing selection, filtering or opening a dialog', t => {
   const app = createApp(t);
   const count = app.document.querySelectorAll('[data-pane="0"] tbody tr[data-id]').length;
   for (const letter of 'kage') app.key(letter);
-  assert.equal(app.row('package.json').getAttribute('aria-selected'), 'true');
+  assert.equal(app.row('package.json').getAttribute('aria-selected'), 'false');
+  assert.equal(app.row('package.json').classList.contains('focused'), true);
   assert.equal(app.document.querySelectorAll('[data-pane="0"] tbody tr[data-id]').length, count);
   assert.equal(app.document.querySelector('dialog').open, false);
   assert.ok(app.row('package.json').querySelector('mark'));

@@ -16,6 +16,48 @@ function progressSample(fields) {
     current: Number.isSafeInteger(fields.total) ? Progress.known('bytes', fields.transferred || 0, fields.total) : Progress.unknown('items', 0, 'enumerating') });
 }
 
+test('generated host HTML searches complete names without changing marks or requesting directory work', async t => {
+  const initial = clipboardFixture(); initial.realFilesystem = false;
+  initial.panes.forEach(pane => { pane.filter = ''; pane.sort = 'name'; });
+  const rows = initial.folders['C:/tmp'];
+  rows[0].name = 'Terror.txt';
+  rows.push({ ...rows[0], id: 'search-match', name: 'Another Terror.txt' });
+  const app = harness(t, { filesystemLoad: async () => initial });
+  await app.command('bitfroest.openPrototype');
+  const panel = app.panels[0], html = panel.webview.html;
+  assert.match(html, /Content-Security-Policy/);
+  assert.match(html, /script-src 'nonce-[^']+'/);
+  const view = require('./support/webview.cjs').createApp(t, initial, { html });
+  const selection = [...view.state().panes[0].selected];
+  let now = Date.now(); view.window.Date.now = () => (now += 2000);
+  let scrolled;
+  view.window.HTMLElement.prototype.scrollIntoView = function () { scrolled = this.dataset.id; };
+  view.messages.length = 0;
+  for (const key of 'Terror') view.key(key);
+  assert.equal(view.state().panes[0].filter, 'Terror');
+  assert.deepEqual(view.state().panes[0].selected, selection);
+  for (const name of ['Terror.txt', 'Another Terror.txt']) assert.equal(view.row(name).querySelector('[data-filename] mark').textContent, 'Terror');
+  assert.equal(scrolled, view.state().panes[0].cursor);
+  assert.equal(view.document.activeElement, view.document.querySelector('.pane.active .list'));
+  assert.equal(view.messages.some(message => /icon|git-status|filesystem/.test(message.type)), false);
+  for (const message of view.messages) if (message.type === 'state') await panel.receive(message);
+  assert.equal(view.state().panes[0].filter, 'Terror');
+  await app.command('bitfroest.select-search-matches');
+  const action = panel.messages.findLast(message => message.type === 'action' && message.action === 'select-search-matches');
+  assert.ok(action);
+  view.window.dispatchEvent(new view.window.MessageEvent('message', { data: action }));
+  const expected = rows.filter(row => row.name.includes('Terror')).map(row => row.id);
+  assert.deepEqual([...view.state().panes[0].selected].sort(), [...new Set([...selection, ...expected])].sort());
+  await app.command('bitfroest.filter-search-matches');
+  const filterAction = panel.messages.findLast(message => message.type === 'action' && message.action === 'filter-search-matches');
+  assert.ok(filterAction);
+  view.window.dispatchEvent(new view.window.MessageEvent('message', { data: filterAction }));
+  assert.deepEqual([...view.document.querySelectorAll('.pane.active tr[data-id]')].map(row => row.dataset.id).sort(), expected.sort());
+  view.key('Escape');
+  assert.equal(view.document.querySelectorAll('.pane.active tr[data-id]').length, rows.length);
+  assert.equal(view.document.querySelector('.pane.active mark'), null);
+});
+
 test('generated host HTML suppresses file-action context menus while retaining native text editing', async t => {
   const initial = clipboardFixture();
   initial.panes.forEach(pane => { pane.filter = ''; pane.sort = 'name'; });

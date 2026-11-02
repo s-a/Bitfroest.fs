@@ -233,6 +233,18 @@
         "mac": "cmd+a"
       },
       {
+        "command": "bitfroest.select-search-matches",
+        "key": "ctrl+b",
+        "when": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.k1cbkv4v",
+        "mac": "cmd+b"
+      },
+      {
+        "command": "bitfroest.filter-search-matches",
+        "key": "ctrl+shift+f",
+        "when": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.k1gt1v9q",
+        "mac": "cmd+shift+f"
+      },
+      {
         "command": "bitfroest.rename",
         "key": "ctrl+m",
         "when": "activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.kmwlf0y",
@@ -987,6 +999,18 @@
         "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype"
       },
       {
+        "command": "bitfroest.select-search-matches",
+        "title": "%command.bitfroest.select-search-matches.title%",
+        "category": "Bitfroest.fs",
+        "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype && bitfroest.listFocus && !bitfroest.textInput"
+      },
+      {
+        "command": "bitfroest.filter-search-matches",
+        "title": "%command.bitfroest.filter-search-matches.title%",
+        "category": "Bitfroest.fs",
+        "enablement": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype && bitfroest.listFocus && !bitfroest.textInput"
+      },
+      {
         "command": "bitfroest.invert",
         "title": "%command.bitfroest.invert.title%",
         "category": "Bitfroest.fs",
@@ -1528,6 +1552,14 @@
         {
           "command": "bitfroest.select-all",
           "when": "activeWebviewPanelId == bitfroestPrototype"
+        },
+        {
+          "command": "bitfroest.select-search-matches",
+          "when": "activeWebviewPanelId == bitfroestPrototype && bitfroest.listFocus && !bitfroest.textInput"
+        },
+        {
+          "command": "bitfroest.filter-search-matches",
+          "when": "activeWebviewPanelId == bitfroestPrototype && bitfroest.listFocus && !bitfroest.textInput"
         },
         {
           "command": "bitfroest.invert",

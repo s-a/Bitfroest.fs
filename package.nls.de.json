@@ -37,6 +37,8 @@
   "command.bitfroest.unpack.title": "Entpacken",
   "command.bitfroest.rename.title": "Mehrfach-Umbenennen",
   "command.bitfroest.select-all.title": "Alle markieren",
+  "command.bitfroest.select-search-matches.title": "Suchtreffer auswählen",
+  "command.bitfroest.filter-search-matches.title": "Nur Suchtreffer anzeigen",
   "command.bitfroest.invert.title": "Auswahl umkehren",
   "command.bitfroest.clear.title": "Auswahl aufheben",
   "command.bitfroest.swap.title": "Seiten tauschen",

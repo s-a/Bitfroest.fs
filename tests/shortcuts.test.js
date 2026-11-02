@@ -2,6 +2,36 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const model = require('../media/commander-shortcuts');
 
+test('search filtering has an editable Ctrl Shift F binding restricted to file list focus', () => {
+  const manifest = require('../package.json');
+  const entry = model.createCatalog(manifest).find(item => item.command === 'bitfroest.filter-search-matches');
+  assert.ok(entry);
+  assert.equal(entry.key, 'ctrl+shift+f');
+  assert.equal(entry.editable, true);
+  const binding = manifest.contributes.keybindings.find(item => item.command === entry.command);
+  assert.ok(binding.when.includes(`!bitfroest.shortcutOverride.${entry.id}`));
+  for (const platform of ['win32', 'linux']) {
+    assert.equal(model.active(entry, { listFocus: true }, platform), true);
+    for (const focus of [{}, { listFocus: true, textInput: true }, { listerFocus: true }, { searchFocus: true }]) assert.equal(model.active(entry, focus, platform), false);
+  }
+});
+
+test('search match selection has an editable Ctrl B binding restricted to file lists', () => {
+  const manifest = require('../package.json');
+  const entry = model.createCatalog(manifest).find(item => item.command === 'bitfroest.select-search-matches');
+  assert.ok(entry);
+  assert.equal(entry.key, 'ctrl+b');
+  assert.equal(entry.editable, true);
+  const binding = manifest.contributes.keybindings.find(item => item.command === entry.command);
+  assert.ok(binding.when.includes(`!bitfroest.shortcutOverride.${entry.id}`));
+  assert.equal(model.active(entry, { listFocus: true }, 'win32'), true);
+  for (const focus of [{}, { listFocus: true, textInput: true }, { listerFocus: true }, { searchFocus: true }]) assert.equal(model.active(entry, focus, 'win32'), false);
+  for (const language of ['', '.de']) {
+    const strings = require(`../package.nls${language}.json`);
+    assert.ok(strings['command.bitfroest.select-search-matches.title']);
+  }
+});
+
 test('slash path shortcut has an editable guarded native binding limited to file list focus', () => {
   const manifest = require('../package.json');
   const entry = model.createCatalog(manifest).find(item => item.command === 'bitfroest.copy-full-names-slash');

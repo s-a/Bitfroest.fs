@@ -7,8 +7,8 @@
 
   let sequence = 0;
   const copy = value => JSON.parse(JSON.stringify(value));
-  const viewFields = ['selected', 'spaceMarked', 'cursorSelection', 'cursor', 'filter', 'sort', 'descending', 'scrollTop'];
-  const defaults = () => ({ selected: [], spaceMarked: [], cursorSelection: null, cursor: null, filter: '', sort: 'name', descending: false, scrollTop: 0 });
+  const viewFields = ['selected', 'spaceMarked', 'cursorSelection', 'cursor', 'filter', 'searchFilter', 'sort', 'descending', 'scrollTop'];
+  const defaults = () => ({ selected: [], spaceMarked: [], cursorSelection: null, cursor: null, filter: '', searchFilter: false, sort: 'name', descending: false, scrollTop: 0 });
   const validIndex = (pane, index) => Number.isInteger(index) && index >= 0 && index < pane.tabs.length;
   const createId = () => `tab-${Date.now().toString(36)}-${(++sequence).toString(36)}`;
 
@@ -118,7 +118,8 @@
     }
     pane.tabs[pane.tab] = path;
     state.path = path;
-    const view = state.directoryStates[path] || { ...defaults(), sort: pane.sort || 'name', descending: Boolean(pane.descending) };
+    const view = { ...(state.directoryStates[path] || { ...defaults(), sort: pane.sort || 'name', descending: Boolean(pane.descending) }),
+      selected: [], spaceMarked: [], cursorSelection: null, filter: '', searchFilter: false };
     state.view = copy(view);
     restore(pane, view);
     return true;

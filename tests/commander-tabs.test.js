@@ -9,6 +9,21 @@ function pane(paths = ['/alpha', '/beta', '/gamma']) {
   return { tabs: paths.slice(), tab: 0, selected: ['a'], cursor: 'a', filter: '', sort: 'name', descending: false, scrollTop: 42 };
 }
 
+test('changing directories resets search, filtering and all marks even when revisiting history', () => {
+  const list = pane(['/alpha']);
+  list.filter = 'report'; list.searchFilter = true; list.spaceMarked = ['a']; list.cursorSelection = 'a';
+  tabs.navigate(list, '/alpha/child');
+  list.filter = 'child'; list.searchFilter = true; list.selected = ['child-file']; list.spaceMarked = ['child-file']; list.cursorSelection = 'child-file';
+  for (const navigate of [() => tabs.back(list), () => tabs.forward(list), () => tabs.navigate(list, '/alpha')]) {
+    assert.equal(navigate(), true);
+    assert.equal(list.filter, '');
+    assert.equal(list.searchFilter, false);
+    assert.deepEqual(list.selected, []);
+    assert.deepEqual(list.spaceMarked, []);
+    assert.equal(list.cursorSelection, null);
+  }
+});
+
 test('legacy tab arrays acquire independent persisted view state', () => {
   const list = pane();
   tabs.ensure(list);
@@ -40,16 +55,16 @@ test('foreground and background duplicates preserve source view without sharing 
   assert.notEqual(list.tabStates[foregroundIndex].id, list.tabStates[backgroundIndex].id);
 });
 
-test('navigation history restores directory selection and truncates forward history', () => {
+test('navigation history resets directory selection and truncates forward history', () => {
   const list = pane(['/alpha']);
   tabs.navigate(list, '/alpha/child');
   assert.deepEqual(list.selected, []);
   list.selected = ['child-file']; list.cursor = 'child-file';
   assert.equal(tabs.back(list), true);
   assert.equal(list.tabs[0], '/alpha');
-  assert.deepEqual(list.selected, ['a']);
+  assert.deepEqual(list.selected, []);
   assert.equal(tabs.forward(list), true);
-  assert.deepEqual(list.selected, ['child-file']);
+  assert.deepEqual(list.selected, []);
   tabs.back(list);
   tabs.navigate(list, '/different');
   assert.equal(tabs.forward(list), false);

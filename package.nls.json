@@ -37,6 +37,8 @@
   "command.bitfroest.unpack.title": "Unpack",
   "command.bitfroest.rename.title": "Multi-rename",
   "command.bitfroest.select-all.title": "Select all",
+  "command.bitfroest.select-search-matches.title": "Select search matches",
+  "command.bitfroest.filter-search-matches.title": "Show only search matches",
   "command.bitfroest.invert.title": "Invert selection",
   "command.bitfroest.clear.title": "Clear selection",
   "command.bitfroest.swap.title": "Swap panes",
