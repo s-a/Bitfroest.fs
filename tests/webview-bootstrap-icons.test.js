@@ -54,7 +54,7 @@ test('status uses the chosen filled Bootstrap check directly and resizes without
   const badge = app.row('file.txt').querySelector('[data-git-status]'), svg = badge.querySelector('svg');
   assert.ok(svg.classList.contains('bi-check-circle-fill'));
   assert.equal(svg.getAttribute('fill'), 'currentColor');
-  assert.equal(badge.style.width, '66%'); assert.equal(badge.style.height, '66%');
+  assert.equal(badge.style.width, '50%'); assert.equal(badge.style.height, '50%');
   assert.equal(badge.querySelector('[data-git-glyph]'), null); assert.equal(loads, 0);
   app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'file-settings', settings: { gitStatus: { iconSizePercent: 80 } } } }));
   assert.equal(badge.style.width, '80%'); assert.equal(badge.style.height, '80%');
@@ -65,13 +65,14 @@ test('status uses the chosen filled Bootstrap check directly and resizes without
 test('overlay sizes validate bounds and Bootstrap license is packaged', t => {
   const app = createApp(t, fixture()); reply(app);
   const badge = app.row('file.txt').querySelector('[data-git-status]');
-  for (const [value, expected] of [[0, '25%'], [101, '100%'], [NaN, '66%'], ['80', '66%']]) {
+  for (const [value, expected] of [[0, '25%'], [101, '100%'], [66, '66%'], [NaN, '50%'], ['80', '50%']]) {
     app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'file-settings', settings: { gitStatus: { iconSizePercent: value } } } }));
     assert.equal(badge.style.width, expected);
+    assert.equal(badge.style.height, expected);
   }
   const manifest = require('../package.json'), properties = Object.assign({}, ...manifest.contributes.configuration.map(section => section.properties));
   const setting = properties['bitfroest.gitStatus.iconSizePercent'];
-  assert.equal(setting.type, 'integer'); assert.equal(setting.default, 66);
+  assert.equal(setting.type, 'integer'); assert.equal(setting.default, 50);
   assert.equal(setting.minimum, 25); assert.equal(setting.maximum, 100); assert.equal(setting.scope, 'window');
   for (const file of ['../package.nls.json', '../package.nls.de.json']) assert.ok(require(file)[setting.description.replaceAll('%', '')]);
   const component = require('../licenses/components.json').find(component => component.name === 'Bootstrap Icons');
