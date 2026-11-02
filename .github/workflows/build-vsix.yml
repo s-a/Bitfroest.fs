@@ -34,6 +34,8 @@ jobs:
         with:
           node-version: 24.22.2
           package-manager-cache: false
+      - name: Check release notes before building
+        run: node scripts/check-release-notes.cjs
       - name: Install locked development dependencies
         run: npm ci
       - name: Install the Linux desktop development SDK
@@ -50,7 +52,7 @@ jobs:
       - name: Check architecture and release policy
         run: |
           npm run test:architecture
-          node --test tests/repository-privacy.test.js tests/beta-release.test.js tests/release-policy.test.js tests/marketplace-release.test.js
+          node --test tests/repository-privacy.test.js tests/beta-release.test.js tests/release-policy.test.js tests/marketplace-release.test.js tests/release-notes.test.js
       - name: Run platform tests
         run: |
           case "$BUILD_TARGET" in
