@@ -1644,7 +1644,7 @@
       const unavailable = result?.unavailableFields;
       const text = unavailable?.length ? t('Nicht verfügbar: {field}', { field: unavailable.join(', ') }) : columns.displayValue(file, column.field === undefined ? column.key : column);
       const isName = isFilenameColumn(column);
-      const content = isName ? `<span class="filename">${icon(file, currentPath(p))}<span data-filename>${highlight(text, p.filter)}</span>${resultView(p) ? `<span data-result-source class="result-source" title="${escape(displayPath(file.fsSource))}">${escape(displayPath(parent(file.fsSource)))}</span>` : ''}</span>` : highlight(text, column.key === 'type' && p.filter.startsWith('.') ? p.filter.slice(1) : p.filter);
+      const content = isName ? `<span class="filename">${icon(file, currentPath(p))}<span data-filename${file.type === 'link' ? ' class="is-link"' : ''}>${highlight(text, p.filter)}</span>${resultView(p) ? `<span data-result-source class="result-source" title="${escape(displayPath(file.fsSource))}">${escape(displayPath(parent(file.fsSource)))}</span>` : ''}</span>` : highlight(text, column.key === 'type' && p.filter.startsWith('.') ? p.filter.slice(1) : p.filter);
       return `<td data-cell="${escape(column.key)}" title="${escape(file.name)}" class="column-align-${column.align || 'left'}">${content}</td>`;
   }
   function sizePaneColumns(section, p, forcedKey) {

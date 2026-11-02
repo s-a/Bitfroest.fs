@@ -442,6 +442,7 @@ dialog button:disabled { color: var(--vscode-disabledForeground, var(--muted)); 
 }
 .file-table tr[data-id] td:has([data-filename]) { color: inherit; }
 [data-filename] { color: var(--file-type-color, inherit); }
+[data-filename].is-link { text-decoration: underline; text-underline-offset: 2px; }
 .file-table tr[data-id]:hover td { color: var(--git-hover-color, inherit); }
 .file-table tr[data-id]:hover td:has([data-filename]) { color: inherit; }
 .file-table tr[data-id]:hover [data-filename] { color: var(--file-type-hover, inherit); }
