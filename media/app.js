@@ -874,7 +874,7 @@
   let gitMenuSelection = null, pendingGitDiff = null;
   let conflictAction = null;
   function flushFocusRefresh() {
-    if (!startupReady || !focusRefreshRequested || filesystemPending || navigationRequests.size || transferPending || rightDropChoice || shellMenuPending || $('#modal').open) return;
+    if (!startupReady || !focusRefreshRequested || filesystemPending || navigationRequests.size || transferPending || rightDropChoice || shellMenuPending || $('#modal').open || document.querySelector('.inline-rename')) return;
     focusRefreshRequested = false;
     if (lister.has(state.active)) return;
     requestFilesystem({ type: 'filesystem-refresh' });
@@ -1539,7 +1539,12 @@
     if (found) activeRow(found.id)?.scrollIntoView({ block: 'nearest' });
   }
   let renameTimer;
-  let lastNameClick = 0;
+  let lastNameClick = null;
+  document.addEventListener('pointerdown', () => clearTimeout(renameTimer), true);
+  document.addEventListener('focusin', event => {
+    if (!event.target.closest('.pane.active .list')) { clearTimeout(renameTimer); lastNameClick = null; }
+  });
+  window.addEventListener('blur', () => { clearTimeout(renameTimer); lastNameClick = null; clearDropTarget(); });
   function moveResultReferences(before, after) {
     const moves = (Array.isArray(before) ? before : [[before, after]]).sort((a, b) => b[0].length - a[0].length);
     for (const p of state.panes) for (const tab of p.tabStates || []) {
@@ -1564,9 +1569,18 @@
     const oldName = file.name;
     const originalNameNodes = [...target.childNodes];
     const input = document.createElement('input'); input.className = 'inline-rename'; input.value = typeof proposal === 'string' ? proposal : oldName; input.setAttribute('aria-label', t('Name bearbeiten'));
+    input.dataset.vscodeContext = JSON.stringify({ webviewSection: 'textInput', preventDefaultContextMenuItems: false });
+    const row = target.closest('tr'), wasDraggable = row.draggable;
+    row.draggable = false;
+    const editingEvents = new AbortController();
     target.replaceChildren(input); input.focus(); input.select();
     let finished = false;
-    function finish(commit, completed) {
+    function stopEditing() {
+      finished = true; editingEvents.abort(); row.draggable = wasDraggable;
+      if (target.contains(input)) target.replaceChildren(...originalNameNodes);
+      queueMicrotask(() => { reportFocus(); flushFocusRefresh(); });
+    }
+    function finish(commit, completed, focusList = true) {
       if (finished) return;
       const extension = columns.splitName(file).extension;
       const name = input.value && !input.value.includes('.') && extension ? `${input.value}.${extension}` : input.value;
@@ -1574,12 +1588,12 @@
       if (commit && name !== oldName && (!validName(name) || [...name].some(character => character.charCodeAt(0) < 32) || reserved || (state.folders[source] || []).some(other => other !== file && other.name.toLowerCase() === name.toLowerCase()))) { toast(t('Der Name ist ungültig oder bereits vergeben.')); input.focus(); return; }
       if (commit && name !== oldName && file.type === 'folder') {
         const context = { side: state.active, source, id: file.id, name: oldName };
-        if (prepareFolders([join(source, oldName)], 'rename-one', () => startRename(name, context))) { finished = true; return; }
+        if (prepareFolders([join(source, oldName)], 'rename-one', () => startRename(name, context))) { stopEditing(); return; }
       }
-      finished = true;
+      stopEditing();
       if (commit && name !== oldName) rememberSelection(p);
       if (commit && name !== oldName && state.archiveLocations?.[source]) {
-        render(true); sendZipWrite({ action: 'rename', path: source, ids: [file.id], name }, completed); return;
+        render(focusList); sendZipWrite({ action: 'rename', path: source, ids: [file.id], name }, completed); return;
       }
       if (commit && name !== oldName) {
         if (state.realFilesystem) renameFailure = { before: clone(state), side: state.active, source, oldName, proposal: name };
@@ -1594,7 +1608,7 @@
       }
       const pending = state.realFilesystem && JSON.stringify(state.folders) !== confirmedFolders;
       if (pending && completed) filesystemResume = completed;
-      render(true);
+      render(focusList);
       if (commit && name !== oldName && !pending) toast(t('Eintrag umbenannt.'), 'success');
       if (!pending) completed?.();
     }
@@ -1616,10 +1630,14 @@
       }
       if (event.key === 'Enter' || event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); finish(event.key === 'Enter'); }
     });
-    input.addEventListener('blur', event => {
-      if (finished || event.relatedTarget?.closest('.operation-error')) return;
-      finished = true; target.replaceChildren(...originalNameNodes); queueMicrotask(reportFocus);
-    });
+    const outsideClick = event => {
+      if (!input.isConnected) { stopEditing(); return; }
+      if (event.target === input || event.target.closest('.operation-error')) return;
+      finish(true, undefined, false);
+      if (!finished) { event.preventDefault(); event.stopPropagation(); }
+    };
+    document.addEventListener('pointerdown', outsideClick, { capture: true, signal: editingEvents.signal });
+    document.addEventListener('click', outsideClick, { capture: true, signal: editingEvents.signal });
     if (confirmed) finish(true);
   }
   function restoreRename(failure) {
@@ -2997,6 +3015,7 @@
     };
   }
   function run(command, reverseDirectories = false, contextSelection) {
+    clearTimeout(renameTimer); lastNameClick = null;
     if (command === 'git-diff') { requestGitDiff(contextSelection); return; }
     if (typeof command !== 'string') return;
     if (command === 'open-terminal') {
@@ -3109,6 +3128,7 @@
     const target = event.target;
     if (target.closest('[data-resize]') || target.closest('.inline-rename')) return;
     clearTimeout(renameTimer);
+    const previousNameClick = lastNameClick; lastNameClick = null;
     const section = target.closest('[data-pane]');
     if (section) {
       state.active = Number(section.dataset.pane);
@@ -3136,14 +3156,25 @@
       const row = target.closest('tr[data-id]');
       if (row) {
         const id = row.dataset.id;
-        const renameClick = p.cursor === id && p.selected.includes(id) && Date.now() - lastNameClick > 500 && event.detail === 1 && !event.shiftKey && !event.ctrlKey && !event.metaKey && target.closest('[data-filename]');
+        const nameClick = event.detail === 1 && !event.shiftKey && !event.ctrlKey && !event.metaKey && target.closest('[data-filename]');
+        const tabId = p.tabStates[p.tab].id, source = currentPath(p);
+        const renameClick = nameClick && p.cursor === id && p.selected.length === 1 && p.selected[0] === id && previousNameClick?.pane === p && previousNameClick.id === id && previousNameClick.tabId === tabId && previousNameClick.source === source && Date.now() - previousNameClick.time > 500;
         if (event.shiftKey && p.cursor) extendSelection(p, id, event.ctrlKey || event.metaKey);
         else if (event.ctrlKey || event.metaKey) p.selected = p.selected.includes(id) ? p.selected.filter(value => value !== id) : [...p.selected, id];
         else { p.selected = [id]; p.spaceMarked = []; }
         p.cursorSelection = !event.shiftKey && !event.ctrlKey && !event.metaKey ? id : null;
         p.cursor = id; if (!event.shiftKey) rememberSelectionAnchor(p); refreshSelection(); section.querySelector('.list').focus({ preventScroll: true });
-        lastNameClick = Date.now();
-        if (renameClick) renameTimer = setTimeout(startRename, 350);
+        lastNameClick = nameClick ? { pane: p, id, tabId, source, time: Date.now() } : null;
+        if (renameClick) {
+          const file = files(p).find(item => item.id === id);
+          const originalName = file.name, originalPath = entryPath(p, file);
+          renameTimer = setTimeout(() => {
+            if (pane() !== p || p.tabStates[p.tab].id !== tabId || currentPath(p) !== source || p.cursor !== id || p.selected.length !== 1 || p.selected[0] !== id || $('#modal').open) return;
+            const current = files(p).find(item => item.id === id);
+            if (current?.name !== originalName || entryPath(p, current) !== originalPath) return;
+            startRename();
+          }, 800);
+        }
         return;
       }
       refreshSelection();
@@ -3151,6 +3182,7 @@
     const command = target.closest('[data-action]'); if (command) run(command.dataset.action);
   });
   $('#panes').addEventListener('dblclick', event => {
+    if (event.target.closest('input,textarea,select,[contenteditable="true"]')) return;
     clearTimeout(renameTimer); clearTimeout(run.tabTimer);
     const section = event.target.closest('[data-pane]'); if (!section) return;
     state.active = Number(section.dataset.pane);
@@ -3244,6 +3276,23 @@
   function clearDropTarget() {
     document.querySelectorAll('.drop-target').forEach(element => element.classList.remove('drop-target'));
     delete $('#panes').dataset.dropMode;
+    document.querySelector('.file-drag-feedback')?.remove();
+  }
+  function showFileDragFeedback(event, mode) {
+    if (mode !== 'copy' && mode !== 'move') return;
+    let feedback = document.querySelector('.file-drag-feedback');
+    if (!feedback) {
+      feedback = document.createElement('div'); feedback.className = 'file-drag-feedback';
+      feedback.setAttribute('aria-hidden', 'true'); document.body.append(feedback);
+    }
+    if (feedback.dataset.mode !== mode) {
+      feedback.dataset.mode = mode;
+      feedback.innerHTML = window.CommanderIcons.svg('workbench', mode);
+      const label = document.createElement('span'); label.textContent = t(mode === 'copy' ? 'Kopieren' : 'Verschieben'); feedback.append(label);
+    }
+    const bounds = feedback.getBoundingClientRect();
+    feedback.style.left = `${Math.max(0, Math.min(event.clientX + 20, window.innerWidth - bounds.width))}px`;
+    feedback.style.top = `${Math.max(0, Math.min(event.clientY + 20, window.innerHeight - bounds.height))}px`;
   }
   function validFileDropTarget(source, destination) {
     if (!destination || !Object.hasOwn(state.folders, destination.path)) return false;
@@ -3269,6 +3318,8 @@
     return { side, path: destination, element: file?.type === 'folder' ? row : section.querySelector('.list') };
   }
   $('#panes').addEventListener('dragstart', event => {
+    if (event.target.closest('input,textarea,[contenteditable="true"]')) return;
+    if (event.target.closest('tr')?.querySelector('.inline-rename')) { event.preventDefault(); return; }
     if (rightPointer || filesystemPending && !refreshingFilesystem || event.target.closest('[data-history]')) { event.preventDefault(); return; }
     const tab = event.target.closest('[data-tab-drag]'), header = event.target.closest('[data-column]'), row = event.target.closest('tr[data-id]');
     if (!tab && !header && !row || event.target.closest('[data-resize]')) return;
@@ -3295,11 +3346,16 @@
       dragged.mode = mode;
       if (event.dataTransfer) event.dataTransfer.dropEffect = mode === 'link' ? 'none' : mode;
       destination.element.classList.add('drop-target'); $('#panes').dataset.dropMode = mode;
+      showFileDragFeedback(event, mode);
       return;
     }
     if (dragged && event.target.closest(dragged.kind === 'tab' ? '.tabs' : '[data-column]')) event.preventDefault();
   });
   $('#panes').addEventListener('dragend', () => { dragged = null; clearDropTarget(); });
+  document.addEventListener('dragover', event => {
+    if (!event.target.closest('#panes')) clearDropTarget();
+  });
+  document.addEventListener('dragleave', event => { if (!event.relatedTarget) clearDropTarget(); });
   $('#functionbar').addEventListener('dragover', event => {
     const target = event.target.closest('[data-action="delete"]');
     if (!target || !internalDeleteDrop(event) || !validDraggedFiles(dragged) || filesystemPending && !refreshingFilesystem || $('#modal').open || event.ctrlKey || event.metaKey || event.altKey) return;

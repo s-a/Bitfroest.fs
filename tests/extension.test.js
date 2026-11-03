@@ -15,6 +15,41 @@ function progressSample(fields) {
     overall: Number.isSafeInteger(fields.totalBytes) ? Progress.known('bytes', fields.completedBytes || 0, fields.totalBytes) : Progress.unknown('items', 0, 'enumerating'),
     current: Number.isSafeInteger(fields.total) ? Progress.known('bytes', fields.transferred || 0, fields.total) : Progress.unknown('items', 0, 'enumerating') });
 }
+
+test('generated host HTML keeps rename text editing and confirms outside clicks through the host', async t => {
+  const initial = clipboardFixture();
+  initial.panes.forEach(pane => { pane.filter = ''; pane.sort = 'name'; });
+  let writes = 0;
+  const app = harness(t, { filesystemLoad: async () => initial, filesystemApply: async (_before, after) => { writes++; return after; } });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0], html = panel.webview.html;
+  assert.match(html, /Content-Security-Policy/); assert.match(html, /script-src 'nonce-[^']+'/);
+  const view = require('./support/webview.cjs').createApp(t, initial, { html });
+  view.click(view.row('a.txt')); view.action('rename-one'); const input = view.document.querySelector('.inline-rename');
+  assert.equal(input.closest('tr').draggable, false);
+  input.value = 'edited.txt'; input.setSelectionRange(0, 6);
+  const menu = new view.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 });
+  input.dispatchEvent(menu); input.blur();
+  assert.equal(menu.defaultPrevented, false);
+  assert.equal(JSON.parse(input.dataset.vscodeContext).webviewSection, 'textInput');
+  assert.equal(view.document.querySelector('.inline-rename'), input);
+  input.focus();
+  assert.equal(input.selectionEnd, 6);
+  const focus = view.messages.filter(message => message.type === 'inputFocus').at(-1);
+  assert.equal(focus.inlineRename, true); assert.equal(focus.value, true); assert.equal(focus.list, false);
+  await panel.receive(focus);
+  view.document.querySelector('[data-pane="1"] .list').dispatchEvent(new view.window.MouseEvent('pointerdown', { bubbles: true, cancelable: true }));
+  const request = view.messages.find(message => message.type === 'filesystem-apply'); assert.ok(request);
+  assert.equal(request.state.folders['C:/tmp'].find(file => file.id === 'a').name, 'edited.txt');
+  assert.equal(view.messages.some(message => message.type === 'shell-context-menu'), false);
+  await panel.receive(request);
+  assert.equal(writes, 1);
+  const reply = panel.messages.filter(message => message.type === 'filesystem-result').at(-1); assert.equal(reply.ok, true);
+  view.window.dispatchEvent(new view.window.MessageEvent('message', { data: reply }));
+  assert.equal(view.document.querySelector('.inline-rename'), null);
+  assert.equal(view.state().folders['C:/tmp'].find(file => file.id === 'a').name, 'edited.txt');
+  assert.equal(view.document.querySelector('[data-pane="0"] tr[data-id="a"]').draggable, true);
+});
+
 test('generated host HTML sorts the configured date column chronologically through header clicks', async t => {
   const initial = clipboardFixture();
   initial.panes.forEach(pane => { pane.filter = ''; pane.sort = 'name'; pane.descending = false; pane.selected = []; });
@@ -79,6 +114,35 @@ test('generated host HTML searches complete names without changing marks or requ
   view.key('Escape');
   assert.equal(view.document.querySelectorAll('.pane.active tr[data-id]').length, rows.length);
   assert.equal(view.document.querySelector('.pane.active mark'), null);
+});
+
+test('generated host HTML delays name editing and shows both drag operations with its CSP', async t => {
+  const initial = clipboardFixture(); initial.realFilesystem = false;
+  initial.panes.forEach(pane => { pane.filter = ''; pane.sort = 'name'; });
+  const app = harness(t, { filesystemLoad: async () => initial });
+  await app.command('bitfroest.openPrototype'); const html = app.panels[0].webview.html;
+  assert.match(html, /Content-Security-Policy/); assert.match(html, /script-src 'nonce-[^']+'/);
+  const view = require('./support/webview.cjs').createApp(t, initial, { html });
+  let now = 1000; view.window.Date.now = () => now;
+  const name = () => view.row('a.txt').querySelector('[data-filename]');
+  view.click(name()); now += 1000; view.click(name());
+  assert.equal(view.document.querySelector('.inline-rename'), null);
+  await new Promise(resolve => setTimeout(resolve, 850));
+  assert.equal(view.document.querySelector('.inline-rename').value, 'a.txt');
+  view.key('Escape', {}, view.document.querySelector('.inline-rename'));
+  const drag = (type, target, shiftKey = false) => {
+    const event = new view.window.MouseEvent(type, { bubbles: true, cancelable: true, shiftKey });
+    Object.defineProperty(event, 'dataTransfer', { value: { setData() {} } }); target.dispatchEvent(event);
+  };
+  drag('dragstart', view.row('a.txt'));
+  const target = view.document.querySelector('[data-pane="1"] .list');
+  for (const shiftKey of [false, true]) {
+    drag('dragover', target, shiftKey);
+    assert.equal(view.document.querySelector('.file-drag-feedback').dataset.mode, shiftKey ? 'move' : 'copy');
+    assert.ok(view.document.querySelector('.file-drag-feedback svg'));
+  }
+  drag('dragend', target); assert.equal(view.document.querySelector('.file-drag-feedback'), null);
+  assert.equal(view.messages.some(message => message.type === 'filesystem-apply'), false);
 });
 
 test('generated host HTML suppresses file-action context menus while retaining native text editing', async t => {

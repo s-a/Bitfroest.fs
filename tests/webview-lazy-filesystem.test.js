@@ -83,10 +83,10 @@ test('cold folder rename opens immediately and prepares only the confirmed propo
 });
 
 test('cold folder rename cancellation and unchanged confirmation never read descendants',t=>{
- for(const finish of ['Escape','Enter','blur']){
+ for(const finish of ['Escape','Enter','outside-click']){
   const app=createApp(t,fixture());select(app,'docs');app.key('F6',{shiftKey:true});
   const input=app.document.querySelector('.inline-rename');assert.ok(input);
-  if(finish==='blur'){input.value='discarded';app.document.querySelector('[data-pane="1"] .list').focus();}
+  if(finish==='outside-click'){const target=app.document.querySelector('[data-pane="1"] .list');target.dispatchEvent(new app.window.MouseEvent('pointerdown',{bubbles:true,cancelable:true}));target.focus();}
   else {if(finish==='Escape')input.value='discarded';app.key(finish,{},input);}
   assert.equal(app.document.querySelector('.inline-rename'),null);
   assert.equal(app.messages.some(message=>['filesystem-prepare','filesystem-apply'].includes(message.type)),false);

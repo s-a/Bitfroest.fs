@@ -6,14 +6,14 @@ function fixture(realFilesystem = false) {
   return { version: 1, realFilesystem, snapshotId: 'before', active: 0, panes: [pane('C:/tmp'), pane('C:/temp')], folders: { 'C:/tmp': [{ id: 'a', name: 'a.one.txt', type: 'text', content: 'one', fsSource: 'C:/tmp/a.one.txt' }, { id: 'b', name: 'b.two.txt', type: 'text', content: 'two', fsSource: 'C:/tmp/b.two.txt' }], 'C:/temp': [] } };
 }
 const reply = (app, data) => app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-result', ...data } }));
-test('ordinary focus loss cancels an inline rename without a model or host mutation', t => {
+test('ordinary focus loss retains an inline rename without a model or host mutation', t => {
   for (const real of [false, true]) {
     const app = createApp(t, fixture(real)); app.action('rename-one');
     const before = structuredClone(app.state().folders);
-    app.document.querySelector('.inline-rename').value = 'discarded-proposal.txt';
+    const input = app.document.querySelector('.inline-rename'); input.value = 'retained-proposal.txt';
     const destination = app.document.querySelector('.path-input'); destination.focus();
     assert.deepEqual(app.state().folders, before);
-    assert.equal(app.document.querySelector('.inline-rename'), null);
+    assert.equal(app.document.querySelector('.inline-rename'), input);
     assert.equal(app.messages.some(message => message.type === 'filesystem-apply'), false);
     assert.equal(app.document.activeElement, destination);
   }
