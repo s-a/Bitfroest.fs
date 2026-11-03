@@ -59,6 +59,33 @@ test('size and attribute sorting use a name tie-break and preserve equal record 
   assert.equal(columns.attributes({ attr: 'r-h-' }), 'r-h-');
 });
 
+test('the configured standard date column sorts folders chronologically in both directions', () => {
+  const settings = require('../media/commander-column-settings');
+  const column = settings.catalog.find(column => column.id === 'date');
+  const items = [
+    { name: 'August', type: 'folder', date: '31.08.2026 19:09:55' },
+    { name: 'October', type: 'folder', date: '30.10.2026 16:33:26' },
+    { name: 'November early', type: 'folder', date: '02.11.2026 16:15:00' },
+    { name: 'November late', type: 'folder', date: '02.11.2026 16:15:40' },
+    { name: 'January', type: 'folder', date: '01.01.2027 00:00:00' },
+    { name: 'File', type: 'text', date: '02.01.2027 00:00:00' }
+  ];
+  assert.deepEqual(columns.sort(items, column, true).map(item => item.name), ['January', 'November late', 'November early', 'October', 'August', 'File']);
+  assert.deepEqual(columns.sort(items, column).map(item => item.name), ['August', 'October', 'November early', 'November late', 'January', 'File']);
+});
+
+test('combined date and time fields sort by their family independently of display formats', () => {
+  for (const family of ['write', 'creation', 'access']) for (const provider of ['file', 'tc']) {
+    const items = [
+      { name: 'older', [`${family}date`]: '2026-08-31T17:09:55Z' },
+      { name: 'newer', [`${family}date`]: '2026-11-02T15:15:40Z' },
+      { name: 'unknown' }
+    ];
+    const column = { field: `[=${provider}.${family}date.D/M/y] [=${provider}.${family}time.h:m:s]` };
+    assert.deepEqual(columns.sort(items, column, true).map(item => item.name), ['newer', 'older', 'unknown']);
+  }
+});
+
 test('autosize includes the header, visible contents, and icon spacing', () => {
   const source = columns.defaults();
   const result = columns.autoSize(source, 'name', [{ name: 'A long project filename.md' }], text => text.length * 8);

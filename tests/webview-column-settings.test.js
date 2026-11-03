@@ -2,6 +2,25 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createApp } = require('./support/webview.cjs');
 
+test('the standard date header orders visible folders by date rather than day of month', t => {
+  const pane = () => ({ tabs: ['/left'], tab: 0, selected: [], cursor: null, filter: '', sort: 'name', descending: false });
+  const files = [
+    { id: 'aug', name: 'August', type: 'folder', date: '31.08.2026 19:09:55' },
+    { id: 'oct', name: 'October', type: 'folder', date: '30.10.2026 16:33:26' },
+    { id: 'nov', name: 'November', type: 'folder', date: '02.11.2026 16:15:40' }
+  ];
+  const settings = require('../media/commander-column-settings');
+  const app = createApp(t, { version: 1, active: 0, panes: [pane(), pane()], folders: { '/left': files, '/left/August': [], '/left/October': [], '/left/November': [] } }, {
+    columnSettings: { sets: [{ id: 'standard', name: 'Standard', columns: settings.catalog }], activeSet: 'standard' }
+  });
+  const section = app.document.querySelector('[data-pane="0"]');
+  const order = () => [...section.querySelectorAll('tbody tr[data-id]')].map(row => row.dataset.id);
+  app.click(section.querySelector('[data-sort="date"]'));
+  assert.deepEqual(order(), ['aug', 'oct', 'nov']);
+  app.click(section.querySelector('[data-sort="date"]'));
+  assert.deepEqual(order(), ['nov', 'oct', 'aug']);
+});
+
 test('Linux runtime masks Windows-only fields even in restored visible column preferences', t => {
   const catalog = require('../media/commander-column-settings').catalog;
   const columns = catalog.map(column => ({ ...column, visible: ['name', 'archive', 'versionString'].includes(column.id) }));

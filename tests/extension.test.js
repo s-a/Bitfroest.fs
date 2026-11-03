@@ -15,6 +15,29 @@ function progressSample(fields) {
     overall: Number.isSafeInteger(fields.totalBytes) ? Progress.known('bytes', fields.completedBytes || 0, fields.totalBytes) : Progress.unknown('items', 0, 'enumerating'),
     current: Number.isSafeInteger(fields.total) ? Progress.known('bytes', fields.transferred || 0, fields.total) : Progress.unknown('items', 0, 'enumerating') });
 }
+test('generated host HTML sorts the configured date column chronologically through header clicks', async t => {
+  const initial = clipboardFixture();
+  initial.panes.forEach(pane => { pane.filter = ''; pane.sort = 'name'; pane.descending = false; pane.selected = []; });
+  initial.folders['C:/tmp'] = [
+    { id: 'aug', name: 'August', type: 'folder', date: '31.08.2026 19:09:55' },
+    { id: 'oct', name: 'October', type: 'folder', date: '30.10.2026 16:33:26' },
+    { id: 'nov', name: 'November', type: 'folder', date: '02.11.2026 16:15:40' }
+  ];
+  for (const file of initial.folders['C:/tmp']) initial.folders[`C:/tmp/${file.name}`] = [];
+  const app = harness(t, { filesystemLoad: async () => initial });
+  await app.command('bitfroest.openPrototype');
+  const panel = app.panels[0];
+  assert.match(panel.webview.html, /Content-Security-Policy/);
+  const view = require('./support/webview.cjs').createApp(t, initial, { html: panel.webview.html });
+  const section = view.document.querySelector('[data-pane="0"]');
+  assert.equal(view.state().panes[0].columns.find(column => column.key === 'date').field, '[=file.writedate] [=file.writetime]');
+  const order = () => [...section.querySelectorAll('tbody tr[data-id]')].map(row => row.dataset.id);
+  view.click(section.querySelector('[data-sort="date"]'));
+  assert.deepEqual(order(), ['aug', 'oct', 'nov']);
+  view.click(section.querySelector('[data-sort="date"]'));
+  assert.deepEqual(order(), ['nov', 'oct', 'aug']);
+  assert.equal(view.messages.some(message => message.type === 'filesystem-apply'), false);
+});
 
 test('generated host HTML searches complete names without changing marks or requesting directory work', async t => {
   const initial = clipboardFixture(); initial.realFilesystem = false;

@@ -136,11 +136,13 @@
     let result;
     if (key && typeof key === 'object') {
       const match = /^\[=(?:file|tc)\.(size|writedate|writetime|creationdate|creationtime|accessdate|accesstime)(?:\.[^\]]+)?\]$/.exec(key.field);
+      const combinedDate = /^\[=(?:file|tc)\.(write|creation|access)date(?:\.[^\]]+)?\]\s+\[=(?:file|tc)\.\1time(?:\.[^\]]+)?\]$/.exec(key.field);
       if (match?.[1] === 'size') result = compareValue(Number(a?.size) || 0, Number(b?.size) || 0);
-      else if (match) {
-        const field = match[1], format = field.endsWith('time') ? 'h:m:s' : 'Y-M-D';
+      else if (match || combinedDate) {
+        const field = match?.[1], format = field?.endsWith('time') ? 'h:m:s' : 'Y-M-D';
+        const template = combinedDate ? `[=file.${combinedDate[1]}date.Y-M-D] [=file.${combinedDate[1]}time.h:m:s]` : `[=file.${field}.${format}]`;
         const timestamp = file => {
-          const value = settings.evaluateColumnTemplate(file, `[=file.${field}.${format}]`);
+          const value = settings.evaluateColumnTemplate(file, template);
           return value.missingFields.length ? '' : value.text;
         };
         result = compareValue(timestamp(a), timestamp(b));
