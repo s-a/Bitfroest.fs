@@ -3412,7 +3412,7 @@
   function fileDragPreview(source) {
     const preview = document.createElement('div'); preview.className = 'file-drag-preview file-table';
     preview.dataset.count = String(source.ids.length);
-    const count = document.createElement('span'); count.className = 'file-drag-count'; count.textContent = String(source.ids.length); preview.append(count);
+    const count = document.createElement('span'); count.className = 'file-drag-count'; count.textContent = String(source.ids.length);
     const section = document.querySelector(`[data-pane="${source.side}"]`), p = state.panes[source.side];
     for (const element of [document.documentElement, $('#panes'), section, section.querySelector('.file-table')]) {
       const style = getComputedStyle(element);
@@ -3451,6 +3451,7 @@
       preview.append(row);
     }
     if (selected.length > 5) { const more = document.createElement('div'); more.className = 'file-drag-more'; more.textContent = `+${selected.length - 5}`; preview.append(more); }
+    preview.append(count);
     return preview;
   }
   function showFileDragFeedback(event, mode, source, allowed = true) {

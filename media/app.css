@@ -714,9 +714,9 @@ body .statusbar { height: var(--icon-row-size); min-height: var(--icon-row-size)
 
 body[data-file-drag-cursor="ready"] #panes *, body[data-file-drag-cursor="copy"] *, body[data-file-drag-cursor="move"] * { cursor: default !important; }
 body[data-file-drag-cursor="none"] * { cursor: no-drop !important; }
-.file-drag-preview { position: relative; padding: 0; border: 0; color: var(--vscode-list-activeSelectionForeground, var(--text)); opacity: .6; overflow: hidden; pointer-events: none; mask-image: linear-gradient(to right, transparent, #000 14px, #000 calc(100% - 14px), transparent); }
-.file-drag-row { position: relative; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-height: var(--icon-row-size); background: var(--vscode-list-activeSelectionBackground, var(--surface)); color: var(--vscode-list-activeSelectionForeground, var(--text)); }
+.file-drag-preview { position: relative; padding: 0; border: 0; color: var(--vscode-list-activeSelectionForeground, var(--text)); opacity: .6; overflow: hidden; pointer-events: none; }
+.file-drag-row { position: relative; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-height: var(--icon-row-size); background: var(--vscode-list-activeSelectionBackground, var(--surface)); color: var(--vscode-list-activeSelectionForeground, var(--text)); mask-image: linear-gradient(to right, transparent, #000 14px, #000 calc(100% - 14px), transparent); }
 .file-drag-row > .ag-cell { position: absolute; top: 0; height: 100%; padding: 0 var(--file-cell-padding); display: flex; align-items: center; }
-.file-drag-count { position: absolute; z-index: 1; right: 0; top: 0; padding: 0 4px; font-weight: bold; background: var(--vscode-badge-background, var(--surface)); color: var(--vscode-badge-foreground, var(--text)); }
+.file-drag-count { position: static; display: block; width: max-content; margin: 2px 0 0 auto; padding: 0 4px; font-weight: bold; background: var(--vscode-badge-background, var(--surface)); color: var(--vscode-badge-foreground, var(--text)); }
 .file-drag-more { padding: 0 4px; background: var(--vscode-list-activeSelectionBackground, var(--surface)); }
 .native-file-drag-preview { position: fixed; left: -10000px; top: 0; pointer-events: none; }

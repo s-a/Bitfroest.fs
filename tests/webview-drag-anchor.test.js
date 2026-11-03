@@ -65,7 +65,7 @@ test('preview lifts at the grabbed row and tracks leftward movement without view
   style.textContent = resolveThemeCss(fs.readFileSync(path.join(__dirname, '../media/app.css'), 'utf8')); app.document.head.append(style);
   assert.equal(app.window.getComputedStyle(feedback).transitionDuration, '0s');
   assert.equal(app.window.getComputedStyle(feedback).width, 'max-content');
-  assert.match(style.textContent, /\.file-drag-preview[^}]*mask-image:\s*linear-gradient\(to right,\s*transparent/);
+  assert.match(style.textContent, /\.file-drag-row[^}]*mask-image:\s*linear-gradient\(to right,\s*transparent/);
 });
 
 test('the grabbed marked row stays in a five-row preview even beyond the first five entries', t => {
@@ -150,4 +150,29 @@ for (const ready of [false, true]) test(`right hold followed by a button chord c
   assert.equal(app.document.querySelectorAll('.file-drag-preview,.drag-pending').length, 0);
   assert.equal(app.document.body.dataset.fileDragCursor, undefined);
   assert.equal(app.document.querySelector('#modal').open, false);
+});
+
+for (const count of [3, 8]) for (const route of ['pointer', 'native']) test(`selection count is below the faded rows for ${route} dragging with ${count - 1} marked files`, t => {
+  const app = setup(t, count), target = app.document.querySelector('[data-pane="1"] .list');
+  if (route === 'pointer') {
+    pointer(app, 'pointerdown', app.rows[1]); pointer(app, 'pointermove', target, { clientX: 800 });
+  } else {
+    native(app, 'dragstart', app.rows[1]); native(app, 'dragover', target);
+  }
+  const preview = app.document.querySelector('.file-drag-feedback .file-drag-preview');
+  const badge = preview.querySelector('.file-drag-count'), rows = [...preview.querySelectorAll('.file-drag-row')];
+  assert.equal(badge.textContent, String(count - 1));
+  assert.equal(preview.lastElementChild, badge, 'the count follows all rows and remaining-item information');
+  assert.equal(rows.length, Math.min(5, count - 1));
+  assert.equal(badge.previousElementSibling, preview.querySelector('.file-drag-more') || rows.at(-1));
+  const style = app.document.createElement('style');
+  style.textContent = resolveThemeCss(fs.readFileSync(path.join(__dirname, '../media/app.css'), 'utf8')); app.document.head.append(style);
+  assert.equal(app.window.getComputedStyle(badge).position, 'static');
+  assert.equal(app.window.getComputedStyle(badge).display, 'block');
+  assert.doesNotMatch(app.window.getComputedStyle(preview).maskImage, /gradient/);
+  assert.doesNotMatch(app.window.getComputedStyle(badge).maskImage, /gradient/);
+  assert.match(app.window.getComputedStyle(rows[0]).maskImage, /linear-gradient\(to right, transparent/);
+  if (route === 'pointer') pointer(app, 'pointerup', target, { clientX: 800 });
+  else native(app, 'dragend', target);
+  assert.equal(app.document.querySelector('.file-drag-feedback'), null);
 });
