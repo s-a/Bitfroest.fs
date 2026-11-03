@@ -22,9 +22,10 @@ struct InspectedWindow {
 };
 struct WindowInspection {
   std::vector<InspectedWindow> windows;
+  std::wstring title_token;
   DWORD process_id = 0, matching_windows = 0, error = 0;
   bool truncated = false, composition_enabled = false;
   HRESULT composition_result = E_FAIL;
 };
-bool InspectApplicationWindows(const std::atomic<bool>& closed, WindowInspection* result);
+bool InspectApplicationWindows(const std::atomic<bool>& closed, WindowInspection* result, const std::wstring& title_token = {});
 napi_value StartWindowInspection(napi_env env, const std::shared_ptr<SessionState>& state, napi_value request);

@@ -1148,7 +1148,7 @@ function harness(t, options = {}) {
       if (request === './open-file') return { openAssociatedFile: async target => { openCalls.push(target); if (options.openError) throw new Error(options.openError); return { editor: Boolean(options.associatedEditor) }; } };
       if (request === './search-provider' && options.searchRoots) return { createSearchProvider: args => require('../search-provider').createSearchProvider({ ...args, roots: options.searchRoots }) };
       if (request === './icon-theme') return { loadIconTheme: async () => { themeCalls++; return options.theme ? options.theme(themeCalls, icons) : icons; } };
-      if (request === './native-window') return { maximizeWindow: native, inspectWindows: async () => options.nativeInspect ? options.nativeInspect() : ({ version: 1, readOnly: true, windows: [], truncated: false }) };
+      if (request === './native-window') return { maximizeWindow: native, inspectWindows: async request => options.nativeInspect ? options.nativeInspect(request) : ({ version: 1, readOnly: true, windows: [], truncated: false }) };
       if (request === 'node:child_process') throw new Error('Window setup must use the native module.');
       if (request === './filesystem-icons') return { getFilesystemIcons: async requests => options.filesystemIcons ? options.filesystemIcons(requests) : {}, clearFilesystemIconCache: () => options.clearFilesystemIconCache?.() };
       if (request === './git-status-provider' && !options.realGitProvider) return { createGitStatusProvider: creation => ({
@@ -5026,5 +5026,195 @@ test('shared icon size reaches generated host HTML and changes live without navi
   view.window.dispatchEvent(new view.window.MessageEvent('message', { data: update }));
   assert.equal(view.document.body.style.getPropertyValue('--icon-base-size'), '16px');
   assert.equal(JSON.stringify(view.state().panes.map(p => p.tabs)), before);
+  panel.dispose();
+});
+
+function restoredWindowSnapshot(request, overrides = {}) {
+  return { version: 1, readOnly: true, truncated: false, titleToken: request?.titleToken,
+    windows: request?.titleToken ? [{ handle: '123456', processId: process.ppid, processCreated: '123456789', className: 'Chrome_WidgetWin_1', identityStable: true, visible: false, minimized: false, ...overrides }] : [] };
+}
+
+test('an identified invisible restored window reopens only its own panel before accepting file actions', async t => {
+  const gate = deferred(), inspected = deferred(), logs = []; let removed = 0;
+  const saved = clipboardFixture(); saved.panes[0].tabs.push('C:/temp'); saved.panes[0].tab = 1; saved.active = 1;
+  const app = harness(t, { manualReadiness: true, workspaceState: { fileManagerState: saved }, filesystemLoad: async () => clipboardFixture(),
+    onInfoLog: line => logs.push(JSON.parse(line)), filesystemRemove: async state => { removed++; return state; },
+    nativeInspect: async request => { if (request?.titleToken) { inspected.resolve(); await gate.promise; } return restoredWindowSnapshot(request); } });
+  const old = app.restoredPanel(); old.active = false;
+  await app.restore(old);
+  const ready = old.receive({ type: 'app-ready' });
+  const duplicateReady = old.receive({ type: 'app-ready' });
+  await Promise.race([inspected.promise, tick()]);
+  assert.equal(app.contexts.get('bitfroest.ready'), false, 'file actions remain blocked during ownership verification');
+  const deletion = old.receive({ type: 'filesystem-delete', paths: ['C:/tmp/a.txt'], operationId: 'before-window-verification', state: saved });
+  await tick();
+  assert.equal(removed, 0);
+  gate.resolve(); await Promise.all([ready, duplicateReady, deletion]);
+  assert.equal(old.disposed, true);
+  assert.equal(app.panels.length, 2);
+  const replacement = app.panels[1];
+  assert.equal(app.calls.filter(call => call.id === 'workbench.action.moveEditorToNewWindow').length, 1);
+  assert.equal(app.contexts.get('bitfroest.ready'), false);
+  const view = require('./support/webview.cjs').createApp(t, undefined, { html: replacement.webview.html });
+  assert.deepEqual(Array.from(view.state().panes[0].tabs), ['C:/tmp', 'C:/temp']);
+  assert.equal(view.state().panes[0].tab, 1); assert.equal(view.state().active, 1);
+  await replacement.receive({ type: 'app-ready' });
+  await old.receive({ type: 'app-ready' });
+  assert.equal(app.contexts.get('bitfroest.ready'), true);
+  assert.equal(app.panels.length, 2, 'a fresh panel cannot repeat the restoration recovery');
+  assert.ok(logs.some(row => row.kind === 'window-recovery-start' && row.handle === '123456'));
+  assert.ok(logs.some(row => row.kind === 'window-recovery-opened'));
+  assert.equal(app.updateCalls.some(call => call.store === 'configuration'), false);
+  replacement.dispose();
+});
+
+test('a visible restored window is retained and its temporary title marker is removed', async t => {
+  let checks = 0;
+  const app = harness(t, { manualReadiness: true, nativeInspect: async request => { if (request?.titleToken) checks++; return restoredWindowSnapshot(request, { visible: true }); } });
+  const panel = app.restoredPanel(); panel.active = false;
+  await app.restore(panel); await panel.receive({ type: 'app-ready' }); await panel.receive({ type: 'app-ready' });
+  assert.equal(checks, 1);
+  assert.equal(app.panels.length, 1); assert.equal(panel.disposed, false);
+  assert.doesNotMatch(panel.title, /\[[a-f0-9-]{36}\]/);
+  assert.equal(app.contexts.get('bitfroest.ready'), true);
+  panel.dispose();
+});
+
+test('window recovery rejects a foreign process, changed identity, minimized window and ambiguous result', async t => {
+  for (const override of [{ processId: process.ppid + 100000 }, { identityStable: false }, { minimized: true }, { ambiguous: true }]) {
+    const app = harness(t, { manualReadiness: true, nativeInspect: async request => {
+      const result = restoredWindowSnapshot(request, override);
+      if (override.ambiguous && result.windows.length) result.windows.push({ ...result.windows[0], handle: '654321' });
+      return result;
+    } });
+    const panel = app.restoredPanel(); panel.active = false;
+    await app.restore(panel); await panel.receive({ type: 'app-ready' });
+    assert.equal(app.panels.length, 1); assert.equal(panel.disposed, false);
+    panel.dispose();
+  }
+});
+
+test('closing a restored panel during ownership verification prevents a late replacement', async t => {
+  const gate = deferred(), checked = deferred();
+  const app = harness(t, { manualReadiness: true, nativeInspect: async request => {
+    if (request?.titleToken) { checked.resolve(); await gate.promise; }
+    return restoredWindowSnapshot(request);
+  } });
+  const panel = app.restoredPanel(); panel.active = false;
+  await app.restore(panel);
+  const ready = panel.receive({ type: 'app-ready' });
+  await Promise.race([checked.promise, tick()]);
+  panel.dispose(); gate.resolve(); await ready;
+  assert.equal(app.panels.length, 1);
+  assert.equal(app.contexts.get('bitfroest.ready'), false);
+});
+
+test('a restored window made visible before confirmation is retained', async t => {
+  let checks = 0;
+  const app = harness(t, { manualReadiness: true, nativeInspect: async request => {
+    if (request?.titleToken) checks++;
+    return restoredWindowSnapshot(request, { visible: checks >= 2 });
+  } });
+  const panel = app.restoredPanel(); panel.active = false;
+  await app.restore(panel); await panel.receive({ type: 'app-ready' });
+  assert.equal(checks, 2); assert.equal(app.panels.length, 1); assert.equal(panel.disposed, false);
+  assert.equal(app.contexts.get('bitfroest.ready'), true);
+  panel.dispose();
+});
+
+test('an unavailable scoped inspection retains the restored panel and records its limitation', async t => {
+  const logs = [];
+  const app = harness(t, { manualReadiness: true, onInfoLog: line => logs.push(JSON.parse(line)), nativeInspect: async request => {
+    if (request?.titleToken) throw Object.assign(new Error('Inspection unavailable'), { code: 'UnsupportedOperation' });
+    return restoredWindowSnapshot(request);
+  } });
+  const panel = app.restoredPanel(); panel.active = false;
+  await app.restore(panel); await panel.receive({ type: 'app-ready' });
+  assert.equal(panel.disposed, false); assert.equal(app.panels.length, 1);
+  assert.equal(app.contexts.get('bitfroest.ready'), true);
+  assert.ok(logs.some(row => row.kind === 'window-recovery-error' && row.code === 'UnsupportedOperation'));
+  assert.doesNotMatch(panel.title, /\[[a-f0-9-]{36}\]/);
+  panel.dispose();
+});
+
+test('window recovery can be reopened manually after replacement loading fails', async t => {
+  let loads = 0;
+  const app = harness(t, { manualReadiness: true, filesystemLoad: async () => {
+    if (++loads === 2) throw new Error('Replacement directory unavailable');
+    return clipboardFixture();
+  }, nativeInspect: async request => restoredWindowSnapshot(request) });
+  const panel = app.restoredPanel(); panel.active = false;
+  await app.restore(panel); await panel.receive({ type: 'app-ready' });
+  assert.equal(app.panels.length, 2);
+  assert.equal(app.panels.every(panel => panel.disposed), true);
+  await app.command('bitfroest.show');
+  assert.equal(app.panels.length, 3);
+  await app.panels[2].receive({ type: 'app-ready' });
+  assert.equal(app.contexts.get('bitfroest.ready'), true);
+  app.panels[2].dispose();
+});
+test('window recovery waits for the marked native title instead of treating a missing match as failure evidence', async t => {
+  const timers = require('node:timers/promises'); let checks = 0;
+  t.mock.method(timers, 'setTimeout', async () => {});
+  const app = harness(t, { manualReadiness: true, nativeInspect: async request => {
+    const snapshot = restoredWindowSnapshot(request);
+    if (request?.titleToken && ++checks < 3) snapshot.windows = [];
+    return snapshot;
+  } });
+  const panel = app.restoredPanel(); panel.active = false;
+  await app.restore(panel); await panel.receive({ type: 'app-ready' });
+  assert.equal(checks, 4, 'three observations locate the title and a separate observation confirms its identity');
+  assert.equal(panel.disposed, true); assert.equal(app.panels.length, 2);
+  assert.equal(timers.setTimeout.mock.calls.length, 2);
+  await app.panels[1].receive({ type: 'app-ready' }); app.panels[1].dispose();
+});
+
+test('exhausted native title lookup preserves the restored panel and logs an unverified result', async t => {
+  const timers = require('node:timers/promises'), logs = []; let checks = 0;
+  t.mock.method(timers, 'setTimeout', async () => {});
+  const app = harness(t, { manualReadiness: true, onInfoLog: line => logs.push(JSON.parse(line)), nativeInspect: async request => {
+    if (request?.titleToken) checks++;
+    return { ...restoredWindowSnapshot(request), windows: [] };
+  } });
+  const panel = app.restoredPanel(); panel.active = false;
+  await app.restore(panel); await panel.receive({ type: 'app-ready' });
+  assert.equal(checks, 12); assert.equal(timers.setTimeout.mock.calls.length, 11);
+  assert.equal(app.panels.length, 1); assert.equal(panel.disposed, false);
+  assert.ok(logs.some(row => row.kind === 'window-recovery-unverified' && row.reason === 'marked-window-not-found'));
+  assert.equal(app.contexts.get('bitfroest.ready'), true);
+  assert.doesNotMatch(panel.title, /\[[a-f0-9-]{36}\]/);
+  panel.dispose();
+});
+
+test('focus refresh arriving during native window verification receives its response after the window is retained', async t => {
+  const gate = deferred(), checked = deferred(); let loads = 0;
+  const state = clipboardFixture();
+  const app = harness(t, { manualReadiness: true, filesystemLoad: async () => { loads++; return state; }, nativeInspect: async request => {
+    if (request?.titleToken) { checked.resolve(); await gate.promise; }
+    return restoredWindowSnapshot(request, { visible: true });
+  } });
+  const panel = app.restoredPanel(); panel.active = false;
+  await app.restore(panel);
+  const ready = panel.receive({ type: 'app-ready' }); await checked.promise;
+  const refresh = panel.receive({ type: 'filesystem-refresh', refreshRequestId: 'refresh-during-window-check', state });
+  await tick(); assert.equal(loads, 1);
+  gate.resolve(); await Promise.all([ready, refresh]);
+  assert.equal(loads, 2);
+  assert.ok(panel.messages.some(message => message.type === 'filesystem-result' && message.refreshRequestId === 'refresh-during-window-check'));
+  panel.dispose();
+});
+
+test('hiding a restored panel during window verification still acknowledges its browser readiness', async t => {
+  const gate = deferred(), checked = deferred();
+  const app = harness(t, { manualReadiness: true, nativeInspect: async request => {
+    if (request?.titleToken) { checked.resolve(); await gate.promise; }
+    return restoredWindowSnapshot(request);
+  } });
+  const panel = app.restoredPanel(); panel.active = false;
+  await app.restore(panel);
+  const ready = panel.receive({ type: 'app-ready' }); await checked.promise;
+  panel.changeVisibility(false); gate.resolve(); await ready;
+  assert.equal(app.panels.length, 1); assert.equal(panel.disposed, false);
+  assert.equal(app.contexts.get('bitfroest.ready'), true);
   panel.dispose();
 });

@@ -43,7 +43,7 @@ test('a missing marked window reports the native search stage without a desktop 
 
 test('compiled binding exposes an honest versioned capability contract', () => {
   const binding = require(binary);
-  assert.deepEqual(binding.apiVersion, { major: 1, minor: 5 });
+  assert.deepEqual(binding.apiVersion, { major: 1, minor: 6 });
   assert.equal(binding.capabilities['git.status'].dirtySummary, true);
   assert.ok(Object.keys(binding.capabilities).length >= 20);
   for (const [operation, capability] of Object.entries(binding.capabilities)) {

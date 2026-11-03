@@ -1,10 +1,12 @@
 #include "window-inspection-win.h"
 #include "windows-async-work.h"
 #include <memory>
+#include <algorithm>
 
 namespace {
 struct Job {
   std::shared_ptr<SessionState> state;
+  std::wstring title_token;
   WindowInspection result;
   napi_deferred deferred = nullptr;
   bool success = false;
@@ -21,7 +23,7 @@ napi_value Rect(napi_env env, const RECT& rect) {
 }
 void Execute(napi_env, void* data) {
   auto* job = static_cast<Job*>(data);
-  try { job->success = InspectApplicationWindows(job->state->closed, &job->result); }
+  try { job->success = InspectApplicationWindows(job->state->closed, &job->result, job->title_token); }
   catch (...) { job->result.error = ERROR_NOT_ENOUGH_MEMORY; }
 }
 napi_value Result(napi_env env, const WindowInspection& inspection) {
@@ -51,6 +53,10 @@ napi_value Result(napi_env env, const WindowInspection& inspection) {
         !Set(env, row, "frame", Rect(env, window.frame)) || !Set(env, row, "normal", Rect(env, window.normal)) ||
         napi_set_element(env, rows, static_cast<uint32_t>(i), row) != napi_ok) return nullptr;
   }
+  if (!inspection.title_token.empty()) {
+    napi_value token;
+    if (napi_create_string_utf16(env, reinterpret_cast<const char16_t*>(inspection.title_token.data()), inspection.title_token.size(), &token) != napi_ok || !Set(env, result, "titleToken", token)) return nullptr;
+  }
   return Set(env, result, "windows", rows) ? result : nullptr;
 }
 void Complete(napi_env env, napi_status status, void* data) {
@@ -74,10 +80,25 @@ napi_value StartWindowInspection(napi_env env, const std::shared_ptr<SessionStat
       napi_strict_equals(env, request, null, &is_null) != napi_ok || is_null) {
     napi_throw_error(env, "InvalidRequest", "Window inspection requires an object."); return nullptr;
   }
-  if (napi_get_property_names(env, request, &keys) != napi_ok || napi_get_array_length(env, keys, &count) != napi_ok || count != 0) {
-    napi_throw_error(env, "InvalidRequest", "Window inspection requires an empty request."); return nullptr;
+  if (napi_get_property_names(env, request, &keys) != napi_ok || napi_get_array_length(env, keys, &count) != napi_ok || count > 1) {
+    napi_throw_error(env, "InvalidRequest", "Window inspection accepts only an optional title token."); return nullptr;
   }
   auto job = std::make_unique<Job>(); job->state = state;
+  if (count == 1) {
+    napi_value token, key; bool present = false; size_t length = 0, copied = 0;
+    if (napi_create_string_utf8(env, "titleToken", NAPI_AUTO_LENGTH, &key) != napi_ok ||
+        napi_has_own_property(env, request, key, &present) != napi_ok || !present ||
+        napi_get_named_property(env, request, "titleToken", &token) != napi_ok ||
+        napi_get_value_string_utf16(env, token, nullptr, 0, &length) != napi_ok || length < 16 || length > 128) {
+      napi_throw_error(env, "InvalidRequest", "Window inspection requires a scoped title token."); return nullptr;
+    }
+    std::vector<char16_t> buffer(length + 1);
+    if (napi_get_value_string_utf16(env, token, buffer.data(), buffer.size(), &copied) != napi_ok || copied != length ||
+        std::find(buffer.begin(), buffer.begin() + length, u'\0') != buffer.begin() + length) {
+      napi_throw_error(env, "InvalidRequest", "Window inspection requires a valid title token."); return nullptr;
+    }
+    job->title_token.assign(reinterpret_cast<const wchar_t*>(buffer.data()), length);
+  }
   napi_value promise;
   if (napi_create_promise(env, &job->deferred, &promise) != napi_ok ||
       QueueWindowsWork(env, "windows.inspect", std::move(job), Execute, Complete) != napi_ok) {

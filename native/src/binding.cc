@@ -430,7 +430,7 @@ napi_value Init(napi_env env, napi_value exports) {
   napi_value version, major, minor, capabilities;
   CHECK(napi_create_object(env, &version));
   CHECK(napi_create_uint32(env, 1, &major));
-  CHECK(napi_create_uint32(env, 5, &minor));
+  CHECK(napi_create_uint32(env, 6, &minor));
   CHECK(napi_set_named_property(env, version, "major", major));
   CHECK(napi_set_named_property(env, version, "minor", minor));
   CHECK(napi_object_freeze(env, version));

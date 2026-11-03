@@ -37,6 +37,11 @@ BOOL CALLBACK Inspect(HWND window, LPARAM data) noexcept {
     auto found = context->processes.find(pid);
     if (found == context->processes.end()) found = context->processes.emplace(pid, Identify(pid, *context->executable)).first;
     if (!found->second.matches) return TRUE;
+    if (!context->result->title_token.empty()) {
+      std::array<wchar_t, 2048> title{};
+      const int length = GetWindowTextW(window, title.data(), static_cast<int>(title.size()));
+      if (length <= 0 || std::wstring(title.data(), static_cast<size_t>(length)).find(context->result->title_token) == std::wstring::npos) return TRUE;
+    }
     ++context->result->matching_windows;
     if (context->result->windows.size() >= kMaxWindows) { context->result->truncated = true; return TRUE; }
     InspectedWindow result;
@@ -68,13 +73,20 @@ BOOL CALLBACK Inspect(HWND window, LPARAM data) noexcept {
     GetWindowThreadProcessId(window, &current_pid);
     const auto current = Identify(current_pid, *context->executable);
     result.identity_stable = current_pid == pid && current.matches && current.created == result.process_created;
+    if (!context->result->title_token.empty()) {
+      std::array<wchar_t, 2048> current_title{};
+      const int length = GetWindowTextW(window, current_title.data(), static_cast<int>(current_title.size()));
+      result.identity_stable = result.identity_stable && length > 0 &&
+          std::wstring(current_title.data(), static_cast<size_t>(length)).find(context->result->title_token) != std::wstring::npos;
+    }
     context->result->windows.push_back(std::move(result)); return TRUE;
   } catch (...) { context->result->error = ERROR_NOT_ENOUGH_MEMORY; return FALSE; }
 }
 }
 
-bool InspectApplicationWindows(const std::atomic<bool>& closed, WindowInspection* result) {
+bool InspectApplicationWindows(const std::atomic<bool>& closed, WindowInspection* result, const std::wstring& title_token) {
   *result = WindowInspection{}; result->process_id = GetCurrentProcessId();
+  result->title_token = title_token;
   if (closed.load()) { result->error = ERROR_CANCELLED; return false; }
   std::array<wchar_t, 32768> path{}; DWORD length = static_cast<DWORD>(path.size());
   if (!QueryFullProcessImageNameW(GetCurrentProcess(), 0, path.data(), &length)) { result->error = GetLastError(); return false; }

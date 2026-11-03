@@ -3,6 +3,30 @@ const assert = require('node:assert/strict');
 const { stubPackagedNativeBinding } = require('./support/native-binding.cjs');
 const token = '9c379752-2049-4716-bb59-2d8116374693';
 
+test('scoped window inspection binds its response to the requested title token', async () => {
+  const calls = []; let closed = 0;
+  const nativeApi = { openSession: () => ({ invoke: async (operation, request) => {
+    calls.push({ operation, request }); return { version: 1, readOnly: true, titleToken: token, windows: [], truncated: false };
+  }, close() { closed++; } }) };
+  await require('../native-window').inspectWindows({ nativeApi, titleToken: token });
+  assert.deepEqual(calls, [{ operation: 'windows.inspect', request: { titleToken: token } }]);
+  assert.equal(closed, 1);
+  nativeApi.openSession = () => ({ invoke: async () => ({ version: 1, readOnly: true, windows: [] }), close() { closed++; } });
+  await assert.rejects(require('../native-window').inspectWindows({ nativeApi, titleToken: token }), { code: 'InvalidNativeResponse' });
+  assert.equal(closed, 2);
+});
+
+test('disposing a pending window inspection closes its session and rejects a late response', async () => {
+  const controller = new AbortController(); let resolve, closed = 0;
+  const nativeApi = { openSession: () => ({ invoke: () => new Promise(done => { resolve = done; }), close() { closed++; } }) };
+  const pending = require('../native-window').inspectWindows({ nativeApi, signal: controller.signal });
+  controller.abort();
+  await assert.rejects(pending, { name: 'AbortError' });
+  assert.equal(closed, 1);
+  resolve({ version: 1, readOnly: true, windows: [] });
+  assert.equal(closed, 1);
+});
+
 test('read-only window inspection never invokes maximization and closes its own session', async () => {
   const calls = []; let closed = false;
   const nativeApi = { openSession: () => ({ invoke: async (operation, request) => {

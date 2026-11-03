@@ -746,6 +746,65 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
     panel.onDidChangeViewState(() => { logStartup('panel-state', { documentId, visible: panel?.visible, active: panel?.active, viewColumn: panel?.viewColumn }); updateStatus(); updateAuxiliaryTabs(); if (panel === messagePanel && messagePanel.visible) publishGit().catch(() => {}); }, null, context.subscriptions);
     updateStatus();
     const messagePanel = panel;
+    let restorationCheck;
+    const restorationAbort = new AbortController();
+    messagePanel.onDidDispose(() => restorationAbort.abort());
+    const verifyRestoredWindow = () => {
+      if (!restoredPanel || process.platform !== 'win32' || !messagePanel.visible) return Promise.resolve(false);
+      return restorationCheck ||= (async () => {
+        await windowSetup;
+        if (restoredDisposed || panel !== messagePanel) return true;
+        const titleToken = crypto.randomUUID(), markedTitle = `${title()} [${titleToken}]`;
+        messagePanel.title = markedTitle;
+        try {
+          for (let attempt = 0; attempt < 12; attempt++) {
+            if (restoredDisposed || panel !== messagePanel) return true;
+            if (!messagePanel.visible) return false;
+            const snapshot = await inspectWindows({ titleToken, signal: restorationAbort.signal });
+            if (restoredDisposed || panel !== messagePanel) return true;
+            if (snapshot.available === false || snapshot.titleToken !== titleToken || snapshot.truncated) {
+              logStartup('window-recovery-unverified', { reason: 'inspection-unavailable-or-unbound' }); return false;
+            }
+            if (snapshot.windows.length) {
+              const window = snapshot.windows[0];
+              const owned = snapshot.windows.length === 1 && window.identityStable === true && window.processId === process.ppid &&
+                window.className === 'Chrome_WidgetWin_1' && /^[1-9]\d*$/.test(window.handle) && /^[1-9]\d*$/.test(window.processCreated);
+              if (!owned || window.visible !== false || window.minimized !== false) {
+                logStartup('window-recovery-retained', { owned, handle: window.handle, visible: window.visible, minimized: window.minimized }); return false;
+              }
+              await pendingOpen;
+              await saveQueue;
+              if (restoredDisposed || panel !== messagePanel || panelReady) return true;
+              if (!messagePanel.visible) return false;
+              if (messagePanel.title !== markedTitle) return false;
+              const confirmation = await inspectWindows({ titleToken, signal: restorationAbort.signal });
+              if (restoredDisposed || panel !== messagePanel) return true;
+              const confirmed = confirmation.windows?.[0];
+              if (confirmation.titleToken !== titleToken || confirmation.truncated || confirmation.windows?.length !== 1 ||
+                confirmed.handle !== window.handle || confirmed.processId !== window.processId || confirmed.processCreated !== window.processCreated ||
+                confirmed.identityStable !== true || confirmed.visible !== false || confirmed.minimized !== false ||
+                !messagePanel.visible || messagePanel.title !== markedTitle) return false;
+              const previousStartupId = startupId;
+              logStartup('window-recovery-start', { handle: window.handle, processId: window.processId, processCreated: window.processCreated,
+                reason: 'identified-native-window-invisible', previousStartupId });
+              messagePanel.dispose();
+              await open(undefined, false);
+              logStartup('window-recovery-opened', { previousStartupId });
+              return true;
+            }
+            if (attempt < 11) await require('node:timers/promises').setTimeout(80, undefined, { signal: restorationAbort.signal });
+          }
+          logStartup('window-recovery-unverified', { reason: 'marked-window-not-found' });
+          return false;
+        } catch (error) {
+          if (restoredDisposed || panel !== messagePanel || error.name === 'AbortError') return true;
+          logStartup('window-recovery-error', { message: error.message, code: error.code });
+          return false;
+        } finally {
+          if (!restoredDisposed && panel === messagePanel && messagePanel.title === markedTitle) messagePanel.title = title();
+        }
+      })();
+    };
     let singleEditor = hasSingleEditor();
     const updateAuxiliaryTabs = () => {
       if (panel !== messagePanel) return;
@@ -937,6 +996,7 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
       if (message?.type === 'app-ready') {
         if (!panelFailed) {
           clearTimeout(startupWatchdog);
+          if (await verifyRestoredWindow() || restoredDisposed || panel !== messagePanel || panelFailed) return;
           logStartup('ready', { startupId: currentStartup?.id, documentId, documentSequence, lastBrowserEvent, lastFrame, visible: panel?.visible, active: panel?.active, viewColumn: panel?.viewColumn });
           setReady(true);
           requestAuxiliaryReady();
@@ -949,7 +1009,8 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
         applyCompactWhenReady();
         return;
       }
-      if (!panelReady) return;
+      if (!panelReady && restorationCheck) await restorationCheck;
+      if (!panelReady || panel !== messagePanel) return;
       if (message?.type === 'git-status') {
         if (typeof message.requestId !== 'string' || message.requestId.length > 100 || typeof message.snapshotId !== 'string' || message.snapshotId.length > 100 || !Array.isArray(message.directories) || message.directories.length > 2 || message.directories.some(directory => typeof directory !== 'string' || directory.length > 4096 || directory.includes('\0'))) return;
         const visibleDirectories = message.visibleDirectories || message.directories;
