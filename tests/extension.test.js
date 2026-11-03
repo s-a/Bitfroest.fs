@@ -4028,7 +4028,33 @@ test('refresh reloads only active folder tabs and defers inactive tabs without r
   const state=lazyState(); state.panes[0].tabs.push('C:/tmp/docs'); const loads=[];
   const app=harness(t,{filesystemLoad:async options=>{loads.push(options);return state;}});
   await app.command('bitfroest.openPrototype'); await app.panels[0].receive({type:'filesystem-refresh',state});
-  assert.deepEqual(loads.at(-1),{directories:['C:/tmp','C:/temp'],deferredDirectories:['C:/tmp/docs'],visibleOnly:true});
+  const options = loads.at(-1);
+  assert.ok(options.signal instanceof AbortSignal);
+  assert.equal(options.signal.aborted, false);
+  assert.deepEqual(options,{signal:options.signal,directories:['C:/tmp','C:/temp'],deferredDirectories:['C:/tmp/docs'],visibleOnly:true});
+});
+
+test('disposing the panel aborts its active refresh without publishing a late filesystem result', { timeout: 5000 }, async t => {
+  const state = lazyState(), entered = deferred();
+  let signal;
+  const app = harness(t, { filesystemLoad: async options => {
+    if (!options?.signal) return state;
+    signal = options.signal;
+    const cancelled = new Promise((_, reject) => signal.addEventListener('abort', () => reject(Object.assign(new Error('Refresh cancelled'), { name: 'AbortError' })), { once: true }));
+    entered.resolve();
+    await cancelled;
+    return state;
+  } });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  t.after(() => panel.dispose());
+  const start = panel.messages.length;
+  const pending = panel.receive({ type: 'filesystem-refresh', state });
+  await entered.promise;
+  assert.equal(signal.aborted, false);
+  panel.dispose(); await pending;
+  assert.equal(signal.aborted, true);
+  assert.equal(panel.messages.slice(start).filter(message => message.type === 'filesystem-result').length, 0);
+  assert.deepEqual(app.errors, []);
 });
 
 
