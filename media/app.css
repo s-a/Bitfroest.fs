@@ -668,6 +668,7 @@ body .statusbar { height: var(--icon-row-size); min-height: var(--icon-row-size)
   --ag-header-column-resize-handle-color: var(--vscode-panel-border, var(--line));
 }
 [data-file-grid] .ag-root-wrapper { border: 0; }
+[data-file-grid] .location-header .pathbar { position: absolute; inset: 0; }
 [data-file-grid] .ag-cell { padding-top: 0; padding-bottom: 0; line-height: var(--icon-row-size); }
 [data-file-grid] .ag-cell-wrapper, [data-file-grid] .ag-cell-value { min-width: 0; }
 .file-cell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

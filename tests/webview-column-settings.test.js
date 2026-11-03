@@ -175,3 +175,31 @@ test('directories show an empty size until an actual folder size is available', 
   assert.equal(app.row('docs').querySelector('[data-cell="size"]').textContent, '');
   assert.notEqual(app.row('README.md').querySelector('[data-cell="size"]').textContent, '');
 });
+
+test('metadata autosizing depends on file values and headings rather than the location row', async t => {
+  const measured = [];
+  for (const path of ['/music', '/music/' + 'album-'.repeat(100)]) {
+    const pane = () => ({ tabs: [path], tab: 0, selected: [], cursor: null, sort: 'name', filter: '' });
+    const app = createApp(t, { version: 1, active: 0, panes: [pane(), pane()], folders: {
+      [path]: [{ id: 'song', name: 'song.flac', type: 'audio', size: 3670016 }]
+    } }, { beforeApp({ window, document }) {
+      const style = document.createElement('style');
+      style.textContent = require('node:fs').readFileSync(require('node:path').join(__dirname, '../media/app.css'), 'utf8');
+      document.head.append(style);
+      const original = Object.getOwnPropertyDescriptor(window.HTMLElement.prototype, 'offsetWidth').get;
+      Object.defineProperty(window.HTMLElement.prototype, 'offsetWidth', { configurable: true, get() {
+        if (this.tagName !== 'FORM' || this.style.position !== 'fixed') return original.call(this);
+        return Math.max(0, ...[...this.children].map(wrapper => {
+          const address = wrapper.querySelector('.location-header .pathbar');
+          if (address) return window.getComputedStyle(address).position === 'absolute' ? 24 : 1200;
+          return wrapper.textContent.replace(/\s+/g, ' ').trim().length * 8 + 24;
+        }));
+      } });
+    } });
+    await settled(app);
+    measured.push(['type', 'size'].map(key => width(app, key)));
+    assert.ok(width(app, 'type') <= 80, `extension width ${width(app, 'type')} fits four characters and its heading`);
+    assert.ok(width(app, 'size') <= 100, `size width ${width(app, 'size')} fits the formatted value and its heading`);
+  }
+  assert.deepEqual(measured[1], measured[0], 'long paths must not widen extension or size columns');
+});
