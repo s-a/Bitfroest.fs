@@ -1999,11 +1999,11 @@
     const path = currentPath(p), tab = p.tabStates?.[p.tab]?.id, snapshot = state.snapshotId;
     return () => state.panes.includes(p) && currentPath(p) === path && p.tabStates?.[p.tab]?.id === tab && state.snapshotId === snapshot;
   }
-  function selectionIO(action, text, pathRanges, successMessage, pathStyle = 'native') {
+  function selectionIO(action, text, pathRanges, successMessage, pathStyle = 'native', onSuccess) {
     if (!host) { toast(t('Diese Auswahlaktion benötigt den Erweiterungshost.')); return; }
     const requestId = `selection-${++selectionSequence}`;
     toast(t('Auswahl wird übertragen…'), 'info');
-    selectionRequests.set(requestId, { p: pane(), valid: selectionContext(pane()), action, statusVersion: statusbar.version, successMessage });
+    selectionRequests.set(requestId, { p: pane(), valid: selectionContext(pane()), action, statusVersion: statusbar.version, successMessage, onSuccess });
     statusTask(requestId, t('Auswahl wird übertragen…') + ` · ${t('Hostbestätigung')}`);
     host.postMessage({ type: 'selection-io', requestId, action, text, ...(pathRanges?.length ? { pathRanges } : {}), ...(pathStyle !== 'native' ? { pathStyle } : {}) });
   }
@@ -2017,6 +2017,7 @@
     if (!request.valid()) return;
     if (message.cancelled) { reportStatus(t('Auswahlübertragung abgebrochen.'), 'cancelled', request.statusVersion); return; }
     if (!message.ok) { reportStatus(message.error || t('Auswahl konnte nicht übertragen werden.'), 'error', request.statusVersion); return; }
+    request.onSuccess?.();
     if (request.action === 'load' && typeof message.text === 'string') restoreSelection(request.p, message.text.replace(/^\uFEFF/, '').split(/\r\n|\n|\r/).map(line => line.replace(/^"(.*)"$/, '$1')));
     reportStatus(request.successMessage || t('Auswahl übertragen.'), 'success', request.statusVersion);
   });
@@ -4111,6 +4112,18 @@
   window.addEventListener('blur', () => closeContextMenu());
   window.addEventListener('resize', () => closeContextMenu());
   window.addEventListener('commander-menu-open', event => { if (event.detail !== 'context') closeContextMenu(); });
+  const pathCopyTimers = new WeakMap();
+  function showPathCopyFeedback(address) {
+    if (!address?.isConnected) return;
+    clearTimeout(pathCopyTimers.get(address));
+    address.classList.remove('path-copy-feedback');
+    void address.offsetWidth;
+    address.classList.add('path-copy-feedback');
+    pathCopyTimers.set(address, setTimeout(() => address.classList.remove('path-copy-feedback'), 700));
+  }
+  document.addEventListener('animationend', event => {
+    if (event.target.matches('.path-breadcrumbs.path-copy-feedback')) event.target.classList.remove('path-copy-feedback');
+  });
   $('#panes').addEventListener('contextmenu', event => {
     if (event.target.closest('input,textarea,[contenteditable="true"]')) return;
     if (event.target.closest('[data-lister]')) return;
@@ -4121,7 +4134,7 @@
       if (event.target.closest('[data-tab]')) showContextMenu(event, section, 'tabs');
       else {
         event.preventDefault(); event.stopPropagation();
-        if (event.button === 2 && event.target.closest('.path-address')) selectionIO('copy', displayArchivePath(currentPath(pane())), undefined, t('Pfad in Zwischenablage kopiert.'));
+        if (event.button === 2 && event.target.closest('.path-address')) selectionIO('copy', displayArchivePath(currentPath(pane())), undefined, t('Pfad in Zwischenablage kopiert.'), 'native', () => showPathCopyFeedback(section.querySelector('.path-breadcrumbs')));
       }
       return;
     }

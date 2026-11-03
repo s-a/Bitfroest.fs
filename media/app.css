@@ -89,6 +89,9 @@ main { display: flex; flex-direction: column; flex: 1; min-height: 0; min-width:
 }
 .path-address { flex: 1; min-width: 0; }
 .path-breadcrumbs { display: flex; align-items: center; overflow-x: auto; scrollbar-width: none; min-height: 22px; white-space: nowrap; }
+.path-breadcrumbs.path-copy-feedback { animation: path-copy-pulse 650ms ease-in-out; }
+@keyframes path-copy-pulse { 50% { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { .path-breadcrumbs.path-copy-feedback { animation: none; background: var(--vscode-list-hoverBackground, var(--hover)); } }
 .path-breadcrumbs > button { flex: 0 0 auto; padding: 2px 0; }
 .path-breadcrumbs > button:hover, .path-breadcrumbs > button:focus-visible { text-decoration: underline; background: transparent; outline: none; }
 .path-breadcrumbs > span { flex: 0 0 auto; }

@@ -99,6 +99,26 @@ test('roots and archive segments preserve navigable identities and escaped label
 });
 const send = (app, data) => app.window.dispatchEvent(new app.window.MessageEvent('message', { data }));
 
+test('address copy feedback follows successful host confirmation in the originating panel', t => {
+  const app = createApp(t, fixture());
+  const panels = [...app.document.querySelectorAll('[data-pane]')];
+  const address = panels[1].querySelector('.path-breadcrumbs');
+  const copy = () => {
+    address.dispatchEvent(new app.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }));
+    return app.messages.filter(message => message.type === 'selection-io').at(-1);
+  };
+  let request = copy();
+  assert.equal(address.classList.contains('path-copy-feedback'), false);
+  send(app, { type: 'selection-io-result', requestId: request.requestId, ok: false });
+  assert.equal(address.classList.contains('path-copy-feedback'), false);
+  request = copy();
+  send(app, { type: 'selection-io-result', requestId: request.requestId, ok: true });
+  assert.equal(address.classList.contains('path-copy-feedback'), true);
+  assert.equal(panels[0].querySelector('.path-breadcrumbs').classList.contains('path-copy-feedback'), false);
+  address.dispatchEvent(new app.window.Event('animationend', { bubbles: true }));
+  assert.equal(address.classList.contains('path-copy-feedback'), false);
+});
+
 test('address right-click copies the complete clicked pane path and confirms only acknowledged writes', t => {
   for (const language of ['de', 'en']) for (const side of [0, 1]) for (const selector of ['[data-breadcrumb]', '[data-path-edit]', '.path-breadcrumbs']) {
     const saved = fixture(); saved.panes[1].tabs = ['/work'];
