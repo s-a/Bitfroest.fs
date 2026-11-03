@@ -163,4 +163,14 @@ test('the address grid centers the refresh control within the available header h
   assert.equal(address.gridTemplateRows, 'minmax(0, 1fr)');
   assert.equal(address.alignItems, 'center');
   assert.equal(app.rule('.pathbar > [data-refresh]').alignSelf, 'center');
+  const refresh = app.rule('.pathbar > [data-refresh]');
+  assert.equal(refresh.position, 'absolute');
+  assert.equal(refresh.top, '50%');
+  assert.equal(refresh.transform, 'translateY(-50%)');
+  assert.equal(refresh.right, 'var(--file-cell-padding)');
+  for (const pane of app.document.querySelectorAll('.pane')) {
+    const button = pane.querySelector('[data-refresh]');
+    assert.ok(button.closest('.pathbar'));
+    assert.ok(button.querySelector('[data-refresh-icon]'));
+  }
 });
