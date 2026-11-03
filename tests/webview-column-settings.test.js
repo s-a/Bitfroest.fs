@@ -203,3 +203,65 @@ test('metadata autosizing depends on file values and headings rather than the lo
   }
   assert.deepEqual(measured[1], measured[0], 'long paths must not widen extension or size columns');
 });
+
+for (const side of [0, 1]) test(`panel ${side} holds column widths through streamed navigation and autosizes once on completion`, async t => {
+  const pane = path => ({ tabs: [path], tab: 0, selected: [], cursor: null, sort: 'name', filter: '' });
+  const root = side ? '/right' : '/left', target = `${root}/child`;
+  const cached = { id: 'cached', name: 'cached.txt', type: 'text', size: 1 };
+  const app = createApp(t, { version: 1, realFilesystem: true, snapshotId: 'initial', active: side,
+    panes: [pane('/left'), pane('/right')], folders: {
+      '/left': [], '/right': [], [root]: [{ id: 'dir', name: 'child', type: 'folder', fsSource: target }], [target]: [cached]
+    } });
+  await settled(app, side); await settled(app, 1 - side);
+  const grid = app.grid(side), other = app.grid(1 - side);
+  resize(app, 'date', 290, side); await delay(5);
+  const widths = () => grid.getColumnState().map(({ colId, width }) => ({ colId, width }));
+  const before = widths();
+  const calls = [], nativeSize = grid.autoSizeColumns;
+  grid.autoSizeColumns = (...args) => { calls.push(args); return nativeSize(...args); };
+  const otherCalls = [], otherNativeSize = other.autoSizeColumns;
+  other.autoSizeColumns = (...args) => { otherCalls.push(args); return otherNativeSize(...args); };
+  app.click(app.row('child').querySelector('[data-filename]')); app.key('Enter');
+  assert.equal(app.grid(side), grid);
+  assert.deepEqual(widths(), before);
+  assert.equal(calls.length, 0, 'cached target widths are not remeasured while loading');
+  assert.equal(grid.getColumn('name').getFlex(), null, 'loading freezes the filename width as well');
+  const request = app.messages.findLast(message => message.type === 'filesystem-navigate');
+  const send = data => app.window.dispatchEvent(new app.window.MessageEvent('message', { data }));
+  const fresh = { id: 'fresh', name: 'z'.repeat(100) + '.txt', type: 'text', size: 3 };
+  send({ type: 'filesystem-directory', navigationRequestId: request.navigationRequestId, path: target, names: [cached.name, fresh.name], rows: [] });
+  send({ type: 'filesystem-directory', navigationRequestId: request.navigationRequestId, path: target, rows: [fresh] });
+  send({ type: 'filesystem-directory', navigationRequestId: request.navigationRequestId, path: target, done: true });
+  await delay(20);
+  assert.deepEqual(widths(), before);
+  assert.equal(calls.length, 0, 'partial rows and metadata completion preserve widths');
+  const state = app.state(); state.snapshotId = 'final'; state.folders[target] = [cached, fresh];
+  send({ type: 'filesystem-result', navigationRequestId: request.navigationRequestId, ok: true, state });
+  await settled(app, side);
+  assert.equal(calls.length, 1, 'the confirmed listing is measured exactly once');
+  assert.ok(width(app, 'name', side) >= 800);
+  assert.equal(width(app, 'date', side), 290);
+  app.click(app.row(fresh.name)); await delay(10);
+  assert.equal(calls.length, 1, 'selection does not repeat the final measurement');
+  assert.equal(otherCalls.length, 0);
+});
+
+test('a confirmed cached listing autosizes once even when its final contents are unchanged', async t => {
+  const pane = path => ({ tabs: [path], tab: 0, selected: [], cursor: null, sort: 'name', filter: '' });
+  const app = createApp(t, { version: 1, realFilesystem: true, snapshotId: 'initial', active: 0,
+    panes: [pane('/left'), pane('/right')], folders: {
+      '/left': [{ id: 'dir', name: 'child', type: 'folder', fsSource: '/left/child' }], '/right': [],
+      '/left/child': [{ id: 'cached', name: 'cached.txt', type: 'text', size: 1 }]
+    } });
+  await settled(app);
+  const grid = app.grid(), calls = [], nativeSize = grid.autoSizeColumns;
+  grid.autoSizeColumns = (...args) => { calls.push(args); return nativeSize(...args); };
+  app.click(app.row('child').querySelector('[data-filename]')); app.key('Enter');
+  const request = app.messages.findLast(message => message.type === 'filesystem-navigate');
+  assert.equal(calls.length, 0);
+  app.window.dispatchEvent(new app.window.MessageEvent('message', { data: {
+    type: 'filesystem-result', navigationRequestId: request.navigationRequestId, ok: true, state: app.state()
+  } }));
+  await settled(app);
+  assert.equal(calls.length, 1);
+});

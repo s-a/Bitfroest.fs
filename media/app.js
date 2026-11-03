@@ -1705,6 +1705,7 @@
     cell: renderFileCell, patch: patchView, results: resultView, source: p => resultView(p) || files(p),
     rowHeight: () => window.CommanderIcons.layout().row,
     controlHeight: () => window.CommanderIcons.layout().control,
+    ready: p => !directoryListings.has(currentPath(p)) && !state.unloadedFolders?.includes(currentPath(p)),
     address: p => pathbarMarkup(p, state.panes.indexOf(p)),
     path: currentPath, view: p => p.tabStates[p.tab].id,
     decorate: () => { refreshSelection(); refreshClipboardMarkers(); refreshFileColors(); },
@@ -1809,7 +1810,7 @@
     });
   }
   function paneDisplayState(p, index) {
-    return JSON.stringify([p, index === state.active, state.realFilesystem, p.tabs.map(displayArchivePath), files(p).map(file => displayFile(file, p))]);
+    return JSON.stringify([p, index === state.active, state.realFilesystem, !directoryListings.has(currentPath(p)), p.tabs.map(displayArchivePath), files(p).map(file => displayFile(file, p))]);
   }
   function patchView(current, next) {
     if (current.nodeType === 3) { if (current.nodeValue !== next.nodeValue) current.nodeValue = next.nodeValue; return; }

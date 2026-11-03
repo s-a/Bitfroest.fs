@@ -160,14 +160,19 @@
       const source = options.source(p);
       const currentSignature = signature(p);
       const changed = !record || record.signature !== currentSignature;
+      const ready = options.ready(p);
       if (record) {
         const focused = record.address?.contains(document.activeElement) ? document.activeElement : null;
         const selection = focused?.matches('input') ? [focused.selectionStart, focused.selectionEnd] : null;
         const navigated = record.path !== options.path(p);
+        const holdWidths = record.ready && !ready;
+        if (changed || navigated || record.count !== rows.length || record.source !== source) record.measurePending = true;
+        record.ready = ready; record.count = rows.length; record.source = source;
         record.path = options.path(p);
         record.p = p; record.signature = currentSignature; marks(record);
         record.updating = true;
         try {
+          if (holdWidths) record.api.applyColumnState({ state: record.api.getColumnState().map(({ colId, width }) => ({ colId, width, flex: null })) });
           updateAddress(record, false);
           if (changed) { record.manual.clear(); record.api.setGridOption('columnDefs', groupedDefinitions(record)); }
           record.api.setGridOption('rowData', [{ id: parentId }, ...rows]);
@@ -181,10 +186,10 @@
         } finally { record.updating = false; }
         sync(section, p);
         options.decorate(section, p);
-        if (changed || record.count !== rows.length || record.source !== source) { record.count = rows.length; record.source = source; measureAll(record); }
+        measureWhenReady(record);
         return;
       }
-      record = { section, p, path: options.path(p), view: options.view(p), manual: new Set(), updating: true };
+      record = { section, p, path: options.path(p), view: options.view(p), manual: new Set(), updating: true, ready, measurePending: true };
       record.source = source; record.font = font(container);
       record.count = rows.length; record.signature = currentSignature; marks(record);
       const nonce = document.querySelector('script[nonce]')?.nonce;
@@ -211,10 +216,10 @@
           headerColumnResizeHandleWidth: 1,
           headerColumnResizeHandleHeight: '60%'
         }),
-        rowBuffer: rows.length + 1,
+        rowBuffer: ready ? rows.length + 1 : 10,
         suppressMaxRenderedRowRestriction: true,
         defaultColDef: { cellDataType: false },
-        onFirstDataRendered: () => measureAll(record),
+        onFirstDataRendered: () => { record.rendered = true; measureWhenReady(record); },
         getRowClass: params => {
           if (params.data.id === parentId) return ['parent-row'];
           const groups = options.results(record.p)?.groups, previous = params.api.getDisplayedRowAtIndex(params.rowIndex - 1)?.data;
@@ -279,12 +284,17 @@
       record.api.setGridOption('rowBuffer', record.api.getDisplayedRowCount());
       record.api.autoSizeColumns(keys);
     }
+    function measureWhenReady(record) {
+      if (!record.rendered || !record.ready || !record.measurePending) return;
+      record.measurePending = false;
+      measureAll(record);
+    }
     function font(container) { const style = getComputedStyle(container); return [style.fontFamily, style.fontSize, style.fontWeight].join('|'); }
     function remeasure(section, force = false) {
       const record = instances.get(section?.querySelector('[data-file-grid]'));
       if (!record) return;
       const current = font(section.querySelector('[data-file-grid]'));
-      if (force || record.font !== current) { record.font = current; measureAll(record); }
+      if (force || record.font !== current) { record.font = current; record.measurePending = true; measureWhenReady(record); }
     }
     function prepareAutosize(section, key) {
       const record = instances.get(section?.querySelector('[data-file-grid]'));
