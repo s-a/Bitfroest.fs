@@ -145,7 +145,7 @@ test('Git context excludes folders, multiple selections, archives and nonreposit
     if (mode === 'archive') state.archiveLocations = { '/repo': { archive: '/archive.zip', prefix: '' } };
     const app = createApp(t, state), request = app.messages.find(m => m.type === 'git-status');
     if (request) reply(app, request, mode === 'outside' ? { directories: { '/repo': { ok: true, repository: false } } } : {});
-    for (const row of app.document.querySelectorAll('.pane.active tr[data-id]')) assert.equal(JSON.parse(row.dataset.vscodeContext).gitFile, false, mode);
+    for (const row of app.document.querySelectorAll('.pane.active [data-file-row][data-id]')) assert.equal(JSON.parse(row.dataset.vscodeContext).gitFile, false, mode);
   }
 });
 

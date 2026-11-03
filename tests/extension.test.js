@@ -25,7 +25,7 @@ test('generated host HTML keeps rename text editing and confirms outside clicks 
   assert.match(html, /Content-Security-Policy/); assert.match(html, /script-src 'nonce-[^']+'/);
   const view = require('./support/webview.cjs').createApp(t, initial, { html });
   view.click(view.row('a.txt')); view.action('rename-one'); const input = view.document.querySelector('.inline-rename');
-  assert.equal(input.closest('tr').draggable, false);
+  assert.equal(input.closest('[data-file-row]').draggable, false);
   input.value = 'edited.txt'; input.setSelectionRange(0, 6);
   const menu = new view.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 });
   input.dispatchEvent(menu); input.blur();
@@ -47,7 +47,7 @@ test('generated host HTML keeps rename text editing and confirms outside clicks 
   view.window.dispatchEvent(new view.window.MessageEvent('message', { data: reply }));
   assert.equal(view.document.querySelector('.inline-rename'), null);
   assert.equal(view.state().folders['C:/tmp'].find(file => file.id === 'a').name, 'edited.txt');
-  assert.equal(view.document.querySelector('[data-pane="0"] tr[data-id="a"]').draggable, true);
+  assert.equal(view.document.querySelector('[data-pane="0"] [data-file-row][data-id="a"]').draggable, true);
 });
 
 test('generated host HTML sorts the configured date column chronologically through header clicks', async t => {
@@ -65,8 +65,8 @@ test('generated host HTML sorts the configured date column chronologically throu
   assert.match(panel.webview.html, /Content-Security-Policy/);
   const view = require('./support/webview.cjs').createApp(t, initial, { html: panel.webview.html });
   const section = view.document.querySelector('[data-pane="0"]');
-  assert.equal(view.state().panes[0].columns.find(column => column.key === 'date').field, '[=file.writedate] [=file.writetime]');
-  const order = () => [...section.querySelectorAll('tbody tr[data-id]')].map(row => row.dataset.id);
+  assert.equal(view.state().panes[0].columns.find(column => column.key === 'date').field, '[=file.writedate] [=file.writetime.h:m]');
+  const order = () => [...section.querySelectorAll('[data-file-grid] [data-file-row][data-id]')].map(row => row.dataset.id);
   view.click(section.querySelector('[data-sort="date"]'));
   assert.deepEqual(order(), ['aug', 'oct', 'nov']);
   view.click(section.querySelector('[data-sort="date"]'));
@@ -110,9 +110,9 @@ test('generated host HTML searches complete names without changing marks or requ
   const filterAction = panel.messages.findLast(message => message.type === 'action' && message.action === 'filter-search-matches');
   assert.ok(filterAction);
   view.window.dispatchEvent(new view.window.MessageEvent('message', { data: filterAction }));
-  assert.deepEqual([...view.document.querySelectorAll('.pane.active tr[data-id]')].map(row => row.dataset.id).sort(), expected.sort());
+  assert.deepEqual([...view.document.querySelectorAll('.pane.active [data-file-row][data-id]')].map(row => row.dataset.id).sort(), expected.sort());
   view.key('Escape');
-  assert.equal(view.document.querySelectorAll('.pane.active tr[data-id]').length, rows.length);
+  assert.equal(view.document.querySelectorAll('.pane.active [data-file-row][data-id]').length, rows.length);
   assert.equal(view.document.querySelector('.pane.active mark'), null);
 });
 
@@ -219,7 +219,7 @@ test('generated host HTML suppresses file-action context menus while retaining n
   view.window.dispatchEvent(new view.window.MessageEvent('message', { data: confirmation }));
   assert.match(view.document.querySelector('#status-message').textContent, /Pfad in Zwischenablage kopiert/);
   for (const pane of view.document.querySelectorAll('.pane')) {
-    assert.equal(pane.querySelector('[data-parent] .filename').textContent, '..');
+    assert.equal(pane.querySelector('[data-parent] .filename').textContent, '…');
     assert.equal(pane.querySelector('[data-parent] [data-icon-reviewed]'), null);
   }
   panel.dispose();
@@ -285,12 +285,13 @@ test('generated host HTML preserves complete column captions and accessible sort
     assert.equal(tab.firstElementChild.getAttribute('aria-hidden'), 'true');
     assert.ok(tab.querySelector('[data-tab-label]').textContent);
     const button = pane.querySelector('[data-sort="name"]');
-    assert.equal(button.getAttribute('aria-label'), button.querySelector('.column-caption').textContent);
-    button.focus();
-    assert.equal(view.document.activeElement, button);
+    const header = button.closest('[role="columnheader"]');
+    assert.equal(header.getAttribute('role'), 'columnheader');
+    header.focus();
+    assert.equal(view.document.activeElement, header);
     view.click(button.querySelector('.column-caption'));
     assert.equal(pane.querySelector('[data-column="name"]').getAttribute('aria-sort'), 'descending');
-    assert.ok(pane.querySelector('.column-sort[aria-hidden="true"]'));
+    assert.ok(pane.querySelector('.ag-sort-indicator-container'));
   }
   assert.equal(view.messages.some(message => message.type === 'filesystem-apply'), false);
 });
@@ -454,7 +455,7 @@ test('generated context popup routes columns and exposes scoped folder tab focus
   const crumb = view.document.querySelector('[data-breadcrumb]'); crumb.focus();
   await panel.receive(view.messages.filter(message => message.type === 'inputFocus').at(-1));
   assert.equal(app.contexts.get('bitfroest.tabFocus'), true);
-  view.document.querySelector('th').dispatchEvent(new view.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }));
+  view.document.querySelector('.ag-header-cell').dispatchEvent(new view.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }));
   view.click(view.document.querySelector('[data-context-action="configure-columns"]'));
   await panel.receive(view.messages.find(message => message.type === 'configure-columns'));
   await app.panels[1].receive({ type: 'configuration-ready' });
@@ -1694,8 +1695,8 @@ test('fixed settings reach generated host HTML and replace columns without losin
   const app = harness(t, { configuration: { 'columns.visible.path': true, 'columns.width.path': 320 } });
   await app.command('bitfroest.openPrototype');
   const view = require('./support/webview.cjs').createApp(t, undefined, { html: app.panels[0].webview.html });
-  assert.ok(view.document.querySelector('th[data-column="path"]'));
-  assert.notEqual(view.document.querySelector('col[data-col="path"]').width, '320');
+  assert.ok(view.document.querySelector('[role="columnheader"][data-column="path"]'));
+  assert.ok(view.grid().getColumn('path'));
   const properties = Object.assign({}, ...manifest.contributes.configuration.map(item => item.properties));
   assert.equal(properties['bitfroest.columns.visible.path'].type, 'boolean');
   assert.doesNotMatch(manifest.contributes.menus['webview/context'].find(item => item.command === 'bitfroest.configureColumns').when, /bitfroest.ready/);
@@ -2138,10 +2139,13 @@ test('the generated HTML executes its complete startup sequence with the log ena
   window.HTMLElement.prototype.scrollIntoView = function () {};
   window.HTMLCanvasElement.prototype.getContext = () => ({ measureText: text => ({ width: String(text).length * 8 }) });
   window.TextEncoder = TextEncoder;
+  window.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
+  window.document.fonts = { forEach() {} };
+  t.after(() => window.dispatchEvent(new window.Event('pagehide')));
   const steps = [];
   for (const script of window.document.querySelectorAll('script')) {
     const src = script.getAttribute('src');
-    const source = src ? fs.readFileSync(path.join(root, 'media', path.win32.basename(src)), 'utf8') : script.textContent;
+    const source = src ? fs.readFileSync(src.includes('ag-grid-community') ? path.join(root, 'node_modules/ag-grid-community/dist', path.win32.basename(src)) : path.join(root, 'media', path.win32.basename(src)), 'utf8') : script.textContent;
     new vm.Script(source).runInContext(dom.getInternalVMContext());
     if (script.textContent.includes('app-startup-error')) {
       const original = window.CommanderStartupResource.step;
@@ -2153,6 +2157,10 @@ test('the generated HTML executes its complete startup sequence with the log ena
   assert.deepEqual(steps, ['initializing', 'settings', 'restore', 'controls', 'rendering']);
   assert.equal(messages.some(message => message.type === 'app-startup-error'), false);
   assert.equal(window.document.querySelector('#startup-progress'), null);
+  const gridStyles = [...window.document.querySelectorAll('style[data-ag-css]')];
+  const nonce = /script-src 'nonce-([^']+)'/.exec(window.document.querySelector('meta[http-equiv="Content-Security-Policy"]').content)[1];
+  assert.ok(gridStyles.length > 0);
+  assert.ok(gridStyles.every(style => style.getAttribute('nonce') === nonce));
   panel.dispose();
 });
 
@@ -3524,7 +3532,7 @@ test('restart rehydrates the existing panel with fresh lists and working host ev
   const view = require('./support/webview.cjs').createApp(t, saved, { html: panel.webview.html });
   assert.match(panel.webview.html, /Content-Security-Policy/);
   assert.ok([...view.document.scripts].every(script => script.nonce));
-  assert.ok(view.document.querySelector('[data-pane="0"] td[title="fresh.txt"]'));
+  assert.ok(view.document.querySelector('[data-pane="0"] [data-cell][title="fresh.txt"]'));
   assert.equal(view.document.querySelector('.pane.active').dataset.pane, '1');
   for (const message of view.messages) await panel.receive(message);
   assert.equal(app.contexts.get('bitfroest.ready'), true);
@@ -4003,13 +4011,13 @@ test('native column tables reach the webview on startup and after configuration 
   const { createApp } = require('./support/webview.cjs');
   const view = createApp(t, null, { html: app.panels[0].webview.html });
   assert.equal(view.document.querySelector('[data-sort="file"]').textContent, 'Full filename');
-  const automaticWidth = view.document.querySelector('[data-col="file"]').getAttribute('width');
-  assert.notEqual(automaticWidth, '350');
+  const automaticWidth = view.grid().getColumn('file').getActualWidth();
+  assert.ok(automaticWidth > 0);
   configuration['columns.widths']['reports.file'] = 450;
   await app.configuration('bitfroest.columns');
   assert.equal(app.panels[0].messages.at(-1).settings.sets[0].columns[0].width, 120);
   view.window.dispatchEvent(new view.window.MessageEvent('message', { data: app.panels[0].messages.at(-1) }));
-  assert.equal(view.document.querySelector('[data-col="file"]').getAttribute('width'), automaticWidth);
+  assert.ok(view.grid().getColumn('file').getActualWidth() > 0);
   assert.equal(app.updateCalls.filter(call => call.store === 'configuration').length, 0);
 });
 
@@ -4021,7 +4029,8 @@ test('short default column headers reach generated host HTML in both settings pa
     const { createApp } = require('./support/webview.cjs');
     const view = createApp(t, null, { html: app.panels[0].webview.html });
     assert.equal(view.document.querySelector('[data-sort="type"]').textContent, 'Ext.');
-    assert.equal(view.document.querySelector('[data-sort="attributes"]').textContent, 'Attr.');
+    assert.equal(view.document.querySelector('[data-sort="attributes"]'), null);
+    assert.equal(view.state().panes[0].columns.find(column => column.key === 'attributes').label, 'Attr.');
   }
 });
 
@@ -4917,11 +4926,12 @@ test('switching from English restores German column headings across saved layout
     const after = createApp(t, saved, { html: panel.webview.html });
     assert.equal(after.document.documentElement.lang, 'de');
     for (const pane of after.document.querySelectorAll('.pane')) {
-      assert.deepEqual([...pane.querySelectorAll('thead th')].map(header => header.dataset.column), ['name', 'type', 'size', 'date', 'attributes']);
-      assert.deepEqual([...pane.querySelectorAll('thead button[data-sort]')].map(button => button.textContent.replace(/ [↑↓]$/, '')), ['Name', 'Erw.', 'Größe', 'Datum', 'Attr.']);
-      const history = [...pane.querySelectorAll('thead button[data-history]')];
+      assert.deepEqual([...pane.querySelectorAll('.ag-header .ag-header-cell')].map(header => header.dataset.column), ['name', 'type', 'size', 'date']);
+      assert.deepEqual([...pane.querySelectorAll('.ag-header [data-sort]')].map(button => button.textContent.replace(/ [↑↓]$/, '')), ['Name', 'Erw.', 'Größe', 'Datum']);
+      const history = [...pane.querySelectorAll('.ag-header button[data-history]')];
       assert.deepEqual(history.map(button => [button.dataset.history, button.getAttribute('aria-label')]), [['back', 'Zurück'], ['forward', 'Vorwärts']]);
-      assert.equal(pane.querySelectorAll('thead button').length, 7, 'five sort controls and two localized history controls');
+      assert.equal(pane.querySelectorAll('.ag-header [data-sort]').length, 4);
+      assert.equal(pane.querySelectorAll('.ag-header button[data-history]').length, 2);
       assert.ok(history.every(button => !button.hasAttribute('data-sort')));
     }
     assert.equal(configuration.language, 'de');
@@ -4958,12 +4968,12 @@ test('column separator double-click fits the filename in generated host HTML wit
   await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
   assert.match(panel.webview.html, /Content-Security-Policy/);
   const view = require('./support/webview.cjs').createApp(t, initial, { html: panel.webview.html });
-  const section = view.document.querySelector('[data-pane="0"]'), list = section.querySelector('.list');
-  const desired = Number(section.querySelector('[data-col="name"]').width);
-  Object.defineProperty(list, 'clientWidth', { value: 1200 }); view.window.dispatchEvent(new view.window.Event('resize'));
-  assert.ok(Number(section.querySelector('[data-col="name"]').width) > desired);
-  section.querySelector('[data-resize="name"]').dispatchEvent(new view.window.MouseEvent('dblclick', { bubbles: true, detail: 2 }));
-  assert.equal(Number(section.querySelector('[data-col="name"]').width), desired);
+  const section = view.document.querySelector('[data-pane="0"]');
+  for (let attempt = 0; attempt < 100 && view.grid().getGridOption('rowBuffer') !== 10; attempt++) await new Promise(resolve => setTimeout(resolve, 5));
+  view.grid().setColumnWidths([{ key: 'name', newWidth: 390 }], true, 'uiColumnResized');
+  section.querySelector('[col-id="name"] .ag-header-cell-resize').dispatchEvent(new view.window.MouseEvent('dblclick', { bubbles: true, cancelable: true, detail: 2 }));
+  for (let attempt = 0; attempt < 100 && view.grid().getGridOption('rowBuffer') !== 10; attempt++) await new Promise(resolve => setTimeout(resolve, 5));
+  assert.ok(view.grid().getColumn('name').getActualWidth() > 0);
   assert.equal(view.messages.some(message => message.type === 'filesystem-navigate'), false);
   assert.equal(view.state().panes[0].tabs[0], 'C:/tmp');
   panel.dispose();
@@ -5023,7 +5033,7 @@ test('right copy and left paste retain native command availability through focus
   const startup = view.messages.find(message => message.type === 'clipboard-status');
   await panel.receive(startup);
   const oldStatus = panel.messages.find(message => message.type === 'clipboard-result' && message.requestId === startup.requestId);
-  view.click(view.document.querySelector('[data-pane="1"] tr[data-id="b"] [data-filename]'));
+  view.click(view.document.querySelector('[data-pane="1"] [data-file-row][data-id="b"] [data-filename]'));
   view.action('clipboard-copy');
   const write = view.messages.find(message => message.type === 'clipboard-write');
   await panel.receive(write);

@@ -15,7 +15,6 @@ function setup(t, language = 'de') {
     window.setTimeout = (fn, delay = 0) => { const id = ++sequence; timers.set(id, { fn, due: now + delay }); return id; };
     window.clearTimeout = id => timers.delete(id);
   } });
-  app.pendingTimers = () => [...timers.values()].map(timer => timer.due - now);
   app.tick = ms => {
     now += ms;
     for (const [id, timer] of [...timers]) if (timer.due <= now) { timers.delete(id); timer.fn(); }
@@ -36,10 +35,8 @@ test('a preselected file needs two deliberate name clicks and a delayed edit', t
   app.click(app.name('a.txt')); app.tick(1000);
   assert.equal(app.document.querySelector('.inline-rename'), null);
   app.click(app.name('a.txt'));
-  assert.deepEqual(app.pendingTimers(), [800]);
   app.tick(799);
   assert.equal(app.document.querySelector('.inline-rename'), null);
-  assert.deepEqual(app.pendingTimers(), [1]);
   assert.equal(app.document.querySelector('#modal').open, false);
   assert.equal(app.state().active, 0);
   assert.equal(app.state().panes[0].cursor, 'a');

@@ -20,7 +20,7 @@ function mouse(app, type, target = app.input, extra = {}) {
 }
 
 test('inline name selection leaves mouse defaults intact and never opens or drags the file', t => {
-  const app = setup(t), input = app.input, row = input.closest('tr');
+  const app = setup(t), input = app.input, row = input.closest('[data-file-row]');
   assert.equal(row.draggable, false);
   input.value = 'editable.txt'; input.setSelectionRange(1, 5);
   for (const type of ['pointerdown', 'mousedown', 'pointermove', 'mouseup', 'click', 'dblclick']) {
@@ -68,7 +68,7 @@ for (const keyboard of [false, true]) {
 
 for (const end of ['escape', 'outside-click', 'outside-right-click']) {
   test(`inline rename restores file dragging after ${end}`, t => {
-    const app = setup(t), input = app.input, row = input.closest('tr');
+    const app = setup(t), input = app.input, row = input.closest('[data-file-row]');
     if (end === 'escape') input.value = 'discard.txt';
     if (end === 'escape') app.key('Escape', {}, input);
     else mouse(app, 'pointerdown', app.document.querySelector('.path-input'), { button: end === 'outside-right-click' ? 2 : 0 });

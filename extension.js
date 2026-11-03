@@ -687,7 +687,7 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
     if (panel) { clearTimeout(startupWatchdog); panel.reveal(); return; }
     const webviewOptions = {
       enableScripts: true,
-      localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, 'media'), ...icons.roots]
+      localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, 'media'), vscode.Uri.joinPath(context.extensionUri, 'node_modules', 'ag-grid-community', 'dist'), ...icons.roots]
     };
     panel = loadingPanel;
     panel.webview.options = webviewOptions;
@@ -765,6 +765,7 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
         .replace('<ol id="startup-log" role="log" aria-live="polite"></ol>', () => `<ol id="startup-log" role="log" aria-live="polite">${startupRows}</ol>`)
         .replace('Startup log', () => t('Startprotokoll'))
         .replace('Copy startup log', () => t('Startprotokoll kopieren'))
+        .replace('<script src="../node_modules/ag-grid-community/dist/ag-grid-community.min.noStyle.js"></script>', () => `<script nonce="${nonce}" src="${resource('../node_modules/ag-grid-community/dist/ag-grid-community.min.noStyle.js')}"></script>`)
         .replace('<script src="webview-bootstrap.js"></script>', () => `<script nonce="${nonce}">${diagnosticsScript}\n${bootstrap.replace(/<\/script/gi, '<\\/script')}</script>`)
         .replace(/<script src="([a-z0-9-]+\.js)"><\/script>/g, (_, name) => `<script nonce="${nonce}">window.CommanderStartupResource.start(${JSON.stringify(name)});</script><script src="${name}"></script>`)
         .replace(/src="([a-z0-9-]+\.js)"/g, (_, name) => `nonce="${nonce}" src="${resource(name)}"`);

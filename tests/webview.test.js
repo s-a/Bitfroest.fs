@@ -28,25 +28,23 @@ test('folder tabs have no close icon and double click closes only that tab', t =
   assert.equal(app.state().panes[0].tabs.length, initial - 1);
 });
 
-test('tab middle click closes it and column dragging changes persisted order', t => {
+test('tab middle click closes it and grid column movement updates the order', async t => {
   const app = createApp(t);
   const tab = app.document.querySelector('[data-pane="0"] [data-tab="1"]');
   tab.dispatchEvent(new app.window.MouseEvent('auxclick', { button: 1, bubbles: true, cancelable: true }));
   assert.equal(app.state().panes[0].tabs.length, 2);
-  const transfer = { data: {}, setData(key, value) { this.data[key] = value; }, getData(key) { return this.data[key] || ''; } };
-  const drag = (type, target) => { const event = new app.window.Event(type, { bubbles: true, cancelable: true }); Object.defineProperty(event, 'dataTransfer', { value: transfer }); target.dispatchEvent(event); };
-  drag('dragstart', app.document.querySelector('[data-pane="0"] [data-column="attributes"]'));
-  drag('drop', app.document.querySelector('[data-pane="0"] [data-column="name"]'));
+  app.grid().moveColumns(['attributes'], 0);
+  await new Promise(resolve => setTimeout(resolve, 5));
   assert.equal(app.state().panes[0].columns[0].key, 'attributes');
 });
 
 test('typing a substring focuses its file without changing selection, filtering or opening a dialog', t => {
   const app = createApp(t);
-  const count = app.document.querySelectorAll('[data-pane="0"] tbody tr[data-id]').length;
+  const count = app.document.querySelectorAll('[data-pane="0"] [data-file-row][data-id]').length;
   for (const letter of 'kage') app.key(letter);
   assert.equal(app.row('package.json').getAttribute('aria-selected'), 'false');
   assert.equal(app.row('package.json').classList.contains('focused'), true);
-  assert.equal(app.document.querySelectorAll('[data-pane="0"] tbody tr[data-id]').length, count);
+  assert.equal(app.document.querySelectorAll('[data-pane="0"] [data-file-row][data-id]').length, count);
   assert.equal(app.document.querySelector('dialog').open, false);
   assert.ok(app.row('package.json').querySelector('mark'));
   app.key('Escape');
@@ -67,19 +65,13 @@ test('tabs and keyboard actions belong to the focused pane', t => {
   assert.equal(app.state().panes[1].tabs.length, 2);
 });
 
-test('five sortable columns include attributes and support autosizing at the boundary', t => {
+test('four standard columns hide attributes and keep folders first', t => {
   const app = createApp(t);
-  const headers = [...app.document.querySelectorAll('[data-pane="0"] th')];
-  assert.deepEqual(headers.map(item => item.dataset.column), ['name', 'type', 'size', 'date', 'attributes']);
-  const before = app.state().panes[0].columns[0].width;
-  const handle = app.document.querySelector('[data-pane="0"] [data-resize="name"]');
-  const pointer = (type, x) => { const event = new app.window.MouseEvent(type, { bubbles: true, button: 0, clientX: x }); handle.dispatchEvent(event); };
-  pointer('pointerdown', 100); pointer('pointermove', 180); pointer('pointerup', 180);
-  assert.equal(app.state().panes[0].columns[0].width, before + 80);
-  app.document.querySelector('[data-pane="0"] [data-resize="name"]').dispatchEvent(new app.window.MouseEvent('dblclick', { bubbles: true, detail: 2 }));
-  assert.equal(app.state().panes[0].columns[0].width, before);
+  const headers = [...app.document.querySelectorAll('[data-pane="0"] .ag-header-cell')];
+  assert.deepEqual(headers.map(item => item.dataset.column), ['name', 'type', 'size', 'date']);
+  assert.ok(headers.every(header => header.querySelector('.ag-header-cell-resize')));
   app.click(app.document.querySelector('[data-pane="0"] [data-sort="name"]'));
-  const firstRow = app.document.querySelector('[data-pane="0"] tr[data-id]');
+  const firstRow = app.document.querySelector('[data-pane="0"] [data-file-row][data-id]');
   assert.ok(firstRow.querySelector('.folder'));
 });
 
@@ -109,11 +101,11 @@ test('arrow keys traverse substring hits while the full list remains visible', t
   app.click(app.row('package.json'));
   const selected = app.state().panes[0].selected;
   const otherPane = app.state().panes[1];
-  const rows = [...app.document.querySelectorAll('.pane.active tbody tr[data-id]')];
+  const rows = [...app.document.querySelectorAll('.pane.active [data-file-row][data-id]')];
   const unchanged = () => {
     assert.deepEqual(app.state().panes[0].selected, selected);
     assert.deepEqual(app.state().panes[1], otherPane);
-    assert.deepEqual([...app.document.querySelectorAll('.pane.active tbody tr[data-id]')], rows);
+    assert.deepEqual([...app.document.querySelectorAll('.pane.active [data-file-row][data-id]')], rows);
     assert.equal(app.row('package.json').getAttribute('aria-selected'), 'true');
     for (const name of ['CHANGELOG.md', 'README.md']) assert.equal(app.row(name).getAttribute('aria-selected'), 'false');
   };

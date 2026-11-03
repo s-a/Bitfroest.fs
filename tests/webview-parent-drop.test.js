@@ -24,10 +24,10 @@ function start(app, modifiers = {}) {
 const submit = app => app.document.querySelector('#modal-form').dispatchEvent(new app.window.Event('submit', { bubbles: true, cancelable: true }));
 const send = (app, data) => app.window.dispatchEvent(new app.window.MessageEvent('message', { data }));
 
-test('parent drop uses two dots and highlights the row even before the parent listing is loaded', t => {
+test('parent drop uses an ellipsis and highlights the row even before the parent listing is loaded', t => {
   for (const shiftKey of [false, true]) {
     const app = createApp(t, fixture()), { row, event, data } = start(app, { shiftKey });
-    assert.equal(row.querySelector('.filename').textContent, '..');
+    assert.equal(row.querySelector('.filename').textContent, '…');
     assert.equal(event.defaultPrevented, true);
     assert.equal(data.dropEffect, shiftKey ? 'move' : 'copy');
     assert.equal(row.classList.contains('drop-target'), true);

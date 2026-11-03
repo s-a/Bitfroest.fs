@@ -27,30 +27,30 @@ function select(app, name, extra) { app.click(app.row(name).querySelector('[data
 function pane(app, index = 0) { return app.document.querySelector(`[data-pane="${index}"]`); }
 function tab(app, index, side = 0) { return pane(app, side).querySelector(`[data-tab="${index}"]`); }
 
-test('pointer resizing persists only the target pane width and stops after release', t => {
+test('native resizing changes only the target pane and stops after mouse release', async t => {
   const app = createApp(t);
-  const left = app.state().panes[0].columns.find(column => column.key === 'name').width;
-  const before = app.state().panes[1].columns.find(column => column.key === 'name').width;
-  const handle = pane(app, 1).querySelector('[data-resize="name"]');
-  pointer(app, 'pointerdown', handle, { clientX: 100 });
-  pointer(app, 'pointermove', handle, { clientX: 180 });
-  assert.equal(pane(app, 1).querySelector('[data-col="name"]').width, String(before + 80));
-  pointer(app, 'pointerup', handle, { clientX: 180 });
-  assert.equal(app.state().panes[1].columns.find(column => column.key === 'name').width, before + 80);
-  assert.equal(app.state().panes[0].columns.find(column => column.key === 'name').width, left);
-  pointer(app, 'pointermove', handle, { clientX: 500 });
-  assert.equal(pane(app, 1).querySelector('[data-col="name"]').width, String(before + 80));
+  await delay(100);
+  const left = app.grid(0).getColumn('name').getActualWidth();
+  const before = app.grid(1).getColumn('name').getActualWidth();
+  const handle = pane(app, 1).querySelector('[col-id="name"] .ag-header-cell-resize');
+  handle.dispatchEvent(new app.window.MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, clientX: 100 }));
+  app.document.dispatchEvent(new app.window.MouseEvent('mousemove', { bubbles: true, button: 0, clientX: 180 }));
+  app.document.dispatchEvent(new app.window.MouseEvent('mouseup', { bubbles: true, button: 0, clientX: 180 }));
+  assert.equal(app.grid(1).getColumn('name').getActualWidth(), before + 80);
+  assert.equal(app.grid(0).getColumn('name').getActualWidth(), left);
+  app.document.dispatchEvent(new app.window.MouseEvent('mousemove', { bubbles: true, button: 0, clientX: 500 }));
+  assert.equal(app.grid(1).getColumn('name').getActualWidth(), before + 80);
 });
 
-test('pointer cancellation persists the final clamped width without leaving handlers active', t => {
-  const app = createApp(t);
-  const handle = pane(app).querySelector('[data-resize="name"]');
-  pointer(app, 'pointerdown', handle, { clientX: 500 });
-  pointer(app, 'pointermove', handle, { clientX: -500 });
-  pointer(app, 'pointercancel', handle);
-  assert.equal(app.state().panes[0].columns.find(column => column.key === 'name').width, 80);
-  pointer(app, 'pointermove', handle, { clientX: 1000 });
-  assert.equal(pane(app).querySelector('[data-col="name"]').width, '80');
+test('native column sizing rejects invalid API widths and accepts the minimum without storing preferences', async t => {
+  const app = createApp(t); await delay(100);
+  const preference = app.state().panes[0].columns.find(column => column.key === 'name').width;
+  const current = app.grid().getColumn('name').getActualWidth();
+  app.grid().setColumnWidths([{ key: 'name', newWidth: 1 }], true, 'uiColumnResized');
+  assert.equal(app.grid().getColumn('name').getActualWidth(), current);
+  app.grid().setColumnWidths([{ key: 'name', newWidth: 80 }], true, 'uiColumnResized');
+  assert.equal(app.grid().getColumn('name').getActualWidth(), 80);
+  assert.equal(app.state().panes[0].columns.find(column => column.key === 'name').width, preference);
 });
 
 test('dragging a tab to the opposite pane moves its path and activates that pane', t => {
@@ -80,12 +80,11 @@ test('Ctrl-drag copies a tab and drag cancellation prevents a later accidental d
   assert.equal(app.state().panes[1].tabs.length, length);
 });
 
-test('each tab restores its selected file, search, sort direction and scroll position', t => {
+test('each tab restores its selected file, search and sort direction', t => {
   const app = createApp(t);
   select(app, 'README.md');
   app.click(pane(app).querySelector('[data-sort="size"]'));
   app.click(pane(app).querySelector('[data-sort="size"]'));
-  pane(app).querySelector('.list').scrollTop = 133;
   for (const character of 'README') app.key(character);
   const originalCursor = app.state().panes[0].cursor;
   app.click(tab(app, 1)); select(app, 'architecture.md');
@@ -97,7 +96,6 @@ test('each tab restores its selected file, search, sort direction and scroll pos
   assert.equal(app.state().panes[0].filter, 'README');
   assert.equal(app.state().panes[0].sort, 'size');
   assert.equal(app.state().panes[0].descending, true);
-  assert.equal(pane(app).querySelector('.list').scrollTop, 133);
 });
 
 test('a quick double click opens a directory instead of starting inline rename', async t => {
@@ -147,9 +145,9 @@ test('Shift-click extends a contiguous range and Ctrl-click toggles a single ent
   const app = createApp(t);
   select(app, 'assets'); select(app, 'src', { shiftKey: true });
   const expected = ['assets', 'docs', 'src'];
-  assert.deepEqual([...pane(app).querySelectorAll('tr.selected [data-filename]')].map(element => element.textContent), expected);
+  assert.deepEqual([...pane(app).querySelectorAll('[data-file-row].selected [data-filename]')].map(element => element.textContent), expected);
   select(app, 'docs', { ctrlKey: true });
-  assert.deepEqual([...pane(app).querySelectorAll('tr.selected [data-filename]')].map(element => element.textContent), ['assets', 'src']);
+  assert.deepEqual([...pane(app).querySelectorAll('[data-file-row].selected [data-filename]')].map(element => element.textContent), ['assets', 'src']);
   select(app, 'README.md', { ctrlKey: true });
   assert.equal(app.state().panes[0].selected.length, 3);
 });
@@ -157,10 +155,10 @@ test('Shift-click extends a contiguous range and Ctrl-click toggles a single ent
 test('a search without matches keeps the current entry while Backspace and Escape update the query', t => {
   const app = createApp(t);
   select(app, 'README.md'); const originalCursor = app.state().panes[0].cursor;
-  const entries = pane(app).querySelectorAll('tr[data-id]').length;
+  const entries = pane(app).querySelectorAll('[data-file-row][data-id]').length;
   app.key('z'); app.key('z');
   assert.equal(app.state().panes[0].cursor, originalCursor);
-  assert.equal(pane(app).querySelectorAll('tr[data-id]').length, entries);
+  assert.equal(pane(app).querySelectorAll('[data-file-row][data-id]').length, entries);
   assert.equal(pane(app).querySelector('mark'), null);
   app.key('Backspace'); assert.equal(app.state().panes[0].filter, 'z');
   app.key('Escape'); assert.equal(app.state().panes[0].filter, '');

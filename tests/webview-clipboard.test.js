@@ -214,11 +214,11 @@ test('copied sources add a neutral hatch strip without an empty gutter on ordina
   assert.equal(reservation.style.height, '12px');
   assert.equal(reservation.style.flex, '0 0 var(--file-marker-width, 0px)');
   assert.equal(reservation.style.getPropertyValue('background-image'), 'none');
-  const hatch = rules.find(rule => rule.selectorText === '.file-table tr.is-copied .filename::before');
+  const hatch = rules.find(rule => rule.selectorText === '.file-table [data-file-row].is-copied .filename::before');
   assert.equal(hatch.style.getPropertyValue('background-size'), '6px 12px');
   assert.match(hatch.style.getPropertyValue('background-image'), /repeating-linear-gradient\(135deg, currentColor 0 1px, transparent 1px 3px\)/i);
   assert.match(reservation.style.color, /--vscode-icon-foreground/);
-  const selected = rules.find(rule => rule.selectorText === '.file-table tr.selected .filename::before');
+  const selected = rules.find(rule => rule.selectorText === '.file-table [data-file-row].selected .filename::before');
   assert.equal(selected.style.color, 'inherit');
   const forced = rules.find(rule => rule.conditionText === '(forced-colors: active)' && [...rule.cssRules].some(child => child.selectorText === '.filename::before'));
   assert.ok([...forced.cssRules].some(rule => rule.style.color.toLowerCase() === 'canvastext'));
@@ -326,7 +326,7 @@ test('confirmed clipboard files remain pasteable across focus and pane changes w
     if (!pendingStatus) respond(app, initial, { available: false });
     const sourcePath = saved.panes[sourceSide].tabs[0], targetSide = 1 - sourceSide;
     const source = saved.folders[sourcePath][0];
-    app.click(app.document.querySelector(`[data-pane="${sourceSide}"] tr[data-id="${source.id}"] [data-filename]`));
+    app.click(app.document.querySelector(`[data-pane="${sourceSide}"] [data-file-row][data-id="${source.id}"] [data-filename]`));
     app.action(mode === 'copy' ? 'clipboard-copy' : 'clipboard-cut');
     const selection = { paths: [source.fsSource], mode, source: 'system', token: 'confirmed' };
     respond(app, app.messages.find(message => message.type === 'clipboard-write'), { selection });
@@ -357,7 +357,7 @@ test('paste copies or moves directly into either active pane without a preparati
     const saved = fixture(); saved.folders['C:/temp'] = [{ id: 'b', name: 'right.txt', type: 'text', content: 'right', size: 5 }];
     const sourcePath = saved.panes[sourceSide].tabs[0], targetSide = 1 - sourceSide, source = { ...saved.folders[sourcePath][0] };
     const targetPath = saved.panes[targetSide].tabs[0], app = createApp(t, saved);
-    app.click(app.document.querySelector(`[data-pane="${sourceSide}"] tr[data-id="${source.id}"] [data-filename]`));
+    app.click(app.document.querySelector(`[data-pane="${sourceSide}"] [data-file-row][data-id="${source.id}"] [data-filename]`));
     app.action(mode === 'copy' ? 'clipboard-copy' : 'clipboard-cut'); app.key('Tab'); app.action('clipboard-paste');
     assert.equal(app.document.querySelector('#modal').open, false);
     assert.equal(app.document.querySelector('#transfer-filter'), null);

@@ -13,6 +13,8 @@ tests/**
 coverage/**
 node_modules/**
 !node_modules/@zip.js/zip.js/**
+!node_modules/ag-grid-community/dist/ag-grid-community.min.noStyle.js
+!node_modules/ag-grid-community/LICENSE.txt
 package-lock.json
 AGENTS.md
 .vscode/**

@@ -212,10 +212,27 @@
     "license": "MIT",
     "licenseUrl": "https://github.com/phosphor-icons/core/blob/main/LICENSE",
     "source": "https://github.com/phosphor-icons/core",
-    "files": ["licenses/PHOSPHOR-ICONS-MIT.txt"],
+    "files": [
+      "licenses/PHOSPHOR-ICONS-MIT.txt"
+    ],
     "description": {
       "de": "Lokal eingebundenes SVG-Symbol file-zip im Stil light. SVG-Hülle für Zugänglichkeit, Größe und Theme-Farbe angepasst; Pfadgeometrie unverändert.",
       "en": "Locally embedded file-zip SVG icon in the light style. SVG wrapper adapted for accessibility, size and theme color; path geometry unchanged."
+    }
+  },
+  {
+    "name": "AG Grid Community",
+    "version": "36.2.0",
+    "author": "AG GRID LTD",
+    "license": "MIT",
+    "licenseUrl": "https://www.ag-grid.com/eula/community/",
+    "source": "https://github.com/ag-grid/ag-grid/tree/v36.2.0",
+    "files": [
+      "node_modules/ag-grid-community/LICENSE.txt"
+    ],
+    "description": {
+      "de": "Tabellenkomponente für die Dateilisten.",
+      "en": "Data grid for the file lists."
     }
   }
 ]

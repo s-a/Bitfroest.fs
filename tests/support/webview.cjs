@@ -43,7 +43,7 @@ function resolveThemeCss(css, tokens = {}, chain = []) {
 function createApp(t, saved, options = {}) {
   const root = path.resolve(__dirname, '../..');
   const dom = new JSDOM(options.html || fs.readFileSync(path.join(root, 'media/index.html'), 'utf8'), { runScripts: 'outside-only', url: 'https://prototype.invalid/' });
-  t.after(() => dom.window.close());
+  t.after(() => { dom.window.dispatchEvent(new dom.window.Event('pagehide')); dom.window.close(); });
   const window = dom.window, document = window.document;
   if (options.ResizeObserver) window.ResizeObserver = options.ResizeObserver;
   document.body.dataset.language = options.language || document.body.dataset.language || 'de';
@@ -64,6 +64,21 @@ function createApp(t, saved, options = {}) {
   window.TextDecoder = TextDecoder;
   window.structuredClone = structuredClone;
   window.HTMLDialogElement.prototype.show = function () { this.setAttribute('open', ''); };
+  Object.defineProperty(window.HTMLElement.prototype, 'offsetWidth', { configurable: true, get() {
+    if (this.tagName === 'FORM' && this.style.position === 'fixed') return Math.max(0, ...[...this.children].map(child => child.offsetWidth));
+    return parseFloat(this.style.width) || (this.textContent.length * 8 + 24);
+  } });
+  Object.defineProperty(window.HTMLElement.prototype, 'clientWidth', { configurable: true, get() {
+    return this.classList.contains('ag-body-viewport') || this.classList.contains('ag-center-cols-viewport') ? 1000 : parseFloat(this.style.width) || 0;
+  } });
+  Object.defineProperty(window.HTMLElement.prototype, 'clientHeight', { configurable: true, get() {
+    return this.classList.contains('ag-body-viewport') ? 440 : parseFloat(this.style.height) || 0;
+  } });
+  window.ResizeObserver ||= class { observe() {} unobserve() {} disconnect() {} };
+  new vm.Script(fs.readFileSync(path.join(root, 'node_modules/ag-grid-community/dist/ag-grid-community.min.noStyle.js'), 'utf8')).runInContext(dom.getInternalVMContext());
+  const createGrid = window.agGrid.createGrid;
+  window.agGrid = { ...window.agGrid, createGrid: (element, options) => createGrid(element, { ...options, suppressAnimationFrame: true }) };
+  new vm.Script(fs.readFileSync(path.join(root, 'media/commander-grid.js'), 'utf8')).runInContext(dom.getInternalVMContext());
   for (const name of ['commander-paths.js', 'commander-shortcuts.js', 'commander-menu.js', 'shortcut-runtime.js', 'commander-i18n.js', 'commander-column-settings.js', 'commander-tabs.js', 'commander-directory-cache.js', 'commander-columns.js', 'commander-search.js', 'file-search-view.js', 'commander-contrast.js', 'commander-file-colors.js', 'commander-file-names.js', 'commander-transfer.js', 'search-duplicates.js', 'commander-clipboard.js', 'commander-lister.js', 'lister-view.js', 'workbench-vendor.js', 'workbench-icons.js', 'git-status-icons.js', 'icon-font-metrics.js', 'icon-layout.js', 'commander-icons.js', 'commander-progress.js', 'commander-statusbar.js', 'commander-jobs.js', 'app.js']) {
     if (name === 'app.js') options.beforeApp?.({ window, document });
     const file = path.join(root, 'media', name);
@@ -72,8 +87,8 @@ function createApp(t, saved, options = {}) {
   const click = (element, extra = {}) => { assert.ok(element, 'click target exists'); element.dispatchEvent(new window.MouseEvent('click', { bubbles: true, detail: 1, ...extra })); };
   const key = (key, extra = {}, target = document.activeElement) => target.dispatchEvent(new window.KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...extra }));
   const action = value => window.dispatchEvent(new window.MessageEvent('message', { data: { type: 'action', action: value } }));
-  const row = name => [...document.querySelectorAll('.pane.active tbody tr[data-id]')].find(element => element.title === name || element.querySelector('td')?.title === name);
-  return { window, document, messages, click, key, action, row, state: () => options.host === false ? JSON.parse(window.sessionStorage.getItem('bitfroest-demo')) : persisted };
+  const row = name => [...document.querySelectorAll('.pane.active [data-file-row][data-id]')].find(element => element.title === name || element.querySelector('[data-cell]')?.title === name);
+  return { window, document, messages, click, key, action, row, grid: (side = persisted?.active || 0) => window.agGrid.getGridApi(`files-${side}`), state: () => options.host === false ? JSON.parse(window.sessionStorage.getItem('bitfroest-demo')) : persisted };
 }
 
 

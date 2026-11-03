@@ -268,7 +268,7 @@ test('workspace restore disposes open searches and duplicate groups stay togethe
   const rows = ['a', 'z', 'b', 'y'].map(name => ({ id: name, name: `${name}.txt`, fsSource: `C:/tmp/${name}.txt`, type: 'text' })); saved.folders['C:/tmp'] = rows;
   saved.panes[0].tabStates = [{ path: 'C:/tmp', searchResult: { paths: rows.map(row => row.fsSource), groups: Object.fromEntries(rows.map((row, i) => [row.fsSource, Math.floor(i / 2)])) } }];
   const app = createApp(t, saved);
-  assert.deepEqual([...app.document.querySelectorAll('.pane.active tr[data-id]')].map(row => row.dataset.id), ['a', 'z', 'b', 'y']);
+  assert.deepEqual([...app.document.querySelectorAll('.pane.active [data-file-row][data-id]')].map(row => row.dataset.id), ['a', 'z', 'b', 'y']);
   app.key('F7', { altKey: true }); app.key('s', { altKey: true });
   respond(app, { type: 'restore', resetViews: true, state: fixture() });
   assert.equal(app.document.querySelector('[data-file-search]'), null);

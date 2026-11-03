@@ -83,11 +83,11 @@ test('Space marks keep normal font weight and an independent visible cursor whil
       assert.deepEqual(app.state().panes[0].selected, ['docs']);
       const cursor = app.row(name);
       assert.ok(cursor.classList.contains('focused'));
-      assert.equal(app.document.querySelectorAll('.pane.active tr.focused').length, 1);
+      assert.equal(app.document.querySelectorAll('.pane.active [data-file-row].focused').length, 1);
       assert.equal(app.window.getComputedStyle(cursor).outlineStyle, 'solid');
     }
   }
-  assert.match(style.textContent, /\.file-table tr\.space-marked[^{}]*\{[^}]*--inactive-selection-text/);
+  assert.match(style.textContent, /\.file-table \[data-file-row\]\.space-marked[^{}]*\{[^}]*--inactive-selection-text/);
   assert.match(style.textContent, /@media \(forced-colors: active\)[\s\S]*\.space-marked/);
 });
 
@@ -151,7 +151,7 @@ test('Space markings restore with the saved view and refresh drops a removed mar
 test('Space sums only the newly marked cursor folder recursively and keeps other marks and cursor', t => {
   const state = fixture(); state.panes[0].selected = ['file', 'empty'];
   const app = createApp(t, state); app.key(' ');
-  assert.equal(cell(app, 'docs'), '18 B'); assert.equal(cell(app, 'empty'), '<DIR>');
+  assert.equal(cell(app, 'docs'), '18 B'); assert.equal(cell(app, 'empty'), '');
   assert.deepEqual(app.state().panes[0].selected, ['file', 'empty', 'docs']);
   assert.equal(app.state().panes[0].cursor, 'docs');
   assert.match(app.document.querySelector('.pane.active .pane-status').textContent, /21 B/);
@@ -170,7 +170,7 @@ test('real folder sizing uses a read-only host request and never commits display
   const app = createApp(t, fixture(true)); app.key(' ');
   const request = app.messages.find(m => m.type === 'folder-size'); assert.ok(request);
   assert.equal(request.path, '/left/docs'); assert.equal(request.snapshotId, 'one');
-  assert.equal(cell(app, 'docs'), '<DIR>'); reply(app, request);
+  assert.equal(cell(app, 'docs'), ''); reply(app, request);
   assert.equal(cell(app, 'docs'), '18 B');
   assert.equal(app.messages.some(m => ['filesystem-apply', 'filesystem-prepare'].includes(m.type)), false);
   assert.equal(app.state().folders['/left'][0].size, 0);
@@ -181,12 +181,12 @@ test('Escape cancels sizing and late or stale results do not publish a partial s
   const app = createApp(t, fixture(true)); app.key(' ');
   const request = app.messages.find(m => m.type === 'folder-size'); assert.ok(request);
   app.key('Escape'); assert.ok(app.messages.some(m => m.type === 'filesystem-cancel' && m.operationId === request.operationId));
-  reply(app, request); assert.equal(cell(app, 'docs'), '<DIR>');
+  reply(app, request); assert.equal(cell(app, 'docs'), '');
   app.key(' '); app.key(' ');
   const next = app.messages.filter(m => m.type === 'folder-size').at(-1);
   const fresh = app.state(); fresh.snapshotId = 'two';
   app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'restore', state: fresh } }));
-  reply(app, next); assert.equal(cell(app, 'docs'), '<DIR>');
+  reply(app, next); assert.equal(cell(app, 'docs'), '');
 });
 
 test('Insert, text input, modified Space and already marked folders do not start sizing', t => {
@@ -206,7 +206,7 @@ test('sizing results preserve a path input and inline rename entered while metad
     assert.ok(input); input.focus(); input.value = 'unfinished';
     reply(app, request, { ok, error: 'Access denied' });
     assert.equal(app.document.activeElement, input); assert.equal(input.value, 'unfinished');
-    assert.equal(cell(app, 'docs'), ok ? '18 B' : '<DIR>');
+    assert.equal(cell(app, 'docs'), ok ? '18 B' : '');
     assert.equal(app.document.querySelector('#modal').open, false);
   }
 });
@@ -218,7 +218,7 @@ test('multiple Space selections receive separate sizes and errors never display 
   const second = app.messages.filter(m => m.type === 'folder-size').at(-1);
   assert.notEqual(first.operationId, second.operationId); assert.equal(second.path, '/left/empty');
   reply(app, second, { size: 0 }); reply(app, first, { ok: false, size: 9, error: 'Access denied' });
-  assert.equal(cell(app, 'empty'), '0 B'); assert.equal(cell(app, 'docs'), '<DIR>');
+  assert.equal(cell(app, 'empty'), '0 B'); assert.equal(cell(app, 'docs'), '');
   assert.deepEqual(app.state().panes[0].selected, ['docs', 'empty']);
   assert.equal(app.messages.some(m => m.type === 'filesystem-apply'), false);
 });

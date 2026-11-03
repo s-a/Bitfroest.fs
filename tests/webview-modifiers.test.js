@@ -2,7 +2,7 @@ const assert = require('node:assert/strict');
 const test = require('node:test');
 const { createApp } = require('./support/webview.cjs');
 function choose(app, name, modifiers = {}) { app.click(app.row(name).querySelector('[data-filename]'), modifiers); }
-function names(app) { return [...app.document.querySelectorAll('.pane.active tr.selected [data-filename]')].map(element => element.closest('tr').title || element.closest('td').title || element.textContent); }
+function names(app) { return [...app.document.querySelectorAll('.pane.active [data-file-row].selected [data-filename]')].map(element => element.closest('[data-file-row]').title || element.closest('[data-cell]').title || element.textContent); }
 test('Shift-arrow keeps the initial anchor and contracts when returning', t => {
   const app = createApp(t); choose(app, 'assets');
   app.key('ArrowDown', { shiftKey: true }); app.key('ArrowDown', { shiftKey: true });

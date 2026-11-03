@@ -24,7 +24,7 @@ function pointer(app, type, target, properties = {}) {
 function layout(app) {
   const list = app.document.querySelector('[data-pane="0"] .list');
   list.getBoundingClientRect = () => ({ left: 0, top: 0, right: 600, bottom: 300, width: 600, height: 300 });
-  [...list.querySelectorAll('tr[data-id]')].forEach((row, index) => { row.getBoundingClientRect = () => ({ left: 0, top: 30 + index * 22, right: 600, bottom: 50 + index * 22, width: 600, height: 20 }); });
+  [...list.querySelectorAll('[data-file-row][data-id]')].forEach((row, index) => { row.getBoundingClientRect = () => ({ left: 0, top: 30 + index * 22, right: 600, bottom: 50 + index * 22, width: 600, height: 20 }); });
   return list;
 }
 
@@ -70,7 +70,7 @@ test('Ctrl rectangle selection extends the marked files and pointercancel restor
 });
 
 test('every data cell keeps native row clicks and file dragging while empty list space remains available for marquee selection', t => {
-  for (const key of ['name', 'type', 'size', 'date', 'attributes']) {
+  for (const key of ['name', 'type', 'size', 'date']) {
     const app = createApp(t, fixture()), cell = app.row('a.txt').querySelector(`[data-cell="${key}"]`);
     assert.equal(pointer(app, 'pointerdown', cell).defaultPrevented, false, `${key} must retain its native click and drag gesture`);
     pointer(app, 'pointerup', cell); app.click(cell);
@@ -114,7 +114,7 @@ test('file drop on the other file list opens a copy dialog and Shift changes it 
 test('dropping a file on a directory row supplies that folder as the transfer target', t => {
   const app = createApp(t, fixture()), data = transfer();
   app.click(name(app, 'a.txt')); drag(app, 'dragstart', name(app, 'a.txt'), data);
-  const folderRow = app.document.querySelector('[data-pane="1"] tr[data-id="4"]');
+  const folderRow = app.document.querySelector('[data-pane="1"] [data-file-row][data-id="4"]');
   drag(app, 'drop', folderRow, data);
   assert.equal(app.document.querySelector('dialog').open, true);
   const input = app.document.querySelector('#modal-body input');
@@ -139,7 +139,7 @@ test('Ctrl-Shift file drops cannot silently move files when link creation is una
 });
 
 test('source directory drops are rejected on rows, list space and either pane tab', t => {
-  for (const shiftKey of [false, true]) for (const selector of ['[data-pane="0"] tr[data-id="1"]', '[data-pane="0"] .list', '[data-pane="0"] [data-tab="0"]', '[data-pane="1"] .list', '[data-pane="1"] [data-tab="0"]']) {
+  for (const shiftKey of [false, true]) for (const selector of ['[data-pane="0"] [data-file-row][data-id="1"]', '[data-pane="0"] .list', '[data-pane="0"] [data-tab="0"]', '[data-pane="1"] .list', '[data-pane="1"] [data-tab="0"]']) {
     const saved = fixture(); saved.panes[1].tabs = ['/left', '/right'];
     const app = createApp(t, saved), data = transfer(), before = JSON.stringify(app.state().folders);
     drag(app, 'dragstart', name(app, 'a.txt'), data);

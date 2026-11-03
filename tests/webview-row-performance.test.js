@@ -5,10 +5,10 @@ const { createApp } = require('./support/webview.cjs');
 test('cursor, marking and panel focus changes retain both lists and their rows', t => {
   const app = createApp(t);
   const lists = [...app.document.querySelectorAll('.list')];
-  const rows = [...app.document.querySelectorAll('tr[data-id]')];
+  const rows = [...app.document.querySelectorAll('[data-file-row][data-id]')];
   const unchanged = () => {
     lists.forEach((list, side) => assert.equal(app.document.querySelectorAll('.list')[side], list));
-    rows.forEach((row, index) => assert.equal(app.document.querySelectorAll('tr[data-id]')[index], row));
+    rows.forEach((row, index) => assert.equal(app.document.querySelectorAll('[data-file-row][data-id]')[index], row));
   };
   app.key('ArrowDown'); unchanged();
   assert.ok(app.state().panes[0].cursor);
@@ -99,5 +99,5 @@ test('selection painting does not repeatedly scan a large marked selection for e
   app.document.querySelector('.list').dispatchEvent(new app.window.Event('focusin', { bubbles: true }));
   t.diagnostic(`Selection membership reads for ${items.length} marked rows: ${reads}`);
   assert.ok(reads <= items.length * 20, `selection membership work must stay linear; got ${reads}`);
-  assert.equal(app.document.querySelectorAll('.pane.active tr.selected').length, items.length);
+  assert.equal(app.document.querySelectorAll('.pane.active [data-file-row].selected').length, items.length);
 });

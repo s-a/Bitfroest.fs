@@ -18,8 +18,8 @@ function fixture() {
 }
 for (const command of ['delete-permanently', 'rename']) test(`${command} opens for an unread folder before preparing its selected subtree`, t => {
   const app = createApp(t, fixture());
-  app.click(app.document.querySelector('[data-pane="1"] tr[data-id="C:/right/folder"] [data-filename]')); app.key('Enter');
-  app.click(app.document.querySelector('[data-pane="0"] tr[data-id="C:/left/folder"] [data-filename]')); app.action(command);
+  app.click(app.document.querySelector('[data-pane="1"] [data-file-row][data-id="C:/right/folder"] [data-filename]')); app.key('Enter');
+  app.click(app.document.querySelector('[data-pane="0"] [data-file-row][data-id="C:/left/folder"] [data-filename]')); app.action(command);
   assert.equal(app.document.querySelector('#modal').open, true);
   assert.equal(app.messages.some(message => message.type === 'filesystem-prepare'), false);
   if (command === 'rename') app.document.querySelector('#mask').value = 'chosen';
@@ -37,12 +37,12 @@ for (const reading of ['left', 'right', 'both', 'refresh']) for (const command o
     const app = createApp(t, fixture());
     if (reading === 'refresh') app.action('refresh');
     else for (const side of reading === 'both' ? [0, 1] : [reading === 'left' ? 0 : 1]) {
-      app.click(app.document.querySelector(`[data-pane="${side}"] tr[data-id="C:/${side ? 'right' : 'left'}/folder"] [data-filename]`));
+      app.click(app.document.querySelector(`[data-pane="${side}"] [data-file-row][data-id="C:/${side ? 'right' : 'left'}/folder"] [data-filename]`));
       app.key('Enter');
     }
     const requests = app.messages.filter(message => ['filesystem-navigate', 'filesystem-refresh'].includes(message.type));
     assert.ok(requests.length);
-    app.click(app.document.querySelector(`[data-pane="0"] tr[data-id="C:/left/${command === 'unpack' ? 'archive' : 'file'}"] [data-filename]`));
+    app.click(app.document.querySelector(`[data-pane="0"] [data-file-row][data-id="C:/left/${command === 'unpack' ? 'archive' : 'file'}"] [data-filename]`));
     app.action(command);
     assert.equal(app.document.querySelector('#modal').open, true, 'the operation dialog opens without a directory response');
     if (['mkdir', 'new-file'].includes(command)) app.document.querySelector('#value').value = command === 'mkdir' ? 'created' : 'created.txt';
@@ -61,7 +61,7 @@ for (const reading of ['left', 'right', 'both', 'refresh']) for (const command o
 }
 test('refresh permits keyboard marking and inline rename before its response', t => {
   const app = createApp(t, fixture()); app.action('refresh');
-  app.click(app.document.querySelector('[data-pane="0"] tr[data-id="C:/left/file"] [data-filename]'));
+  app.click(app.document.querySelector('[data-pane="0"] [data-file-row][data-id="C:/left/file"] [data-filename]'));
   app.key(' ');
   assert.ok(app.state().panes[0].spaceMarked?.includes('C:/left/file'));
   app.action('rename-one');
@@ -71,7 +71,7 @@ test('refresh permits keyboard marking and inline rename before its response', t
 });
 test('refresh permits dragging a visible selection to the opposite pane', t => {
   const app = createApp(t, fixture()); app.action('refresh');
-  const source = app.document.querySelector('[data-pane="0"] tr[data-id="C:/left/file"] [data-filename]'); app.click(source);
+  const source = app.document.querySelector('[data-pane="0"] [data-file-row][data-id="C:/left/file"] [data-filename]'); app.click(source);
   const values = new Map(), data = { setData: (key, value) => values.set(key, value), getData: key => values.get(key) || '' };
   const drag = (type, target) => { const event = new app.window.Event(type, { bubbles: true, cancelable: true }); Object.defineProperty(event, 'dataTransfer', { value: data }); target.dispatchEvent(event); };
   drag('dragstart', source); drag('drop', app.document.querySelector('[data-pane="1"] .list'));
@@ -91,17 +91,17 @@ test('paste reads the clipboard and starts its transfer while refresh is pending
 });
 test('packing remains available while the opposite archive view is opening', t => {
   const app = createApp(t, fixture());
-  app.click(app.document.querySelector('[data-pane="1"] tr[data-id="C:/right/archive"] [data-filename]')); app.key('Enter');
+  app.click(app.document.querySelector('[data-pane="1"] [data-file-row][data-id="C:/right/archive"] [data-filename]')); app.key('Enter');
   const opening = app.messages.find(message => message.type === 'zip-open'); assert.ok(opening);
-  app.click(app.document.querySelector('[data-pane="0"] tr[data-id="C:/left/file"] [data-filename]')); app.action('pack');
+  app.click(app.document.querySelector('[data-pane="0"] [data-file-row][data-id="C:/left/file"] [data-filename]')); app.action('pack');
   assert.equal(app.document.querySelector('#modal').open, true); submit(app);
   assert.ok(app.messages.some(message => message.type === 'zip-write'));
 });
 test('an interrupted directory read resumes only after the confirmed copy completes', async t => {
   const app = createApp(t, fixture());
-  app.click(app.document.querySelector('[data-pane="0"] tr[data-id="C:/left/folder"] [data-filename]')); app.key('Enter');
+  app.click(app.document.querySelector('[data-pane="0"] [data-file-row][data-id="C:/left/folder"] [data-filename]')); app.key('Enter');
   const first = app.messages.find(message => message.type === 'filesystem-navigate');
-  app.click(app.document.querySelector('[data-pane="1"] tr[data-id="C:/right/file"] [data-filename]')); app.action('copy');
+  app.click(app.document.querySelector('[data-pane="1"] [data-file-row][data-id="C:/right/file"] [data-filename]')); app.action('copy');
   assert.equal(app.messages.some(message => message.type === 'filesystem-read-cancel'), false, 'opening a dialog does not interrupt a read');
   submit(app); await tick();
   const copy = app.messages.find(message => message.type === 'filesystem-apply'); assert.ok(copy);

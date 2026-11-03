@@ -2,6 +2,22 @@ const assert = require('node:assert/strict');
 const test = require('node:test');
 const settings = require('../media/commander-column-settings');
 
+test('attributes are hidden by default and remain available for explicit configuration', () => {
+  assert.equal(settings.normalizeColumnSets(null)[0].columns.find(column => column.id === 'attributes').visible, false);
+  assert.equal(settings.catalog.find(column => column.id === 'attributes').visible, false);
+  assert.equal(require('../package.json').contributes.configuration.flatMap(group => Object.entries(group.properties)).find(([key]) => key === 'bitfroest.columns.visibility')[1].default['standard.attributes'], false);
+  assert.equal(require('../package.json').contributes.configuration.flatMap(group => Object.entries(group.properties)).find(([key]) => key === 'bitfroest.columns.visible.attributes')[1].default, false);
+  assert.equal(settings.columnSetFromPreferences({ 'visible.attributes': true }).columns.find(column => column.id === 'attributes').visible, true);
+  assert.equal(settings.columnSetsFromTables({ names: { standard: 'Standard' }, fields: { 'standard.attributes': '[=file.attributes]' }, visibility: { 'standard.name': true } })[0].columns[0].visible, false);
+});
+
+test('the standard date column displays hours and minutes while explicit seconds remain available', () => {
+  const file = { date: '02.01.2026 03:04:05' };
+  const column = settings.catalog.find(column => column.id === 'date');
+  assert.equal(settings.evaluateColumnTemplate(file, column.field).text, '02.01.2026 03:04');
+  assert.equal(settings.evaluateColumnTemplate(file, '[=file.writetime.h:m:s]').text, '03:04:05');
+});
+
 test('additional content fields use actual metadata and keep platform restrictions explicit', () => {
   const flags = { archive: false, readonly: true, hidden: false, system: true, compressed: true, encrypted: false, sparse: true, offline: false, directory: false };
   const row = { name: 'example.dll', type: 'binary', attributeFlags: flags, fileVersionString: '2.0 beta', dosName: 'EXAMPL~1.DLL', comment: 'Notes' };
@@ -68,7 +84,7 @@ test('automatic size units are readable while explicit byte and fixed-unit colum
   assert.equal(settings.evaluateColumnTemplate(file, '[=tc.size]').text, '1536');
   assert.equal(settings.evaluateColumnTemplate(file, '[=tc.size.bytes]').text, '1536');
   assert.equal(settings.evaluateColumnTemplate(file, '[=tc.size.kbytes]').text, '1.5');
-  assert.equal(settings.evaluateColumnTemplate({ type: 'folder' }, '[=tc.size.auto]').text, '<DIR>');
+  assert.equal(settings.evaluateColumnTemplate({ type: 'folder' }, '[=tc.size.auto]').text, '');
   assert.equal(settings.normalizeColumnSets([])[0].columns.find(column => column.id === 'size').field, '[=file.size.auto]');
   const manifest = require('../package.json');
   assert.equal(Object.assign({}, ...manifest.contributes.configuration.map(category => category.properties))['bitfroest.columns.sets'].default[0].columns.find(column => column.id === 'size').field, '[=file.size.auto]');
@@ -99,7 +115,7 @@ test('evaluates literal text and file name fields with folder and dotfile handli
 test('formats byte units deterministically and preserves raw byte precision', () => {
   assert.equal(settings.evaluateColumnTemplate(file,'[=tc.size] / [=tc.size.kbytes] / [=tc.size.mbytes]').text,'1536 / 1.5 / 0.00146484375');
   assert.equal(settings.evaluateColumnTemplate({size:1073741824},'[=tc.size.gbytes]').text,'1');
-  assert.equal(settings.evaluateColumnTemplate({type:'folder'},'[=tc.size]').text,'<DIR>');
+  assert.equal(settings.evaluateColumnTemplate({type:'folder'},'[=tc.size]').text,'');
 });
 test('formats write dates and times without guessing unavailable creation or access data', () => {
   const result = settings.evaluateColumnTemplate(file,'[=tc.writedate.Y-M-D] [=tc.writetime.h:m:s]');
@@ -127,7 +143,7 @@ test('time-only metadata is usable and impossible calendar dates remain missing'
 });
 test('metadata aliases and primitive input failures are handled without fabrication', () => {
   assert.equal(settings.evaluateColumnTemplate({name:'a.',attr:'rh',path:'/src',fullpath:'/src/a.'},'[=tc.name]|[=tc.ext]|[=tc.attributes]|[=tc.path]|[=tc.fullpath]').text,'a.||rh|/src|/src/a.');
-  assert.equal(settings.evaluateColumnTemplate({name:'.a.json',isDirectory:true},'[=tc.name]|[=tc.ext]|[=tc.size]').text,'.a.json||<DIR>');
+  assert.equal(settings.evaluateColumnTemplate({name:'.a.json',isDirectory:true},'[=tc.name]|[=tc.ext]|[=tc.size]').text,'.a.json||');
   assert.deepEqual(settings.evaluateColumnTemplate(null,'[=tc.fullname]').missingFields,['tc.fullname']);
   assert.equal(settings.evaluateColumnTemplate(null,null).text,'');
   assert.equal(settings.evaluateColumnTemplate({date:new Date(2026,0,2,3,4,5)},'[=tc.writedate] [=tc.writetime]').text,'02.01.2026 03:04:05');

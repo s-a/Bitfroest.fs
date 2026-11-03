@@ -58,7 +58,7 @@ test('real F5 copies binary bytes through the surface, host bridge and filesyste
   await commit();
   assert.deepEqual(await fs.readFile(`${right}/binary.bin`), await fs.readFile(`${left}/binary.bin`));
   assert.equal(app.document.querySelector('#panes').inert, false);
-  assert.ok(app.document.querySelectorAll('.pane')[1].querySelector('tr[data-id]'));
+  assert.ok(app.document.querySelectorAll('.pane')[1].querySelector('[data-file-row][data-id]'));
 });
 test('real F7, inline rename, F4 and F8 roundtrip through refreshed snapshots', async t => {
   const { app, left, submit, commit } = await fixture(t);

@@ -120,7 +120,7 @@ test('context popup supports keyboard dismissal, background paste, columns and n
   context(app, list);
   assert.deepEqual([...menu(app).querySelectorAll('[data-context-action]')].map(item => item.dataset.contextAction), ['clipboard-paste']);
   assert.equal(menu(app).querySelector('button').disabled, true);
-  context(app, list.querySelector('th'));
+  context(app, list.querySelector('.ag-header-cell'));
   assert.ok(menu(app).querySelector('[data-context-action="configure-columns"]'));
   const input = app.document.querySelector('.path-input');
   assert.equal(context(app, input).defaultPrevented, false);

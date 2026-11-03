@@ -132,7 +132,7 @@ test('filename and metadata text colors transition for 200ms and respect reduced
   style.textContent = css;
   app.document.head.append(style);
   const row = app.row('test.js');
-  for (const element of [row.querySelector('[data-filename]'), row.querySelector('td:last-child')]) {
+  for (const element of [row.querySelector('[data-filename]'), row.querySelector('[data-cell]:last-child')]) {
     assert.equal(app.window.getComputedStyle(element).transition, 'color 200ms ease');
   }
   const reduced = [...style.sheet.cssRules].find(rule => rule.conditionText === '(prefers-reduced-motion: reduce)' && [...rule.cssRules].some(child => child.style?.transition === 'none' && child.selectorText.includes('[data-filename]')));

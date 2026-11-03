@@ -60,38 +60,26 @@ test('a pending read belongs to its tab and does not mark a newly opened tab as 
   assert.equal(app.document.querySelector('#status-activity').textContent.includes('Verzeichnis einlesen'), false);
 });
 
-test('directory return restores resized columns before revalidation and keeps them through metadata updates', t => {
+test('directory return creates a fresh grid without restoring live column widths', t => {
   const app = createApp(t, fixture());
-  const section = app.document.querySelector('[data-pane="0"]');
-  const handle = section.querySelector('[data-resize="name"]');
-  const original = Number(section.querySelector('[data-col="name"]').width);
-  const pointer = (target, type, values) => { const event = new app.window.Event(type, { bubbles: true, cancelable: true }); for (const [key, value] of Object.entries(values)) Object.defineProperty(event, key, { value }); target.dispatchEvent(event); };
-  pointer(handle, 'pointerdown', { button: 0, clientX: 100, pointerId: 1 });
-  pointer(app.document, 'pointermove', { clientX: 170, pointerId: 1 });
-  pointer(app.document, 'pointerup', { pointerId: 1 });
-  const resized = original + 70;
+  const original = app.grid(0), configured = app.state().panes[0].columns.find(column => column.key === 'name').width;
+  original.setColumnWidths([{ key: 'name', newWidth: 390 }], true, 'uiColumnResized');
   enter(app);
-  assert.notEqual(Number(section.querySelector('[data-col="name"]').width), resized);
+  assert.equal(original.isDestroyed(), true);
   app.key('Backspace');
-  assert.equal(Number(section.querySelector('[data-col="name"]').width), resized);
-  const automatic = Number(section.querySelector('[data-col="type"]').width);
-  const opposite = app.document.querySelector('[data-pane="1"]').innerHTML;
+  assert.notEqual(app.grid(0), original);
+  assert.equal(app.state().panes[0].columns.find(column => column.key === 'name').width, configured);
   const request = app.messages.filter(message => message.type === 'filesystem-navigate').at(-1);
   send(app, { type: 'filesystem-directory', navigationRequestId: request.navigationRequestId, path: '/root', rows: [{ id: 'keep', name: 'keep.txt', type: 'text', size: 123456 }, { id: 'long', name: 'another.verylongextensionforautosizing', type: 'text' }] });
-  assert.equal(Number(section.querySelector('[data-col="name"]').width), resized);
-  assert.ok(Number(section.querySelector('[data-col="type"]').width) > automatic);
-  assert.equal(app.document.querySelector('[data-pane="1"]').innerHTML, opposite);
+  assert.ok(app.grid(0).getRowNode('long'));
 });
 
-test('panels showing the same directory retain independent cached column widths', t => {
+test('panels showing the same directory keep independent live column widths', t => {
   const saved = fixture(); saved.panes[1].tabs = ['/root'];
-  const app = createApp(t, saved), left = app.document.querySelector('[data-pane="0"]'), right = app.document.querySelector('[data-pane="1"]');
-  const original = Number(left.querySelector('[data-col="name"]').width);
-  const handle = left.querySelector('[data-resize="name"]');
-  for (const [type, clientX] of [['pointerdown', 100], ['pointermove', 170], ['pointerup', 170]]) handle.dispatchEvent(new app.window.MouseEvent(type, { bubbles: true, button: 0, clientX }));
-  enter(app); app.key('Backspace');
-  assert.equal(Number(left.querySelector('[data-col="name"]').width), original + 70);
-  assert.equal(Number(right.querySelector('[data-col="name"]').width), original);
+  const app = createApp(t, saved), other = app.grid(1).getColumn('name').getActualWidth();
+  app.grid(0).setColumnWidths([{ key: 'name', newWidth: 390 }], true, 'uiColumnResized');
+  assert.equal(app.grid(0).getColumn('name').getActualWidth(), 390);
+  assert.equal(app.grid(1).getColumn('name').getActualWidth(), other);
 });
 
 test('cached rows paint immediately without transitions and restore transitions for subsequent live updates', t => {
@@ -102,7 +90,7 @@ test('cached rows paint immediately without transitions and restore transitions 
   app.window.HTMLElement.prototype.getBoundingClientRect = function () {
     if (this.matches('.pane')) {
       const cell = this.querySelector('[data-filename]');
-      if (cell) paints.push({ side: this.dataset.pane, transition: app.window.getComputedStyle(cell).transition, animation: app.window.getComputedStyle(cell).animation, opposite: app.window.getComputedStyle(app.document.querySelector('[data-pane="1"] [data-parent] td')).transition });
+      if (cell) paints.push({ side: this.dataset.pane, transition: app.window.getComputedStyle(cell).transition, animation: app.window.getComputedStyle(cell).animation, opposite: app.window.getComputedStyle(app.document.querySelector('[data-pane="1"] [data-parent] [data-cell]')).transition });
     }
     return original.call(this);
   };
@@ -184,11 +172,11 @@ test('manual refresh activates its button immediately', t => {
   assert.equal(app.document.querySelector('.pane.active [data-refresh]').getAttribute('aria-busy'), 'true');
 });
 
-test('cached return restores the directory scroll position immediately', t => {
+test('cached return creates a fresh viewport without restoring directory scroll', t => {
   const app = createApp(t, fixture()); app.document.querySelector('.pane.active .list').scrollTop = 77;
   enter(app); app.document.querySelector('.pane.active .list').scrollTop = 12;
   app.key('Backspace');
-  assert.equal(app.document.querySelector('.pane.active .list').scrollTop, 77);
+  assert.equal(app.grid().getVerticalPixelRange().top, 0);
 });
 
 test('a late first-visit response completes its own tab without stealing the other panel', t => {

@@ -172,7 +172,7 @@ test('view menu sorts the active list, swaps paths and restores the menu after L
 
 test('sorting from the menu works when its column is hidden', t => {
   const app = createApp(t);
-  app.document.querySelector('.pane.active [data-sort="size"]').closest('th').remove();
+  app.document.querySelector('.pane.active [data-sort="size"]').closest('.ag-header-cell').remove();
   choose(app, 'sort:size');
   assert.equal(app.state().panes[0].sort, 'size');
 });

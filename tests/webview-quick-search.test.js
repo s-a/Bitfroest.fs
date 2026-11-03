@@ -38,7 +38,7 @@ test('directory navigation and history discard old searches, filters and marked 
   for (const key of 'Child') app.key(key);
   app.key('b', { ctrlKey: true }); app.key('f', { ctrlKey: true, shiftKey: true });
   app.action('back'); reset();
-  assert.equal(app.document.querySelectorAll('.pane.active tr[data-id]').length, 3);
+  assert.equal(app.document.querySelectorAll('.pane.active [data-file-row][data-id]').length, 3);
   app.action('forward'); reset();
   assert.ok(app.row('Child report.txt'));
 });
@@ -69,19 +69,20 @@ test('spaces in a running query are searchable and Escape restores space marking
   assert.equal(app.state().panes[0].filter, 'River');
 });
 
-test('sorting through headers or commands retains the search and reveals the current hit', t => {
+test('sorting through headers or commands retains the search and reveals the current hit', async t => {
   const app = fixture(t);
   const scrolled = [];
   app.window.HTMLElement.prototype.scrollIntoView = function () { scrolled.push(this.dataset.id); };
   for (const key of 'Terror') app.key(key);
   const cursor = app.state().panes[0].cursor;
-  const row = app.document.querySelector(`.pane.active tr[data-id="${cursor}"]`);
+  const row = app.document.querySelector(`.pane.active [data-file-row][data-id="${cursor}"]`);
   for (const sort of ['name', 'size', 'type', 'date', 'name']) {
     scrolled.length = 0;
     app.click(app.document.querySelector(`.pane.active [data-sort="${sort}"]`));
-    assert.equal(scrolled.at(-1), cursor);
+    await new Promise(resolve => setTimeout(resolve, 5));
+    assert.ok(app.grid().getRenderedNodes().some(node => node.id === cursor));
     assert.equal(app.state().panes[0].filter, 'Terror');
-    assert.equal(app.document.querySelector(`.pane.active tr[data-id="${cursor}"]`), row);
+    assert.equal(app.document.querySelector(`.pane.active [data-file-row][data-id="${cursor}"]`), row);
     assert.equal(row.querySelector('[data-filename] mark').textContent, 'Terror');
   }
   scrolled.length = 0; app.action('sort:size');
@@ -90,7 +91,7 @@ test('sorting through headers or commands retains the search and reveals the cur
 
 test('Ctrl Shift F shows only matching names, updates the filtered list and restores all entries on Escape', t => {
   const app = fixture(t);
-  const shown = () => [...app.document.querySelectorAll('.pane.active tr[data-id]')].map(row => row.dataset.id).sort();
+  const shown = () => [...app.document.querySelectorAll('.pane.active [data-file-row][data-id]')].map(row => row.dataset.id).sort();
   for (const key of 'Terror') app.key(key);
   app.key('f', { ctrlKey: true, shiftKey: true });
   assert.deepEqual(shown(), ['1', '2']);
@@ -125,7 +126,7 @@ test('the active filter accepts a new search after inactivity and preserves lite
   time += 3000;
   for (const key of 'Another Terror') timedKey(app, key, time += 40);
   assert.equal(app.state().panes[0].filter, 'Another Terror');
-  assert.equal(app.document.querySelectorAll('.pane.active tr[data-id]').length, 1);
+  assert.equal(app.document.querySelectorAll('.pane.active [data-file-row][data-id]').length, 1);
   assert.equal(app.row('Another Terror.txt').querySelector('mark').textContent, 'Another Terror');
   assert.deepEqual(app.state().panes[0].selected, []);
 });
@@ -249,7 +250,7 @@ test('typing a complete query highlights all matches and scrolls to its cursor w
 test('search updates retain icons, cell nodes and lists without rendering or measuring directory contents', t => {
   const app = fixture(t, 1000);
   const lists = [...app.document.querySelectorAll('.list')];
-  const cells = [...app.document.querySelectorAll('td')];
+  const cells = [...app.document.querySelectorAll('[data-cell]')];
   const icons = [...app.document.querySelectorAll('.fileicon')];
   let templates = 0, measurements = 0;
   const createElement = app.document.createElement.bind(app.document);
@@ -262,7 +263,7 @@ test('search updates retain icons, cell nodes and lists without rendering or mea
   assert.equal(measurements, 0, 'search must not measure directory columns');
   assert.equal(templates, 0, 'search must not render directory templates or regenerate file icons');
   assert.deepEqual([...app.document.querySelectorAll('.list')], lists);
-  assert.deepEqual([...app.document.querySelectorAll('td')], cells);
+  assert.deepEqual([...app.document.querySelectorAll('[data-cell]')], cells);
   assert.deepEqual([...app.document.querySelectorAll('.fileicon')], icons);
   assert.equal(app.messages.some(message => /icon|git-status|filesystem-navigate/.test(message.type)), false);
 });

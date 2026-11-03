@@ -8,7 +8,7 @@ function fixture() {
 function select(app,name){app.click(app.row(name).querySelector('[data-filename]'));}
 for (const readingSide of [0, 1]) test(`directory reads on side ${readingSide} leave the opposite pane usable`, t => {
  const app = createApp(t, fixture());
- const row = side => app.document.querySelector(`[data-pane="${side}"] tr[data-id="${side ? 'incoming' : 'docs'}"] [data-filename]`);
+ const row = side => app.document.querySelector(`[data-pane="${side}"] [data-file-row][data-id="${side ? 'incoming' : 'docs'}"] [data-filename]`);
  app.click(row(readingSide)); app.key('Enter');
  const first = app.messages.find(message => message.type === 'filesystem-navigate'); assert.ok(first);
  app.click(row(1 - readingSide));
@@ -33,8 +33,8 @@ for (const readingSide of [0, 1]) test(`viewing a file opposite a pending read o
  const initial = fixture(), other = 1 - readingSide, directory = initial.panes[other].tabs[0];
  initial.folders[directory].push({ id: 'view-file', name: 'view.txt', type: 'text', size: 3, fsSource: `${directory}/view.txt` });
  const app = createApp(t, initial);
- app.click(app.document.querySelector(`[data-pane="${readingSide}"] tr[data-id="${readingSide ? 'incoming' : 'docs'}"] [data-filename]`)); app.key('Enter');
- app.click(app.document.querySelector(`[data-pane="${other}"] tr[data-id="view-file"] [data-filename]`));
+ app.click(app.document.querySelector(`[data-pane="${readingSide}"] [data-file-row][data-id="${readingSide ? 'incoming' : 'docs'}"] [data-filename]`)); app.key('Enter');
+ app.click(app.document.querySelector(`[data-pane="${other}"] [data-file-row][data-id="view-file"] [data-filename]`));
  app.action('open-terminal');
  assert.equal(app.messages.find(message => message.type === 'open-terminal')?.path, directory);
  app.action('view');
@@ -135,7 +135,7 @@ test('opening a folder in the opposite new tab waits for loading and leaves the 
 test('dropping on an unloaded destination retains the source selection and move mode after loading',async t=>{
  const app=createApp(t,fixture()), store=new Map(),data={setData:(key,value)=>store.set(key,value),getData:key=>store.get(key)||''};select(app,'a.txt');
  const drag=(type,target)=>{const event=new app.window.Event(type,{bubbles:true,cancelable:true});Object.defineProperty(event,'dataTransfer',{value:data});Object.defineProperty(event,'shiftKey',{value:true});target.dispatchEvent(event);};
- drag('dragstart',app.row('a.txt').querySelector('[data-filename]'));drag('drop',app.document.querySelector('[data-pane="1"] tr[data-id="incoming"]'));
+ drag('dragstart',app.row('a.txt').querySelector('[data-filename]'));drag('drop',app.document.querySelector('[data-pane="1"] [data-file-row][data-id="incoming"]'));
  assert.equal(app.document.querySelector('#modal').open,true);assert.equal(app.messages.some(m=>m.type==='filesystem-prepare'),false);assert.match(app.document.querySelector('#modal-title').textContent,/Verschieben/);assert.equal(app.document.querySelector('#value').value,'C:\\temp\\incoming');assert.equal(app.document.querySelector('[data-transfer-source]').textContent,'C:\\tmp');submit(app);await tick();const request=app.messages.find(m=>m.type==='filesystem-prepare');assert.deepEqual([...request.paths],['C:/temp/incoming']);assert.equal(request.recursive,false);
  result(app);await tick();assert.equal(app.state().panes[0].selected[0],'a');
 });

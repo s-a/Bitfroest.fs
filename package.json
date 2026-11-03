@@ -1962,7 +1962,7 @@
               "standard.name": "[=file.name]",
               "standard.type": "[=file.ext]",
               "standard.size": "[=file.size.auto]",
-              "standard.date": "[=file.writedate]",
+              "standard.date": "[=file.writedate] [=file.writetime.h:m]",
               "standard.attributes": "[=file.attributes]"
             },
             "order": 12,
@@ -2046,7 +2046,7 @@
               "standard.type": true,
               "standard.size": true,
               "standard.date": true,
-              "standard.attributes": true
+              "standard.attributes": false
             },
             "order": 17,
             "tags": [
@@ -2295,7 +2295,7 @@
           },
           "bitfroest.columns.visible.attributes": {
             "type": "boolean",
-            "default": true,
+            "default": false,
             "scope": "window",
             "order": 14,
             "tags": [
@@ -3822,6 +3822,7 @@
     "ui"
   ],
   "dependencies": {
-    "@zip.js/zip.js": "2.24.0"
+    "@zip.js/zip.js": "2.24.0",
+    "ag-grid-community": "36.2.0"
   }
 }

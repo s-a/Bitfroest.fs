@@ -117,7 +117,7 @@ test('history icons switch from outline to fill on hover and focus, with disable
     .at(-1)?.style.getPropertyValue('padding-left');
   assert.equal(padding(header.querySelector('[data-sort]')), padding(pane(app).querySelector('.parent-row .filename')));
   const rule = selector => rules.find(rule => rule.selectorText === selector)?.style;
-  assert.equal(rule('.file-table th .history-controls button').getPropertyValue('max-width'), 'calc(var(--icon-base-size) / 2)');
+  assert.equal(rule('.file-table .ag-header-cell .history-controls button').getPropertyValue('max-width'), 'calc(var(--icon-base-size) / 2)');
   assert.equal(rule('.history-controls svg').getPropertyValue('max-width'), 'calc(var(--icon-base-size) / 2)');
   assert.equal(rule('.history-controls svg').getPropertyValue('max-height'), 'calc(var(--icon-base-size) / 2)');
 });

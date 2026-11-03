@@ -395,14 +395,14 @@ test('pending native transfers retain confirmed rows, sizes and source selection
     state.active = side; state.folders[targetPath] = [];
     for (const row of state.folders[sourcePath]) row.fsSource = `${sourcePath}/${row.name}`;
     const original = structuredClone(state), app = createApp(t, state);
-    const names = section => [...section.querySelectorAll('tbody tr[data-id] [data-filename]')].map(row => row.closest('td').title);
+    const names = section => [...section.querySelectorAll('[data-file-row][data-id] [data-filename]')].map(row => row.closest('[data-cell]').title);
     const section = index => app.document.querySelector(`[data-pane="${index}"]`);
     choose(app, 'same.txt'); choose(app, 'other.txt', { ctrlKey: true }); app.action(mode); submit(app); await tick();
     const request = app.messages.find(message => message.type === 'filesystem-apply'); assert.ok(request);
     const send = data => app.window.dispatchEvent(new app.window.MessageEvent('message', { data }));
     send({ type: 'filesystem-progress', operationId: request.operationId, progress: { completedBytes: 1, totalBytes: 12 } });
     assert.deepEqual(names(section(side)), ['other.txt', 'same.txt']); assert.deepEqual(names(section(1 - side)), []);
-    assert.equal(section(side).querySelectorAll('tr.selected').length, 2);
+    assert.equal(section(side).querySelectorAll('[data-file-row].selected').length, 2);
     assert.equal(section(1 - side).querySelector('.pane-status').textContent.includes('0 B'), true);
     assert.equal(app.document.querySelector('#panes').inert, false); assert.equal(app.document.querySelector('#functionbar').inert, true);
     app.document.body.classList.toggle('vscode-high-contrast'); await tick();
@@ -427,7 +427,7 @@ test('pending native overwrite retains the confirmed target size and filename', 
   const app = createApp(t, state); choose(app, 'same.txt'); app.action('copy'); submit(app); await tick();
   app.click(app.document.querySelector('[data-conflict-action="overwrite"]')); await tick();
   const request = app.messages.find(message => message.type === 'filesystem-apply'); assert.ok(request);
-  const target = app.document.querySelector('[data-pane="1"] tr[data-id="c"]'); assert.ok(target);
+  const target = app.document.querySelector('[data-pane="1"] [data-file-row][data-id="c"]'); assert.ok(target);
   assert.equal(target.querySelector('[data-cell="size"]').textContent, '900 B');
   assert.equal(app.state().folders['/right'][0].content, 'old');
   assert.equal(request.state.folders['/right'].find(row => row.name === 'same.txt').size, 3);

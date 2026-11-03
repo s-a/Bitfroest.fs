@@ -20,10 +20,9 @@ test('column captions retain complete names and independent sort indicators in b
     const button = header.querySelector('[data-sort]');
     const label = button.querySelector('.column-caption');
     assert.ok(label);
-    assert.equal(button.title, label.textContent);
-    assert.equal(button.getAttribute('aria-label'), label.textContent);
+    assert.equal(header.getAttribute('role'), 'columnheader');
+    assert.equal(label.textContent, 'Name');
     assert.equal(header.getAttribute('aria-sort'), 'ascending');
-    assert.equal(button.querySelector('.column-sort').getAttribute('aria-hidden'), 'true');
     app.click(button);
     assert.equal(pane.querySelector('[data-column="name"]').getAttribute('aria-sort'), 'descending');
     app.click(pane.querySelector('[data-sort="size"]'));
@@ -35,27 +34,30 @@ test('column captions retain complete names and independent sort indicators in b
 
 test('column heads share the menu font and keep captions on one line', t => {
   const app = styledApp(t);
-  const header = app.document.querySelector('th');
+  const header = app.document.querySelector('.ag-header-cell');
   const computed = element => app.window.getComputedStyle(element);
   assert.equal(computed(header).borderRightWidth, '0px');
-  assert.equal(app.rule('.file-table th button').height, 'var(--icon-row-size)');
-  assert.equal(app.rule('.file-table th').fontSize, app.rule('.main-menu').fontSize);
+  assert.equal(app.rule('.file-table .ag-header-cell button').height, 'var(--icon-row-size)');
+  assert.equal(app.rule('.file-table .ag-header-cell').fontSize, app.rule('.main-menu').fontSize);
   const label = header.querySelector('.column-caption');
   assert.ok(label);
   assert.equal(computed(label).whiteSpace, 'nowrap');
   assert.equal(computed(label).overflowWrap, 'normal');
   assert.equal(computed(label).textOverflow, 'ellipsis');
-  const hover = app.rule('.file-table th button:hover');
+  const hover = app.rule('.file-table .ag-header-cell button:hover');
   assert.equal(hover?.background, 'transparent');
   assert.equal(hover.textDecoration, 'underline');
-  assert.equal(app.rule('.column-resize').width, '7px');
-  assert.equal(app.rule('.column-resize::after').width, '1px');
+  assert.equal(app.rule('.ag-header-cell-resize').width, '7px');
+  assert.equal(app.rule('.ag-header-cell-resize').right, '0px');
+  assert.equal(app.rule('.ag-header-cell-resize::after').width, '1px');
   assert.equal(computed(app.row('README.md').querySelector('[data-filename]')).textOverflow, 'ellipsis');
 });
 
 test('file scrollbars retain native scrolling and use theme slider states', t => {
   const app = styledApp(t);
-  assert.equal(app.window.getComputedStyle(app.document.querySelector('.list')).overflow, 'auto');
+  assert.equal(app.rule('.list:has([data-file-grid])').overflow, 'hidden');
+  assert.ok(app.document.querySelector('.ag-body-horizontal-scroll-viewport'));
+  assert.equal(app.rule('[data-file-grid]').getPropertyValue('--ag-wrapper-border-radius'), '0');
   assert.equal(app.rule('.list::-webkit-scrollbar')?.width, '12px');
   assert.match(app.rule('.list::-webkit-scrollbar-thumb').backgroundColor, /--vscode-scrollbarSlider-background/);
   assert.match(app.rule('.list::-webkit-scrollbar-thumb:hover').backgroundColor, /--vscode-scrollbarSlider-hoverBackground/);
@@ -63,5 +65,11 @@ test('file scrollbars retain native scrolling and use theme slider states', t =>
   assert.equal(app.rule('.column-sort').flexShrink, '0');
   assert.equal(app.rule('.column-sort').getPropertyValue('--icon-size'), '');
   assert.equal(app.rule('.column-sort').alignSelf, 'center');
-  assert.equal(app.rule('.file-table th button:focus-visible').outlineStyle, 'solid');
+  assert.equal(app.rule('.file-table .ag-header-cell button:focus-visible').outlineStyle, 'solid');
+});
+
+test('cell renderers leave intrinsic width available for native content autosizing', t => {
+  const app = styledApp(t);
+  assert.equal(app.rule('.file-cell').width, '');
+  assert.equal(app.rule('[data-file-grid] .ag-cell-wrapper, [data-file-grid] .ag-cell-value')?.width || '', '');
 });

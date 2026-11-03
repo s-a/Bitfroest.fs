@@ -45,6 +45,8 @@ Shortcuts apply in the file manager view. Text fields and ordinary code editors 
 
 Search for `Bitfroest` in the Visual Studio Code Settings editor. Options include file operations, columns, favorites, colors, Git status, archive behavior and interface language. Tab layouts can be stored per workspace or shared across workspaces.
 
+File-list columns support dragging, resizing and content-based autosizing. The standard view hides the attributes column; it can be enabled in the column settings. Directory size cells stay empty until a calculated size is available. The standard date column displays time to the minute. The lists use the editor font and existing icon and row sizes.
+
 The copy and move dialog includes **Compare file contents after copying**, disabled by default. The choice is saved as `bitfroest.files.verifyAfterCopy` for subsequent operations. File identity, size and safety checks remain enabled.
 
 ## Platform support

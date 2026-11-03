@@ -11,7 +11,7 @@
     { key: 'type', label: 'Ext.', width: 88, minWidth: 48, maxWidth: 400 },
     { key: 'size', label: 'Größe', width: 96, minWidth: 48, maxWidth: 400 },
     { key: 'date', label: 'Datum', width: 154, minWidth: 80, maxWidth: 600 },
-    { key: 'attributes', label: 'Attr.', width: 72, minWidth: 48, maxWidth: 400 }
+    { key: 'attributes', label: 'Attr.', width: 72, minWidth: 48, maxWidth: 400, visible: false }
   ];
   const byKey = new Map(definitions.map(column => [column.key, column]));
   const collator = new Intl.Collator('de', { numeric: true, sensitivity: 'base' });
@@ -38,7 +38,7 @@
       const definition = byKey.get(key);
       if (!definition || seen.has(key)) continue;
       const width = numericWidth(saved?.width);
-      result.push({ ...definition, width: Number.isFinite(width) ? clamp(width, definition) : definition.width });
+      result.push({ ...definition, ...(typeof saved?.visible === 'boolean' ? { visible: saved.visible } : {}), width: Number.isFinite(width) ? clamp(width, definition) : definition.width });
       seen.add(key);
     }
     for (const definition of definitions) if (!seen.has(definition.key)) result.push({ ...definition });
@@ -51,24 +51,6 @@
 
   function numericWidth(value) {
     return typeof value === 'number' || (typeof value === 'string' && value.trim()) ? Number(value) : NaN;
-  }
-
-  function moveColumn(columns, key, target) {
-    const result = normalize(columns);
-    const sourceIndex = result.findIndex(column => column.key === key);
-    const targetIndex = typeof target === 'number' ? Math.trunc(target) : result.findIndex(column => column.key === target);
-    if (sourceIndex < 0 || !Number.isFinite(targetIndex) || targetIndex < 0) return result;
-    const [column] = result.splice(sourceIndex, 1);
-    result.splice(Math.max(0, Math.min(result.length, targetIndex)), 0, column);
-    return result;
-  }
-
-  function resizeColumn(columns, key, width) {
-    const result = normalize(columns);
-    const column = result.find(item => item.key === key);
-    const numeric = numericWidth(width);
-    if (column && Number.isFinite(numeric)) column.width = clamp(numeric, column);
-    return result;
   }
 
   function isFolder(file) {
@@ -101,8 +83,8 @@
     switch (key) {
       case 'name': return parts.name;
       case 'type': return parts.extension;
-      case 'size': return isFolder(file) ? Number.isFinite(file.folderSize) ? formatSize(file.folderSize) : '<DIR>' : formatSize(file?.size);
-      case 'date': return String(file?.date ?? '');
+      case 'size': return isFolder(file) ? Number.isFinite(file.folderSize) ? formatSize(file.folderSize) : '' : formatSize(file?.size);
+      case 'date': return String(file?.date ?? '').replace(/(\d{1,2}:\d{2}):\d{2}/, '$1');
       case 'attributes': return attributes(file);
       default: return '';
     }
@@ -162,17 +144,5 @@
       .map(item => item.file);
   }
 
-  function autoSize(columns, key, items, measure) {
-    const result = normalize(columns);
-    const column = result.find(item => item.key === key);
-    if (!column || typeof measure !== 'function') return result;
-    const padding = key === 'name' ? 32 : 16;
-    const widths = [column.label, ...(Array.isArray(items) ? items : []).map(file => displayValue(file, typeof column.field === 'string' ? column : key))]
-      .map(text => numericWidth(measure(text, key)))
-      .filter(Number.isFinite);
-    if (widths.length) column.width = clamp(Math.ceil(widths.reduce((largest, width) => Math.max(largest, width), 0) + padding), column);
-    return result;
-  }
-
-  return { defaults, normalize, moveColumn, resizeColumn, autoSize, displayValue, splitName, attributes, dateValue, compare, sort };
+  return { defaults, normalize, displayValue, splitName, attributes, dateValue, compare, sort };
 });

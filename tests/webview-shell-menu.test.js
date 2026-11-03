@@ -95,7 +95,7 @@ test('row context freezes IDs and directory while suppressing the competing work
   assert.equal(request.paths, undefined); assert.equal(request.keyboard, false); assert.equal(workbenchMenus, 0);
   app.click(app.row('second.txt').querySelector('[data-cell="size"]'));
   assert.deepEqual(Array.from(request.ids), ['a', 'b'], 'subsequent selection cannot change the captured menu');
-  assert.equal(context(app, app.document.querySelector('thead th')).defaultPrevented, true); assert.equal(workbenchMenus, 0);
+  assert.equal(context(app, app.document.querySelector('.ag-header .ag-header-cell')).defaultPrevented, true); assert.equal(workbenchMenus, 0);
   assert.ok(app.document.querySelector('[data-context-action="configure-columns"]'));
   assert.equal(requests(app).length, 1);
 });

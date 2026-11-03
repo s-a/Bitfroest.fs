@@ -19,16 +19,16 @@
     ['name', 'Name', '[=file.name]', 260, 'left'],
     ['type', 'Ext.', '[=file.ext]', 88, 'left'],
     ['size', 'Größe', '[=file.size.auto]', 96, 'right'],
-    ['date', 'Datum', '[=file.writedate] [=file.writetime]', 154, 'left'],
+    ['date', 'Datum', '[=file.writedate] [=file.writetime.h:m]', 154, 'left'],
     ['attributes', 'Attr.', '[=file.attributes]', 72, 'left'],
     ['fullName', 'Vollständiger Dateiname', '[=file.fullname]', 260, 'left'],
     ['path', 'Pfad', '[=file.path]', 320, 'left'],
     ['fullPath', 'Vollständiger Pfad', '[=file.fullpath]', 400, 'left'],
-    ['writeTime', 'Änderungszeit', '[=file.writetime]', 120, 'left'],
+    ['writeTime', 'Änderungszeit', '[=file.writetime.h:m]', 120, 'left'],
     ['creationDate', 'Erstellungsdatum', '[=file.creationdate]', 154, 'left'],
-    ['creationTime', 'Erstellungszeit', '[=file.creationtime]', 120, 'left'],
+    ['creationTime', 'Erstellungszeit', '[=file.creationtime.h:m]', 120, 'left'],
     ['accessDate', 'Zugriffsdatum', '[=file.accessdate]', 154, 'left'],
-    ['accessTime', 'Zugriffszeit', '[=file.accesstime]', 120, 'left'],
+    ['accessTime', 'Zugriffszeit', '[=file.accesstime.h:m]', 120, 'left'],
     ['version', 'Version', '[=file.versionnr]', 154, 'left'],
     ['versionString', 'Versionsstring', '[=file.versionstring]', 180, 'left'],
     ['comment', 'Kommentar', '[=file.comment]', 320, 'left'],
@@ -44,7 +44,7 @@
     ['directory', 'Verzeichnis', '[=file.directory]', 96, 'left'],
     ['fileType', 'Dateityp', '[=file.file type]', 120, 'left'],
     ['dosName', 'DOS-Name', '[=file.dosname]', 154, 'left']
-  ].map(([id, title, field, width, align], index) => Object.freeze({ id, title, field, width, align, visible: index < 5, position: index + 1 }));
+  ].map(([id, title, field, width, align], index) => Object.freeze({ id, title, field, width, align, visible: index < 4, position: index + 1 }));
 
   function columnSetFromPreferences(preferences = {}, translate = value => value) {
     const columns = catalog.map(column => ({
@@ -120,7 +120,7 @@
         if (Array.isArray(file.fileVersion) && file.fileVersion.length === 4 && file.fileVersion.every(part => Number.isInteger(part) && part >= 0 && part <= 65535)) value = file.fileVersion.join('.');
       }
       else if (field === 'size') {
-        if (file.type === 'folder' || file.isDirectory) value = Number.isFinite(file.folderSize) ? format === 'auto' ? automaticSize(file.folderSize) : String(file.folderSize / (units[format] || 1)) : '<DIR>';
+        if (file.type === 'folder' || file.isDirectory) value = Number.isFinite(file.folderSize) ? format === 'auto' ? automaticSize(file.folderSize) : String(file.folderSize / (units[format] || 1)) : '';
         else if (file.size !== undefined && Number.isFinite(Number(file.size))) value = format === 'auto' ? automaticSize(Number(file.size)) : String(Number(file.size) / (units[format] || 1));
       } else if (field === 'attributes') value = file.attributes ?? file.attr;
       else if (field === 'path' || field === 'fullpath') {
@@ -148,8 +148,8 @@
       {id:'name',title:'Name',field:'[=file.name]',width:260,align:'left',visible:true},
       {id:'type',title:'Ext.',field:'[=file.ext]',width:88,align:'left',visible:true},
       {id:'size',title:'Größe',field:'[=file.size.auto]',width:96,align:'right',visible:true},
-      {id:'date',title:'Datum',field:'[=file.writedate] [=file.writetime]',width:154,align:'left',visible:true},
-      {id:'attributes',title:'Attr.',field:'[=file.attributes]',width:72,align:'left',visible:true}
+      {id:'date',title:'Datum',field:'[=file.writedate] [=file.writetime.h:m]',width:154,align:'left',visible:true},
+      {id:'attributes',title:'Attr.',field:'[=file.attributes]',width:72,align:'left',visible:false}
     ],unsupportedFields:[]}];
   }
   function normalizeColumnSets(input) {
@@ -186,7 +186,7 @@
         id: key.slice(id.length + 1), field: fields[key],
         title: record(tables.titles)[key] ?? key.slice(id.length + 1),
         width: record(tables.widths)[key], align: record(tables.alignments)[key],
-        visible: record(tables.visibility)[key]
+        visible: record(tables.visibility)[key] ?? (key === 'standard.attributes' ? false : undefined)
       }))
     }));
     const result = normalizeColumnSets(sets);

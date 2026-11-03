@@ -46,8 +46,8 @@ test('ordinary file names have no empty marker gutter and parent rows contain on
   const app = styledApp(t);
   assert.equal(app.document.querySelector('.file-table').style.getPropertyValue('--file-marker-width'), '0px');
   assert.equal(app.rule('.filename::before').width, 'var(--file-marker-width, 0px)');
-  assert.equal(app.rule('.file-table th.filename-column button').paddingLeft, app.rule('.parent-row .filename').paddingLeft);
-  assert.match(app.rule('.file-table th.filename-column button').paddingLeft, /var\(--icon-base-size\)/);
+  assert.equal(app.rule('.file-table .ag-header-cell.filename-column button').paddingLeft, app.rule('.parent-row .filename').paddingLeft);
+  assert.match(app.rule('.file-table .ag-header-cell.filename-column button').paddingLeft, /var\(--icon-base-size\)/);
   for (const parent of app.document.querySelectorAll('[data-parent]')) {
     assert.equal(parent.querySelector('.filename').textContent, '…');
     assert.equal(parent.querySelector('[data-icon-reviewed]'), null);

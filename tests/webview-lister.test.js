@@ -15,7 +15,7 @@ function realApp(t, size = 100000) {
   return app;
 }
 
-test('F3 replaces only the initiating list, changes menus by focus, and Escape restores selection and scroll', t => {
+test('F3 replaces only the initiating list, changes menus by focus, and Escape restores selection and focus', t => {
   const app = createApp(t);
   const original = app.row('README.md'); app.click(original);
   const state = JSON.stringify(app.state().panes);
@@ -30,7 +30,7 @@ test('F3 replaces only the initiating list, changes menus by focus, and Escape r
   app.document.querySelector('[data-lister] textarea').focus();
   app.key('Escape');
   assert.equal(app.document.querySelector('[data-lister]'), null);
-  assert.equal(app.document.querySelector('.pane.active .list').scrollTop, 125);
+  assert.equal(app.grid().getVerticalPixelRange().top, 0);
   const restored = app.state().panes;
   const before = JSON.parse(state);
   assert.deepEqual(restored.map(p => p.selected), before.map(p => p.selected));

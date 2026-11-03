@@ -196,7 +196,7 @@ for (const activation of ['click', 'keyboard']) test(`a job popup restores its t
   const app = createApp(t, saved);
   app.document.querySelector('[data-pane="1"] .list').focus(); app.action('new-tab');
   const targetTabIndex = app.state().panes[1].tab, targetTabId = app.state().panes[1].tabStates[targetTabIndex].id;
-  app.click(app.document.querySelector('[data-pane="0"] tbody tr[data-id]'));
+  app.click(app.document.querySelector('[data-pane="0"] [data-file-row][data-id]'));
   app.action('select-all'); app.action('copy'); submit(app);
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(app.document.querySelectorAll('[data-job-row]').length, 1);
@@ -218,7 +218,7 @@ test('a job whose target tab was closed opens a new tab on the original target p
   const app = createApp(t, saved);
   app.document.querySelector('[data-pane="1"] .list').focus(); app.action('new-tab');
   const targetPane = app.state().panes[1], closedTargetTabId = targetPane.tabStates[targetPane.tab].id;
-  app.click(app.document.querySelector('[data-pane="0"] tbody tr[data-id]'));
+  app.click(app.document.querySelector('[data-pane="0"] [data-file-row][data-id]'));
   app.action('select-all'); app.action('copy'); submit(app); await new Promise(resolve => setImmediate(resolve));
   const operationCount = app.messages.filter(message => ['filesystem-apply', 'zip-write'].includes(message.type)).length;
   app.click(app.document.querySelector(`[data-pane="1"] [data-tab="${targetPane.tab}"]`)); app.action('close-tab');

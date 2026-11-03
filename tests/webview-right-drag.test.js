@@ -18,7 +18,7 @@ test('column context remains available after a cancelled right drag without a fu
   pointer(app, 'pointermove', target, { clientX: 500, clientY: 200 });
   pointer(app, 'pointercancel', target);
   const event = new app.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 0 });
-  app.document.querySelector('thead th button').dispatchEvent(event);
+  app.document.querySelector('.ag-header-cell-label').dispatchEvent(event);
   assert.equal(event.defaultPrevented, false);
 });
 function gesture(app, target, extra = {}) {
@@ -52,7 +52,7 @@ test('right pointer drag offers a choice before the normal copy or move confirma
   }
 });
 test('right drag captures folder and inactive-tab destinations without navigating there', t => {
-  for (const selector of ['[data-pane="1"] tr[data-id="folder"]', '[data-pane="1"] [data-tab="1"]']) {
+  for (const selector of ['[data-pane="1"] [data-file-row][data-id="folder"]', '[data-pane="1"] [data-tab="1"]']) {
     const app = createApp(t, fixture()), request = gesture(app, app.document.querySelector(selector)); assert.ok(request);
     reply(app, request, 'copy'); assert.equal(app.document.querySelector('#value').value, '/right/target'); assert.equal(app.state().panes[1].tab, 0);
   }
@@ -67,7 +67,7 @@ test('right-drag cancellation, unsupported links and short right clicks cannot t
 });
 test('changed drag sources and removed targets are rejected after the native menu and before confirmation', t => {
   for (const phase of ['menu', 'confirmation']) for (const change of ['source', 'target']) {
-    const app = createApp(t, fixture()), request = gesture(app, app.document.querySelector('[data-pane="1"] tr[data-id="folder"]')); assert.ok(request);
+    const app = createApp(t, fixture()), request = gesture(app, app.document.querySelector('[data-pane="1"] [data-file-row][data-id="folder"]')); assert.ok(request);
     if (phase === 'confirmation') reply(app, request, 'copy');
     const changed = fixture();
     if (change === 'source') changed.folders['/left'][0].name = 'different.txt';

@@ -152,7 +152,10 @@
   let fileSettings = {};
   try { fileSettings = JSON.parse(decodeURIComponent(document.body.dataset.fileSettings || '%7B%7D')); } catch { fileSettings = {}; }
   window.CommanderIcons.configure(fileSettings.iconSize);
-  const activeRow = id => [...document.querySelectorAll('.pane.active tr[data-id]')].find(row => row.dataset.id === id);
+  const activeRow = id => {
+    fileGrid.ensure(document.querySelector('.pane.active'), id);
+    return [...document.querySelectorAll('.pane.active [data-file-row][data-id]')].find(row => row.dataset.id === id);
+  };
   const tabs = window.CommanderTabs;
   const columns = window.CommanderColumns;
   const columnModel = window.CommanderColumnSettings;
@@ -309,7 +312,7 @@
       const directory = currentPath(state.panes[index]);
       const byId = new Map(files(state.panes[index]).map(file => [file.id, file]));
       let markerWidth = 0;
-      section.querySelectorAll('tr[data-id]').forEach(row => {
+      section.querySelectorAll('[data-file-row][data-id]').forEach(row => {
         const file = byId.get(row.dataset.id);
         const { cut, copied, hidden, width } = fileMarkerState(file, directory, paths);
         markerWidth = Math.max(markerWidth, width);
@@ -516,7 +519,6 @@
   nextId = Math.max(Date.now(), ...Object.values(state.folders).flat().map(item => Number(item.id) + 1).filter(Number.isFinite));
   let confirmedFolders = JSON.stringify(state.folders);
   const directoryCache = window.CommanderDirectoryCache.create();
-  const columnSizing = new WeakMap();
   const directoryListings = new Map();
   const navigationRequests = new Map();
   const navigationByTab = new Map();
@@ -1389,7 +1391,7 @@
         set(table, `--${selection}-selection-text`, safe(front, back));
         set(table, `--${selection}-space-mark-text`, contrast ? '' : safe(variable('--vscode-list-highlightForeground') || variable('--vscode-textLink-foreground') || front, back));
       }
-      for (const row of section.querySelectorAll('tr[data-id]')) {
+      for (const row of section.querySelectorAll('[data-file-row][data-id]')) {
         const file = entries.get(row.dataset.id), name = row.querySelector('[data-filename]');
         if (!file || !name) continue;
         const nativeImage = row.querySelector('img.native-icon');
@@ -1514,7 +1516,7 @@
           }
         }
       };
-      section.querySelectorAll('tr[data-id]').forEach(row => {
+      section.querySelectorAll('[data-file-row][data-id]').forEach(row => {
         const file = byId.get(row.dataset.id);
         if (file) replace(row.querySelector('.git-icon') || row.querySelector('.fileicon'), icon(file, currentPath(p)));
       });
@@ -1538,7 +1540,7 @@
     if (filtered) render(focusList, undefined, false);
     else if (changed) {
       refreshHighlight();
-      document.querySelector('.pane.active .list').querySelectorAll('td[data-cell]').forEach(cell => {
+      document.querySelector('.pane.active .list').querySelectorAll('[data-cell]').forEach(cell => {
         const target = cell.querySelector('[data-filename]') || cell;
         const text = target.textContent;
         const match = cell.dataset.cell === 'type' && query.startsWith('.') ? query.slice(1) : query;
@@ -1581,7 +1583,7 @@
     const originalNameNodes = [...target.childNodes];
     const input = document.createElement('input'); input.className = 'inline-rename'; input.value = typeof proposal === 'string' ? proposal : oldName; input.setAttribute('aria-label', t('Name bearbeiten'));
     input.dataset.vscodeContext = JSON.stringify({ webviewSection: 'textInput', preventDefaultContextMenuItems: false });
-    const row = target.closest('tr'), wasDraggable = row.draggable;
+    const row = target.closest('[data-file-row]'), wasDraggable = row.draggable;
     row.draggable = false;
     const editingEvents = new AbortController();
     target.replaceChildren(input); input.focus(); input.select();
@@ -1674,122 +1676,31 @@
       const text = unavailable?.length ? t('Nicht verfügbar: {field}', { field: unavailable.join(', ') }) : columns.displayValue(file, column.field === undefined ? column.key : column);
       const isName = isFilenameColumn(column);
       const content = isName ? `<span class="filename">${icon(file, currentPath(p))}<span data-filename${file.type === 'link' ? ' class="is-link"' : ''}>${highlight(text, p.filter)}</span>${resultView(p) ? `<span data-result-source class="result-source" title="${escape(displayPath(file.fsSource))}">${escape(displayPath(parent(file.fsSource)))}</span>` : ''}</span>` : highlight(text, column.key === 'type' && p.filter.startsWith('.') ? p.filter.slice(1) : p.filter);
-      return `<td data-cell="${escape(column.key)}" title="${escape(file.name)}" class="column-align-${column.align || 'left'}">${content}</td>`;
+      return content;
   }
-  function sizePaneColumns(section, p, forcedKey) {
-    const table = section.querySelector('.file-table');
-    if (!table) return;
-    const signature = JSON.stringify(p.columns.map(({ key, label, field, visible, align }) => ({ key, label, field, visible, align })));
-    const path = currentPath(p), rows = files(p), source = resultView(p) || rows;
-    const cellStyle = getComputedStyle(table.querySelector('td') || section);
-    const font = cellStyle.font || `${cellStyle.fontSize || '13px'} ${cellStyle.fontFamily || 'sans-serif'}`;
-    const previous = columnSizing.get(p), changed = !previous || previous.path !== path || previous.signature !== signature;
-    const cached = directoryCache.getColumns(path)?.[state.panes.indexOf(p)];
-    const restored = changed && cached?.signature === signature;
-    let manual = changed ? restored ? { ...cached.manual } : {} : previous.manual;
-    if (restored) p.columns = p.columns.map(column => ({ ...column, width: cached.widths[column.key] ?? column.width }));
-    const measure = forcedKey !== undefined || restored && cached.font !== font || !restored && (changed || previous.source !== source || previous.count !== rows.length || previous.font !== font);
-    if (measure) {
-      const context = document.createElement('canvas').getContext('2d');
-      if (context) {
-        const widths = new Map();
-        context.font = font;
-        const grid = window.CommanderIcons.layout(), fileIconSize = grid.size;
-        const byId = new Map(rows.map(file => [file.id, file]));
-        const clipboardPaths = new Set(clipboardSelection?.paths.map(fileIdentity));
-        let markerWidth = 0;
-        for (const row of table.querySelectorAll('tr[data-id]')) {
-          const marked = fileMarkerState(byId.get(row.dataset.id), path, clipboardPaths);
-          markerWidth = Math.max(markerWidth, marked.cut ? fileIconSize : marked.copied ? fileIconSize / 2 : 0);
-        }
-        for (const header of table.querySelectorAll('th[data-column]')) {
-          const key = header.dataset.column;
-          if (forcedKey !== undefined ? key !== forcedKey : manual[key]) continue;
-          const button = header.querySelector('[data-sort]'), headerStyle = getComputedStyle(button);
-          context.font = headerStyle.font || `${headerStyle.fontSize || '12px'} ${headerStyle.fontFamily || 'sans-serif'}`;
-          const inset = header.classList.contains('filename-column') ? fileIconSize + grid.gap + markerWidth + (markerWidth ? grid.gap : 0) : 0;
-          const padding = 10 + (button.querySelector('.column-sort') ? fileIconSize + grid.gap : 0);
-          widths.set(key, context.measureText(button.querySelector('.column-caption').textContent).width + padding + inset);
-        }
-        context.font = font;
-        for (const cell of table.querySelectorAll('tbody td[data-cell]')) {
-          const key = cell.dataset.cell;
-          if (!widths.has(key)) continue;
-          const padding = cell.querySelector('.filename') ? 10 + grid.gap + fileIconSize + markerWidth + (markerWidth ? grid.gap : 0) : 16;
-          widths.set(key, Math.max(widths.get(key), context.measureText(cell.textContent.trim()).width + padding));
-        }
-        for (const [key, width] of widths) p.columns = columns.resizeColumn(p.columns, key, width);
-        if (forcedKey !== undefined) manual = { ...manual, [forcedKey]: true };
-      }
-    }
-    columnSizing.set(p, { path, signature, source, count: rows.length, font, manual });
-    layoutPaneColumns(section, p);
-    if (!directoryCache.get(path) && state.folders[path] && !state.unloadedFolders?.includes(path)) directoryCache.set(path, state.folders[path]);
-    const widths = Object.fromEntries(p.columns.map(column => [column.key, column.width]));
-    if (JSON.stringify(cached) !== JSON.stringify({ signature, widths, manual, font })) cacheColumnWidths(p, { signature, widths, manual, font });
-  }
-  function layoutPaneColumns(section, p) {
-    const table = section.querySelector('.file-table');
-    if (!table) return;
-    const visible = p.columns.filter(column => column.visible !== false);
-    const name = visible.find(isFilenameColumn) || visible.at(-1), available = section.querySelector('.list').clientWidth;
-    const widths = new Map(visible.map(column => [column.key, column.width]));
-    if (name && available > 0) {
-      const manual = columnSizing.get(p)?.manual || {};
-      const minimumWidth = column => column !== name && manual[column.key] ? column.width : column.minWidth;
-      const minimum = visible.reduce((sum, column) => sum + minimumWidth(column), 0);
-      const otherWidth = visible.reduce((sum, column) => sum + (column === name ? 0 : column.width), 0);
-      const otherMinimum = minimum - name.minWidth;
-      const manualName = manual[name.key];
-      const reserved = Math.min(name.width, available - otherMinimum);
-      const factor = otherWidth > otherMinimum ? Math.min(1, (available - reserved - otherMinimum) / (otherWidth - otherMinimum)) : 1;
-      let used = 0;
-      for (const column of visible) {
-        if (column === name) continue;
-        const minWidth = minimumWidth(column);
-        const width = Math.floor(minimum > available ? minWidth * available / minimum : minWidth + (column.width - minWidth) * factor);
-        widths.set(column.key, width); used += width;
-      }
-      widths.set(name.key, manualName && factor === 1 ? Math.min(name.width, available - used) : available - used);
-    }
-    let total = 0;
-    for (const col of table.querySelectorAll('col[data-col]')) {
-      const column = visible.find(column => column.key === col.dataset.col);
-      const width = widths.get(column.key);
-      col.width = width; total += width;
-    }
-    table.style.width = `${total}px`;
-  }
-  const columnResizeObserver = typeof ResizeObserver === 'function' ? new ResizeObserver(entries => {
-    for (const { target } of entries) {
-      const section = target.closest('[data-pane]');
-      if (section?.isConnected) layoutPaneColumns(section, state.panes[Number(section.dataset.pane)]);
-    }
-  }) : null;
-  window.addEventListener('resize', () => document.querySelectorAll('.pane').forEach((section, index) => layoutPaneColumns(section, state.panes[index])));
-  window.addEventListener('pagehide', () => columnResizeObserver?.disconnect(), { once: true });
-  function cacheColumnWidths(p, value) {
-    const path = currentPath(p);
-    directoryCache.setColumns(path, { ...directoryCache.getColumns(path), [state.panes.indexOf(p)]: value });
-  }
-  function rememberColumnWidth(p, key) {
-    const sizing = columnSizing.get(p);
-    if (!sizing || sizing.path !== currentPath(p)) return;
-    sizing.manual[key] = true;
-    cacheColumnWidths(p, { signature: sizing.signature, widths: Object.fromEntries(p.columns.map(column => [column.key, column.width])), manual: sizing.manual, font: sizing.font });
-  }
+  const fileGrid = window.CommanderGrid.create({
+    translate: t, isFilename: isFilenameColumn, history: historyMarkup,
+    value: (file, column) => columns.displayValue(file, column.field === undefined ? column.key : column),
+    compare: (a, b, column, descending) => columns.compare(a, b, column.field === undefined ? column.key : column, descending),
+    cell: renderFileCell, patch: patchView, results: resultView, source: p => resultView(p) || files(p),
+    rowHeight: () => window.CommanderIcons.layout().row,
+    path: currentPath, view: p => p.tabStates[p.tab].id,
+    decorate: () => { refreshSelection(); refreshClipboardMarkers(); refreshFileColors(); },
+    spaceMarks,
+    sorted: (p, key, descending) => { p.sort = key; p.descending = descending; persist(); },
+    columnsChanged: () => persist()
+  });
   function renderPane(p, index) {
     tabs.ensure(p);
     prepareColumns(p);
-    const displayColumns = p.columns.filter(column => column.visible !== false);
-    const list = visible(p), marked = selectedFor(p), selectedIds = new Set(p.selected), spaceIds = new Set(spaceMarks(p));
-    const cell = (file, column) => renderFileCell(file, column, p);
+    const marked = selectedFor(p);
+    const empty = !p.columns.some(column => column.visible !== false) ? t('Keine sichtbaren Spalten') : !(p.searchFilter && p.filter ? search.matches(files(p), p.filter) : files(p)).length ? t('Keine Einträge') : '';
     return ui`<section class="pane ${state.active === index ? 'active' : ''}" data-pane="${index}" data-tab-key="${p.tabStates[p.tab].id}" data-directory="${escape(currentPath(p))}" aria-label="${index === 0 ? t('Linke') : t('Rechte')} Dateiliste">
       <div class="pane-label"><span>${index === 0 ? t('LINKE') : t('RECHTE')} DATEILISTE</span><span>${state.active === index ? t('AKTIV') : t('GEGENSEITE')}</span></div>
       <div class="tabs" data-vscode-context='{"webviewSection":"address","preventDefaultContextMenuItems":true}' role="tablist" aria-label="Ordner-Tabs ${index === 0 ? t('links') : t('rechts')}">${p.tabs.map((path, tab) => ui`<div class="tab-wrap ${p.tab === tab ? 'selected' : ''}" draggable="true" data-tab-drag="${tab}"><button class="tab" role="tab" aria-selected="${p.tab === tab}" data-tab="${tab}" title="${escape(displayArchivePath(path))} · Doppelklick schließt">${window.CommanderIcons.font('folder', { class: 'tab-icon' })}<span data-tab-label>${escape(p.tabStates[tab].searchResult?.label || archiveTabName(path))}</span></button></div>`).join('')}<button class="add-tab" data-new-tab title="Ordner-Tab hinzufügen" aria-label="Ordner-Tab hinzufügen">+</button></div>
       <div class="pathbar" data-vscode-context='{"webviewSection":"address","preventDefaultContextMenuItems":true}'><button data-favorites title="${escape(t('Ortsmenü: Favoriten und Aktionen'))}" aria-label="${escape(t('Ortsmenü: Favoriten und Aktionen'))}" aria-haspopup="menu" aria-expanded="false">${locationMarkup(p)}</button><div class="path"><div class="path-address"><div class="path-breadcrumbs" title="${escape(displayArchivePath(currentPath(p)) + '\n' + t('Rechtsklick: Pfad kopieren'))}">${breadcrumbMarkup(p)}<span data-path-edit></span></div><input class="path-input" data-vscode-context='{"webviewSection":"textInput","preventDefaultContextMenuItems":false}' aria-label="Pfad ${index === 0 ? t('links') : t('rechts')}" value="${escape(displayArchivePath(currentPath(p)))}" spellcheck="false"></div><span data-git-location>${branchMarkup(p)}</span></div><button data-refresh title="Liste aktualisieren" aria-label="Liste aktualisieren">${window.CommanderIcons.font('refresh', { 'data-refresh-icon': '' })}</button></div>
       <div class="pane-jobs" role="region" aria-label="${escape(t('Aufträge'))}" hidden></div>
-      <div class="list" tabindex="0" aria-label="Dateien ${index === 0 ? t('links') : t('rechts')}"><table class="file-table" aria-label="Dateien und Ordner ${index === 0 ? t('links') : t('rechts')}"><colgroup>${displayColumns.map(column => `<col data-col="${escape(column.key)}" width="${column.width}">`).join('')}</colgroup><thead data-vscode-context='{"webviewSection":"columns","preventDefaultContextMenuItems":true}'><tr>${displayColumns.map(column => ui`<th data-column="${escape(column.key)}" class="column-align-${column.align || 'left'} ${isFilenameColumn(column) ? 'filename-column' : ''}" draggable="true" aria-sort="${p.sort === column.key ? p.descending ? 'descending' : 'ascending' : 'none'}"><div class="column-heading">${column.key === 'name' ? historyMarkup(p) : ''}<button data-sort="${escape(column.key)}" title="${escape(t(column.label))}" aria-label="${escape(t(column.label))}"><span class="column-caption">${escape(t(column.label))}</span>${p.sort === column.key ? `${window.CommanderIcons.font(p.descending ? 'arrow-down' : 'arrow-up', { class: 'column-sort' }, p.descending ? ' ↓' : ' ↑')}` : ''}</button></div><span class="column-resize" data-resize="${escape(column.key)}" role="separator" aria-label="Breite ${escape(t(column.label))}" title="Ziehen: Breite ändern · Doppelklick: an Inhalt anpassen"></span></th>`).join('')}</tr></thead><tbody><tr class="parent-row" data-parent aria-label="${escape(t('Übergeordnetes Verzeichnis'))}" title="${escape(t('Übergeordnetes Verzeichnis'))}">${displayColumns.map(column => `<td data-cell="${escape(column.key)}">${column.key === 'name' ? '<span class="filename"><span>..</span></span>' : ''}</td>`).join('')}</tr>${list.map((file, rowIndex) => `<tr data-id="${escape(file.id)}" draggable="${!resultView(p)}" aria-selected="${selectedIds.has(file.id)}" class="${resultView(p)?.groups && rowIndex > 0 && resultView(p).groups[file.fsSource] !== resultView(p).groups[list[rowIndex - 1].fsSource] ? 'search-group-start' : ''} ${selectedIds.has(file.id) ? 'selected' : ''} ${spaceIds.has(file.id) ? 'space-marked' : ''} ${p.cursor === file.id ? 'focused' : ''}">${displayColumns.map(column => cell(file, column)).join('')}</tr>`).join('')}</tbody></table>${!displayColumns.length ? `<div class="empty">${t('Keine sichtbaren Spalten')}</div>` : list.length ? '' : ui(['<div class="empty">Keine Einträge</div>'])}</div>
+      <div class="list" tabindex="0" aria-label="Dateien ${index === 0 ? t('links') : t('rechts')}"><div class="file-table" data-file-grid></div>${empty ? `<div class="empty grid-empty">${empty}</div>` : ''}</div>
       <div class="pane-status"><span><strong>${marked.length ? ui`${marked.length} markiert` : count('file', files(p).filter(f => f.type !== 'folder').length)}</strong>${searchSummary(p)} · ${count('folder', files(p).filter(f => f.type === 'folder').length)}</span><span>${size((marked.length ? marked : files(p)).reduce((sum, f) => sum + displayBytes(f, p), 0))}</span></div></section>`;
   }
   function searchSummary(p) {
@@ -1809,15 +1720,7 @@
       if (currentPath(p) !== parent(path)) return;
       const file = files(p).find(file => join(currentPath(p), file.name) === path);
       if (!file) return;
-      const row = [...section.querySelectorAll('tr[data-id]')].find(row => row.dataset.id === file.id);
-      for (const column of p.columns) {
-        const cell = row && [...row.querySelectorAll('[data-cell]')].find(item => item.dataset.cell === column.key);
-        if (!cell || cell.querySelector('input')) continue;
-        const template = document.createElement('template');
-        template.innerHTML = `<table><tbody><tr>${renderFileCell(file, column, p)}</tr></tbody></table>`;
-        const html = template.content.querySelector('td').innerHTML;
-        if (cell.innerHTML !== html) cell.innerHTML = html;
-      }
+      fileGrid.api(section)?.refreshCells({ rowNodes: [fileGrid.api(section).getRowNode(String(file.id))].filter(Boolean), force: true });
       const marked = selectedFor(p);
       section.querySelector('.pane-status > span:last-child').textContent = size((marked.length ? marked : files(p)).reduce((sum, file) => sum + displayBytes(file, p), 0));
     });
@@ -1839,6 +1742,7 @@
       const context = workbenchContext ? JSON.stringify({ webviewSection: folderContext ? 'folder' : 'files', preventDefaultContextMenuItems: true, fileMenu: true, gitFile, gitHistory, ...frozenContext }) : null;
       const rowContext = workbenchContext ? JSON.stringify({ webviewSection: 'files', preventDefaultContextMenuItems: true, fileMenu: true, gitFile: false, gitHistory: false, ...frozenContext }) : null;
       if (workbenchContext) section.querySelector('.list').dataset.vscodeContext = context;
+      fileGrid.sync(section, p);
       section.querySelectorAll('[data-id]').forEach(row => {
         if (workbenchContext) row.dataset.vscodeContext = row.dataset.id === effective[0] ? context : rowContext;
         row.classList.toggle('selected', selectedIds.has(row.dataset.id));
@@ -1885,6 +1789,7 @@
   function patchView(current, next) {
     if (current.nodeType === 3) { if (current.nodeValue !== next.nodeValue) current.nodeValue = next.nodeValue; return; }
     if (current.nodeType !== 1) return;
+    if (current.hasAttribute('data-file-grid') && next.hasAttribute('data-file-grid')) return;
     if (current.classList.contains('pane-jobs') && next.classList.contains('pane-jobs')) return;
     const changedValue = current.matches('input') && current.getAttribute('value') !== next.getAttribute('value');
     for (const attribute of [...current.attributes]) if (!next.hasAttribute(attribute.name)) current.removeAttribute(attribute.name);
@@ -1946,15 +1851,13 @@
         patchView(document.querySelector(`[data-pane="${index}"]`), template.content.firstElementChild);
       });
     } else $('#panes').innerHTML = state.panes.map(renderPane).join('');
-    refreshFileColors();
-    columnResizeObserver?.disconnect();
+    fileGrid.prune();
     document.querySelectorAll('.pane').forEach((section, index) => {
       if (previousViews && paneDisplayState(state.panes[index], index) === previousViews[index]) return;
       const list = section.querySelector('.list');
       if (!list) return;
-      list.scrollTop = state.panes[index].scrollTop || 0;
-      sizePaneColumns(section, state.panes[index]);
-      columnResizeObserver?.observe(list);
+      const p = state.panes[index];
+      fileGrid.mount(section, p, visible(p));
     });
     lister.mount();
     if (focusList) { if (lister.has(state.active)) lister.focus(); else document.querySelector('.pane.active .list')?.focus({ preventScroll: true }); }
@@ -3258,8 +3161,7 @@
       const breadcrumb = target.closest('[data-breadcrumb]');
       if (breadcrumb) { openBreadcrumb(breadcrumb.dataset.breadcrumb, event.ctrlKey); return; }
       if (target.closest('[data-path-edit]') || target.classList.contains('path-breadcrumbs')) { focusPath(); return; }
-      if (target.closest('[data-sort]')) { const sort = target.closest('[data-sort]').dataset.sort; p.descending = p.sort === sort ? !p.descending : false; p.sort = sort; render(true); return; }
-      const row = target.closest('tr[data-id]');
+      const row = target.closest('[data-file-row][data-id]');
       if (row) {
         const id = row.dataset.id;
         const nameClick = event.detail === 1 && !event.shiftKey && !event.ctrlKey && !event.metaKey && target.closest('[data-filename]');
@@ -3287,6 +3189,17 @@
     }
     const command = target.closest('[data-action]'); if (command) run(command.dataset.action);
   });
+  $('#panes').addEventListener('click', event => {
+    const button = event.target.closest('[data-history]');
+    if (!button) return;
+    event.preventDefault(); event.stopPropagation();
+    state.active = Number(button.closest('[data-pane]').dataset.pane);
+    if (button.getAttribute('aria-disabled') !== 'true') run(button.dataset.history);
+  }, true);
+  $('#panes').addEventListener('dblclick', event => {
+    const resize = event.target.closest('.ag-header-cell-resize');
+    if (resize) fileGrid.prepareAutosize(resize.closest('[data-pane]'), resize.closest('[data-column]').dataset.column);
+  }, true);
   $('#panes').addEventListener('dblclick', event => {
     if (event.target.closest('input,textarea,select,[contenteditable="true"]')) return;
     clearTimeout(renameTimer); clearTimeout(run.tabTimer);
@@ -3294,11 +3207,6 @@
     state.active = Number(section.dataset.pane);
     const tab = event.target.closest('[data-tab]');
     if (tab) { rememberScroll(); tabs.close(pane(), Number(tab.dataset.tab)); render(true); return; }
-    const resize = event.target.closest('[data-resize]');
-    if (resize) {
-      sizePaneColumns(section, pane(), resize.dataset.resize);
-      render(true); return;
-    }
     if (event.target.closest('[data-parent]')) return goUp();
     const row = event.target.closest('[data-id]'); if (row) openFile(files(pane()).find(file => file.id === row.dataset.id));
   });
@@ -3342,7 +3250,7 @@
   document.addEventListener('pointerdown', event => {
     if (event.button !== 2) return;
     suppressRightContext = false;
-    const row = event.target.closest('#panes tr[data-id]');
+    const row = event.target.closest('#panes [data-file-row][data-id]');
     if (!row || event.target.closest('input,textarea,select,[contenteditable="true"]') || filesystemPending && !refreshingFilesystem || transferPending || rightDropChoice || $('#modal').open) return;
     const side = Number(row.closest('[data-pane]').dataset.pane), p = state.panes[side], ids = p.selected.includes(row.dataset.id) ? [...p.selected] : [row.dataset.id];
     if (resultView(p)) return;
@@ -3379,7 +3287,7 @@
   document.addEventListener('contextmenu', event => {
     const text = event.target.closest('input,textarea,[contenteditable="true"]');
     if (text) { text.dataset.vscodeContext = JSON.stringify({ webviewSection: 'textInput', preventDefaultContextMenuItems: false }); suppressRightContext = false; return; }
-    if (suppressRightContext) { suppressRightContext = false; if (event.target.closest('thead') || event.button !== 2) return; event.preventDefault(); event.stopPropagation(); }
+    if (suppressRightContext) { suppressRightContext = false; if (event.target.closest('.ag-header') || event.button !== 2) return; event.preventDefault(); event.stopPropagation(); }
   }, true);
   function clearDropTarget() {
     document.querySelectorAll('.drop-target').forEach(element => element.classList.remove('drop-target'));
@@ -3420,7 +3328,7 @@
     const tab = target.closest('[data-tab]');
     if (tab) return { side, path: p.tabs[Number(tab.dataset.tab)], element: tab };
     if (!target.closest('.list')) return null;
-    const row = target.closest('tr[data-id]');
+    const row = target.closest('[data-file-row][data-id]');
     const file = row && files(p).find(item => item.id === row.dataset.id);
     const parentRow = target.closest('[data-parent]');
     const destination = parentRow ? parent(currentPath(p)) : file?.type === 'folder' ? entryPath(p, file) : currentPath(p);
@@ -3428,10 +3336,10 @@
   }
   $('#panes').addEventListener('dragstart', event => {
     if (event.target.closest('input,textarea,[contenteditable="true"]')) return;
-    if (event.target.closest('tr')?.querySelector('.inline-rename')) { event.preventDefault(); return; }
+    if (event.target.closest('[data-file-row]')?.querySelector('.inline-rename')) { event.preventDefault(); return; }
     if (rightPointer || filesystemPending && !refreshingFilesystem || event.target.closest('[data-history]')) { event.preventDefault(); return; }
-    const tab = event.target.closest('[data-tab-drag]'), header = event.target.closest('[data-column]'), row = event.target.closest('tr[data-id]');
-    if (!tab && !header && !row || event.target.closest('[data-resize]')) return;
+    const tab = event.target.closest('[data-tab-drag]'), row = event.target.closest('[data-file-row][data-id]');
+    if (!tab && !row) return;
     clearTimeout(renameTimer);
     if (row) {
       const side = Number(row.closest('[data-pane]').dataset.pane), p = state.panes[side];
@@ -3442,7 +3350,7 @@
       if (event.dataTransfer) { event.dataTransfer.effectAllowed = 'copyMove'; event.dataTransfer.setData('application/x-bitfroest-files', JSON.stringify(dragged)); }
       return;
     }
-    dragged = { kind: tab ? 'tab' : 'column', side: Number(event.target.closest('[data-pane]').dataset.pane), key: header?.dataset.column, index: Number(tab?.dataset.tabDrag) };
+    dragged = { kind: 'tab', side: Number(event.target.closest('[data-pane]').dataset.pane), index: Number(tab.dataset.tabDrag) };
     event.dataTransfer?.setData('application/x-bitfroest-item', JSON.stringify(dragged));
   });
   $('#panes').addEventListener('dragover', event => {
@@ -3489,10 +3397,7 @@
       if (validDraggedFiles(source) && validFileDropTarget(source, destination)) runTransfer({ sourceSide: source.side, sourcePath: source.sourcePath, targetSide: destination.side, ids: source.ids, targetPath: destination.parent ? destination.path.replace(/\/$/, '') + '/' : destination.path, targetIsDirectory: destination.parent, mode, validateSelection: () => validDraggedFiles(source) });
       return;
     }
-    if (dragged.kind === 'column' && side === dragged.side) {
-      const header = event.target.closest('[data-column]');
-      if (header) state.panes[side].columns = columns.moveColumn(state.panes[side].columns, dragged.key, header.dataset.column);
-    } else if (dragged.kind === 'tab' && event.target.closest('.tabs')) {
+    if (dragged.kind === 'tab' && event.target.closest('.tabs')) {
       const target = event.target.closest('[data-tab-drag]');
       tabs.move(state.panes[dragged.side], dragged.index, state.panes[side], target ? Number(target.dataset.tabDrag) : state.panes[side].tabs.length, { copy: event.ctrlKey || event.metaKey });
       state.active = side;
@@ -3508,10 +3413,9 @@
     if (event.target.closest('.list') && !event.target.closest('input,textarea,[contenteditable="true"]')) event.preventDefault();
   });
   $('#panes').addEventListener('pointerdown', event => {
-    const handle = event.target.closest('[data-resize]');
-    if (!handle && event.button === 0) {
+    if (event.button === 0) {
       const list = event.target.closest('.list');
-      if (!list || event.target.closest('thead,tr[data-id],[data-parent],input,textarea,button,[contenteditable="true"],[data-filename],.fileicon')) return;
+      if (!list || event.target.closest('.ag-header,[data-file-row][data-id],[data-parent],input,textarea,button,[contenteditable="true"],[data-filename],.fileicon')) return;
       event.preventDefault(); clearTimeout(renameTimer);
       const section = list.closest('[data-pane]'), side = Number(section.dataset.pane), p = state.panes[side];
       const initial = [...p.selected], initialCursor = p.cursor, additive = event.ctrlKey || event.metaKey || event.shiftKey;
@@ -3528,7 +3432,7 @@
         const left = Math.max(bounds.left, Math.min(startX, current.clientX)), right = Math.min(bounds.right, Math.max(startX, current.clientX));
         const top = Math.max(bounds.top, Math.min(startY, current.clientY)), bottom = Math.min(bounds.bottom, Math.max(startY, current.clientY));
         Object.assign(marquee.style, { left: `${left - bounds.left + list.scrollLeft}px`, top: `${top - bounds.top + list.scrollTop}px`, width: `${Math.max(0, right - left)}px`, height: `${Math.max(0, bottom - top)}px` });
-        const hits = [...list.querySelectorAll('tr[data-id]')].filter(row => {
+        const hits = [...list.querySelectorAll('[data-file-row][data-id]')].filter(row => {
           const rect = row.getBoundingClientRect();
           return rect.right > left && rect.left < right && rect.bottom > top && rect.top < bottom;
         }).map(row => row.dataset.id);
@@ -3546,34 +3450,10 @@
       list.addEventListener('pointermove', move); list.addEventListener('pointerup', finish); list.addEventListener('pointercancel', finish);
       return;
     }
-    if (!handle || event.button !== 0) return;
-    event.preventDefault(); event.stopPropagation();
-    const section = handle.closest('[data-pane]'), p = state.panes[Number(section.dataset.pane)];
-    const key = handle.dataset.resize, start = event.clientX, path = currentPath(p);
-    const width = handle.closest('th').getBoundingClientRect().width || p.columns.find(column => column.key === key).width;
-    handle.setPointerCapture?.(event.pointerId);
-    const move = event => {
-      if (event.pointerId !== undefined && event.pointerId !== initialPointer) return;
-      if (currentPath(p) !== path || !section.isConnected || !p.columns.some(column => column.key === key)) { finish(event); return; }
-      p.columns = columns.resizeColumn(p.columns, key, width + event.clientX - start);
-      const sizing = columnSizing.get(p);
-      if (sizing) sizing.manual[key] = true;
-      layoutPaneColumns(section, p);
-    };
-    const initialPointer = event.pointerId;
-    const finish = event => {
-      if (event.pointerId !== undefined && event.pointerId !== initialPointer) return;
-      document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', finish); document.removeEventListener('pointercancel', finish);
-      handle.removeEventListener('lostpointercapture', finish); window.removeEventListener('blur', finish);
-      if (handle.hasPointerCapture?.(initialPointer)) handle.releasePointerCapture(initialPointer);
-      if (currentPath(p) === path) rememberColumnWidth(p, key);
-      persist();
-    };
-    document.addEventListener('pointermove', move); document.addEventListener('pointerup', finish); document.addEventListener('pointercancel', finish);
-    handle.addEventListener('lostpointercapture', finish); window.addEventListener('blur', finish);
   });
   $('#panes').addEventListener('focusin', event => { const section = event.target.closest('[data-pane]'); if (section) { state.active = Number(section.dataset.pane); refreshSelection(); lister.updateMenu(); } });
   document.addEventListener('keydown', event => {
+    if (event.target.closest('.ag-header') && !event.target.closest('[data-history]')) return;
     if (event.target.closest('[data-lister]') && !$('#modal').open) return;
     if (event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'd' && event.target.closest('.list') && !$('#modal').open) {
       event.preventDefault(); showFavorites(document.querySelectorAll('[data-favorites]')[state.active]); return;
@@ -3778,9 +3658,10 @@
       const after = window.CommanderIcons.configure(fileSettings.iconSize).size;
       refreshFileColors(); refreshSelection();
       if (before !== after) document.querySelectorAll('[data-pane]').forEach(section => {
-        const p = state.panes[Number(section.dataset.pane)], previous = columnSizing.get(p);
-        if (previous) previous.font = null;
-        sizePaneColumns(section, p);
+        fileGrid.api(section)?.setGridOption('rowHeight', window.CommanderIcons.layout().row);
+        fileGrid.api(section)?.setGridOption('headerHeight', window.CommanderIcons.layout().row);
+        fileGrid.api(section)?.resetRowHeights();
+        fileGrid.remeasure(section, true);
       });
       return;
     }
@@ -4118,8 +3999,8 @@
       return;
     }
     if (event.target.closest('[data-history]')) { showContextMenu(event, section, 'history'); return; }
-    if (event.target.closest('thead')) { showContextMenu(event, section, 'columns'); return; }
-    const row = event.target.closest('tr[data-id]');
+    if (event.target.closest('.ag-header')) { showContextMenu(event, section, 'columns'); return; }
+    const row = event.target.closest('[data-file-row][data-id]');
     if (row && !pane().selected.includes(row.dataset.id)) { pane().selected = [row.dataset.id]; pane().cursor = row.dataset.id; }
     refreshSelection();
     if (host && state.realFilesystem) {
@@ -4138,7 +4019,7 @@
   });
   const themeObserver = new MutationObserver(() => {
     refreshHighlight(); refreshVisibleIcons(); refreshFileColors();
-    document.querySelectorAll('.pane').forEach((section, index) => sizePaneColumns(section, state.panes[index]));
+    document.querySelectorAll('.pane').forEach(section => { fileGrid.api(section)?.resetRowHeights(); fileGrid.remeasure(section); });
   });
   themeObserver.observe(document.body, { attributes: true, attributeFilter: ['class', 'style', 'data-vscode-theme-id'] });
   themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'style'] });

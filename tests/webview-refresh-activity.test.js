@@ -93,7 +93,7 @@ test('Git counter updates preserve file icons and only refresh the status displa
     if (selector === '.pane') for (const section of sections) {
       if (section.querySelectorAll.counted) continue;
       const query = section.querySelectorAll.bind(section);
-      section.querySelectorAll = selector => { if (selector === 'tr[data-id]') iconTraversals++; return query(selector); };
+      section.querySelectorAll = selector => { if (selector === '[data-file-row][data-id]') iconTraversals++; return query(selector); };
       section.querySelectorAll.counted = true;
     }
     return sections;
