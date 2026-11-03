@@ -14,6 +14,37 @@ function finishDirectory(app) {
   if (request) app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-result', navigationRequestId: request.navigationRequestId, ok: true, state: app.state() } }));
 }
 
+test('Git History captures files and folders in the Git submenu and preserves the clicked target', t => {
+  for (const name of ['a.txt', 'folder']) {
+    const app = createApp(t, fixture()); reply(app, app.messages.find(m => m.type === 'git-status'));
+    app.row(name).dispatchEvent(new app.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }));
+    const group = app.document.querySelector('[data-context-action="git"]'); assert.ok(group);
+    group.dispatchEvent(new app.window.MouseEvent('mouseenter'));
+    const history = app.document.querySelector('[data-context-action="git-history"]'); assert.ok(history);
+    assert.equal(Boolean(app.document.querySelector('[data-context-action="git-diff"]')), name === 'a.txt');
+    app.click(history);
+    const request = app.messages.find(m => m.type === 'git-history'); assert.ok(request);
+    assert.deepEqual([...request.ids], [name === 'a.txt' ? 'a' : 'b']);
+    assert.equal(request.snapshotId, 'one'); assert.equal(request.directory, '/repo');
+  }
+});
+
+test('Git History preserves folder selection through focus refresh and reports failed refresh without opening history', t => {
+  for (const ok of [true, false]) {
+    const app = createApp(t, fixture()); reply(app, app.messages.find(m => m.type === 'git-status'));
+    app.row('folder').dispatchEvent(new app.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }));
+    const selection = JSON.parse(app.row('folder').dataset.vscodeContext);
+    app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'window-focus' } }));
+    app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'action', action: 'git-history', contextSelection: selection } }));
+    const state = structuredClone(app.state()); state.snapshotId = 'refreshed';
+    app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-result', ok, state, error: 'Refresh failed' } }));
+    const requests = app.messages.filter(m => m.type === 'git-history');
+    assert.equal(requests.length, ok ? 1 : 0);
+    if (ok) { assert.deepEqual([...requests[0].ids], ['b']); assert.equal(requests[0].snapshotId, 'refreshed'); }
+    else assert.equal(app.document.querySelector('#status-message').textContent, 'Ungültige Auswahl für Git History.');
+  }
+});
+
 test('confirmed empty folders show a neutral outlined Git badge without requesting another scan', t => {
   for (const language of ['de', 'en']) {
     const state = fixture();

@@ -503,6 +503,59 @@ test('system-menu Git Diff is absent after repository inspection fails', async t
   assert.equal(app.calls.some(call => call.id === 'git.openChange'), false);
 });
 
+test('Git History delegates captured file and folder URIs to the built-in timeline and rejects stale selections', async t => {
+  for (const folder of [false, true]) {
+    const initial = clipboardFixture();
+    if (folder) { initial.folders['C:/tmp'][0] = { id: 'a', name: 'docs', type: 'folder', fsSource: 'C:/tmp/docs' }; initial.folders['C:/tmp/docs'] = []; }
+    const app = harness(t, { filesystemLoad: async () => initial,
+      gitExtension: { enabled: true, getAPI: () => ({ getRepository: () => ({}) }) } });
+    await app.command('bitfroest.openPrototype'); const panel = app.panels[0]; await panel.receive({ type: 'app-ready' });
+    assert.match(panel.webview.html, /Content-Security-Policy/);
+    const view = require('./support/webview.cjs').createApp(t, initial, { html: panel.webview.html });
+    const status = view.messages.find(m => m.type === 'git-status');
+    view.window.dispatchEvent(new view.window.MessageEvent('message', { data: { type: 'git-status-result', requestId: status.requestId, snapshotId: status.snapshotId, directories: { 'C:/tmp': { ok: true, repository: true, statuses: {} } } } }));
+    const row = view.row(folder ? 'docs' : 'a.txt');
+    row.dispatchEvent(new view.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }));
+    await app.command('bitfroest.gitHistory', JSON.parse(row.dataset.vscodeContext));
+    view.window.dispatchEvent(new view.window.MessageEvent('message', { data: panel.messages.at(-1) }));
+    const request = view.messages.find(m => m.type === 'git-history'); assert.ok(request);
+    await panel.receive(request);
+    const call = app.calls.find(call => call.id === 'files.openTimeline'); assert.ok(call);
+    assert.equal(call.args[0].fsPath, folder ? 'C:/tmp/docs' : 'C:/tmp/a.txt');
+    assert.equal(panel.messages.find(m => m.requestId === request.requestId)?.ok, true);
+    await panel.receive({ ...request, requestId: 'ui-action-2', snapshotId: 'stale' });
+    assert.equal(panel.messages.find(m => m.requestId === 'ui-action-2')?.ok, false);
+    assert.equal(app.calls.filter(call => call.id === 'files.openTimeline').length, 1);
+  }
+});
+
+test('Git History reports integration, repository, command and older folder host failures through status replies', async t => {
+  for (const mode of ['missing', 'disabled', 'repository', 'command', 'older-folder']) {
+    const initial = clipboardFixture();
+    if (mode === 'older-folder') initial.folders['C:/tmp'][0] = { id: 'a', name: 'docs', type: 'folder', fsSource: 'C:/tmp/docs' };
+    const app = harness(t, { filesystemLoad: async () => initial, vscodeVersion: '1.100.0', commandError: mode === 'command' ? 'files.openTimeline' : undefined,
+      gitExtension: mode === 'missing' ? undefined : { enabled: mode !== 'disabled', getAPI: () => ({ getRepository: () => mode === 'repository' ? null : {}, openRepository: async () => null }) } });
+    await app.command('bitfroest.openPrototype'); const panel = app.panels[0]; await panel.receive({ type: 'app-ready' });
+    await panel.receive({ type: 'git-history', requestId: 'ui-action-1', directory: 'C:/tmp', ids: ['a'], snapshotId: 'clipboard' });
+    const result = panel.messages.find(m => m.type === 'ui-action-result');
+    assert.equal(result?.ok, false, mode); assert.ok(result.error, mode); assert.equal(app.errors.length, 0, mode);
+    if (mode !== 'command') assert.equal(app.calls.some(call => call.id === 'files.openTimeline'), false, mode);
+  }
+});
+
+test('system-menu Git History delegates a selected folder without refreshing or invoking a shell verb', async t => {
+  const initial = clipboardFixture(); initial.folders['C:/tmp'][0] = { id: 'a', name: 'docs', type: 'folder', fsSource: 'C:/tmp/docs' }; initial.folders['C:/tmp/docs'] = [];
+  const app = harness(t, { filesystemLoad: async () => initial,
+    gitInspect: async directories => Object.fromEntries(directories.map(directory => [directory, { ok: true, repository: true, statuses: {} }])),
+    gitExtension: { enabled: true, getAPI: () => ({ getRepository: () => ({}) }) },
+    shellMenuShow: async (_paths, settings) => { assert.equal(settings.gitHistory, true); assert.equal(settings.gitDiff, false); return { ok: true, displayed: true, invoked: true, cancelled: false, action: 'git-history' }; } });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0]; await panel.receive({ type: 'app-ready' });
+  await panel.receive({ type: 'git-status', requestId: 'git-1', snapshotId: 'clipboard', directories: ['C:/tmp'] });
+  await panel.receive({ type: 'shell-context-menu', requestId: 'shell-menu-1', directory: 'C:/tmp', ids: ['a'], snapshotId: 'clipboard' });
+  assert.equal(app.calls.find(call => call.id === 'files.openTimeline')?.args[0].fsPath, 'C:/tmp/docs');
+  assert.equal(panel.messages.at(-1).action, 'git-history'); assert.equal(panel.messages.at(-1).refreshed, false); assert.equal(panel.messages.at(-1).invoked, false);
+});
+
 test('Git Diff validates captured selection and delegates to the built-in Git change editor', async t => {
   const initial = clipboardFixture(); let statusCalls = 0;
   const repository = { status: async () => { statusCalls++; }, state: { workingTreeChanges: [{ uri: { fsPath: 'C:/tmp/a.txt' } }], indexChanges: [], untrackedChanges: [], mergeChanges: [] } };
@@ -1043,6 +1096,7 @@ function harness(t, options = {}) {
   let status, serializer;
   const tabGroups = [], tabListeners = new Set(), groupListeners = new Set();
   const vscode = {
+    version: options.vscodeVersion || '1.144.1',
     extensions: { getExtension: id => id === 'vscode.git' && options.gitExtension ? { activate: async () => options.gitExtension } : undefined },
     env: { language: options.language || 'de', remoteName: options.remoteName, openExternal: async uri => { calls.push({ id: 'openExternal', args: [uri.toString()] }); return true; }, clipboard: { writeText: async text => { clipboardCalls.push({ action: 'writeText', text }); await options.writeClipboardText?.(text); }, readText: async () => { clipboardCalls.push({ action: 'readText' }); if (options.readClipboardText) return options.readClipboardText(); return options.clipboardText || ''; } } },
     ExtensionKind: { UI: 1, Workspace: 2 },

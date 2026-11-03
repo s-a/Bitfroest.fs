@@ -4,6 +4,7 @@
   "appearance.iconSize": "Base icon size in pixels. Icon frames, badges, spacing, and required control heights scale together. Text size is unchanged.",
   "files.commentEncoding.description": "Encoding of descript.ion and files.bbs comments without a Unicode byte order mark. A byte order mark takes precedence. Applies when the directory is loaded or refreshed.",
   "git.diff.title": "Diff",
+  "git.history.title": "Git History",
   "command.bitfroest.open-terminal.title": "Open terminal here",
   "command.bitfroest.select-group.title": "Select group...",
   "command.bitfroest.unselect-group.title": "Unselect group...",

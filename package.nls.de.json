@@ -4,6 +4,7 @@
   "appearance.iconSize": "Basisgröße der Symbole in Pixeln. Symbolflächen, Badges, Abstände und erforderliche Bedienelementhöhen skalieren gemeinsam. Die Textgröße bleibt unverändert.",
   "files.commentEncoding.description": "Kodierung von Kommentaren in descript.ion und files.bbs ohne Unicode-Bytefolgemarkierung. Eine Bytefolgemarkierung hat Vorrang. Gilt beim Laden oder Aktualisieren des Verzeichnisses.",
   "git.diff.title": "Diff",
+  "git.history.title": "Git History",
   "command.bitfroest.open-terminal.title": "Terminal hier öffnen",
   "command.bitfroest.select-group.title": "Gruppe markieren...",
   "command.bitfroest.unselect-group.title": "Gruppenauswahl rückgängig...",

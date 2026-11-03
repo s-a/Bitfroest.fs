@@ -16,6 +16,32 @@ test('Git Diff is an explicitly enabled file action returned separately from she
 });
 const { createNativeApi } = require('../native-api');
 
+test('Git History is explicitly enabled for one file or folder and rejects unsolicited actions', { skip: process.platform !== 'win32' }, async t => {
+  const files = await fixture(t), directory = path.join(files.root, 'folder'); await fs.mkdir(directory);
+  let request;
+  const provider = createShellMenuProvider({ roots: [files.root], invokeNative: async input => { request = input; return { ok: true, displayed: true, invoked: true, cancelled: false, action: 'git-history' }; } });
+  t.after(() => provider.dispose());
+  for (const target of [files.a, directory]) {
+    assert.equal((await provider.show([target], { gitHistory: true })).action, 'git-history');
+    assert.equal(request.gitHistory, true);
+  }
+  await assert.rejects(provider.show([files.a]), /Systemmenü/);
+  await assert.rejects(provider.show([files.a, files.b], { gitHistory: true }), /Systemmenü/);
+});
+
+test('direct native Git History is present for one file or folder without displaying a menu', {
+  skip: process.platform !== 'win32' || !process.env.NATIVE_BINDING_TEST_PATH
+}, async t => {
+  const files = await fixture(t), directory = path.join(files.root, 'folder'); await fs.mkdir(directory);
+  const nativeApi = createNativeApi(require(process.env.NATIVE_BINDING_TEST_PATH)), session = nativeApi.openSession();
+  t.after(() => { session.close(); nativeApi.shutdown(); });
+  for (const [paths, enabled, expected] of [[[files.a], true, true], [[directory], true, true], [[files.a], false, false], [[files.a, files.b], true, false]]) {
+    const result = await session.invoke('shell.showContextMenu', { mode: 'inspect', paths, roots: [files.root], gitHistory: enabled });
+    assert.equal(result.displayed, false); assert.equal(result.invoked, false);
+    assert.equal(result.entries.some(entry => entry.label === 'Git' && entry.submenu), expected);
+  }
+});
+
 test('selected file inspection uses the versioned native session and closes it without starting a process', { skip: process.platform !== 'win32' }, async t => {
   const files = await fixture(t), calls = [], lifecycle = { opened: 0, closed: 0 };
   const nativeApi = { openSession() {

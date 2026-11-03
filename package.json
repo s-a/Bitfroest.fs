@@ -824,6 +824,11 @@
         "category": "Git"
       },
       {
+        "command": "bitfroest.gitHistory",
+        "title": "%git.history.title%",
+        "category": "Git"
+      },
+      {
         "command": "bitfroest.open-terminal",
         "title": "%command.bitfroest.open-terminal.title%",
         "category": "Bitfroest.fs",
@@ -1300,7 +1305,13 @@
       "bitfroest.git": [
         {
           "command": "bitfroest.gitDiff",
-          "group": "1_diff"
+          "group": "1_diff",
+          "when": "gitFile"
+        },
+        {
+          "command": "bitfroest.gitHistory",
+          "when": "gitHistory",
+          "group": "2_history"
         }
       ],
       "editor/title": [
@@ -1438,7 +1449,7 @@
         },
         {
           "submenu": "bitfroest.git",
-          "when": "bitfroest.ready && webviewId == bitfroestPrototype && webviewSection == files && webviewSection != textInput && webviewSection != address && gitFile",
+          "when": "bitfroest.ready && webviewId == bitfroestPrototype && (webviewSection == files || webviewSection == folder) && webviewSection != textInput && webviewSection != address && gitHistory",
           "group": "2_git"
         },
         {
@@ -1463,6 +1474,10 @@
         }
       ],
       "commandPalette": [
+        {
+          "command": "bitfroest.gitHistory",
+          "when": "false"
+        },
         {
           "command": "bitfroest.gitDiff",
           "when": "false"

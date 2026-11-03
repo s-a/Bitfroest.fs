@@ -53,6 +53,21 @@ int wmain() {
         !SelectGitDiffMenuCommand(git_command, true, &git_result) || !git_result.git_diff || !git_result.invoked || git_result.cancelled) return 13;
     DestroyMenu(git_menu);
   }
+  for (const bool diff : {false, true}) {
+    HMENU menu = CreatePopupMenu();
+    DWORD error = 0;
+    if (!AppendGitMenu(menu, diff, true, &error)) return 14;
+    HMENU submenu = GetSubMenu(menu, GetMenuItemCount(menu) - 1);
+    wchar_t label[32]{};
+    if (!submenu || GetMenuItemCount(submenu) != (diff ? 2 : 1) ||
+        !GetMenuStringW(submenu, diff ? 1 : 0, label, 32, MF_BYPOSITION) || wcscmp(label, L"Git History") != 0) return 15;
+    const UINT command = GetMenuItemID(submenu, diff ? 1 : 0);
+    ShellContextMenuResult result;
+    if (SelectGitHistoryMenuCommand(command, false, &result) ||
+        !SelectGitHistoryMenuCommand(command, true, &result) || !result.git_history || !result.invoked || result.cancelled || result.git_diff ||
+        SelectGitHistoryMenuCommand(0, true, &result)) return 16;
+    DestroyMenu(menu);
+  }
   FakeContextMenu fake;
   CMINVOKECOMMANDINFO command{};
   command.cbSize = sizeof(command);

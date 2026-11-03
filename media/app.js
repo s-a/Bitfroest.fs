@@ -1832,9 +1832,10 @@
       const effective = p.selected.length ? p.selected : p.cursor ? [p.cursor] : [];
       const folderContext = workbenchContext && state.realFilesystem && !resultView(p) && !state.archiveLocations?.[currentPath(p)] && effective.length === 1 && entriesById.get(effective[0])?.type === 'folder';
       const frozenContext = { directory: currentPath(p), ids: effective, snapshotId: state.snapshotId };
+      const gitHistory = Boolean(workbenchContext && state.realFilesystem && !resultView(p) && !state.archiveLocations?.[currentPath(p)] && effective.length === 1 && entriesById.get(effective[0]) && gitInfo(currentPath(p))?.ok && gitInfo(currentPath(p))?.repository);
       const gitFile = Boolean(workbenchContext && state.realFilesystem && !resultView(p) && !state.archiveLocations?.[currentPath(p)] && effective.length === 1 && entriesById.get(effective[0]) && entriesById.get(effective[0]).type !== 'folder' && gitInfo(currentPath(p))?.ok && gitInfo(currentPath(p))?.repository);
-      const context = workbenchContext ? JSON.stringify({ webviewSection: folderContext ? 'folder' : 'files', preventDefaultContextMenuItems: true, fileMenu: true, gitFile, ...frozenContext }) : null;
-      const rowContext = workbenchContext ? JSON.stringify({ webviewSection: 'files', preventDefaultContextMenuItems: true, fileMenu: true, gitFile: false, ...frozenContext }) : null;
+      const context = workbenchContext ? JSON.stringify({ webviewSection: folderContext ? 'folder' : 'files', preventDefaultContextMenuItems: true, fileMenu: true, gitFile, gitHistory, ...frozenContext }) : null;
+      const rowContext = workbenchContext ? JSON.stringify({ webviewSection: 'files', preventDefaultContextMenuItems: true, fileMenu: true, gitFile: false, gitHistory: false, ...frozenContext }) : null;
       if (workbenchContext) section.querySelector('.list').dataset.vscodeContext = context;
       section.querySelectorAll('[data-id]').forEach(row => {
         if (workbenchContext) row.dataset.vscodeContext = row.dataset.id === effective[0] ? context : rowContext;
@@ -1984,22 +1985,23 @@
     statusTask(requestId, t('Aktion wird ausgeführt…') + ` · ${t('Hostbestätigung')}`);
     host.postMessage({ type, ...payload, requestId });
   }
-  function captureGitDiff(selection) {
+  function captureGitDiff(selection, action = 'git-diff') {
     if (!selection || selection.snapshotId !== state.snapshotId || !Array.isArray(selection.ids) || selection.ids.length !== 1) return null;
     const file = state.folders[selection.directory]?.find(file => file.id === selection.ids[0]);
-    if (!file || file.type === 'folder') return null;
+    if (!file || action !== 'git-history' && file.type === 'folder') return null;
     return { directory: selection.directory, ids: [...selection.ids], snapshotId: selection.snapshotId, path: file.fsSource || join(selection.directory, file.name) };
   }
-  function requestGitDiff(selection) {
+  function requestGitDiff(selection, action = 'git-diff') {
+    const invalid = action === 'git-history' ? 'Ungültige Auswahl für Git History.' : 'Ungültige Dateiauswahl für Git Diff.';
     const matches = gitMenuSelection && selection?.directory === gitMenuSelection.directory && selection.snapshotId === gitMenuSelection.snapshotId && selection.ids?.length === 1 && selection.ids[0] === gitMenuSelection.ids[0];
-    const captured = matches ? gitMenuSelection : captureGitDiff(selection);
-    if (!captured) { toast(t('Ungültige Dateiauswahl für Git Diff.'), 'error'); return; }
-    if (filesystemPending && refreshingFilesystem && !transferPending && !navigationRequests.size) { gitMenuSelection = captured; pendingGitDiff = captured; return; }
+    const captured = matches ? gitMenuSelection : captureGitDiff(selection, action);
+    if (!captured) { toast(t(invalid), 'error'); return; }
+    if (filesystemPending && refreshingFilesystem && !transferPending && !navigationRequests.size) { gitMenuSelection = captured; pendingGitDiff = { selection: captured, action }; return; }
     if (filesystemPending || transferPending || navigationRequests.size) { toast(t('Eine Dateisystemoperation läuft bereits.'), 'info'); return; }
     const file = state.folders[captured.directory]?.find(file => file.id === captured.ids[0]);
-    if (![captured.snapshotId, captured.refreshSnapshot].includes(state.snapshotId) || !state.panes.some(p => currentPath(p) === captured.directory) || !file || file.type === 'folder' || (file.fsSource || join(captured.directory, file.name)) !== captured.path) { gitMenuSelection = null; toast(t('Ungültige Dateiauswahl für Git Diff.'), 'error'); return; }
+    if (![captured.snapshotId, captured.refreshSnapshot].includes(state.snapshotId) || !state.panes.some(p => currentPath(p) === captured.directory) || !file || action !== 'git-history' && file.type === 'folder' || (file.fsSource || join(captured.directory, file.name)) !== captured.path) { gitMenuSelection = null; toast(t(invalid), 'error'); return; }
     gitMenuSelection = null;
-    hostAction('git-diff', { directory: captured.directory, ids: captured.ids, snapshotId: state.snapshotId });
+    hostAction(action, { directory: captured.directory, ids: captured.ids, snapshotId: state.snapshotId });
   }
   window.addEventListener('message', event => {
     const result = event.data;
@@ -2007,7 +2009,7 @@
     const request = uiActionRequests.get(result.requestId); if (!request) return;
     uiActionRequests.delete(result.requestId);
     statusTask(result.requestId, null);
-    const labels = { edit: 'Datei zum Bearbeiten geöffnet.', open: 'Datei geöffnet.', preview: 'Datei angezeigt.', 'open-settings': 'Einstellungen geöffnet.', 'show-licenses': 'Lizenzen geöffnet.', 'open-help-link': 'Link geöffnet.', 'open-trash': 'Papierkorb geöffnet.', 'open-terminal': 'Terminal geöffnet.', 'git-diff': 'Git-Diff geöffnet.' };
+    const labels = { edit: 'Datei zum Bearbeiten geöffnet.', open: 'Datei geöffnet.', preview: 'Datei angezeigt.', 'open-settings': 'Einstellungen geöffnet.', 'show-licenses': 'Lizenzen geöffnet.', 'open-help-link': 'Link geöffnet.', 'open-trash': 'Papierkorb geöffnet.', 'open-terminal': 'Terminal geöffnet.', 'git-diff': 'Git-Diff geöffnet.', 'git-history': 'Git History geöffnet.' };
     reportStatus(result.cancelled ? t('Aktion abgebrochen.') : result.ok ? t(labels[request.type]) : result.error || t('Dateiaktion fehlgeschlagen.'), result.cancelled ? 'cancelled' : result.ok ? 'success' : result.unsupported ? 'info' : 'error', request.statusVersion);
   });
   function rememberSelection(p = pane()) {
@@ -3116,7 +3118,7 @@
   }
   function run(command, reverseDirectories = false, contextSelection) {
     clearTimeout(renameTimer); lastNameClick = null;
-    if (command === 'git-diff') { requestGitDiff(contextSelection); return; }
+    if (command === 'git-diff' || command === 'git-history') { requestGitDiff(contextSelection, command); return; }
     if (typeof command !== 'string') return;
     if (command === 'open-terminal') {
       if ($('#modal').open || document.activeElement?.matches('input,textarea,select,[contenteditable="true"]') || !document.activeElement?.closest('.list') || filesystemPending) return;
@@ -3745,7 +3747,7 @@
       statusTask(shellMenuPending.requestId, null); shellMenuPending = null;
       if (event.data.clipboardInvalidated) { clipboardGeneration++; setClipboardSelection(null); refreshClipboardAvailability(); }
       if (event.data.refreshed) focusRefreshRequested = false;
-      if (event.data.action === 'git-diff') toast(event.data.ok ? t('Git-Diff geöffnet.') : event.data.error, event.data.ok ? 'success' : 'error');
+      if (event.data.action === 'git-diff' || event.data.action === 'git-history') toast(event.data.ok ? t(event.data.action === 'git-history' ? 'Git History geöffnet.' : 'Git-Diff geöffnet.') : event.data.error, event.data.ok ? 'success' : 'error');
       else if (!event.data.ok) { if (event.data.unsupported) toast(event.data.error, 'info'); else showOperationFailure(event.data.error || t('Das native Systemmenü konnte nicht geöffnet werden.'), { diagnostic: event.data.diagnostic }); }
       flushFocusRefresh(); return;
     }
@@ -3904,7 +3906,7 @@
       if (!event.data.ok && failedTransferPreparation) failedTransferPreparation();
       if (event.data.cancelled && failedTransferPreparation) failedTransferPreparation(true);
       if (!event.data.ok) showOperationFailure(error, { inline: Boolean(failedRename && restoreRename(failedRename)), diagnostic: event.data.diagnostic, notify: !operationQueue?.active });
-      if (pendingGitDiff) { const selection = pendingGitDiff; pendingGitDiff = null; if (event.data.ok) requestGitDiff(selection); else { gitMenuSelection = null; toast(t('Ungültige Dateiauswahl für Git Diff.'), 'error'); } }
+      if (pendingGitDiff) { const selection = pendingGitDiff; pendingGitDiff = null; if (event.data.ok) requestGitDiff(selection.selection, selection.action); else { gitMenuSelection = null; toast(t(selection.action === 'git-history' ? 'Ungültige Auswahl für Git History.' : 'Ungültige Dateiauswahl für Git Diff.'), 'error'); } }
     if (completedTransferJob?.queueJobId && operationQueue.active?.id === completedTransferJob.queueJobId && !continuePreparation) operationQueue.complete(completedTransferJob.queueJobId, { ok: event.data.ok, cancelled, message: resultMessage, ...(!event.data.ok ? { error } : {}) });
       flushQueuedOperation(); flushDeferredNavigationReads(); flushFocusRefresh(); return;
     }
@@ -4052,7 +4054,7 @@
     if (kind === 'files' && selection.ids.length === 1) {
       const file = files(p).find(file => file.id === selection.ids[0]);
       if (file?.type === 'folder' && nativeDesktopSupported && !directory.startsWith('zip:')) definitions.push(['inspect-folder-locks', 'Ordnersperren untersuchen', []]);
-      if (selection.gitFile) definitions.push(['git', 'Git', [], [['git-diff', 'Git-Diff', []]]]);
+      if (selection.gitHistory) definitions.push(['git', 'Git', [], [...(selection.gitFile ? [['git-diff', 'Git-Diff', []]] : []), ['git-history', 'Git History', []]]]);
     }
     const root = document.createElement('div'); root.className = 'main-menu context-menu'; root.dataset.contextMenu = '';
     function describe([action, label, keys, children]) {
@@ -4117,7 +4119,7 @@
     if (host && state.realFilesystem) {
       if (fileSettings.useSystemContextMenu !== true || ['linux', 'darwin'].includes(document.body.dataset.platform) && row) {
         const list = section.querySelector('.list');
-        gitMenuSelection = captureGitDiff(JSON.parse((row || list).dataset.vscodeContext));
+        gitMenuSelection = captureGitDiff(JSON.parse((row || list).dataset.vscodeContext), 'git-history');
         if (!row && event.button === 2) list.dataset.vscodeContext = JSON.stringify({ webviewSection: 'fileBackground', fileMenu: true, preventDefaultContextMenuItems: true, directory: currentPath(pane()), ids: [], snapshotId: state.snapshotId });
         list.focus();
         showContextMenu(event, section, 'files', JSON.parse((row || list).dataset.vscodeContext)); return;
