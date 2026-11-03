@@ -263,7 +263,7 @@ test('menu shortcuts show localized compact alternatives and expose every regist
     'select-group': ['NUMPAD_ADD', 'Shift+NUMPAD_ADD'], 'unselect-group': ['NUMPAD_SUBTRACT', 'Shift+NUMPAD_SUBTRACT'],
     clear: ['Control+NUMPAD_SUBTRACT', 'Control+Shift+NUMPAD_SUBTRACT'], invert: ['NUMPAD_MULTIPLY', 'Shift+NUMPAD_MULTIPLY'],
     'select-extension': ['Control+NUMPAD_ADD', 'Alt+NUMPAD_ADD'], 'restore-selection': ['NUMPAD_DIVIDE'],
-    'copy-full-names': ['Control+Y'],
+    'copy-full-names': ['Control+Y'], 'copy-full-names-slash': ['Control+Shift+Y'],
     'search-separate': ['Alt+Shift+F7'], back: ['Alt+ArrowLeft'],
     'swap-paths': ['Control+U'], swap: ['Control+Shift+U'], 'new-tab': ['Control+T'], refresh: ['Control+R']
   };

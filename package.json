@@ -57,6 +57,7 @@
       {
         "command": "bitfroest.copy-full-names-slash",
         "key": "ctrl+shift+y",
+        "mac": "cmd+shift+y",
         "when": "bitfroest.ready && activeWebviewPanelId == bitfroestPrototype && webviewFocus && bitfroest.listFocus && !bitfroest.textInput && !bitfroest.shortcutOverride.k1lbpxmk"
       },
       {
