@@ -41,10 +41,10 @@ for (const readingSide of [0, 1]) test(`viewing a file opposite a pending read o
  assert.equal(app.messages.find(message => message.type === 'lister-open')?.path, `${directory}/view.txt`);
 });
 function result(app, extra={}) {const fresh=app.state();fresh.snapshotId='new';fresh.unloadedFolders=[];fresh.folders['C:/tmp/docs']=[{id:'child',name:'child.txt',type:'text',size:1,fsSource:'C:/tmp/docs/child.txt'}];app.window.dispatchEvent(new app.window.MessageEvent('message',{data:{type:'filesystem-result',ok:true,state:fresh,...extra}}));}
-test('opening an unloaded folder waits for its shallow snapshot before changing directory',t=>{
+test('opening an unloaded folder changes directory before its shallow snapshot arrives',t=>{
  const app=createApp(t,fixture());select(app,'docs');app.key('Enter');
  const request=app.messages.find(message=>message.type==='filesystem-navigate');assert.ok(request);assert.equal(request.path,'C:/tmp/docs');
- assert.equal(app.state().panes[0].tabs[0],'C:/tmp');assert.equal(app.document.querySelector('#modal').open,false);
+ assert.equal(app.state().panes[0].tabs[0],'C:/tmp/docs');assert.equal(app.row('a.txt'),undefined);assert.equal(app.document.querySelector('#modal').open,false);
  result(app,{resumeNavigation:{path:'C:/tmp/docs',side:0}});
  assert.equal(app.state().panes[0].tabs[0],'C:/tmp/docs');assert.ok(app.row('child.txt'));
 });
@@ -128,8 +128,8 @@ test('a target edited in the transfer dialog is prepared without losing the chos
  result(app);await tick();const apply=app.messages.find(m=>m.type==='filesystem-apply');assert.ok(apply);assert.ok(apply.state.folders['C:/temp/incoming'].some(file=>file.name==='a.txt'));assert.equal(app.state().folders['C:/temp/incoming'].some(file=>file.name==='a.txt'),false);
  app.window.dispatchEvent(new app.window.MessageEvent('message',{data:{type:'filesystem-result',operationId:apply.operationId,ok:true,state:apply.state}}));assert.ok(app.state().folders['C:/temp/incoming'].some(file=>file.name==='a.txt'));
 });
-test('opening a folder in the opposite new tab waits for loading and leaves the source path intact',t=>{
- const app=createApp(t,fixture());select(app,'docs');app.action('open-dir-other-tab');assert.equal(app.state().panes[1].tabs.length,1);result(app);
+test('opening a folder in the opposite new tab displays its destination immediately and leaves the source path intact',t=>{
+ const app=createApp(t,fixture());select(app,'docs');app.action('open-dir-other-tab');assert.equal(app.state().panes[1].tabs.length,2);result(app);
  assert.equal(app.state().panes[0].tabs[0],'C:/tmp');assert.equal(app.state().panes[1].tabs.at(-1),'C:/tmp/docs');assert.equal(app.state().active,1);
 });
 test('dropping on an unloaded destination retains the source selection and move mode after loading',async t=>{

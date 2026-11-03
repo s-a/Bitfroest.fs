@@ -1035,6 +1035,38 @@ test('Git host never queues navigation behind a pending status calculation', asy
   assert.deepEqual(panel.messages.find(message => message.type === 'git-status-result')?.directories, {}); panel.dispose();
 });
 
+test('generated host HTML clears a cold directory immediately and keeps navigation bound through streamed completion', async t => {
+  const initial = clipboardFixture(), target = 'C:/tmp/next', waiting = deferred(), started = deferred();
+  initial.panes.forEach(p => { p.filter = ''; p.sort = 'name'; });
+  initial.folders['C:/tmp'].push({ id: 'next', name: 'next', type: 'folder' });
+  initial.folders[target] = []; initial.unloadedFolders = [target];
+  const row = { id: 'fresh', name: 'fresh.txt', type: 'text' };
+  const app = harness(t, { filesystemLoad: async () => initial, filesystemPrepare: async (before, options) => {
+    started.resolve(); await waiting.promise;
+    await options.onDirectory({ path: target, names: ['fresh.txt'], rows: [row] });
+    return { ...before, unloadedFolders: [], folders: { ...before.folders, [target]: [row] } };
+  } });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  assert.match(panel.webview.html, /Content-Security-Policy/);
+  assert.match(panel.webview.html, /script-src 'nonce-[^']+'/);
+  const view = require('./support/webview.cjs').createApp(t, initial, { html: panel.webview.html });
+  view.click(view.row('next').querySelector('[data-filename]')); view.key('Enter');
+  const request = view.messages.findLast(message => message.type === 'filesystem-navigate');
+  const pending = panel.receive(request); await started.promise;
+  assert.equal(view.state().panes[0].tabs[0], target);
+  assert.equal(Boolean(view.row('a.txt')), false);
+  view.click(view.document.querySelector('[data-pane="1"] .list'));
+  waiting.resolve(); await pending;
+  for (const data of panel.messages.filter(message => message.navigationRequestId === request.navigationRequestId)) {
+    view.window.dispatchEvent(new view.window.MessageEvent('message', { data }));
+  }
+  assert.equal(view.state().panes[0].tabs[0], target);
+  assert.equal(view.state().panes[1].tabs[0], 'C:/temp');
+  assert.equal(view.state().active, 1);
+  assert.equal(view.state().panes[0].tabs.length, 1);
+  assert.equal(Boolean(view.document.querySelector('[data-pane="0"] [data-id="fresh"]')), true);
+});
+
 test('directory navigation streams display batches and binds the final snapshot to the request', async t => {
   const initial = clipboardFixture(); initial.folders['C:/tmp/next'] = [];
   const app = harness(t, { filesystemLoad: async () => initial, filesystemPrepare: async (before, options) => {

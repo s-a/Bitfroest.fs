@@ -768,7 +768,7 @@
     for (const request of pending) {
       const origin = state.panes[request.message.side];
       if (!origin || origin.tabStates[origin.tab].id !== request.tabId) continue;
-      requestFilesystem(request.message, request.resume);
+      requestFilesystem(request.message, request.resume, request.rollback);
     }
   }
   function flushQueuedOperation() {
@@ -919,7 +919,7 @@
   function prioritizeFilesystemOperation() {
     if (!navigationRequests.size && !refreshingFilesystem) return;
     for (const request of navigationRequests.values()) {
-      if (['filesystem-navigate', 'zip-open'].includes(request.type)) deferredNavigationReads.set(navigationKey(request), { message: { type: request.type, path: request.path, side: request.side }, resume: request.resume, tabId: request.tabId });
+      if (['filesystem-navigate', 'zip-open'].includes(request.type)) deferredNavigationReads.set(navigationKey(request), { message: { type: request.type, path: request.path, side: request.side }, resume: request.resume, rollback: request.rollback, tabId: request.tabId });
     }
     navigationRequests.clear(); navigationByTab.clear();
     host?.postMessage({ type: 'filesystem-read-cancel' });
@@ -932,7 +932,7 @@
     }
     updateDirectoryActivity();
   }
-  function requestFilesystem(message, resume) {
+  function requestFilesystem(message, resume, rollback) {
     if (!['filesystem-navigate', 'zip-open', 'filesystem-refresh'].includes(message.type)) prioritizeFilesystemOperation();
     if (message.type === 'zip-open' && (!filesystemPending || operationQueue?.active)) {
       const origin = state.panes[message.side], navigationRequestId = `directory-${++navigationSequence}`;
@@ -947,7 +947,7 @@
         if (origin) {
           const tabId = origin.tabStates[origin.tab].id;
           for (const [key, pending] of deferredNavigationReads) if (pending.message.side === message.side && pending.tabId !== tabId) deferredNavigationReads.delete(key);
-          deferredNavigationReads.set(`${message.side}:${tabId}`, { message: { ...message }, resume, tabId });
+          deferredNavigationReads.set(`${message.side}:${tabId}`, { message: { ...message }, resume, rollback, tabId });
         }
         statusbar.setStatus(t('Verzeichnisanfrage wartet auf Kopierplanung.'), 'info');
         return true;
@@ -955,7 +955,9 @@
       cacheDirectories();
       const navigationRequestId = `directory-${++navigationSequence}`;
       const origin = state.panes[message.side];
-      const request = { ...message, navigationRequestId, startedAt: performance.now(), resume, tabId: origin.tabStates[origin.tab].id, originPath: currentPath(origin), activeAtStart: state.active, pathNavigation: pendingPathNavigation };
+      const previous = navigationByTab.get(`${message.side}:${origin.tabStates[origin.tab].id}`);
+      if (!rollback && previous?.path === message.path) rollback = previous.rollback;
+      const request = { ...message, navigationRequestId, startedAt: performance.now(), resume, rollback, tabId: origin.tabStates[origin.tab].id, originPath: currentPath(origin), activeAtStart: state.active, pathNavigation: pendingPathNavigation };
       pendingPathNavigation = null;
       navigationRequests.set(navigationRequestId, request); navigationByTab.set(navigationKey(request), request);
       for (const path of directoryListings.keys()) if (!state.panes.some(p => currentPath(p) === path)) directoryListings.delete(path);
@@ -1020,9 +1022,9 @@
     rememberScroll(); const previousViews = state.panes.map(paneDisplayState), view = state.panes, active = state.active;
     navigationRequests.delete(request.navigationRequestId);
     if (latest) navigationByTab.delete(navigationKey(request));
-    if (data.state?.realFilesystem) { state = data.state; state.panes = view; state.active = active; confirmedFolders = JSON.stringify(state.folders); }
-    if (success && state.folders[request.path]) directoryCache.set(request.path, state.folders[request.path]);
-    if (latest) {
+    if (contextValid && data.state?.realFilesystem) { state = data.state; state.panes = view; state.active = active; confirmedFolders = JSON.stringify(state.folders); }
+    if (contextValid && success && state.folders[request.path]) directoryCache.set(request.path, state.folders[request.path]);
+    if (contextValid) {
       if (success) directoryListings.delete(request.path);
       else { const cached = directoryCache.get(request.path); if (cached) directoryListings.set(request.path, cached); }
       if (displayed && origin.tabStates[origin.tab].id === request.tabId) {
@@ -1031,7 +1033,20 @@
         gitBindings.delete(request.path);
       }
     }
+    const failedInput = !success && contextValid && request.rollback?.input?.element === document.activeElement ? request.rollback.input : null;
+    if (!success && contextValid && request.rollback) {
+      if (request.rollback.closeTab) tabs.close(origin);
+      else {
+        const tab = request.rollback.tab;
+        origin.tabs[origin.tab] = tab.path; origin.tabStates[origin.tab] = tab;
+        Object.assign(origin, clone(tab.view));
+      }
+    }
     render(false, previousViews, false);
+    if (failedInput) {
+      const { element, value, start, end } = failedInput;
+      element.value = value; element.setSelectionRange(start, end); element.closest('.path-address').classList.add('is-editing');
+    }
     if (request.pathNavigation) request.pathNavigation.valid = contextValid && request.pathNavigation.generation === pathRequestGeneration && document.activeElement === request.pathNavigation.input;
     if (contextValid && success) {
       validatedNavigation = request.path;
@@ -1048,7 +1063,7 @@
           else document.querySelector(`[data-pane="${active}"] .list`)?.focus();
         }
       }
-    } else if (latest && origin.tabStates[origin.tab].id === request.tabId && !data.ok) toast(data.error || t('Dateioperation fehlgeschlagen.'), 'error');
+    } else if (contextValid && !data.ok) toast(data.error || t('Dateioperation fehlgeschlagen.'), 'error');
     requestGitStatus(); updateDirectoryActivity(); flushQueuedOperation(); flushFocusRefresh();
     return true;
   }
@@ -2073,11 +2088,13 @@
       const side = state.active;
       cacheDirectories();
       const cached = directoryCache.get(path) || (!state.unloadedFolders?.includes(path) ? state.folders[path] : undefined);
-      if (cached) {
-        rememberScroll(); const previousViews = state.panes.map(paneDisplayState);
-        directoryListings.set(path, cached); delete pane().tabStates[pane().tab].searchResult; tabs.navigate(pane(), path); render(true, previousViews, false);
-      }
-      requestFilesystem({ type: 'filesystem-navigate', path, side }, cached ? undefined : () => { state.active = side; go(path); }); return;
+      rememberScroll(); const previousViews = state.panes.map(paneDisplayState);
+      const rollback = cached ? undefined : { tab: clone(tabs.remember(pane())) };
+      const input = document.activeElement?.matches('.path-input') ? document.activeElement : null;
+      if (rollback && input) rollback.input = { element: input, value: input.value, start: input.selectionStart, end: input.selectionEnd };
+      directoryListings.set(path, cached || []); delete pane().tabStates[pane().tab].searchResult; tabs.navigate(pane(), path); render(!input, previousViews, false);
+      if (input) input.closest('.path-address').classList.add('is-editing');
+      requestFilesystem({ type: 'filesystem-navigate', path, side }, undefined, rollback); return;
     }
     if (!Object.hasOwn(state.folders, path)) return toast(t('Dieser Pfad ist in den Beispieldaten nicht vorhanden.'));
     rememberScroll(); const previousViews = state.panes.map(paneDisplayState); delete pane().tabStates[pane().tab].searchResult; tabs.navigate(pane(), path); render(true, previousViews); toast(t('Verzeichnis geöffnet: {path}', { path: displayArchivePath(path) }), 'success');
@@ -2110,7 +2127,7 @@
     if (!newTab) { go(path); return; }
     const side = state.active, sourcePane = pane(), sourceTab = sourcePane.tabStates[sourcePane.tab].id;
     const open = () => {
-      if (state.panes[side] !== sourcePane || sourcePane.tabStates[sourcePane.tab].id !== sourceTab) return;
+      if (backgroundNavigation || state.panes[side] !== sourcePane || sourcePane.tabStates[sourcePane.tab].id !== sourceTab) return;
       state.active = side; rememberScroll(); tabs.openPath(sourcePane, path); go(path);
     };
     if (host && state.realFilesystem && !state.archiveLocations?.[path]) requestFilesystem({ type: 'filesystem-navigate', path, side }, open);
@@ -3084,6 +3101,7 @@
     }
     if (['new-tab', 'background-tab', 'close-tab', 'next-tab', 'previous-tab', 'open-dir-tab', 'open-dir-other-tab', 'back', 'forward', 'history-jump'].includes(command)) {
       rememberScroll(); const p = pane(), previousViews = state.panes.map(paneDisplayState), previousPath = currentPath(p), previousTab = p.tabStates[p.tab].id, previousSide = state.active;
+      let navigationRollback;
       if (command === 'new-tab' || command === 'background-tab') tabs.duplicate(p, { background: command === 'background-tab' });
       if (command === 'close-tab' && !tabs.close(p, contextSelection?.tabId ? p.tabStates.findIndex(tab => tab.id === contextSelection.tabId) : p.tab)) return toast(t('Der letzte Ordner-Tab bleibt geöffnet.'));
       if (command === 'next-tab' || command === 'previous-tab') tabs.step(p, command === 'next-tab' ? 1 : -1);
@@ -3099,16 +3117,14 @@
         if (!file || !['folder', 'archive'].includes(file.type)) return;
         const destination = entryPath(p, file) + (file.type === 'archive' ? '!' : '');
         if (!Object.hasOwn(state.folders, destination)) return;
-        if (host && state.realFilesystem && state.unloadedFolders?.includes(destination)) {
-          requestFilesystem({ type: 'filesystem-navigate', path: destination, side: command === 'open-dir-other-tab' ? 1 - state.active : state.active }, () => run(command)); return;
-        }
         const other = command === 'open-dir-other-tab';
         tabs.openPath(state.panes[other ? 1 - state.active : state.active], destination);
+        navigationRollback = { closeTab: true };
         if (other) state.active = 1 - state.active;
       }
       if (host && state.realFilesystem && !resultView(pane()) && (state.unloadedFolders?.includes(currentPath(pane())) || currentPath(pane()) !== previousPath || pane().tabStates[pane().tab].id !== previousTab || state.active !== previousSide)) {
         render(true, previousViews, false);
-        requestFilesystem({ type: 'filesystem-navigate', path: currentPath(pane()), side: state.active }, () => { focusSelection(); toast(t('Ordner-Tab geändert.'), 'success'); }); return;
+        requestFilesystem({ type: 'filesystem-navigate', path: currentPath(pane()), side: state.active }, () => { focusSelection(); toast(t('Ordner-Tab geändert.'), 'success'); }, navigationRollback); return;
       }
       render(true, previousViews); toast(t('Ordner-Tab geändert.'), 'success'); return;
     }

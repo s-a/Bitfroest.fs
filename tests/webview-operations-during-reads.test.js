@@ -38,7 +38,7 @@ for (const reading of ['left', 'right', 'both', 'refresh']) for (const command o
     if (reading === 'refresh') app.action('refresh');
     else for (const side of reading === 'both' ? [0, 1] : [reading === 'left' ? 0 : 1]) {
       app.click(app.document.querySelector(`[data-pane="${side}"] [data-file-row][data-id="C:/${side ? 'right' : 'left'}/folder"] [data-filename]`));
-      app.key('Enter');
+      app.action('open-dir-tab'); app.action('previous-tab');
     }
     const requests = app.messages.filter(message => ['filesystem-navigate', 'filesystem-refresh'].includes(message.type));
     assert.ok(requests.length);
@@ -99,14 +99,14 @@ test('packing remains available while the opposite archive view is opening', t =
 });
 test('an interrupted directory read resumes only after the confirmed copy completes', async t => {
   const app = createApp(t, fixture());
-  app.click(app.document.querySelector('[data-pane="0"] [data-file-row][data-id="C:/left/folder"] [data-filename]')); app.key('Enter');
+  app.click(app.document.querySelector('[data-pane="0"] [data-file-row][data-id="C:/left/folder"] [data-filename]')); app.action('open-dir-tab'); app.action('previous-tab');
   const first = app.messages.find(message => message.type === 'filesystem-navigate');
   app.click(app.document.querySelector('[data-pane="1"] [data-file-row][data-id="C:/right/file"] [data-filename]')); app.action('copy');
   assert.equal(app.messages.some(message => message.type === 'filesystem-read-cancel'), false, 'opening a dialog does not interrupt a read');
   submit(app); await tick();
   const copy = app.messages.find(message => message.type === 'filesystem-apply'); assert.ok(copy);
-  assert.equal(app.messages.filter(message => message.type === 'filesystem-navigate').length, 1);
+  assert.equal(app.messages.filter(message => message.type === 'filesystem-navigate').length, 2);
   app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-result', operationId: copy.operationId, ok: true, state: { ...copy.state, snapshotId: 'copied' } } }));
   const next = app.messages.filter(message => message.type === 'filesystem-navigate').at(-1);
-  assert.notEqual(next.navigationRequestId, first.navigationRequestId); assert.equal(next.path, first.path); assert.equal(next.side, first.side);
+  assert.notEqual(next.navigationRequestId, first.navigationRequestId); assert.equal(next.path, 'C:/left'); assert.equal(next.side, first.side);
 });
