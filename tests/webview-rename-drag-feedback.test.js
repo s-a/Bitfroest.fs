@@ -111,7 +111,12 @@ test('drag feedback cannot cover a drop target and uses readable theme colors an
   app.document.head.append(style);
   const feedback = app.document.querySelector('.file-drag-feedback'); assert.ok(feedback);
   assert.equal(app.window.getComputedStyle(feedback).pointerEvents, 'none');
-  assert.equal(app.window.getComputedStyle(feedback.querySelector('svg')).width, '24px');
+  const styleFeedback = app.window.getComputedStyle(feedback);
+  assert.equal(styleFeedback.fontSize, '12px');
+  assert.equal(styleFeedback.fontWeight, '400');
+  assert.equal(styleFeedback.padding, '3px 6px');
+  assert.equal(styleFeedback.borderTopWidth, '1px');
+  assert.equal(app.window.getComputedStyle(feedback.querySelector('svg')).width, '16px');
   drag(app, 'dragover', app.row('a.txt'));
   assert.equal(app.document.querySelector('.file-drag-feedback'), null);
 });
