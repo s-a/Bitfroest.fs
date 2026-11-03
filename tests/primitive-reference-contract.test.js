@@ -68,7 +68,7 @@ test('PRIM-015 preview cancellation and a collision at the second destination le
   }
 });
 
-test('PRIM-020 both delete keys obey all preference/Shift combinations and cancellation preserves the selected group', t => {
+test('PRIM-020 both delete keys use trash unless Shift is held and cancellation preserves the selected group', t => {
   for (const key of ['F8', 'Delete']) for (const deleteToTrash of [true, false]) for (const shiftKey of [true, false]) {
     const saved = fixture(); saved.panes[0].selected = ['a', 'b']; saved.panes[0].cursor = 'a';
     const app = createApp(t, saved), before = structuredClone(app.state().folders);
@@ -79,7 +79,7 @@ test('PRIM-020 both delete keys obey all preference/Shift combinations and cance
     app.key(key, { shiftKey }); submit(app);
     const requests = app.messages.filter(message => message.type === 'filesystem-delete');
     assert.equal(requests.length, 1);
-    assert.equal(requests[0].useTrash, deleteToTrash !== shiftKey);
+    assert.equal(requests[0].useTrash, !shiftKey);
     assert.deepEqual(requests[0].paths, ['C:/tmp/a.txt', 'C:/tmp/b.txt']);
     assert.deepEqual(app.state().folders, before);
   }

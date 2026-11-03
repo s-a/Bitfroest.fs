@@ -16,6 +16,16 @@ test('network deletion confirms only mapped and UNC targets before permitting pe
   assert.deepEqual(result, network);
 });
 
+test('unchanged explicitly confirmed network paths need no duplicate warning but changed mappings do', async () => {
+  let confirmations = 0;
+  const paths = ['Z:/a', 'C:/local'];
+  const options = { platform: 'win32', resolvePaths: async () => ['//server/share/a', 'C:/local'], confirmedPaths: ['Z:/a'], confirm: async () => { confirmations++; return false; } };
+  assert.deepEqual(await prepareNetworkDeletion(paths, true, options), ['Z:/a']);
+  assert.equal(confirmations, 0);
+  await assert.rejects(prepareNetworkDeletion(paths, true, { ...options, confirmedPaths: ['C:/local'] }), { name: 'AbortError' });
+  assert.equal(confirmations, 1);
+});
+
 test('declined network deletion aborts and local or explicitly permanent deletion needs no extra confirmation', async () => {
   await assert.rejects(prepareNetworkDeletion(['\\\\server\\share\\a'], true, {
     platform: 'win32', confirm: async () => false

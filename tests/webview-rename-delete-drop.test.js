@@ -106,8 +106,8 @@ test('reading and dismissing inline failure details keeps the editable rename pr
   assert.equal(app.document.activeElement, recovered);
   assert.equal(app.messages.filter(item => item.type === 'filesystem-apply').length, 1);
 });
-test('dropping an internal selected group on F8 uses the confirmed configured deletion mode', t => {
-  for (const [deleteToTrash, shiftKey, expected] of [[true, false, true], [true, true, false], [false, true, true]]) {
+test('dropping an internal selected group on F8 confirms trash or permanent deletion with Shift', t => {
+  for (const [deleteToTrash, shiftKey, expected] of [[true, false, true], [true, true, false], [false, true, false]]) {
     const state = fixture(); state.panes[0].selected = ['a', 'b']; const app = createApp(t, state);
     message(app, { type: 'file-settings', settings: { deleteToTrash } });
     const button = app.document.querySelector('#functionbar [data-action="delete"]');

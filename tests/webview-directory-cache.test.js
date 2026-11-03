@@ -23,6 +23,26 @@ test('opening a child remains available while a parent directory is being revali
 const send = (app, data) => app.window.dispatchEvent(new app.window.MessageEvent('message', { data }));
 const enter = app => { app.click(app.row('child').querySelector('[data-filename]')); app.key('Enter'); };
 
+for (const input of ['keyboard', 'context menu']) test(`deleting a newly streamed folder via ${input} starts without preparation before the unfinished listing completes`, t => {
+  const app = createApp(t, fixture());
+  enter(app); app.key('Backspace');
+  const request = app.messages.filter(message => message.type === 'filesystem-navigate').at(-1);
+  const streamed = { id: 'new-folder', name: 'new-folder', type: 'folder', fsSource: '/root/new-folder' };
+  send(app, { type: 'filesystem-directory', navigationRequestId: request.navigationRequestId, path: '/root', rows: [streamed] });
+  if (input === 'keyboard') { app.click(app.row('new-folder').querySelector('[data-filename]')); app.key('Delete'); }
+  else {
+    app.row('new-folder').dispatchEvent(new app.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }));
+    app.click(app.document.querySelector('[data-context-action="delete"]'));
+  }
+  assert.equal(app.document.querySelector('#modal').open, true);
+  assert.equal(app.messages.some(message => message.type === 'filesystem-prepare'), false);
+  app.document.querySelector('#modal-form').dispatchEvent(new app.window.Event('submit', { bubbles: true, cancelable: true }));
+  assert.equal(app.messages.some(message => message.type === 'filesystem-prepare'), false);
+  assert.deepEqual(Array.from(app.messages.find(message => message.type === 'filesystem-delete')?.paths || []), ['/root/new-folder']);
+  send(app, { type: 'filesystem-result', navigationRequestId: request.navigationRequestId, ok: true, state: { ...fixture(), snapshotId: 'obsolete' } });
+  assert.equal(app.state().snapshotId, 'one');
+});
+
 test('a pending read belongs to its tab and does not mark a newly opened tab as loading', t => {
   const state = fixture(); state.unloadedFolders = ['/root/child']; state.folders['/root/child'] = [];
   const app = createApp(t, state);

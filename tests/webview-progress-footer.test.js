@@ -5,6 +5,18 @@ const path = require('node:path');
 const { createApp } = require('./support/webview.cjs');
 const Progress = require('../media/commander-progress');
 
+test('copied status logs retain native clipboard diagnostics', t => {
+  const pane = path => ({ tabs: [path], tab: 0, selected: [], cursor: null, filter: '', sort: 'name' });
+  const app = createApp(t, { version: 1, realFilesystem: true, snapshotId: 'clipboard-log', active: 0, panes: [pane('/left'), pane('/right')], folders: { '/left': [], '/right': [] } });
+  app.action('refresh');
+  app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'clipboard-result', requestId: 'clipboard-native', ok: false, error: 'Native clipboard failure', diagnostic: { failure: { nativeCode: '-2147024809', operation: 'clipboard.writeFiles' } } } }));
+  app.click(app.document.querySelector('#status-activity [data-status-icon], #status-message [data-status-icon]'));
+  const request = app.messages.findLast(message => message.type === 'status-log-copy'); assert.ok(request);
+  const entry = JSON.parse(request.text).context.hostEvents.find(event => event.requestId === 'clipboard-native'); assert.ok(entry);
+  assert.equal(entry.diagnostic.failure.nativeCode, '-2147024809');
+  assert.equal(entry.diagnostic.failure.operation, 'clipboard.writeFiles');
+});
+
 test('footer icon copies the message and execution log and confirms only a successful reply', async t => {
   const p = path => ({ tabs: [path], tab: 0, selected: [], cursor: null, filter: '', sort: 'name' });
   const app = createApp(t, { version: 1, realFilesystem: true, snapshotId: 'log', active: 0, panes: [p('/left'), p('/right')], folders: { '/left': [], '/right': [] } });

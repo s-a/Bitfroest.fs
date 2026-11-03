@@ -5,6 +5,9 @@
 })(typeof globalThis === 'object' ? globalThis : this, function () {
   'use strict';
   const pairs = {
+    'Abweichende Quellmerkmale': 'Mismatched source fields',
+    'Erwartet': 'Expected',
+    'Gelesen': 'Observed',
     'Uhrzeit': 'Time',
     'Gleicher Wert': 'Equal value',
     'Unterschiedlicher Wert': 'Different value',
@@ -407,6 +410,11 @@
     'Entscheidungen für alle Dateien gelten für weitere Konflikte dieses Auftrags.': 'Decisions for all files apply to subsequent conflicts in this operation.',
     'Anzeigen': 'View', 'Bearbeiten': 'Edit', 'Kopieren': 'Copy', 'Verschieben': 'Move', 'Neuer Ordner': 'New folder', 'Löschen': 'Delete',
     'Endgültig löschen?': 'Delete permanently?', 'Endgültig löschen': 'Delete permanently', 'Abbrechen': 'Cancel', 'Schließen': 'Close', 'Übernehmen': 'Apply',
+    'Die ausgewählten Einträge werden nicht in den Papierkorb verschoben, sondern endgültig gelöscht.': 'The selected entries will be permanently deleted without using the Recycle Bin.',
+    'Netzwerkpfade werden endgültig gelöscht und nicht in den Papierkorb verschoben.': 'Network paths will be permanently deleted without using the Recycle Bin.',
+    'Lokale Einträge werden in den Papierkorb verschoben. Netzwerkpfade werden endgültig gelöscht.': 'Local entries will be moved to the Recycle Bin. Network paths will be permanently deleted.',
+    'Diese Netzwerkpfade können nicht in den lokalen Papierkorb verschoben werden. Endgültig löschen?': 'These network paths cannot be moved to the local Recycle Bin. Delete them permanently?',
+    'Erwartete Ordnermetadaten': 'Expected directory metadata', 'Gelesene Ordnermetadaten': 'Observed directory metadata', 'Abweichende Ordnermerkmale': 'Differing directory fields',
     'Name': 'Name', 'Erweiterung': 'Extension', 'Ext.': 'Ext.', 'Größe': 'Size', 'Datum': 'Date', 'Attribute': 'Attributes', 'Attr.': 'Attr.', 'Ordner': 'folders', 'Dateien': 'files',
     'Linke': 'Left', 'Rechte': 'Right', 'LINKE': 'LEFT', 'RECHTE': 'RIGHT', 'Dateiliste': 'file list', 'DATEILISTE': 'FILE LIST', 'AKTIV': 'ACTIVE', 'GEGENSEITE': 'TARGET',
     'links': 'left', 'rechts': 'right', 'Ordner-Tabs': 'Folder tabs', 'Doppelklick schließt': 'Double-click to close', 'Ordner-Tab hinzufügen': 'Add folder tab',

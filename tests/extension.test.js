@@ -1141,7 +1141,9 @@ function harness(t, options = {}) {
       if (request === 'vscode') return vscode;
       if (request === './open-terminal') return { openTerminal: async target => { if (options.terminalOpen) return options.terminalOpen(target); throw new Error('Terminal unavailable'); } };
       if (request === './license-information' && options.licenseOpenError) return { createLicenseInformation: () => ({ dispose() {}, async open() { throw new Error(options.licenseOpenError); } }) };
-      if (request === './network-paths') return { resolveUncPaths: options.resolveUncPaths || (async paths => paths) };
+      if (request === './network-paths') return { prepareNetworkDeletion: require('../network-paths').prepareNetworkDeletion,
+        findNetworkPaths: paths => require('../network-paths').findNetworkPaths(paths, { resolvePaths: options.resolveUncPaths || (async paths => paths) }),
+        resolveUncPaths: options.resolveUncPaths || (async paths => paths) };
       if (request === './lock-inspector') return { createLockInspector: () => ({ open: folder => options.lockInspectorOpen?.(folder), dispose() {} }) };
       if (request === './open-file') return { openAssociatedFile: async target => { openCalls.push(target); if (options.openError) throw new Error(options.openError); return { editor: Boolean(options.associatedEditor) }; } };
       if (request === './search-provider' && options.searchRoots) return { createSearchProvider: args => require('../search-provider').createSearchProvider({ ...args, roots: options.searchRoots }) };
@@ -2877,6 +2879,49 @@ test('concurrent status button opens share the pending startup until the first p
   gate.resolve(); await Promise.all([first, second]); assert.equal(app.panels.length, 1);
 });
 
+test('real provider deletes a streamed folder without preparation before the pending host listing completes', { timeout: 10000 }, async t => {
+  const disk = require('node:fs/promises'), { createProvider } = require('../filesystem-provider');
+  const root = (await disk.mkdtemp(path.join(os.tmpdir(), 'stream-delete-host-'))).replaceAll('\\', '/');
+  const left = `${root}/left`, right = `${root}/right`, target = `${left}/new-folder`;
+  t.after(() => disk.rm(root, { recursive: true, force: true }));
+  await disk.mkdir(left); await disk.mkdir(right);
+  const started = deferred(), release = deferred(), calls = [];
+  t.after(() => release.resolve());
+  let holding = false;
+  const app = harness(t, { startupRoots: [left, right], providerFactory: creation => {
+    const provider = createProvider({ ...creation, roots: [left, right], readDirectory: undefined, readAttributes: undefined, networkPaths: async () => [],
+      fs: { ...disk, readdir: async (directory, ...args) => {
+        assert.equal(String(directory).replaceAll('\\', '/').startsWith(target), false, 'no inventory of the deletion target');
+        return disk.readdir(directory, ...args);
+      } },
+      deletePath: async (target, options) => { calls.push([target, options.useTrash]); await disk.rm(target, { recursive: true }); } });
+    const prepare = provider.prepare;
+    provider.prepare = (before, settings) => prepare(before, { ...settings, onDirectory: async update => {
+      await settings.onDirectory?.(update);
+      if (holding && settings.navigation && update.path === left && update.rows?.some(row => row.name === 'new-folder')) {
+        holding = false; started.resolve(); await release.promise;
+      }
+    } });
+    return provider;
+  } });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  assert.match(panel.webview.html, /Content-Security-Policy/);
+  const initial = require('./support/webview.cjs').createApp(t, undefined, { html: panel.webview.html }).state();
+  await disk.mkdir(`${target}/nested`, { recursive: true }); await disk.writeFile(`${target}/nested/keep.txt`, 'fixture'); holding = true;
+  let listingDone = false;
+  const listing = panel.receive({ type: 'filesystem-navigate', navigationRequestId: 'directory-101', side: 0, path: left, state: initial }).finally(() => { listingDone = true; });
+  await started.promise;
+  assert.equal(listingDone, false);
+  assert.ok(panel.messages.some(message => message.type === 'filesystem-directory' && message.rows?.some(row => row.name === 'new-folder')));
+  await panel.receive({ type: 'filesystem-delete', paths: [target], useTrash: false, operationId: 'delete-streamed-test', state: initial });
+  assert.equal(listingDone, false);
+  assert.deepEqual(calls, [[target, false]]);
+  assert.equal(panel.messages.findLast(message => message.operationId === 'delete-streamed-test')?.ok, true);
+  await assert.rejects(disk.lstat(target), { code: 'ENOENT' });
+  release.resolve(); await listing;
+  assert.equal(panel.messages.findLast(message => message.navigationRequestId === 'directory-101')?.cancelled, true);
+});
+
 test('folder tabs and their active positions survive a fresh extension instance and provider', async t => {
   const fs = require('node:fs/promises'), os = require('node:os'), { createProvider } = require('../filesystem-provider');
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'tab-restart-')), left = path.join(root, 'left').replaceAll('\\', '/'), right = path.join(root, 'right').replaceAll('\\', '/'), inactive = `${left}/nested/archive`;
@@ -3961,6 +4006,57 @@ test('reopening waits for an in-flight preparation before loading the replacemen
 });
 
 
+test('generated host HTML exposes confirmed context deletion without a trash preference', async t => {
+  const initial = clipboardFixture();
+  initial.panes.forEach(pane => { pane.filter = ''; pane.sort = 'name'; });
+  const app = harness(t, { filesystemLoad: async () => structuredClone(initial) });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0], html = panel.webview.html;
+  assert.match(html, /Content-Security-Policy/); assert.match(html, /script-src 'nonce-[^']+'/);
+  const settings = JSON.parse(decodeURIComponent(/data-file-settings="([^"]+)"/.exec(html)[1]));
+  assert.equal(Object.hasOwn(settings, 'deleteToTrash'), false);
+  const view = require('./support/webview.cjs').createApp(t, initial, { html });
+  view.row('a.txt').dispatchEvent(new view.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }));
+  view.click(view.document.querySelector('[data-context-action="delete"]'));
+  assert.equal(view.document.querySelector('#modal').open, true);
+  assert.equal(view.messages.some(message => message.type === 'filesystem-delete'), false);
+  view.document.querySelector('#modal-form').dispatchEvent(new view.window.Event('submit', { bubbles: true, cancelable: true }));
+  const request = view.messages.find(message => message.type === 'filesystem-delete');
+  assert.equal(request.useTrash, true); assert.deepEqual(Array.from(request.paths), ['C:/tmp/a.txt']);
+});
+
+test('generated host HTML confirms mapped network deletion permanently before preparation', async t => {
+  const initial = clipboardFixture(); initial.networkDirectories = ['C:/tmp'];
+  initial.panes.forEach(pane => { pane.filter = ''; pane.sort = 'name'; });
+  const app = harness(t, { filesystemLoad: async () => initial,
+    resolveUncPaths: async paths => paths.map(value => value.startsWith('Z:') ? '//server/share' : value) });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  assert.deepEqual(await app.providerOptions.networkPaths(['Z:/', 'C:/']), ['Z:/']);
+  const view = require('./support/webview.cjs').createApp(t, initial, { html: panel.webview.html });
+  view.click(view.row('a.txt'));
+  view.key('Delete');
+  assert.equal(view.document.querySelector('#modal-confirm').textContent, 'Endgültig löschen');
+  assert.match(view.document.querySelector('#modal-description').textContent, /Netzwerk/);
+  assert.equal(view.messages.some(message => message.type === 'filesystem-prepare'), false);
+  view.document.querySelector('#modal-form').dispatchEvent(new view.window.Event('submit', { bubbles: true, cancelable: true }));
+  assert.equal(view.messages.find(message => message.type === 'filesystem-delete').useTrash, false);
+});
+
+test('network delete offers a localized permanent confirmation and cancellation', async t => {
+  let accept = false;
+  const app = harness(t, { language: 'en',
+    resolveUncPaths: async paths => paths.map(value => value.startsWith('Z:') ? '//server/share/file' : value),
+    showWarningMessage: (message, options, action) => {
+      assert.equal(message, 'These network paths cannot be moved to the local Recycle Bin. Delete them permanently?');
+      assert.equal(options.modal, true); assert.equal(options.detail, 'Z:/file');
+      assert.equal(action, 'Delete permanently'); return accept ? action : undefined;
+    }
+  });
+  const paths = ['Z:/file', 'C:/file'];
+  await assert.rejects(app.providerOptions.prepareDelete(paths, true), { name: 'AbortError' });
+  accept = true;
+  assert.deepEqual(await app.providerOptions.prepareDelete(paths, true), ['Z:/file']);
+});
+
 test('real delete passes useTrash explicitly to the VS Code filesystem adapter', async t => {
   const real = { version: 1, realFilesystem: true, snapshotId: 'delete', folders: { 'C:/tmp': [] }, panes: [{ tabs: ['C:/tmp'], tab: 0 }, { tabs: ['C:/temp'], tab: 0 }] };
   const app = harness(t, { filesystemLoad: async () => real, filesystemRemove: async (before, request, options) => { await options.deletePath(request.paths[0], { useTrash: request.useTrash, recursive: true }); return real; } });
@@ -4098,6 +4194,38 @@ test('file clipboard errors cannot report successful system export', async t => 
   assert.match(app.panels[0].messages.at(-1).error, /Clipboard busy/);
 });
 
+for (const includeMode of [false, true]) test(`copy errors preserve the exact rejected source identity in host diagnostics (mode: ${includeMode})`, async t => {
+  const expected = { dev: '1', ino: '2', ...(includeMode ? { mode: '33206' } : {}), size: '1024', mtimeNs: '100', ctimeNs: '200' }, observed = { ...expected, ...(includeMode ? { mode: '33060' } : {}), ctimeNs: '300' };
+  const failure = Object.assign(new Error('The source changed before copying.'), { code: 'IdentityChanged', outcome: { status: 'unchanged', copied: false, sourceIdentity: { expected, observed } } });
+  const initial = clipboardFixture();
+  const app = harness(t, { filesystemLoad: async () => initial, filesystemApply: async () => { throw failure; } });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  const view = require('./support/webview.cjs').createApp(t, initial, { html: panel.webview.html });
+  view.click(view.row('a.txt').querySelector('[data-filename]')); view.action('copy');
+  view.document.querySelector('#modal-form').dispatchEvent(new view.window.Event('submit', { bubbles: true, cancelable: true })); await tick();
+  const request = view.messages.find(message => message.type === 'filesystem-apply'); assert.ok(request);
+  await panel.receive(request);
+  const response = panel.messages.findLast(message => message.type === 'filesystem-result');
+  assert.equal(response.ok, false);
+  assert.deepEqual(response.diagnostic.failure.sourceIdentity, { expected, observed, differingFields: [...(includeMode ? ['mode'] : []), 'ctimeNs'] });
+  view.window.dispatchEvent(new view.window.MessageEvent('message', { data: response })); await tick();
+  for (const key of Object.keys(expected)) assert.ok(view.document.querySelector('.operation-error-text').value.includes(`${key}: Erwartet=${expected[key]}, Gelesen=${observed[key]}`));
+  assert.match(view.document.querySelector('.operation-error-text').value, /ctimeNs: Erwartet=200, Gelesen=300/);
+  assert.ok(view.row('a.txt'));
+});
+
+test('native file clipboard failures retain the operation and error code for diagnostics', async t => {
+  const failure = Object.assign(new Error('Windows file clipboard operation failed.'), { code: 'InvalidRequest', nativeCode: -2147024809, operation: 'clipboard.writeFiles' });
+  const app = harness(t, { filesystemLoad: async () => clipboardFixture(), clipboardFactory: () => ({ write: async () => { throw failure; }, dispose() {} }) });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  await panel.receive({ type: 'clipboard-write', requestId: 'native-clipboard-error', paths: ['C:/tmp/a.txt'], mode: 'copy' });
+  const response = panel.messages.at(-1);
+  assert.equal(response.ok, false);
+  assert.equal(response.diagnostic.failure.nativeCode, '-2147024809');
+  assert.equal(response.diagnostic.failure.operation, 'clipboard.writeFiles');
+  assert.equal(response.diagnostic.failure.code, 'InvalidRequest');
+});
+
 test('clipboard commands and shortcuts are registered only for focused file lists', async t => {
   const app = harness(t); await app.command('bitfroest.openPrototype');
   for (const [action,key] of [['clipboard-copy','c'],['clipboard-cut','x'],['clipboard-paste','v']]) {
@@ -4157,7 +4285,7 @@ test('preparation has progress and a cancellable job before applying any mutatio
 
 test('failed preparation acknowledges and releases the filesystem queue without a blocking native popup', async t => {
   let releaseError;
-  const failure = Object.assign(new Error('Preparation failed'), { code: 'FolderChangedDuringScan', path: 'C:/tmp', scanPhase: 'readdir', cause: Object.assign(new Error('Directory changed'), { code: 'ESTALE', path: 'C:/tmp', scanPhase: 'stat', stack: 'cause stack' }) });
+  const failure = Object.assign(new Error('Preparation failed'), { code: 'FolderChangedDuringScan', path: 'C:/tmp', scanPhase: 'readdir', expectedDirectory: '{"ino":"1"}', observedDirectory: '{"ino":"2"}', changedFields: 'ino', cause: Object.assign(new Error('Directory changed'), { code: 'ESTALE', path: 'C:/tmp', scanPhase: 'stat', stack: 'cause stack' }) });
   const app = harness(t, { filesystemLoad: async () => clipboardFixture(), filesystemPrepare: async () => { throw failure; }, showErrorMessage: () => new Promise(resolve => { releaseError = resolve; }) });
   await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
   const pending = panel.receive({ type: 'filesystem-prepare', operationId: 'prepare-failure', snapshotId: 'clipboard', paths: ['C:/tmp'], action: 'copy', state: clipboardFixture() });
@@ -4171,6 +4299,7 @@ test('failed preparation acknowledges and releases the filesystem queue without 
   assert.equal(panel.messages.at(-1)?.diagnostic.osRelease, require('node:os').release());
   assert.equal(panel.messages.at(-1)?.diagnostic.failure.code, 'FolderChangedDuringScan');
   assert.equal(panel.messages.at(-1)?.diagnostic.failure.scanPhase, 'readdir');
+  for (const key of ['expectedDirectory', 'observedDirectory', 'changedFields']) assert.equal(panel.messages.at(-1)?.diagnostic.failure[key], failure[key]);
   assert.equal(panel.messages.at(-1)?.diagnostic.failure.cause.code, 'ESTALE');
   assert.equal(panel.messages.at(-1)?.diagnostic.failure.cause.path, 'C:/tmp');
   assert.equal(panel.messages.at(-1)?.diagnostic.failure.cause.stack, 'cause stack');

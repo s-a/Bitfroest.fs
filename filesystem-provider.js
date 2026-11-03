@@ -66,6 +66,7 @@ function createProvider(options = {}) {
   if (!roots.length || roots.some((root, index) => roots.some((other, otherIndex) => index !== otherIndex && below(root, other)))) throw new Error('Mindestens ein eindeutiges, nicht überlappendes Root-Verzeichnis ist erforderlich.');
   const limits = { entries: options.maxEntries ?? Infinity, depth: options.maxDepth ?? Infinity, fileBytes: options.maxFileBytes ?? 262144, totalBytes: options.maxTotalBytes ?? options.maxBytes ?? 4194304 };
   let snapshot = null, busy = false;
+  const publishedEntries = new Map();
   const directoryHistory = new Map();
   let directoryClock = 0;
   const visitedRoots = new Set();
@@ -109,6 +110,7 @@ function createProvider(options = {}) {
   }
 
   async function readSnapshot(settings = {}) {
+    const sourceSnapshot = snapshot;
     const folders = settings.baseline ? clone(settings.baseline.folders) : {}, entries = new Map(settings.baseline?.entries);
     const loadedDirectories = new Set(settings.baseline?.loadedDirectories);
     const scannedDirectories = new Set(), discardedDirectories = new Set();
@@ -162,7 +164,13 @@ function createProvider(options = {}) {
         if (!settings.onDirectory || !final && folders[directory].length - emitted < 64 && Date.now() - emittedAt < 50) return;
         const rows = folders[directory].slice(emitted);
         emitted = folders[directory].length; emittedAt = Date.now();
-        if (rows.length) await settings.onDirectory({ path: directory, rows, completed: folders[directory].length, total: names.length, ...(final ? { phase: 'publication' } : {}) });
+        if (rows.length) {
+          if (sourceSnapshot && snapshot === sourceSnapshot) for (const row of rows) {
+            const entry = entries.get(identity(row.fsSource));
+            if (entry) publishedEntries.set(identity(entry.path), { snapshot: sourceSnapshot, entry });
+          }
+          await settings.onDirectory({ path: directory, rows, completed: folders[directory].length, total: names.length, ...(final ? { phase: 'publication' } : {}) });
+        }
       };
       await settings.onDirectory?.({ path: directory, names, rows: [], completed: 0, total: names.length });
       let directoryEntries;
@@ -232,7 +240,16 @@ function createProvider(options = {}) {
         if (comments.has(key)) row.comment = comments.get(key);
       }
       await settings.onDirectory?.({ path: directory, phase: 'validation', rows: [], completed: names.length, total: names.length });
-      const finalStat = await fs.lstat(directory, { bigint: true });
+      let finalStat = await fs.lstat(directory, { bigint: true });
+      const timeFields = ['mtimeNs', 'ctimeNs'];
+      const incompleteTimes = timeFields.some(key => stat[key] > 0n && finalStat[key] === 0n)
+        && timeFields.every(key => finalStat[key] === stat[key] || stat[key] > 0n && finalStat[key] === 0n);
+      if (strict && finalStat.isDirectory() && !finalStat.isSymbolicLink() && incompleteTimes
+          && ['dev', 'ino', 'mode', 'size'].every(key => finalStat[key] === stat[key])) {
+        throwIfAborted(settings.signal);
+        finalStat = await fs.lstat(directory, { bigint: true });
+      }
+      throwIfAborted(settings.signal);
       if (!finalStat.isDirectory() || finalStat.isSymbolicLink() || finalStat.dev !== stat.dev || finalStat.ino !== stat.ino || finalStat.mode !== stat.mode || strict && statSignature(finalStat) !== statSignature(stat)) {
         const fields = ['dev', 'ino', 'mode', 'size', 'mtimeNs', 'ctimeNs'];
         const describe = value => JSON.stringify(Object.fromEntries(fields.map(key => [key, String(value[key])])));
@@ -291,8 +308,12 @@ function createProvider(options = {}) {
     let previous = snapshot;
     const visibleOnly = settings.baseline ? true : settings.visibleOnly ?? previous?.visibleOnly ?? false;
     const result = await readSnapshot({ ...settings, visibleOnly, directories: visibleOnly || settings.baseline ? settings.directories || [] : [...(settings.directories || []), left, right] });
+    const classifiedDirectories = new Set(Object.keys(result.folders));
+    let networkDirectories = typeof options.networkPaths === 'function' ? await options.networkPaths([...classifiedDirectories]) : [];
+    throwIfAborted(settings.signal);
     if (settings.getVisibleDirectories) settings = { ...settings, visibleDirectories: settings.getVisibleDirectories() };
     if (settings.baseline && snapshot !== previous) {
+      networkDirectories = [...new Set([...networkDirectories, ...(snapshot.state.networkDirectories || []).filter(directory => !classifiedDirectories.has(directory))])];
       const scanned = result.scannedDirectories;
       const discarded = new Set([...result.discardedDirectories].filter(directory => {
         const current = snapshot.entries.get(identity(directory)), incoming = result.entries.get(identity(directory));
@@ -334,7 +355,12 @@ function createProvider(options = {}) {
     const inactiveDirectories = settings.visibleDirectories ? result.loadedDirectories.filter(directory => !settings.visibleDirectories.includes(directory)) : [];
     result.loadedDirectories = result.loadedDirectories.filter(directory => !inactiveDirectories.includes(directory));
     const requestedDeferred = new Set((settings.deferredDirectories || []).flatMap(directory => { try { return [allowed(directory)]; } catch { return []; } }));
-    const deferredDirectories = [...new Set([...(visibleOnly ? roots : []), ...inactiveDirectories, ...(settings.baseline?.state.panes || []).flatMap(pane => pane.tabs), ...(settings.deferredDirectories || previous?.deferredDirectories || [])].flatMap(directory => { try { return [allowed(directory)]; } catch { return []; } }))].filter(directory => (requestedDeferred.has(directory) || roots.includes(directory) || Object.hasOwn(result.folders, directory) || Object.hasOwn(previous?.folders || {}, directory)) && !result.loadedDirectories.includes(directory));
+    const retainedDeferred = directory => {
+      if (!(settings.recursiveDirectories || []).some(root => below(directory, root))) return true;
+      const entry = result.entries.get(identity(directory));
+      return entry?.type === 'folder' && entry.row?.type !== 'link';
+    };
+    const deferredDirectories = [...new Set([...(visibleOnly ? roots : []), ...inactiveDirectories, ...(settings.baseline?.state.panes || []).flatMap(pane => pane.tabs), ...(settings.deferredDirectories || previous?.deferredDirectories || [])].flatMap(directory => { try { return [allowed(directory)]; } catch { return []; } }))].filter(directory => retainedDeferred(directory) && (requestedDeferred.has(directory) || roots.includes(directory) || Object.hasOwn(result.folders, directory) || Object.hasOwn(previous?.folders || {}, directory)) && !result.loadedDirectories.includes(directory));
     for (const directory of deferredDirectories) {
       if (!settings.baseline) {
         const refreshed = target => result.loadedDirectories.some(loaded => below(target, loaded));
@@ -346,8 +372,9 @@ function createProvider(options = {}) {
     result.unloadedFolders = [...new Set([...result.unloadedFolders.filter(directory => Object.hasOwn(result.folders, directory)), ...Object.keys(result.folders).filter(directory => !result.loadedDirectories.includes(directory))])];
     if (!Object.hasOwn(result.folders, left) || !Object.hasOwn(result.folders, right)) throw new Error('Der gewählte Ordner wurde nicht vollständig eingelesen.');
     for (const entry of result.entries.values()) if (entry.root) visitedRoots.add(entry.path);
-    const state = { version: 1, active: 0, realFilesystem: true, snapshotId: crypto.randomUUID(), panes: [pane(left), pane(right)], folders: result.folders, unloadedFolders: result.unloadedFolders };
+    const state = { version: 1, active: 0, realFilesystem: true, snapshotId: crypto.randomUUID(), panes: [pane(left), pane(right)], folders: result.folders, unloadedFolders: result.unloadedFolders, networkDirectories };
     snapshot = { ...result, deferredDirectories, visibleOnly, state: clone(state), digest: filesystemDigest(state) };
+    publishedEntries.clear();
     return state;
   }
 
@@ -376,7 +403,7 @@ function createProvider(options = {}) {
     return entries;
   }
 
-  async function validateEntries(expected, selected, signal) {
+  async function validateEntries(expected, selected, signal, recursive = true) {
     const checked = new Set();
     async function verify(entry) {
       if (checked.has(identity(entry.path))) return;
@@ -384,9 +411,25 @@ function createProvider(options = {}) {
       throwIfAborted(signal);
       if (entry.metadataError) throw entry.metadataError;
       await assertComponents(entry.path);
-      if (statSignature(await fs.lstat(entry.path, { bigint: true })) !== entry.signature) throw new Error('Eintrag vor dem Schreiben extern geändert.');
+      const observed = await fs.lstat(entry.path, { bigint: true });
+      const signature = statSignature(observed);
+      const matches = !recursive && entry.type === 'folder'
+        ? signature.split(':').slice(0, 3).join(':') === entry.signature.split(':').slice(0, 3).join(':')
+        : signature === entry.signature;
+      if (!matches) {
+        const fields = ['dev', 'ino', 'mode', 'size', 'mtimeNs', 'ctimeNs'];
+        const values = entry.signature.split(':');
+        throw Object.assign(new Error('Eintrag vor dem Schreiben extern geändert.'), {
+          code: 'EntryChangedBeforeWrite', path: entry.path,
+          outcome: { sourceIdentity: {
+            expected: Object.fromEntries(fields.map((key, index) => [key, values[index]])),
+            observed: Object.fromEntries(fields.map(key => [key, String(observed[key])]))
+          } }
+        });
+      }
+      if (!recursive && entry.type === 'folder') return;
       if (entry.type === 'file' && entry.hash && hash(await fs.readFile(entry.path)) !== entry.hash) throw new Error('Datei vor dem Schreiben extern geändert.');
-      if (entry.type !== 'folder') return;
+      if (!recursive || entry.type !== 'folder') return;
       const children = [...expected.entries.values()].filter(child => !child.root && identity(slash(path.dirname(child.path))) === identity(entry.path));
       const names = (await fs.readdir(entry.path)).sort();
       if (JSON.stringify(names) !== JSON.stringify(children.map(child => path.basename(child.path)).sort())) throw new Error('Ordner vor dem Schreiben extern geändert.');
@@ -889,9 +932,9 @@ function createProvider(options = {}) {
     if (!baseline || before?.snapshotId !== baseline.state.snapshotId || filesystemDigest(before) !== baseline.digest) throw new Error('Der Dateisystem-Snapshot ist veraltet oder wurde verändert.');
     if (!Array.isArray(request.paths) || !request.paths.length || request.paths.length > limits.entries || typeof request.useTrash !== 'boolean') throw new Error('Ungültige Löschanfrage.');
     const selected = [...new Set(request.paths.map(value => identity(allowed(value))))].map(key => {
-      const item = baseline.entries.get(key);
+      const published = publishedEntries.get(key);
+      const item = baseline.entries.get(key) || (published?.snapshot === baseline ? published.entry : undefined);
       if (!item || item.root) throw new Error('Root-Ordner oder unbekannte Einträge dürfen nicht entfernt werden.');
-      if (baseline.unloadedFolders.some(directory => below(directory, item.path))) throw new Error('Der Ordner muss vor der Dateioperation vollständig eingelesen und vorbereitet werden.');
       return item;
     });
     const targets = selected.filter(item => !selected.some(other => other !== item && other.type === 'folder' && below(item.path, other.path)));
@@ -900,13 +943,14 @@ function createProvider(options = {}) {
     let completed = 0;
     try {
       throwIfAborted(settings.signal);
-      const permanentPaths = new Set(typeof options.prepareDelete === 'function' ? await options.prepareDelete(targets.map(item => item.path), request.useTrash) : []);
+      const permanentPaths = new Set(typeof options.prepareDelete === 'function' ? await options.prepareDelete(targets.map(item => item.path), request.useTrash, request.confirmedNetworkPaths) : []);
       throwIfAborted(settings.signal);
-      await validateEntries(baseline, targets, settings.signal);
+      await validateEntries(baseline, targets, settings.signal, false);
       for (const item of targets) {
         throwIfAborted(settings.signal);
         settings.onProgress?.(Progress.event({ phase: 'deleting', path: item.path, overall: Progress.known('items', completed, targets.length), current: Progress.unknown('items', 0, 'native-operation') }));
-        await validateEntries(baseline, [item]);
+        await validateEntries(baseline, [item], settings.signal, false);
+        throwIfAborted(settings.signal);
         await options.deletePath(item.path, { recursive: true, useTrash: request.useTrash && !permanentPaths.has(item.path) });
         completed++;
         settings.onProgress?.(Progress.event({ phase: 'deleting', path: item.path, overall: Progress.known('items', completed, targets.length), current: Progress.known('items', 1, 1) }));
@@ -918,6 +962,7 @@ function createProvider(options = {}) {
       return state;
     } catch (error) {
       snapshot = null;
+      publishedEntries.clear();
       if (error.name === 'AbortError') throw error;
       const failure = new Error(`Löschen fehlgeschlagen nach ${completed} Einträgen: ${error.message}`, { cause: error });
       failure.deletedCount = completed;

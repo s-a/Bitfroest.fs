@@ -13,7 +13,7 @@ const helpLinks = Object.freeze({
 const iconLayout = require('./media/icon-layout');
 const { createSelectionIO } = require('./selection-io');
 const { selectStartupRoots, existingDirectories } = require('./startup-paths');
-const { resolveUncPaths } = require('./network-paths');
+const { resolveUncPaths, findNetworkPaths, prepareNetworkDeletion } = require('./network-paths');
 const defaultFileColors = Object.fromEntries(require('./file-type-colors.json').flatMap(group => group.patterns.map(pattern => [pattern, group.color])));
 const { createGitStatusProvider } = require('./git-status-provider');
 const { allowedGitPath } = require('./git-status-paths');
@@ -52,12 +52,21 @@ function operationDiagnostic(error, request, state) {
     for (const key of ['mode', 'sourcePath', 'sourceSide', 'targetPath']) if (request.transfer[key] !== undefined) transfer[key] = request.transfer[key];
     requestContext.transfer = transfer;
   }
+  let sourceIdentityIncluded = false;
   const serialize = (failure, depth = 0) => {
     if (!failure || depth > 6) return undefined;
     const result = {};
-    for (const key of ['name', 'message', 'code', 'path', 'scanPhase', 'nativeCode', 'nativeStage', 'hresult', 'nativeCommand', 'nativeCommandId', 'operation', 'requestId', 'generation']) {
+    for (const key of ['name', 'message', 'code', 'path', 'scanPhase', 'expectedDirectory', 'observedDirectory', 'changedFields', 'nativeCode', 'nativeStage', 'hresult', 'nativeCommand', 'nativeCommandId', 'operation', 'requestId', 'generation']) {
       const value = failure[key];
       if (typeof value === 'string' || typeof value === 'number' || typeof value === 'bigint') result[key] = String(value).slice(0, 4000);
+    }
+    const sourceIdentity = failure.outcome?.sourceIdentity;
+    const identityFields = ['dev', 'ino', ...(sourceIdentity?.expected?.mode !== undefined || sourceIdentity?.observed?.mode !== undefined ? ['mode'] : []), 'size', 'mtimeNs', 'ctimeNs'];
+    if (!sourceIdentityIncluded && identityFields.every(key => /^-?\d{1,24}$/.test(String(sourceIdentity?.expected?.[key])) && /^-?\d{1,24}$/.test(String(sourceIdentity?.observed?.[key])))) {
+      const expected = Object.fromEntries(identityFields.map(key => [key, String(sourceIdentity.expected[key])]));
+      const observed = Object.fromEntries(identityFields.map(key => [key, String(sourceIdentity.observed[key])]));
+      result.sourceIdentity = { expected, observed, differingFields: identityFields.filter(key => expected[key] !== observed[key]) };
+      sourceIdentityIncluded = true;
     }
     if (typeof failure.stack === 'string') result.stack = failure.stack.slice(0, 12000);
     if (failure.cause) result.cause = serialize(failure.cause, depth + 1);
@@ -189,7 +198,7 @@ function activate(context) {
   }
   const fileSettings = () => {
     const settings = vscode.workspace.getConfiguration('bitfroest');
-    return { verifyAfterCopy: settings.get('files.verifyAfterCopy', false) === true, useSystemContextMenu: settings.get('files.useSystemContextMenu', false) === true, deleteToTrash: settings.get('files.deleteToTrash', true) !== false, countFolderSizeOnSpace: settings.get('files.countFolderSizeOnSpace', true) !== false, selectDirectories: settings.get('files.selectDirectories', true) !== false,
+    return { verifyAfterCopy: settings.get('files.verifyAfterCopy', false) === true, useSystemContextMenu: settings.get('files.useSystemContextMenu', false) === true, countFolderSizeOnSpace: settings.get('files.countFolderSizeOnSpace', true) !== false, selectDirectories: settings.get('files.selectDirectories', true) !== false,
       iconSize: iconLayout.resolve(settings.get('appearance.iconSize', iconLayout.defaults.size)).size,
       colors: { enabled: settings.get('colors.fileTypes', true), git: settings.get('colors.gitStatus', true), rules: settings.get('colors.rules', defaultFileColors) },
       gitStatus: { iconSizePercent: settings.get('gitStatus.iconSizePercent', iconLayout.defaults.badgeRatio * 100) },
@@ -294,10 +303,18 @@ function activate(context) {
   };
   const directoryMetadata = createSearchMetadata();
   const directoryReader = createDirectoryReader();
+  const prepareDelete = (paths, useTrash, confirmedPaths) => prepareNetworkDeletion(paths, useTrash, {
+    confirmedPaths,
+    resolvePaths: resolveUncPaths,
+    confirm: async targets => {
+      const action = t('Endgültig löschen');
+      return await vscode.window.showWarningMessage(t('Diese Netzwerkpfade können nicht in den lokalen Papierkorb verschoben werden. Endgültig löschen?'), { modal: true, detail: targets.join('\n') }, action) === action;
+    }
+  });
   context.subscriptions.push(directoryReader);
   context.subscriptions.push(directoryMetadata);
-  const provider = createZipFilesystem(createProvider({ readDirectory: (directory, signal) => directoryReader.readDirectory(directory, signal), roots: fileRoots, additionalRoots: favoriteRoots, allowNavigationOutsideRoots: true, commentEncoding: directory => vscode.workspace.getConfiguration('bitfroest', vscode.Uri.file(directory)).get('files.commentEncoding') || 'windows-1252', ...(process.platform === 'win32' ? { readAttributes: target => directoryMetadata.attributes(target, undefined, true) } : {}), deletePath: (target, options) => vscode.workspace.fs.delete(vscode.Uri.file(target), options) }));
-  const navigationProvider = createZipFilesystem(createProvider({ readDirectory: (directory, signal) => directoryReader.readDirectory(directory, signal), roots: fileRoots, additionalRoots: favoriteRoots, allowNavigationOutsideRoots: true, commentEncoding: directory => vscode.workspace.getConfiguration('bitfroest', vscode.Uri.file(directory)).get('files.commentEncoding') || 'windows-1252', ...(process.platform === 'win32' ? { readAttributes: target => directoryMetadata.attributes(target, undefined, true) } : {}), deletePath: (target, options) => vscode.workspace.fs.delete(vscode.Uri.file(target), options) }));
+  const provider = createZipFilesystem(createProvider({ networkPaths: findNetworkPaths, readDirectory: (directory, signal) => directoryReader.readDirectory(directory, signal), roots: fileRoots, additionalRoots: favoriteRoots, allowNavigationOutsideRoots: true, commentEncoding: directory => vscode.workspace.getConfiguration('bitfroest', vscode.Uri.file(directory)).get('files.commentEncoding') || 'windows-1252', ...(process.platform === 'win32' ? { readAttributes: target => directoryMetadata.attributes(target, undefined, true) } : {}), prepareDelete, deletePath: (target, options) => vscode.workspace.fs.delete(vscode.Uri.file(target), options) }));
+  const navigationProvider = createZipFilesystem(createProvider({ networkPaths: findNetworkPaths, readDirectory: (directory, signal) => directoryReader.readDirectory(directory, signal), roots: fileRoots, additionalRoots: favoriteRoots, allowNavigationOutsideRoots: true, commentEncoding: directory => vscode.workspace.getConfiguration('bitfroest', vscode.Uri.file(directory)).get('files.commentEncoding') || 'windows-1252', ...(process.platform === 'win32' ? { readAttributes: target => directoryMetadata.attributes(target, undefined, true) } : {}), prepareDelete, deletePath: (target, options) => vscode.workspace.fs.delete(vscode.Uri.file(target), options) }));
   let navigationRevision = 0, viewRevision = 0;
   context.subscriptions.push(provider, navigationProvider);
   const fileClipboard = createClipboardProvider({ contains: provider.contains });
@@ -1335,7 +1352,7 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
             }
             if (panel === current) await current.webview.postMessage({ type: 'clipboard-result', requestId: message.requestId, ok: true, ...response });
           } catch (error) {
-            if (panel === current) await current.webview.postMessage({ type: 'clipboard-result', requestId: message.requestId, ok: false, unavailable: error.code === 'CLIPBOARD_UNAVAILABLE', error: t(error.message) });
+            if (panel === current) await current.webview.postMessage({ type: 'clipboard-result', requestId: message.requestId, ok: false, unavailable: error.code === 'CLIPBOARD_UNAVAILABLE', error: t(error.message), diagnostic: operationDiagnostic(error, message, filesystemState) });
           }
         });
         await clipboardQueue; return;
@@ -1537,7 +1554,7 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
             if (!filesystemState) throw new Error(t('Kein Dateisystem geladen.'));
             let fresh;
             if (message.type === 'filesystem-apply') fresh = await provider.apply(filesystemState, message.state, { verifyAfterCopy: typeof message.transfer?.verifyAfterCopy === 'boolean' ? message.transfer.verifyAfterCopy : fileSettings().verifyAfterCopy, ...(job ? { signal: job.controller.signal, transfer: message.transfer, onProgress } : {}) });
-            else if (message.type === 'filesystem-delete') fresh = await provider.remove(filesystemState, { paths: message.paths, useTrash: message.useTrash }, { ...(job ? { signal: job.controller.signal } : {}), onProgress: progress => { if (panel === current) current.webview.postMessage({ type: 'filesystem-task-progress', operationId, taskRequestId: message.taskRequestId, progress: Progress.read(progress) }); } });
+            else if (message.type === 'filesystem-delete') fresh = await provider.remove(filesystemState, { paths: message.paths, useTrash: message.useTrash, ...(Array.isArray(message.confirmedNetworkPaths) ? { confirmedNetworkPaths: message.confirmedNetworkPaths } : {}) }, { ...(job ? { signal: job.controller.signal } : {}), onProgress: progress => { if (panel === current) current.webview.postMessage({ type: 'filesystem-task-progress', operationId, taskRequestId: message.taskRequestId, progress: Progress.read(progress) }); } });
             else if (message.type === 'filesystem-navigate' || message.type === 'filesystem-prepare') {
               const directories = message.type === 'filesystem-navigate' ? [message.path] : message.paths;
               if (!Array.isArray(directories) || directories.length > 128 || directories.some(target => typeof target !== 'string' || target.length > 4096 || !provider.canNavigate(target))) throw new Error(t('Ungültiger Datei- oder Ordnername.'));

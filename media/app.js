@@ -2281,8 +2281,13 @@
     const appendFailure = (failure, label = null, depth = 0) => {
       if (!failure || depth > 6) return;
       if (label) lines.push(`${'  '.repeat(depth)}${t('Ursache')}:`);
-      for (const [key, label] of Object.entries({ name: 'Fehlername', code: 'Fehlercode', nativeCode: 'Nativer Fehlercode', nativeStage: 'Native Phase', hresult: 'HRESULT', nativeCommand: 'Nativer Befehl', nativeCommandId: 'Native Befehlskennung', operation: 'Native Operation', requestId: 'Native Anfragekennung', generation: 'Sitzungsgeneration', message: 'Fehlermeldung', path: 'Pfad', scanPhase: 'Scan-Phase' })) if (failure[key] !== undefined && failure[key] !== null && failure[key] !== '') lines.push(`${t(label)}: ${failure[key]}`);
+      for (const [key, label] of Object.entries({ name: 'Fehlername', code: 'Fehlercode', nativeCode: 'Nativer Fehlercode', nativeStage: 'Native Phase', hresult: 'HRESULT', nativeCommand: 'Nativer Befehl', nativeCommandId: 'Native Befehlskennung', operation: 'Native Operation', requestId: 'Native Anfragekennung', generation: 'Sitzungsgeneration', message: 'Fehlermeldung', path: 'Pfad', scanPhase: 'Scan-Phase', expectedDirectory: 'Erwartete Ordnermetadaten', observedDirectory: 'Gelesene Ordnermetadaten', changedFields: 'Abweichende Ordnermerkmale' })) if (failure[key] !== undefined && failure[key] !== null && failure[key] !== '') lines.push(`${t(label)}: ${failure[key]}`);
       if (failure.stack) lines.push(`${'  '.repeat(depth)}${t('Stack')}:\n${failure.stack}`);
+      if (failure.sourceIdentity) {
+        const identity = failure.sourceIdentity;
+        lines.push(`${t('Abweichende Quellmerkmale')}: ${(identity.differingFields || []).join(', ')}`);
+        for (const key of Object.keys(identity.expected || {})) lines.push(`  ${key}: ${t('Erwartet')}=${identity.expected?.[key]}, ${t('Gelesen')}=${identity.observed?.[key]}`);
+      }
       if (failure.cause) appendFailure(failure.cause, true, depth + 1);
     };
     appendFailure(diagnostic.failure);
@@ -2818,7 +2823,9 @@
   }
   function validDraggedFiles(source) {
     if (source?.kind !== 'files' || currentPath(state.panes[source.side]) !== source.sourcePath || !source.items.length) return false;
-    const byId = new Map((state.folders[source.sourcePath] || []).map(file => [file.id, file]));
+    const p = state.panes[source.side];
+    if (source.context && source.context.tabId !== p.tabStates[p.tab].id) return false;
+    const byId = new Map((source.context ? files(p) : state.folders[source.sourcePath] || []).map(file => [file.id, file]));
     return source.items.every(item => JSON.stringify(byId.get(item.id)) === item.signature);
   }
   function internalDeleteDrop(event) {
@@ -2891,20 +2898,27 @@
     if (picked.some(row => row.archive) && !['view', 'edit'].includes(kind)) return toast(t('Dateioperationen innerhalb von Archiven sind nicht verfügbar. F3 zeigt den Inhalt schreibgeschützt an.'));
     if (kind === 'view' || kind === 'edit') return preview(picked[0], kind === 'edit');
     if (['delete', 'delete-alternate', 'delete-permanently'].includes(kind)) {
-      const useTrash = kind === 'delete-permanently' ? false : kind === 'delete-alternate' ? fileSettings.deleteToTrash === false : fileSettings.deleteToTrash !== false;
-      modal(state.realFilesystem ? t(useTrash ? 'In den Papierkorb verschieben?' : 'Endgültig löschen?') : t('Auswahl löschen?'), ui`<p>${count('entry', picked.length)} ${state.realFilesystem ? t(useTrash ? picked.length === 1 ? 'wird in den Papierkorb verschoben.' : 'werden in den Papierkorb verschoben.' : picked.length === 1 ? 'wird endgültig gelöscht.' : 'werden endgültig gelöscht.') : t(picked.length === 1 ? 'wird aus den Beispieldaten entfernt.' : 'werden aus den Beispieldaten entfernt.')}</p><p>${picked.map(file => escape(file.name)).join('<br>')}</p>`, state.realFilesystem ? t(useTrash ? 'In den Papierkorb' : 'Endgültig löschen') : t('Mockup löschen'), function removeSelection() {
+      const selectedPaths = picked.map(file => resultView(p) ? file.fsSource : join(source, file.name));
+      const pathKey = value => paths.isWindowsPath(value) ? value.replaceAll('\\', '/').toLowerCase() : value;
+      const networkPaths = selectedPaths.filter(target => (state.networkDirectories || []).some(directory => pathKey(target).startsWith(pathKey(directory).replace(/\/$/, '') + '/')));
+      const useTrash = kind === 'delete' && networkPaths.length < picked.length;
+      const mixed = useTrash && networkPaths.length > 0;
+      const warningText = networkPaths.length ? t('Netzwerkpfade werden endgültig gelöscht und nicht in den Papierkorb verschoben.') : t('Die ausgewählten Einträge werden nicht in den Papierkorb verschoben, sondern endgültig gelöscht.');
+      const warning = state.realFilesystem && (!useTrash || mixed) ? `<p id="modal-description">${warningText}</p>${mixed ? `<p>${networkPaths.map(target => escape(target)).join('<br>')}</p>` : ''}` : '';
+      modal(state.realFilesystem ? t(mixed ? 'Auswahl löschen?' : useTrash ? 'In den Papierkorb verschieben?' : 'Endgültig löschen?') : t('Auswahl löschen?'), ui`<p>${mixed ? t('Lokale Einträge werden in den Papierkorb verschoben. Netzwerkpfade werden endgültig gelöscht.') : `${count('entry', picked.length)} ${state.realFilesystem ? t(useTrash ? picked.length === 1 ? 'wird in den Papierkorb verschoben.' : 'werden in den Papierkorb verschoben.' : picked.length === 1 ? 'wird endgültig gelöscht.' : 'werden endgültig gelöscht.') : t(picked.length === 1 ? 'wird aus den Beispieldaten entfernt.' : 'werden aus den Beispieldaten entfernt.')}`}</p>${warning}<p>${picked.map(file => escape(file.name)).join('<br>')}</p>`, state.realFilesystem ? t(mixed ? 'Löschen' : useTrash ? 'In den Papierkorb' : 'Endgültig löschen') : t('Mockup löschen'), function removeSelection() {
         if (frozen && !validDraggedFiles(frozen)) { toast(t('Die gezogene Auswahl wurde geändert. Bitte erneut ziehen.')); return false; }
-        if (prepareFolders(picked.filter(file => file.type === 'folder').map(file => resultView(p) ? file.fsSource : join(source, file.name)), kind, removeSelection)) return false;
         if (state.realFilesystem) {
-          const paths = picked.map(file => resultView(p) ? file.fsSource : join(source, file.name));
+          const paths = selectedPaths;
           $('#modal').close();
           transferJob = { id: `delete-${Date.now()}-${++transferSequence}`, phase: 'deleting', hostActive: true, context: { mode: 'delete', sources: paths, target: source } };
-          transferProgress(); requestFilesystem({ type: 'filesystem-delete', operationId: transferJob.id, paths, useTrash });
+          transferProgress(); requestFilesystem({ type: 'filesystem-delete', operationId: transferJob.id, paths, useTrash, ...(mixed ? { confirmedNetworkPaths: networkPaths } : {}) });
           return false;
         }
         picked.forEach(file => removeTree(join(source, file.name), file.type === 'archive'));
         state.folders[source] = files(p).filter(file => !picked.some(item => item.id === file.id)); p.selected = []; p.cursor = null; render(true); toast(state.realFilesystem ? t('Löschen wird ausgeführt') : t('Auswahl aus Beispieldaten gelöscht'), state.realFilesystem ? 'info' : 'success'); return true;
-      }); return;
+      });
+      if (state.realFilesystem && (!useTrash || mixed)) $('#modal-cancel').focus();
+      return;
     }
     if (kind === 'copy' || kind === 'move') {
       if (resultView(p)) {
@@ -2998,7 +3012,7 @@
   }
   window.addEventListener('message', event => {
     const value = event.data;
-    if (!value || typeof value.type !== 'string' || !/^(filesystem-|git-|transfer-|zip-|folder-size-|search-)/.test(value.type)) return;
+    if (!value || typeof value.type !== 'string' || !/^(filesystem-|git-|transfer-|zip-|folder-size-|search-|clipboard-)/.test(value.type)) return;
     const fields = Object.fromEntries(['type', 'emittedAt', 'requestId', 'refreshRequestId', 'navigationRequestId', 'taskRequestId', 'operationId', 'snapshotId', 'path', 'phase', 'completed', 'total', 'ok', 'partial', 'cancelled', 'error', 'diagnostic'].filter(key => value[key] !== undefined).map(key => [key, value[key]]));
     if (value.progress) fields.progress = { phase: value.progress.phase, path: value.progress.path, overall: value.progress.overall, current: value.progress.current };
     if (value.directories) fields.directories = Object.entries(value.directories).map(([path, info]) => ({ path, phase: info?.phase, stage: info?.stage, ok: info?.ok, loading: info?.loading, error: info?.error, repositoryResult: info?.repositoryResult, overall: info?.overall, current: info?.current }));
@@ -4019,7 +4033,11 @@
     const origin = event.target.closest('button, .list') || section.querySelector('.list');
     const definitions = kind === 'tabs' ? [['copy-path', 'Pfad kopieren', []], ['close-tab', 'Ordner-Tab schließen', ['ctrl+w']]]
       : kind === 'columns' ? [['configure-columns', 'Spalten konfigurieren', []]]
-        : kind === 'history' ? [] : [...(selection.ids.length ? [['clipboard-copy', 'Kopieren', ['ctrl+c']], ['clipboard-cut', 'Ausschneiden', ['ctrl+x']]] : []), ['clipboard-paste', 'Einfügen', ['ctrl+v']]];
+        : kind === 'history' ? [] : [...(selection.ids.length ? [['clipboard-copy', 'Kopieren', ['ctrl+c']], ['clipboard-cut', 'Ausschneiden', ['ctrl+x']], ['delete', 'Löschen', ['delete']]] : []), ['clipboard-paste', 'Einfügen', ['ctrl+v']]];
+    const deleteSelection = kind === 'files' && selection.ids.length ? { kind: 'files', side, sourcePath: directory, ids: [...selection.ids],
+      context: { tabId },
+      items: files(p).filter(file => selection.ids.includes(file.id)).map(file => ({ id: file.id, signature: JSON.stringify(file) })) } : null;
+    const actionDelete = () => action('delete', deleteSelection);
     if (kind === 'files' && selection.ids.length === 1) {
       const file = files(p).find(file => file.id === selection.ids[0]);
       if (file?.type === 'folder' && nativeDesktopSupported && !directory.startsWith('zip:')) definitions.push(['inspect-folder-locks', 'Ordnersperren untersuchen', []]);
@@ -4050,6 +4068,7 @@
         if (action === 'copy-path') { selectionIO('copy', displayArchivePath(contextDirectory)); return; }
         if (action === 'configure-columns') { host?.postMessage({ type: 'configure-columns' }); return; }
         if (action === 'inspect-folder-locks') { requestShellMenu(true, true, selection); return; }
+        if (action === 'delete') { actionDelete(); return; }
         run(action, false, action === 'close-tab' ? { tabId: clickedTabId } : selection);
       }
     });

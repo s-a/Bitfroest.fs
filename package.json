@@ -1709,12 +1709,6 @@
             "default": false,
             "description": "%files.verifyAfterCopy.description%"
           },
-          "bitfroest.files.deleteToTrash": {
-            "type": "boolean",
-            "scope": "resource",
-            "default": true,
-            "description": "%files.deleteToTrash.description%"
-          },
           "bitfroest.lister.codepages": {
             "type": "object",
             "scope": "window",

@@ -48,8 +48,8 @@ test('opening an unloaded folder waits for its shallow snapshot before changing 
  result(app,{resumeNavigation:{path:'C:/tmp/docs',side:0}});
  assert.equal(app.state().panes[0].tabs[0],'C:/tmp/docs');assert.ok(app.row('child.txt'));
 });
-test('delete and rename open a single dialog before preparing their selected subtree',t=>{
- for(const action of ['delete','rename']){const app=createApp(t,fixture());select(app,'docs');app.action(action);
+test('rename opens a single dialog before preparing its selected subtree',t=>{
+ for(const action of ['rename']){const app=createApp(t,fixture());select(app,'docs');app.action(action);
  assert.equal(app.document.querySelector('#modal').open,true);assert.equal(app.messages.some(message=>message.type==='filesystem-prepare'),false);
  submit(app);
  const request=app.messages.find(message=>message.type==='filesystem-prepare');assert.ok(request,action);assert.deepEqual([...request.paths],['C:/tmp/docs']);
@@ -105,9 +105,12 @@ test('cold folder rename does not commit after failed or cancelled preparation o
   assert.equal(app.state().folders['C:/tmp'][0].name,outcome==='replaced'?'replacement':'docs');
  }
 });
-test('failed selected subtree preparation preserves the confirmation and does not delete',t=>{
- const app=createApp(t,fixture());select(app,'docs');app.action('delete');submit(app);app.window.dispatchEvent(new app.window.MessageEvent('message',{data:{type:'filesystem-result',ok:false,state:app.state()}}));
- assert.equal(app.document.querySelector('#modal-title').textContent,'In den Papierkorb verschieben?');assert.ok(app.document.querySelector('.operation-error-text'));assert.equal(app.messages.some(message=>message.type==='filesystem-apply'),false);assert.equal(app.messages.some(message=>message.type==='filesystem-delete'),false);
+test('deleting an unloaded folder starts directly and reports a failed native deletion',t=>{
+ const app=createApp(t,fixture());select(app,'docs');app.action('delete');submit(app);
+ assert.equal(app.messages.some(message=>message.type==='filesystem-prepare'),false);
+ assert.deepEqual([...app.messages.find(message=>message.type==='filesystem-delete').paths],['C:/tmp/docs']);
+ app.window.dispatchEvent(new app.window.MessageEvent('message',{data:{type:'filesystem-result',ok:false,state:app.state()}}));
+ assert.ok(app.document.querySelector('.operation-error-text'));assert.equal(app.messages.some(message=>message.type==='filesystem-apply'),false);
 });
 
 const tick=()=>new Promise(resolve=>setImmediate(resolve));

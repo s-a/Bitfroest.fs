@@ -39,7 +39,7 @@ test('shell menu error copy includes request context and runtime diagnostics', t
   const request = requests(app)[0];
   send(app, { type: 'shell-context-menu-result', requestId: request.requestId, ok: false, error: 'Invalid selection', diagnostic: {
     request: { ...request, paths: ['C:/tmp/literal & Datei.txt'] }, platform: 'win32', runtimeVersion: 'v22.test',
-    failure: { code: 'NativeFailure', nativeCode: '31', operation: 'shell.showContextMenu', requestId: '2', generation: '7', stack: 'selection validation stack', cause: { nativeCode: '5', nativeStage: 'IContextMenu.InvokeCommand', hresult: '0x80004005', nativeCommand: 'delete', nativeCommandId: '0' } }
+    failure: { code: 'NativeFailure', nativeCode: '31', operation: 'shell.showContextMenu', requestId: '2', generation: '7', stack: 'selection validation stack', cause: { nativeCode: '5', nativeStage: 'IContextMenu.InvokeCommand', hresult: '0x80004005', nativeCommand: 'delete', nativeCommandId: '0', expectedDirectory: '{"ino":"1"}', observedDirectory: '{"ino":"2"}', changedFields: 'ino' } }
   } });
   app.click(app.document.querySelector('[data-copy-error]'));
   const copied = app.messages.find(message => message.type === 'selection-io' && message.action === 'copy');
@@ -49,6 +49,9 @@ test('shell menu error copy includes request context and runtime diagnostics', t
   assert.ok(copied.text.includes('HRESULT: 0x80004005'));
   assert.ok(copied.text.includes('Native command: delete'));
   assert.ok(copied.text.includes('Native command ID: 0'));
+  assert.ok(copied.text.includes('Expected directory metadata: {"ino":"1"}'));
+  assert.ok(copied.text.includes('Observed directory metadata: {"ino":"2"}'));
+  assert.ok(copied.text.includes('Differing directory fields: ino'));
 });
 
 test('Unix folder context uses the shared popup without launching a Windows shell helper', t => {

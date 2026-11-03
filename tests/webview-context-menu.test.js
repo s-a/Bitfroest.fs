@@ -10,6 +10,67 @@ const context = (app, target) => {
 };
 const menu = app => app.document.querySelector('[data-context-menu]:not([hidden])');
 
+test('file delete popup confirms its captured selection and allows cancellation', t => {
+  for (const language of ['de', 'en']) {
+    const app = createApp(t, fixture(), { language });
+    context(app, app.row('one.txt'));
+    const remove = menu(app).querySelector('[data-context-action="delete"]');
+    assert.ok(remove);
+    assert.ok(remove.textContent.includes(language === 'de' ? 'Löschen' : 'Delete'));
+    app.click(app.row('two.txt'));
+    app.click(remove);
+    assert.equal(app.document.querySelector('#modal').open, true);
+    assert.match(app.document.querySelector('#modal-body').textContent, /one\.txt/);
+    assert.doesNotMatch(app.document.querySelector('#modal-body').textContent, /two\.txt/);
+    assert.equal(app.messages.some(message => message.type === 'filesystem-delete'), false);
+    app.click(app.document.querySelector('#modal-cancel'));
+    assert.equal(app.messages.some(message => message.type === 'filesystem-delete'), false);
+    context(app, app.row('two.txt'));
+    app.click(menu(app).querySelector('[data-context-action="delete"]'));
+    app.document.querySelector('#modal-form').dispatchEvent(new app.window.Event('submit', { bubbles: true, cancelable: true }));
+    const request = app.messages.find(message => message.type === 'filesystem-delete');
+    assert.deepEqual(Array.from(request.paths), ['C:/one/two.txt']);
+    assert.equal(request.useTrash, true);
+  }
+});
+
+test('delete context actions reject a changed tab', t => {
+  const app = createApp(t, fixture());
+  context(app, app.row('one.txt'));
+  const remove = menu(app).querySelector('[data-context-action="delete"]');
+  assert.ok(remove);
+  app.action('next-tab'); app.click(remove);
+  assert.equal(app.document.querySelector('#modal').open, false);
+  assert.equal(app.messages.some(message => message.type === 'filesystem-delete'), false);
+});
+
+test('context deletion uses nested search result paths instead of the search root', t => {
+  const saved = fixture();
+  saved.folders['C:/one/sub'] = [{ id: 'nested', name: 'nested.txt', type: 'text', fsSource: 'C:/one/sub/nested.txt', size: 1 }];
+  saved.panes[0].tabStates = [{ path: 'C:/one', searchResult: { id: 'search', source: 'C:/one', paths: ['C:/one/sub/nested.txt'] } }, { path: 'C:/two' }];
+  saved.panes[0].selected = ['nested']; saved.panes[0].cursor = 'nested';
+  const app = createApp(t, saved);
+  context(app, app.row('nested.txt'));
+  app.click(menu(app).querySelector('[data-context-action="delete"]'));
+  assert.equal(app.document.querySelector('#modal').open, true);
+  app.document.querySelector('#modal-form').dispatchEvent(new app.window.Event('submit', { bubbles: true, cancelable: true }));
+  assert.deepEqual(Array.from(app.messages.find(message => message.type === 'filesystem-delete').paths), ['C:/one/sub/nested.txt']);
+});
+
+test('context deletion sends an unloaded folder directly after confirmation', t => {
+  const saved = fixture();
+  saved.folders['C:/one'].push({ id: 'folder', name: 'folder', type: 'folder', fsSource: 'C:/one/folder' });
+  saved.folders['C:/one/folder'] = []; saved.unloadedFolders = ['C:/one/folder'];
+  const app = createApp(t, saved);
+  context(app, app.row('folder'));
+  app.click(menu(app).querySelector('[data-context-action="delete"]'));
+  const submit = () => app.document.querySelector('#modal-form').dispatchEvent(new app.window.Event('submit', { bubbles: true, cancelable: true }));
+  submit();
+  assert.equal(app.messages.some(message => message.type === 'filesystem-prepare'), false);
+  assert.deepEqual(Array.from(app.messages.find(message => message.type === 'filesystem-delete')?.paths || []), ['C:/one/folder']);
+  assert.equal(app.document.querySelector('#modal').open, false);
+});
+
 test('menus omit sample-only and focus-only actions and the generic webview command collection', () => {
   const menus = require('../package.json').contributes.menus;
   for (const command of ['bitfroest.reset', 'bitfroest.help', 'bitfroest.filter', 'bitfroest.background-tab']) {

@@ -48,7 +48,7 @@ test('unsupported or failed trash leaves files intact and never invokes a perman
 test('all deletion paths and snapshot metadata are validated before invoking the adapter', async t => {
   const calls = [], { provider, left, right } = await fixture(t, async target => calls.push(target));
   let before = await provider.load();
-  for (const paths of [[], [left], [`${left}/a.txt`, `${left}/../escape`], [`${left}/missing`], [`${left}/child`], [`${left}/a.txt`, right]]) await assert.rejects(provider.remove(before, { paths, useTrash: true }));
+  for (const paths of [[], [left], [`${left}/a.txt`, `${left}/../escape`], [`${left}/missing`], [`${left}/a.txt`, right]]) await assert.rejects(provider.remove(before, { paths, useTrash: true }));
   assert.deepEqual(calls, []);
   await fs.writeFile(`${left}/a.txt`, 'external');
   await assert.rejects(provider.remove(before, { paths: [`${left}/a.txt`], useTrash: true }), /veraltet|geändert/);
@@ -58,16 +58,73 @@ test('all deletion paths and snapshot metadata are validated before invoking the
   await assert.rejects(provider.remove(stale, { paths: [`${left}/a.txt`], useTrash: true }));
 });
 
-test('deleting a selected file tolerates unrelated changes but rejects changed descendants of a selected folder', async t => {
-  const calls = [], { provider, left } = await fixture(t, async target => { calls.push(target); await fs.unlink(target); });
+test('deletion tolerates unrelated changes and changed contents of the same selected folder', async t => {
+  const calls = [], { provider, left } = await fixture(t, async target => { calls.push(target); await fs.rm(target, { recursive: true }); });
   let before = await provider.load();
   await fs.writeFile(`${left}/b.txt`, 'unrelated');
   await provider.remove(before, { paths: [`${left}/a.txt`], useTrash: true });
   assert.deepEqual(calls, [`${left}/a.txt`]);
   before = await provider.load({ recursive: true });
   await fs.writeFile(`${left}/child/inside.txt`, 'externally changed descendant');
-  await assert.rejects(provider.remove(before, { paths: [`${left}/child`], useTrash: true }), /geändert/);
-  assert.deepEqual(calls, [`${left}/a.txt`]);
+  await provider.remove(before, { paths: [`${left}/child`], useTrash: true });
+  assert.deepEqual(calls, [`${left}/a.txt`, `${left}/child`]);
+});
+
+test('an unloaded folder is deleted without enumerating or reading any descendants', async t => {
+  const { left, right } = await fixture(t);
+  let deleting = false;
+  const calls = [];
+  const provider = createProvider({ roots: [left, right], fs: { ...fs,
+    readdir: async (target, ...args) => {
+      assert.equal(deleting && slash(String(target)).startsWith(`${left}/child`), false, 'no target inventory');
+      return fs.readdir(target, ...args);
+    },
+    lstat: async (target, ...args) => {
+      assert.equal(deleting && slash(String(target)).startsWith(`${left}/child/`), false, 'no descendant metadata');
+      const stat = await fs.lstat(target, ...args);
+      return deleting && slash(String(target)) === `${left}/child` && args[0]?.bigint
+        ? Object.assign(Object.create(stat), { mtimeNs: 0n, ctimeNs: 0n }) : stat;
+    }
+  }, deletePath: async (target, options) => { calls.push({ target, options }); await fs.rm(target, { recursive: true }); } });
+  const before = await provider.load();
+  assert.ok(before.unloadedFolders.includes(`${left}/child`));
+  deleting = true;
+  const after = await provider.remove(before, { paths: [`${left}/child`], useTrash: true });
+  assert.deepEqual(calls, [{ target: `${left}/child`, options: { recursive: true, useTrash: true } }]);
+  assert.equal(after.folders[left].some(row => row.name === 'child'), false);
+  assert.equal(await fs.readFile(`${left}/b.txt`, 'utf8'), 'b');
+});
+
+test('directory deletion rejects identity changes and links before the native call', async t => {
+  const { left, right } = await fixture(t);
+  for (const change of ['identity', 'link', 'parent-link']) {
+    let checking = false;
+    const calls = [];
+    const provider = createProvider({ roots: [left, right], fs: { ...fs, lstat: async (target, ...args) => {
+      const stat = await fs.lstat(target, ...args), value = slash(String(target));
+      if (!checking) return stat;
+      if (change === 'parent-link' && value === left || change === 'link' && value === `${left}/child`) return Object.assign(Object.create(stat), { isSymbolicLink: () => true });
+      if (change === 'identity' && value === `${left}/child` && args[0]?.bigint) return Object.assign(Object.create(stat), { ino: stat.ino + 1n });
+      return stat;
+    } }, deletePath: async target => calls.push(target) });
+    const before = await provider.load(); checking = true;
+    await assert.rejects(provider.remove(before, { paths: [`${left}/child`], useTrash: false }));
+    assert.deepEqual(calls, []);
+  }
+});
+
+test('cancellation during the final target identity read prevents the native deletion', async t => {
+  const { left, right } = await fixture(t);
+  const controller = new AbortController(), calls = [];
+  let deleting = false, reads = 0;
+  const provider = createProvider({ roots: [left, right], fs: { ...fs, lstat: async (target, ...args) => {
+    const stat = await fs.lstat(target, ...args);
+    if (deleting && slash(String(target)) === `${left}/child` && args[0]?.bigint && ++reads === 2) controller.abort();
+    return stat;
+  } }, deletePath: async target => calls.push(target) });
+  const before = await provider.load(); deleting = true;
+  await assert.rejects(provider.remove(before, { paths: [`${left}/child`], useTrash: true }, { signal: controller.signal }), { name: 'AbortError' });
+  assert.deepEqual(calls, []);
 });
 
 test('a removed optional view cannot turn a completed native deletion into a reported failure', async t => {

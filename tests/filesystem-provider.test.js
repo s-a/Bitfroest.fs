@@ -354,6 +354,45 @@ test('browsing skips an entry removed after listing while recursive preparation 
   await assert.rejects(provider.prepare(state, { directories: [left], recursive: true }), { code: 'ENOENT' });
 });
 
+test('recursive preparation recovers only an exactly restored transient zero directory timestamp response', async t => {
+  const { left, right } = await setup(t);
+  for (const outcome of ['restored', 'zero', 'changed', 'identity', 'aborted']) {
+    let reads = 0, enumerated = false;
+    const controller = new AbortController();
+    const provider = createProvider({ roots: [left, right], fs: { ...fs, lstat: async (directory, options) => {
+      const stat = await fs.lstat(directory, options);
+      if (slash(String(directory)) !== `${left}/docs` || !options?.bigint || !enumerated) return stat;
+      reads++;
+      if (reads === 1) {
+        if (outcome === 'aborted') controller.abort();
+        return Object.assign(Object.create(stat), { mtimeNs: 0n, ctimeNs: 0n, ...(outcome === 'identity' ? { ino: stat.ino + 1n } : {}) });
+      }
+      if (reads === 2 && outcome === 'zero') return Object.assign(Object.create(stat), { mtimeNs: 0n, ctimeNs: 0n });
+      if (reads === 2 && outcome === 'changed') return Object.assign(Object.create(stat), { mtimeNs: stat.mtimeNs + 1n });
+      return stat;
+    }, readdir: async (directory, ...args) => {
+      const names = await fs.readdir(directory, ...args);
+      if (slash(String(directory)) === `${left}/docs`) enumerated = true;
+      return names;
+    } } });
+    const before = await provider.load(); reads = 0;
+    const pending = provider.prepare(before, { directories: [`${left}/docs`], recursive: true, signal: controller.signal });
+    if (outcome === 'restored') { await pending; assert.equal(reads, 2); }
+    else {
+      await assert.rejects(pending, outcome === 'aborted' ? { name: 'AbortError' } : { code: 'DirectoryChangedDuringScan' });
+      assert.equal(reads, ['identity', 'aborted'].includes(outcome) ? 1 : 2);
+    }
+  }
+});
+
+test('filesystem snapshots classify network directories before a deletion dialog opens', async t => {
+  const { left, right } = await setup(t);
+  const provider = createProvider({ roots: [left, right], networkPaths: async directories => directories.filter(directory => directory === left || directory.startsWith(`${left}/`)) });
+  const state = await provider.load();
+  assert.ok(state.networkDirectories.includes(left));
+  assert.equal(state.networkDirectories.includes(right), false);
+});
+
 test('directory identity changes and recursive scan mutations retain technical scan diagnostics', async t => {
   const { left, right } = await setup(t);
   for (const recursive of [false, true]) {
@@ -719,6 +758,28 @@ test('stale snapshots and new external destinations are rejected before any writ
   assert.equal(await fs.readFile(`${right}/plain.txt`, 'utf8'), 'external destination');
 });
 
+test('a rejected move identifies the affected entry and exact metadata difference before writing', async t => {
+  const { provider, left, right } = await setup(t);
+  const before = await provider.load({ recursive: true }), after = clone(before);
+  const source = row(before, left, 'plain.txt'), target = `${left}/plain.txt`;
+  const expected = await fs.lstat(target, { bigint: true });
+  after.folders[left] = after.folders[left].filter(file => file.id !== source.id);
+  after.folders[right].push({ ...source });
+  await fs.writeFile(target, 'externally replaced contents');
+  const observed = await fs.lstat(target, { bigint: true });
+  await assert.rejects(provider.apply(before, after, { transfer: { mode: 'move', sourcePath: left, sourceSide: 0, ids: [source.id] } }), error => {
+    assert.equal(error.code, 'EntryChangedBeforeWrite');
+    assert.equal(error.path, target);
+    for (const key of ['dev', 'ino', 'mode', 'size', 'mtimeNs', 'ctimeNs']) {
+      assert.equal(error.outcome.sourceIdentity.expected[key], String(expected[key]));
+      assert.equal(error.outcome.sourceIdentity.observed[key], String(observed[key]));
+    }
+    return true;
+  });
+  assert.equal(await fs.readFile(target, 'utf8'), 'externally replaced contents');
+  assert.deepEqual(await fs.readdir(right), []);
+});
+
 test('copy does not rescan unrelated loaded roots before its first file copy', async t => {
   const directories = [], inspected = [];
   let baselineReads = 0, unrelatedFolderChecks = 0, expectedSource;
@@ -992,6 +1053,26 @@ test('default load reads only open directories and preserves unloaded children d
   await provider.apply(before,after);
   assert.equal(await fs.readFile(`${left}/docs/nested.txt`,'utf8'),'nested');
   assert.equal(reads.includes(`${left}/docs`), false);
+});
+
+test('recursive preparation does not restore a removed deferred descendant as an unloaded folder', async t => {
+  const { left, right } = await setup(t);
+  const removed = `${left}/docs/removed`;
+  const retained = `${left}/docs/retained`, unrelated = `${right}/deferred`;
+  await fs.mkdir(removed); await fs.mkdir(retained); await fs.mkdir(unrelated);
+  const calls = [];
+  const provider = createProvider({ roots: [left, right], deletePath: async target => { calls.push(target); await fs.rm(target, { recursive: true }); } });
+  const before = await provider.load({ directories: [left, right], deferredDirectories: [removed, retained, unrelated], visibleOnly: true });
+  assert.ok(before.unloadedFolders.includes(removed));
+  await fs.rmdir(removed);
+  const prepared = await provider.prepare(before, { directories: [`${left}/docs`], recursive: true });
+  assert.equal(Object.hasOwn(prepared.folders, removed), false);
+  assert.equal(prepared.unloadedFolders.some(directory => directory === `${left}/docs` || directory.startsWith(`${left}/docs/`)), false);
+  assert.ok(Object.hasOwn(prepared.folders, retained));
+  assert.ok(Object.hasOwn(prepared.folders, unrelated));
+  assert.ok(prepared.unloadedFolders.includes(unrelated));
+  await provider.remove(prepared, { paths: [`${left}/docs`], useTrash: false });
+  assert.deepEqual(calls, [`${left}/docs`]);
 });
 
 test('prepare expands requested folders and blocks mutation of an unprepared subtree', async t => {
