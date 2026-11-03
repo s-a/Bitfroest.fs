@@ -975,9 +975,9 @@
     host.postMessage({ ...message, ...(refreshingFilesystem ? { refreshRequestId } : {}), state });
     return true;
   }
-  function prepareFolders(paths, action, resume, recursive = true) {
+  function prepareFolders(paths, action, resume, recursive = true, requireSnapshot = false) {
     if (!host || !state.realFilesystem) return false;
-    const directories = [...new Set(paths)].filter(path => (state.unloadedFolders || []).some(unloaded => unloaded === path || recursive && unloaded.startsWith(`${path}/`)));
+    const directories = [...new Set(paths)].filter(path => requireSnapshot && !Object.hasOwn(state.folders, path) || (state.unloadedFolders || []).some(unloaded => unloaded === path || recursive && unloaded.startsWith(`${path}/`)));
     return directories.length ? requestFilesystem({ type: 'filesystem-prepare', paths: directories, action, recursive }, resume) : false;
   }
   function receiveDirectoryMessage(data) {
@@ -1778,7 +1778,7 @@
       <div class="tabs" data-vscode-context='{"webviewSection":"address","preventDefaultContextMenuItems":true}' role="tablist" aria-label="Ordner-Tabs ${index === 0 ? t('links') : t('rechts')}">${p.tabs.map((path, tab) => ui`<div class="tab-wrap ${p.tab === tab ? 'selected' : ''}" draggable="true" data-tab-drag="${tab}"><button class="tab" role="tab" aria-selected="${p.tab === tab}" data-tab="${tab}" title="${escape(displayArchivePath(path))} · Doppelklick schließt">${window.CommanderIcons.font('folder', { class: 'tab-icon' })}<span data-tab-label>${escape(p.tabStates[tab].searchResult?.label || archiveTabName(path))}</span></button></div>`).join('')}<button class="add-tab" data-new-tab title="Ordner-Tab hinzufügen" aria-label="Ordner-Tab hinzufügen">+</button></div>
       <div class="pathbar" data-vscode-context='{"webviewSection":"address","preventDefaultContextMenuItems":true}'><button data-favorites title="${escape(t('Ortsmenü: Favoriten und Aktionen'))}" aria-label="${escape(t('Ortsmenü: Favoriten und Aktionen'))}" aria-haspopup="menu" aria-expanded="false">${locationMarkup(p)}</button><div class="path"><div class="path-address"><div class="path-breadcrumbs" title="${escape(displayArchivePath(currentPath(p)) + '\n' + t('Rechtsklick: Pfad kopieren'))}">${breadcrumbMarkup(p)}<span data-path-edit></span></div><input class="path-input" data-vscode-context='{"webviewSection":"textInput","preventDefaultContextMenuItems":false}' aria-label="Pfad ${index === 0 ? t('links') : t('rechts')}" value="${escape(displayArchivePath(currentPath(p)))}" spellcheck="false"></div><span data-git-location>${branchMarkup(p)}</span></div><button data-refresh title="Liste aktualisieren" aria-label="Liste aktualisieren">${window.CommanderIcons.font('refresh', { 'data-refresh-icon': '' })}</button></div>
       <div class="pane-jobs" role="region" aria-label="${escape(t('Aufträge'))}" hidden></div>
-      <div class="list" tabindex="0" aria-label="Dateien ${index === 0 ? t('links') : t('rechts')}"><table class="file-table" aria-label="Dateien und Ordner ${index === 0 ? t('links') : t('rechts')}"><colgroup>${displayColumns.map(column => `<col data-col="${escape(column.key)}" width="${column.width}">`).join('')}</colgroup><thead data-vscode-context='{"webviewSection":"columns","preventDefaultContextMenuItems":true}'><tr>${displayColumns.map(column => ui`<th data-column="${escape(column.key)}" class="column-align-${column.align || 'left'} ${isFilenameColumn(column) ? 'filename-column' : ''}" draggable="true" aria-sort="${p.sort === column.key ? p.descending ? 'descending' : 'ascending' : 'none'}"><div class="column-heading">${column.key === 'name' ? historyMarkup(p) : ''}<button data-sort="${escape(column.key)}" title="${escape(t(column.label))}" aria-label="${escape(t(column.label))}"><span class="column-caption">${escape(t(column.label))}</span>${p.sort === column.key ? `${window.CommanderIcons.font(p.descending ? 'arrow-down' : 'arrow-up', { class: 'column-sort' }, p.descending ? ' ↓' : ' ↑')}` : ''}</button></div><span class="column-resize" data-resize="${escape(column.key)}" role="separator" aria-label="Breite ${escape(t(column.label))}" title="Ziehen: Breite ändern · Doppelklick: an Inhalt anpassen"></span></th>`).join('')}</tr></thead><tbody><tr class="parent-row" data-parent aria-label="${escape(t('Übergeordnetes Verzeichnis'))}" title="${escape(t('Übergeordnetes Verzeichnis'))}">${displayColumns.map(column => `<td data-cell="${escape(column.key)}">${column.key === 'name' ? '<span class="filename"><span>…</span></span>' : ''}</td>`).join('')}</tr>${list.map((file, rowIndex) => `<tr data-id="${escape(file.id)}" draggable="${!resultView(p)}" aria-selected="${selectedIds.has(file.id)}" class="${resultView(p)?.groups && rowIndex > 0 && resultView(p).groups[file.fsSource] !== resultView(p).groups[list[rowIndex - 1].fsSource] ? 'search-group-start' : ''} ${selectedIds.has(file.id) ? 'selected' : ''} ${spaceIds.has(file.id) ? 'space-marked' : ''} ${p.cursor === file.id ? 'focused' : ''}">${displayColumns.map(column => cell(file, column)).join('')}</tr>`).join('')}</tbody></table>${!displayColumns.length ? `<div class="empty">${t('Keine sichtbaren Spalten')}</div>` : list.length ? '' : ui(['<div class="empty">Keine Einträge</div>'])}</div>
+      <div class="list" tabindex="0" aria-label="Dateien ${index === 0 ? t('links') : t('rechts')}"><table class="file-table" aria-label="Dateien und Ordner ${index === 0 ? t('links') : t('rechts')}"><colgroup>${displayColumns.map(column => `<col data-col="${escape(column.key)}" width="${column.width}">`).join('')}</colgroup><thead data-vscode-context='{"webviewSection":"columns","preventDefaultContextMenuItems":true}'><tr>${displayColumns.map(column => ui`<th data-column="${escape(column.key)}" class="column-align-${column.align || 'left'} ${isFilenameColumn(column) ? 'filename-column' : ''}" draggable="true" aria-sort="${p.sort === column.key ? p.descending ? 'descending' : 'ascending' : 'none'}"><div class="column-heading">${column.key === 'name' ? historyMarkup(p) : ''}<button data-sort="${escape(column.key)}" title="${escape(t(column.label))}" aria-label="${escape(t(column.label))}"><span class="column-caption">${escape(t(column.label))}</span>${p.sort === column.key ? `${window.CommanderIcons.font(p.descending ? 'arrow-down' : 'arrow-up', { class: 'column-sort' }, p.descending ? ' ↓' : ' ↑')}` : ''}</button></div><span class="column-resize" data-resize="${escape(column.key)}" role="separator" aria-label="Breite ${escape(t(column.label))}" title="Ziehen: Breite ändern · Doppelklick: an Inhalt anpassen"></span></th>`).join('')}</tr></thead><tbody><tr class="parent-row" data-parent aria-label="${escape(t('Übergeordnetes Verzeichnis'))}" title="${escape(t('Übergeordnetes Verzeichnis'))}">${displayColumns.map(column => `<td data-cell="${escape(column.key)}">${column.key === 'name' ? '<span class="filename"><span>..</span></span>' : ''}</td>`).join('')}</tr>${list.map((file, rowIndex) => `<tr data-id="${escape(file.id)}" draggable="${!resultView(p)}" aria-selected="${selectedIds.has(file.id)}" class="${resultView(p)?.groups && rowIndex > 0 && resultView(p).groups[file.fsSource] !== resultView(p).groups[list[rowIndex - 1].fsSource] ? 'search-group-start' : ''} ${selectedIds.has(file.id) ? 'selected' : ''} ${spaceIds.has(file.id) ? 'space-marked' : ''} ${p.cursor === file.id ? 'focused' : ''}">${displayColumns.map(column => cell(file, column)).join('')}</tr>`).join('')}</tbody></table>${!displayColumns.length ? `<div class="empty">${t('Keine sichtbaren Spalten')}</div>` : list.length ? '' : ui(['<div class="empty">Keine Einträge</div>'])}</div>
       <div class="pane-status"><span><strong>${marked.length ? ui`${marked.length} markiert` : count('file', files(p).filter(f => f.type !== 'folder').length)}</strong>${searchSummary(p)} · ${count('folder', files(p).filter(f => f.type === 'folder').length)}</span><span>${size((marked.length ? marked : files(p)).reduce((sum, f) => sum + displayBytes(f, p), 0))}</span></div></section>`;
   }
   function searchSummary(p) {
@@ -2478,7 +2478,6 @@
           const target = join(directory, name);
           if (prepareFolders([target], 'copy', () => {
             for (const [path, rows] of Object.entries(state.folders)) if (inTree(path, target)) folders[path] = rows;
-            state.folders = folders;
             finish({ name });
           })) {
             transferPreparationFailure = cancelled => { if (cancelled) finish({ action: 'cancel' }); else { toast(t('Dateioperation fehlgeschlagen; Verzeichnisse erneut eingelesen')); $('#value')?.focus(); } };
@@ -2501,7 +2500,7 @@
   async function executeTransfer(options) {
     if (!host || !state.realFilesystem) return executeTransferNow(options);
     const captured = { ...options, verifyAfterCopy: options.verifyAfterCopy ?? fileSettings.verifyAfterCopy === true, validateSelection: undefined, ids: [...options.ids] };
-    const target = window.CommanderTransfer.planTarget({ ...captured, folders: state.folders }).directory;
+    const target = captured.requiredDirectory || window.CommanderTransfer.planTarget({ ...captured, folders: state.folders }).directory;
     enqueueOperation({ command: options.mode === 'move' ? 'move' : 'copy', title: t(options.mode === 'move' ? 'Verschieben' : 'Kopieren'), target, sources: options.ids.map(id => (state.folders[options.sourcePath] || []).find(file => file.id === id)).filter(Boolean).map(file => file.fsSource || join(options.sourcePath, file.name)) }, job => executeTransferNow(captured).catch(error => {
       failTransferExecution(error, captured.onComplete);
       operationQueue.complete(job.id, { ok: false, error: error.message });
@@ -2515,6 +2514,10 @@
     if (options.validateSelection && !options.validateSelection()) throw new Error(t('Die gezogene Auswahl wurde geändert. Bitte erneut ziehen.'));
     if (host && state.realFilesystem && !Object.hasOwn(state.folders, options.sourcePath)) {
       requestFilesystem({ type: 'filesystem-prepare', paths: [options.sourcePath], action: options.mode, recursive: false }, () => executeTransferNow(options).catch(failed));
+      return;
+    }
+    if (options.requiredDirectory && !options.requiredDirectoryVerified) {
+      requestFilesystem({ type: 'filesystem-prepare', paths: [options.requiredDirectory], action: options.mode, recursive: false }, () => executeTransferNow({ ...options, requiredDirectoryVerified: true }).catch(failed));
       return;
     }
     const plan = window.CommanderTransfer.planTarget({ ...options, folders: state.folders });
@@ -2534,14 +2537,15 @@
     const planningJob = transferJob;
     planningJob.controller = new AbortController();
     let originalFolders = clone(state.folders);
+    let planningFolders = clone(state.folders);
     let committedResult = { completed: 0, directories: 0, completedIds: [] };
     const pendingTransfer = () => ({ mode: options.mode, sourcePath: options.sourcePath, sourceSide: options.sourceSide, verifyAfterCopy: options.verifyAfterCopy === true,
       ids: options.ids.filter(id => !committedResult.completedIds.includes(id) && (originalFolders[options.sourcePath] || []).some(row => row.id === id)) });
     try {
     const confirmedView = host && state.realFilesystem ? { folders: originalFolders, panes: clone(state.panes) } : null;
     const flushCompleted = async partial => {
-      if (!confirmedView || JSON.stringify(state.folders) === confirmedFolders) return true;
-      const plannedFolders = state.folders, proposed = clone(state);
+      if (!confirmedView || JSON.stringify(planningFolders) === confirmedFolders) return true;
+      const plannedFolders = planningFolders, proposed = { ...clone(state), folders: clone(plannedFolders) };
       state.folders = originalFolders;
       planningJob.hostActive = true;
       planningJob.id = `transfer-checkpoint-${Date.now()}-${++transferSequence}`;
@@ -2563,7 +2567,7 @@
             });
             rows.splice(0, rows.length, ...updated); plannedFolders[key] = rows;
           }
-          state = { ...nativeState, folders: plannedFolders, active: view.active };
+          state = { ...nativeState, folders: clone(plannedFolders), active: view.active };
           view.panes.forEach((p, index) => {
             if (!p.tabs.every(path => Object.hasOwn(plannedFolders, path))) return;
             const valid = new Set((plannedFolders[currentPath(p)] || []).map(file => file.id));
@@ -2593,11 +2597,12 @@
       });
     };
     transferPlanning = true;
-    const result = await window.CommanderTransfer.execute({ ...options, policy: options.policyState?.value || options.policy, signal: planningJob.controller.signal, folders: state.folders, createId: () => String(nextId++),
-      onBeforeDecision: flushCompleted, onConflict: async (...args) => { const decision = await transferConflict(...args); if (options.policyState && window.CommanderTransfer.policies.includes(decision?.action) && decision.action !== 'ask') options.policyState.value = decision.action; return decision; }, onRename: (source, directory) => transferIndividualName(source, directory, options.mode) });
+    const result = await window.CommanderTransfer.execute({ ...options, policy: options.policyState?.value || options.policy, signal: planningJob.controller.signal, folders: planningFolders, createId: () => String(nextId++),
+      onBeforeDecision: flushCompleted, onConflict: async (...args) => { const decision = await transferConflict(...args); if (options.policyState && window.CommanderTransfer.policies.includes(decision?.action) && decision.action !== 'ask') options.policyState.value = decision.action; return decision; }, onRename: (source, directory) => transferIndividualName(source, directory, options.mode, planningFolders) });
     if (transferJob !== planningJob) return;
     if (planningJob.cancelRequested) {
       state.folders = originalFolders;
+      planningFolders = clone(originalFolders);
       const sourcePane = state.panes[options.sourceSide], completedIds = state.realFilesystem ? committedResult.completedIds : result.completedIds;
       if (currentPath(sourcePane) === options.sourcePath) sourcePane.selected = sourcePane.selected.filter(id => !completedIds.includes(id));
       Object.assign(result, committedResult, { cancelled: true });
@@ -2611,10 +2616,10 @@
       if (!remaining.has(sourcePane.cursor)) sourcePane.cursor = null;
     }
     const completion = { result, options, committedResult };
-    const needsCommit = host && state.realFilesystem && JSON.stringify(state.folders) !== confirmedFolders;
+    const needsCommit = host && state.realFilesystem && JSON.stringify(planningFolders) !== confirmedFolders;
     if (needsCommit) { transferCompletion = completion; document.querySelector('.transfer-progress')?.remove(); transferJob = { id: `transfer-${Date.now()}-${++transferSequence}`, queueJobId: queuedJob?.id, hostActive: true, context: Object.freeze({ mode: options.mode, sources: Object.freeze(result.completedIds.map(id => progressSources.get(id))), target: plan.name || plan.mask ? join(targetDirectory, plan.name || plan.mask) : targetDirectory }), transfer: pendingTransfer() }; transferProgress(); }
     if (needsCommit) {
-      completion.proposedState = clone(state); const currentPanes = state.panes;
+      completion.proposedState = { ...clone(state), folders: clone(planningFolders) }; const currentPanes = state.panes;
       state.folders = confirmedView.folders;
       currentPanes.forEach((currentPane, index) => {
         const confirmedPane = confirmedView.panes[index];
@@ -2623,7 +2628,7 @@
         }
       });
       state.panes = currentPanes;
-    }
+    } else state.folders = planningFolders;
     transferPending = false;
     render(true);
     if (!needsCommit) { finishTransfer(completion, true); operationQueue?.complete(operationQueue.active?.id, { ok: true, cancelled: result.cancelled, message: transferSummary(completion) }); }
@@ -2712,7 +2717,7 @@
     $('#zip-paths').checked = fileSettings.zip?.paths !== false;
     $('#zip-recursive').checked = fileSettings.zip?.recursive !== false;
   }
-  function runTransfer({ sourceSide = state.active, targetSide = 1 - sourceSide, sourcePath: providedSourcePath, ids, targetPath, mode = 'copy', onComplete, validateSelection, sourceGroups }) {
+  function runTransfer({ sourceSide = state.active, targetSide = 1 - sourceSide, sourcePath: providedSourcePath, ids, targetPath, targetIsDirectory = false, mode = 'copy', onComplete, validateSelection, sourceGroups }) {
     if ((filesystemPending && !operationQueue?.active && !refreshingFilesystem) || transferPending) return;
     if (validateSelection && !validateSelection()) return toast(t('Die gezogene Auswahl wurde geändert. Bitte erneut ziehen.'));
     const sourcePane = state.panes[sourceSide];
@@ -2751,9 +2756,10 @@
       let destination = $('#value').value;
       if (sourceGroups?.length && sourceGroups.reduce((sum, group) => sum + group.ids.length, 0) > 1 && destination.trim() && !/[\\/]$/.test(destination)) destination += '/';
       if (validateSelection && !validateSelection()) { toast(t('Die gezogene Auswahl wurde geändert. Bitte erneut ziehen.')); return false; }
-      try { for (const group of sourceGroups || [{ sourcePath, ids: picked.map(file => file.id) }]) window.CommanderTransfer.planTarget({ folders: state.folders, sourcePath: group.sourcePath, ids: group.ids, targetPath: destination }); }
+      const requiredDirectory = targetIsDirectory && paths.identity(inputPath(destination, sourcePath)) === paths.identity(inputPath(targetPath, sourcePath)) ? inputPath(targetPath, sourcePath) : undefined;
+      try { if (!requiredDirectory || Object.hasOwn(state.folders, requiredDirectory)) for (const group of sourceGroups || [{ sourcePath, ids: picked.map(file => file.id) }]) window.CommanderTransfer.planTarget({ folders: state.folders, sourcePath: group.sourcePath, ids: group.ids, targetPath: destination }); }
       catch (error) { toast(error.message); return false; }
-      const options = { sourceSide, targetSide, sourcePath, ids: picked.map(file => file.id), targetPath: destination, mode, verifyAfterCopy: $('#transfer-verify').checked, individualNames: $('#transfer-individual').checked, filter: $('#transfer-filter').value, policy: $('#transfer-policy').value, onComplete, validateSelection };
+      const options = { sourceSide, targetSide, sourcePath, ids: picked.map(file => file.id), targetPath: destination, requiredDirectory, mode, verifyAfterCopy: $('#transfer-verify').checked, individualNames: $('#transfer-individual').checked, filter: $('#transfer-filter').value, policy: $('#transfer-policy').value, onComplete, validateSelection };
       if (sourceGroups?.length) {
         options.policyState = { value: options.policy };
         let index = 0;
@@ -3277,7 +3283,7 @@
     const choice = rightDropChoice;
     if (!choice || choice.requestId !== requestId) return;
     rightDropChoice = null;
-    if (action === 'copy' || action === 'move') runTransfer({ sourceSide: choice.source.side, sourcePath: choice.source.sourcePath, ids: choice.source.ids, targetPath: choice.path, mode: action, validateSelection: choice.validate });
+    if (action === 'copy' || action === 'move') runTransfer({ sourceSide: choice.source.side, sourcePath: choice.source.sourcePath, targetSide: choice.targetSide, ids: choice.source.ids, targetPath: choice.parent ? choice.path.replace(/\/$/, '') + '/' : choice.path, targetIsDirectory: choice.parent, mode: action, validateSelection: choice.validate });
     reportFocus(); flushFocusRefresh();
   }
   function chooseRightDrop(source, destination) {
@@ -3285,15 +3291,17 @@
     if (!validFileDropTarget(source, destination)) return;
     const path = destination.path, parentRow = (state.folders[parent(path)] || []).find(file => file.type === 'folder' && file.name === base(path));
     const signature = parentRow && JSON.stringify(parentRow);
-    const validate = () => validDraggedFiles(source) && Object.hasOwn(state.folders, path) && (!signature || JSON.stringify((state.folders[parent(path)] || []).find(file => file.type === 'folder' && file.name === base(path))) === signature);
+    const origin = currentPath(state.panes[destination.side]);
+    const validate = () => validDraggedFiles(source) && (Object.hasOwn(state.folders, path) || destination.parent && currentPath(state.panes[destination.side]) === origin) && (!signature || JSON.stringify((state.folders[parent(path)] || []).find(file => file.type === 'folder' && file.name === base(path))) === signature);
     if (!validate()) { toast(t('Die gezogene Auswahl wurde geändert. Bitte erneut ziehen.')); return; }
     const requestId = `right-drop-${++rightDropSequence}`;
-    rightDropChoice = { source, path, validate, requestId };
+    const choice = { source, path, validate, requestId, targetSide: destination.side, parent: destination.parent };
+    rightDropChoice = choice;
     if (host) { host.postMessage({ type: 'choose-drop-action', requestId }); return; }
     modal(t('Aktion für die gezogene Auswahl'), `<div class="conflict-actions"><button type="button" data-right-drop="copy">${t('Hier kopieren')}</button><button type="button" data-right-drop="move">${t('Hier verschieben')}</button></div>`, null, null);
     $('#modal-cancel').textContent = t('Abbrechen');
     const dialog = $('#modal');
-    $('#modal-body').querySelectorAll('[data-right-drop]').forEach(button => { button.onclick = () => { const action = button.dataset.rightDrop; rightDropChoice = null; dialog.close(); rightDropChoice = { source, path, validate, requestId }; finishRightDrop(action, requestId); }; });
+    $('#modal-body').querySelectorAll('[data-right-drop]').forEach(button => { button.onclick = () => { const action = button.dataset.rightDrop; rightDropChoice = null; dialog.close(); rightDropChoice = choice; finishRightDrop(action, requestId); }; });
     dialog.addEventListener('close', () => { if (rightDropChoice?.requestId === requestId) finishRightDrop('cancel', requestId); }, { once: true });
   }
   function pointerDestination(event) {
@@ -3364,7 +3372,7 @@
     feedback.style.top = `${Math.max(0, Math.min(event.clientY + 20, window.innerHeight - bounds.height))}px`;
   }
   function validFileDropTarget(source, destination) {
-    if (!destination || !Object.hasOwn(state.folders, destination.path)) return false;
+    if (!destination || !Object.hasOwn(state.folders, destination.path) && !destination.parent) return false;
     const identity = value => /^[a-z]:\//i.test(value) ? value.toLowerCase() : value;
     const target = identity(destination.path);
     if (target === identity(source.sourcePath)) return false;
@@ -3383,8 +3391,9 @@
     if (!target.closest('.list')) return null;
     const row = target.closest('tr[data-id]');
     const file = row && files(p).find(item => item.id === row.dataset.id);
-    const destination = target.closest('[data-parent]') ? parent(currentPath(p)) : file?.type === 'folder' ? entryPath(p, file) : currentPath(p);
-    return { side, path: destination, element: file?.type === 'folder' ? row : section.querySelector('.list') };
+    const parentRow = target.closest('[data-parent]');
+    const destination = parentRow ? parent(currentPath(p)) : file?.type === 'folder' ? entryPath(p, file) : currentPath(p);
+    return { side, path: destination, parent: Boolean(parentRow && !state.archiveLocations?.[currentPath(p)]), element: parentRow || (file?.type === 'folder' ? row : section.querySelector('.list')) };
   }
   $('#panes').addEventListener('dragstart', event => {
     if (event.target.closest('input,textarea,[contenteditable="true"]')) return;
@@ -3446,7 +3455,7 @@
       dragged = null; clearDropTarget();
       const mode = window.CommanderTransfer.dropMode(event);
       if (mode === 'link') { toast(t('Verknüpfungen sind für diese Dateiaktion noch nicht verfügbar.')); return; }
-      if (validFileDropTarget(source, destination)) runTransfer({ sourceSide: source.side, targetSide: destination.side, ids: source.ids, targetPath: destination.path, mode });
+      if (validDraggedFiles(source) && validFileDropTarget(source, destination)) runTransfer({ sourceSide: source.side, sourcePath: source.sourcePath, targetSide: destination.side, ids: source.ids, targetPath: destination.parent ? destination.path.replace(/\/$/, '') + '/' : destination.path, targetIsDirectory: destination.parent, mode, validateSelection: () => validDraggedFiles(source) });
       return;
     }
     if (dragged.kind === 'column' && side === dragged.side) {

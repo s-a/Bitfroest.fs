@@ -286,6 +286,48 @@ test('Shift-F5 includes all marked sources and asks for each new name before cop
   assert.deepEqual(app.state().panes[0].selected, ['b']);
 });
 
+test('individual transfer names retain extensions and show the source, target and final name', async t => {
+  for (const mode of ['copy', 'move']) for (const language of ['de', 'en']) {
+    const app = createApp(t, fixture(), { language });
+    choose(app, 'same.txt'); app.action(mode);
+    const option = app.document.querySelector('#transfer-individual');
+    assert.equal(option.closest('label').textContent.trim(), language === 'de' ? 'Dateinamen im Ziel einzeln festlegen' : 'Set each destination filename');
+    assert.equal(option.getAttribute('aria-description'), option.title);
+    assert.ok(option.title.length > 20);
+    assert.equal(app.document.querySelector('#transfer-individual-hint'), null);
+    option.checked = true; submit(app); await tick();
+    assert.equal(app.document.querySelector('#modal-title').textContent, language === 'de' ? 'Dateiname im Zielordner' : 'Filename in the target folder');
+    const input = app.document.querySelector('#value');
+    assert.equal(app.document.querySelector('[data-rename-source]').textContent, 'same.txt');
+    assert.equal(app.document.querySelector('[data-rename-directory]').textContent, '/right');
+    assert.equal(app.document.querySelector('#modal-confirm').textContent, mode === 'move' ? (language === 'de' ? 'Verschieben' : 'Move') : (language === 'de' ? 'Kopieren' : 'Copy'));
+    assert.ok(app.document.querySelector('.modal-actions #transfer-skip'));
+    assert.equal(app.document.querySelector('#modal').getAttribute('aria-describedby'), 'modal-description');
+    assert.equal(app.document.activeElement, input);
+    assert.equal(input.getAttribute('aria-describedby'), 'rename-preview');
+    assert.ok(input.title.length > 20);
+    assert.equal(app.document.querySelector('#rename-extension-hint'), null);
+    input.value = 'renamed'; input.dispatchEvent(new app.window.Event('input', { bubbles: true }));
+    assert.equal(app.document.querySelector('[data-rename-preview]').textContent, 'renamed.txt');
+    submit(app); await tick();
+    assert.ok(app.state().folders['/right'].some(file => file.name === 'renamed.txt'));
+    assert.equal(app.state().folders['/left'].some(file => file.name === 'same.txt'), mode === 'copy');
+    app.action('mkdir'); assert.equal(app.document.querySelector('#transfer-skip'), null);
+  }
+});
+
+test('individual rename uses explicit extensions and keeps empty proposals editable', async t => {
+  const app = createApp(t, fixture()); choose(app, 'same.txt'); app.action('copy');
+  app.document.querySelector('#transfer-individual').checked = true; submit(app); await tick();
+  const input = app.document.querySelector('#value');
+  input.value = ''; submit(app); await tick();
+  assert.equal(app.document.activeElement, input);
+  input.value = 'renamed.md'; input.dispatchEvent(new app.window.Event('input', { bubbles: true }));
+  assert.equal(app.document.querySelector('[data-rename-preview]').textContent, 'renamed.md');
+  submit(app); await tick();
+  assert.ok(app.state().folders['/right'].some(file => file.name === 'renamed.md'));
+});
+
 test('individual rename phases ignore delayed prior close and retain invalid typed names', async t => {
   const app = createApp(t, fixture());
   app.window.HTMLDialogElement.prototype.close = function () {

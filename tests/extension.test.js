@@ -219,7 +219,7 @@ test('generated host HTML suppresses file-action context menus while retaining n
   view.window.dispatchEvent(new view.window.MessageEvent('message', { data: confirmation }));
   assert.match(view.document.querySelector('#status-message').textContent, /Pfad in Zwischenablage kopiert/);
   for (const pane of view.document.querySelectorAll('.pane')) {
-    assert.equal(pane.querySelector('[data-parent] .filename').textContent, '…');
+    assert.equal(pane.querySelector('[data-parent] .filename').textContent, '..');
     assert.equal(pane.querySelector('[data-parent] [data-icon-reviewed]'), null);
   }
   panel.dispose();

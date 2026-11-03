@@ -196,6 +196,7 @@ body.vscode-high-contrast .column-resize::after, body.vscode-high-contrast-light
 .fileicon.folder::before { content: ''; width: 13px; height: 9px; position: absolute; top: 5px; border: 1px solid currentColor; background: currentColor; }
 .fileicon.folder::after { content: ''; width: 6px; height: 3px; border: 1px solid currentColor; border-bottom: 0; position: absolute; top: 3px; left: 2px; }
 .parent-row { color: var(--muted); }
+.file-table tbody tr.parent-row.drop-target { color: var(--vscode-list-activeSelectionForeground, var(--text)); background: var(--vscode-list-dropBackground, var(--vscode-list-activeSelectionBackground, var(--hover))); outline: 2px solid var(--vscode-focusBorder, var(--accent)); outline-offset: -2px; }
 .parent-row .filename { padding-left: calc(var(--file-marker-width, 0px) + var(--file-marker-gap, 0px) + var(--icon-base-size) + var(--icon-text-gap)); }
 .parent-row .filename::before { content: none; }
 .inline-rename { width: 100%; height: 21px; padding: 0 2px; border: 1px solid var(--accent); }
