@@ -11,6 +11,31 @@ function git(app) {
   send(app, { ...request, type: 'git-status-result', directories: { '/repo': { ok: true, repository: true, branch: 'main', statuses: {} }, '/plain': { ok: true, repository: false } } });
 }
 
+for (const side of [0, 1]) for (const kind of ['plain', 'git']) test(`${kind} location menu opens outside the grid in panel ${side + 1}`, t => {
+  const app = createApp(t, fixture());
+  if (kind === 'git') git(app);
+  const panel = app.document.querySelector(`[data-pane="${side}"]`);
+  const button = panel.querySelector('[data-favorites]');
+  if (kind === 'git' && side === 1) {
+    const request = app.messages.find(message => message.type === 'git-status');
+    send(app, { ...request, type: 'git-status-result', directories: { '/plain': { ok: true, repository: true, branch: 'main', statuses: {} } } });
+  }
+  app.click(button.querySelector('[data-location-icon]'));
+  const menu = app.document.querySelector('[data-favorite-menu]');
+  assert.ok(menu);
+  assert.equal(menu.parentElement, app.document.body, 'the popup must not be clipped by the grid header');
+  assert.equal(button.getAttribute('aria-expanded'), 'true');
+  if (kind === 'git') {
+    app.click(menu.querySelector('[data-location-section="git"]'));
+    app.click(menu.querySelector('[data-location-action="git-branches"]'));
+    assert.equal(app.messages.filter(message => message.type === 'git-branches').at(-1).path, side ? '/plain' : '/repo');
+  } else {
+    assert.ok(menu.querySelector('[data-favorite-toggle]'));
+    app.key('Escape');
+    assert.equal(app.document.activeElement, button);
+  }
+});
+
 test('plain folders have one filled star with direct favorites and no additional path glyph', t => {
   const app = createApp(t, fixture());
   const button = app.document.querySelector('[data-favorites]');

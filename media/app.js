@@ -278,7 +278,7 @@
         else { closeFavorites(false); host?.postMessage({ type: 'configure-favorites' }); }
       }
     });
-    popup.dataset.favoriteMenu = ''; trigger.parentElement.append(popup);
+    popup.dataset.favoriteMenu = ''; document.body.append(popup);
     menus.place(popup, { anchor: trigger }); popup.querySelector('button')?.focus();
   }
   document.addEventListener('pointerdown', event => { if (!event.target.closest('[data-favorite-menu],[data-favorites]')) closeFavorites(false); });

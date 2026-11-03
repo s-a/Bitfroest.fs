@@ -38,7 +38,8 @@ test('the star replaces the up button and opens a keyboard accessible panel menu
   const stars = app.document.querySelectorAll('[data-favorites]');
   assert.equal(stars.length, 2);
   app.click(stars[1]);
-  assert.equal(app.document.querySelector('[data-favorite-menu]').closest('[data-pane]').dataset.pane, '1');
+  assert.ok(app.document.querySelector('[data-favorite-menu]'));
+  assert.equal(stars[1].getAttribute('aria-expanded'), 'true');
   app.key('Escape');
   assert.equal(app.document.querySelector('[data-favorite-menu]'), null);
   assert.equal(app.document.activeElement, stars[1]);
