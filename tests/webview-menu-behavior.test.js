@@ -5,6 +5,20 @@ const path = require('node:path');
 const { createApp } = require('./support/webview.cjs');
 const hover = (app, item) => item.dispatchEvent(new app.window.MouseEvent('mouseenter'));
 
+test('context menu hover keeps the selection background without a border and keyboard focus remains visible', t => {
+  const app = createApp(t);
+  const style = app.document.createElement('style');
+  style.textContent = fs.readFileSync(path.join(__dirname, '../media/app.css'), 'utf8').replaceAll(':hover', '.test-hover').replaceAll(':focus-visible', '.test-focus');
+  app.document.head.append(style);
+  app.click(app.document.querySelector('[data-favorites]'));
+  const item = app.document.querySelector('[data-favorite-toggle]');
+  item.classList.add('test-hover', 'test-focus');
+  assert.equal(app.window.getComputedStyle(item).outline, 'none');
+  assert.ok(app.window.getComputedStyle(item).backgroundColor);
+  item.classList.remove('test-hover');
+  assert.match(app.window.getComputedStyle(item).outline, /solid/);
+});
+
 test('popup labels share the compact menu typography and mapped font icons', t => {
   const app = createApp(t);
   const style = app.document.createElement('style'); style.textContent = fs.readFileSync(path.join(__dirname, '../media/app.css'), 'utf8'); app.document.head.append(style);
