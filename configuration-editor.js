@@ -37,7 +37,7 @@ function createConfigurationEditor(vscode, context, options) {
           scope = message.scope; await sendState(); return;
         }
         if (message?.type === 'configuration-browse') {
-          if (saving || typeof message.id !== 'string' || typeof message.requestId !== 'string' || !['path', 'target'].includes(message.field)) return;
+          if (saving || typeof message.id !== 'string' || typeof message.requestId !== 'string' || message.field !== 'path') return;
           const requestedScope = scope, requestedRevision = revision(options.read(scope));
           const value = await options.browse();
           if (panel === current && value && scope === requestedScope && revision(options.read(scope)) === requestedRevision) await current.webview.postMessage({ type: 'configuration-browsed', requestId: message.requestId, scope: requestedScope, id: message.id, field: message.field, value });

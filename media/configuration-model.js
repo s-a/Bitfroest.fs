@@ -24,9 +24,9 @@
     const nodes = input.map(item => {
       if (!item || typeof item.id !== 'string' || !item.id || ids.has(item.id) || !['favorite', 'group'].includes(item.type) || typeof item.name !== 'string' || !item.name.trim() || item.name.includes('\0')) throw new Error('Jeder Eintrag benötigt einen eindeutigen Namen.');
       if (item.type === 'group' && item.name.includes('/')) throw new Error('Gruppennamen dürfen keinen Schrägstrich enthalten.');
-      if (item.type === 'favorite' && (!absolute(item.path) || item.target && !absolute(item.target))) throw new Error('Ein gültiger absoluter Verzeichnispfad ist erforderlich.');
+      if (item.type === 'favorite' && !absolute(item.path)) throw new Error('Ein gültiger absoluter Verzeichnispfad ist erforderlich.');
       const result = { id: item.id, type: item.type, name: item.name.trim(), parent: item.parent || null };
-      if (item.type === 'favorite') Object.assign(result, { path: item.path, target: item.target || '' });
+      if (item.type === 'favorite') result.path = item.path;
       ids.set(result.id, result); return result;
     });
     validateHierarchy(nodes);
@@ -43,19 +43,18 @@
         if (!groups.has(location)) { const id = `group-${++sequence}`; groups.set(location, id); nodes.push({ id, name, type: 'group', parent }); }
         parent = groups.get(location);
       }
-      nodes.push({ id: `favorite-${++sequence}`, type: 'favorite', name: tables.labels?.[key] || key, parent, path: entries[key], target: tables.targets?.[key] || '' });
+      nodes.push({ id: `favorite-${++sequence}`, type: 'favorite', name: tables.labels?.[key] || key, parent, path: entries[key] });
     }
     return nodes;
   }
   function favoritesToTables(input) {
     const nodes = validateFavorites(input), byId = new Map(nodes.map(item => [item.id, item]));
-    const result = { entries: {}, labels: {}, groups: {}, targets: {}, order: [], groupPaths: [] };
+    const result = { entries: {}, labels: {}, groups: {}, order: [], groupPaths: [] };
     const groupPath = node => { const names = []; let parent = node.parent; while (parent) { const group = byId.get(parent); names.unshift(group.name); parent = group.parent; } return names.join('/'); };
     for (const node of nodes) {
       if (node.type === 'group') { result.groupPaths.push([groupPath(node), node.name].filter(Boolean).join('/')); continue; }
       result.entries[node.id] = node.path; result.labels[node.id] = node.name; result.order.push(node.id);
       const group = groupPath(node); if (group) result.groups[node.id] = group;
-      if (node.target) result.targets[node.id] = node.target;
     }
     return result;
   }

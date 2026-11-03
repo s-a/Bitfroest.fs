@@ -149,7 +149,6 @@
   "columns.fixed.position.accessTime": "Position of Accessed time. Equal positions keep catalog order.",
   "favorites.entries": "Favorite names and directory paths. All paths are literal; commands are not executed.",
   "favorites.groups": "Optional menu group per favorite name. Use / to separate nested groups.",
-  "favorites.targets": "Optional directory in the opposite panel per favorite name.",
   "favorites.order": "Favorite names in menu order. Remaining entries follow in table order.",
   "favorites.storage.user": "User",
   "favorites.storage.workspace": "Workspace",

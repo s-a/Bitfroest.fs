@@ -167,7 +167,7 @@ function activate(context) {
       return value && typeof value === 'object' && !Array.isArray(value) ? Object.fromEntries(Object.entries(value).filter(([name, path]) => name.trim() && typeof path === 'string' && path.trim() && !path.includes('\0'))) : {};
     };
     const order = settings.get('favorites.order', []);
-    return { caseSensitive: process.platform !== 'win32', entries: record('entries'), groups: record('groups'), labels: record('labels'), targets: record('targets'), order: Array.isArray(order) ? order.filter(name => typeof name === 'string') : [] };
+    return { caseSensitive: process.platform !== 'win32', entries: record('entries'), groups: record('groups'), labels: record('labels'), order: Array.isArray(order) ? order.filter(name => typeof name === 'string') : [] };
   };
   let favoriteQueue = Promise.resolve();
   function toggleFavorite(directory) {
@@ -191,7 +191,7 @@ function activate(context) {
           validateInput: value => !value.trim() ? t('Ein Name ist erforderlich.') : duplicate(value) ? t('Dieser Name ist bereits vergeben.') : undefined });
         data = configurationData.read(scope);
         if (!name?.trim() || duplicate(name)) return;
-        data.favorites.push({ id: crypto.randomUUID(), type: 'favorite', name: name.trim(), path: directory, target: '', parent: null });
+        data.favorites.push({ id: crypto.randomUUID(), type: 'favorite', name: name.trim(), path: directory, parent: null });
         await configurationData.write(data, scope);
       }
       if (panel) await panel.webview.postMessage({ type: 'favorite-settings', settings: favoriteSettings() });
@@ -300,7 +300,7 @@ function activate(context) {
   const storage = () => scope === 'global' ? context.globalState : context.workspaceState;
   let savedState = storage().get('fileManagerState');
   const fileRoots = selectStartupRoots(process.platform === 'win32' ? ['C:/tmp', 'C:/temp'] : [path.join(os.homedir(), 'tmp'), path.join(os.homedir(), 'temp')], os.homedir());
-  const favoriteRoots = () => { const settings = favoriteSettings(); return [...Object.values(settings.entries), ...Object.values(settings.targets)]; };
+  const favoriteRoots = () => Object.values(favoriteSettings().entries);
   const minimizeRoots = values => {
     const normalized = [...new Set(values.filter(value => typeof value === 'string' && path.isAbsolute(value) && !value.includes('\0') && !value.split(/[\\/]/).includes('..')).map(value => normalizePath(path.resolve(value), { platform: process.platform })))];
     const identity = value => process.platform === 'win32' ? value.toLowerCase() : value;

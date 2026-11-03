@@ -2880,20 +2880,6 @@
             "markdownDescription": "%favorites.groups%",
             "deprecationMessage": "%configuration.managedByEditor%"
           },
-          "bitfroest.favorites.targets": {
-            "type": "object",
-            "default": {},
-            "scope": "window",
-            "order": 2,
-            "tags": [
-              "favoriteSettings"
-            ],
-            "additionalProperties": {
-              "type": "string"
-            },
-            "markdownDescription": "%favorites.targets%",
-            "deprecationMessage": "%configuration.managedByEditor%"
-          },
           "bitfroest.favorites.order": {
             "type": "array",
             "default": [],
@@ -2978,9 +2964,6 @@
                   ]
                 },
                 "path": {
-                  "type": "string"
-                },
-                "target": {
                   "type": "string"
                 }
               }

@@ -1863,13 +1863,13 @@ test('removing a missing earlier tab retains the active saved path and its tab s
   assert.equal(pane.tabStates[pane.tab].filter, 'saved filter');
 });
 
-test('configured favorite directories and opposite targets extend the provider without changing startup roots', t => {
+test('configured favorites extend the provider while legacy opposite targets are ignored', t => {
   const configuration = { 'favorites.entries': { Work: 'C:/git' }, 'favorites.targets': { Work: 'A:/Media' } };
   const app = harness(t, { configuration });
   assert.deepEqual(app.providerOptions.roots, ['C:/tmp', 'C:/temp']);
-  assert.deepEqual(app.providerOptions.additionalRoots(), ['C:/git', 'A:/Media']);
+  assert.deepEqual(app.providerOptions.additionalRoots(), ['C:/git']);
   configuration['favorites.entries'] = { Work: 'D:/Work' };
-  assert.deepEqual(app.providerOptions.additionalRoots(), ['D:/Work', 'A:/Media']);
+  assert.deepEqual(app.providerOptions.additionalRoots(), ['D:/Work']);
 });
 
 test('configuration editor saves trees and layout into the chosen scope and broadcasts the resulting panel state', async t => {

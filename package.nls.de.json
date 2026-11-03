@@ -149,7 +149,6 @@
   "columns.fixed.position.accessTime": "Position der Spalte Zugriffszeit. Gleiche Positionen behalten die Katalogreihenfolge.",
   "favorites.entries": "Favoritennamen und Verzeichnispfade. Alle Pfade sind wörtlich; Befehle werden nicht ausgeführt.",
   "favorites.groups": "Optionale Menügruppe je Favoritenname. / trennt verschachtelte Gruppen.",
-  "favorites.targets": "Optionales Verzeichnis im Gegenpanel je Favoritenname.",
   "favorites.order": "Favoritennamen in Menüreihenfolge. Weitere Einträge folgen in Tabellenreihenfolge.",
   "favorites.storage.user": "Benutzer",
   "favorites.storage.workspace": "Arbeitsbereich",

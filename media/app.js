@@ -179,27 +179,27 @@
   }
   function openFavorite(name, side) {
     if (favoritesBlocked()) return;
-    const settings = favoriteSettings, destination = settings.entries?.[name], opposite = settings.targets?.[name];
+    const destination = favoriteSettings.entries?.[name];
     if (typeof destination !== 'string') return;
     closeFavorites(false);
     const normalized = favoritePath;
-    const navigate = (value, index, done) => {
+    const navigate = (value, index) => {
       const target = normalized(value);
       const finish = () => {
         const existing = Object.keys(state.folders).find(path => favoriteIdentity(path) === favoriteIdentity(target));
         if (!existing) { toast(t('Dieser Pfad ist in den Beispieldaten nicht vorhanden.')); return; }
-        tabs.navigate(state.panes[index], existing); state.active = side; render(true); done?.();
+        tabs.navigate(state.panes[index], existing); state.active = side; render(true);
       };
       if (host && state.realFilesystem) {
         cacheDirectories();
         const existing = Object.keys(state.folders).find(path => favoriteIdentity(path) === favoriteIdentity(target)) || target;
         const cached = directoryCache.get(existing) || (!state.unloadedFolders?.includes(existing) ? state.folders[existing] : undefined);
         if (cached) { rememberScroll(); directoryListings.set(existing, cached); tabs.navigate(state.panes[index], existing); state.active = side; render(true, undefined, false); }
-        requestFilesystem({ type: 'filesystem-navigate', path: existing, side: index }, cached ? done : finish);
+        requestFilesystem({ type: 'filesystem-navigate', path: existing, side: index }, cached ? undefined : finish);
       }
       else finish();
     };
-    navigate(destination, side, () => { if (typeof opposite === 'string' && opposite.trim()) navigate(opposite, 1 - side); });
+    navigate(destination, side);
   }
   function favoritesBlocked() {
     return (filesystemPending && !operationQueue?.active && !refreshingFilesystem) || (transferPending && !operationQueue?.active) || (transferJob && !operationQueue?.active);

@@ -11,7 +11,7 @@ test('column settings omit custom titles from validated saved data and public sc
   assert.equal(properties['bitfroest.columns.layout'].items.properties.title, undefined);
 });
 
-test('favorite tables roundtrip groups, duplicate labels, order and opposite targets', () => {
+test('favorite tables preserve groups and labels while discarding legacy opposite targets', () => {
   const input = { entries: { Work: 'C:/work', 'Other work': 'D:/work' }, labels: { 'Other work': 'Work' }, groups: { 'Other work': 'Projects/Archive' }, targets: { Work: 'C:/downloads' }, order: ['Work', 'Other work'] };
   const tree = model.favoritesFromTables(input);
   const tables = model.favoritesToTables(tree);
@@ -19,7 +19,11 @@ test('favorite tables roundtrip groups, duplicate labels, order and opposite tar
   assert.deepEqual(Object.values(tables.entries), ['C:/work', 'D:/work']);
   assert.deepEqual(Object.values(tables.labels), ['Work', 'Work']);
   assert.equal(Object.values(tables.groups)[0], 'Projects/Archive');
-  assert.equal(Object.values(tables.targets)[0], 'C:/downloads');
+  assert.equal(tables.targets, undefined);
+  assert.ok(tree.every(item => !Object.hasOwn(item, 'target')));
+  const properties = Object.assign({}, ...require('../package.json').contributes.configuration.map(category => category.properties));
+  assert.equal(properties['bitfroest.favorites.targets'], undefined);
+  assert.equal(properties['bitfroest.favorites.items'].items.properties.target, undefined);
 });
 
 test('moving groups prevents cycles and moving favorites preserves their properties', () => {

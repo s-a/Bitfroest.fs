@@ -80,7 +80,7 @@
     $('#favorite-name').value = node.name;
     $('[data-directory-fields]').hidden = node.type === 'group';
     $('#favorite-path').required = node.type === 'favorite';
-    $('#favorite-path').value = paths.displayPath(node.path || ''); $('#favorite-target').value = paths.displayPath(node.target || '');
+    $('#favorite-path').value = paths.displayPath(node.path || '');
     const select = $('#favorite-parent'); select.replaceChildren(new Option(t('Hauptebene'), ''));
     function append(parent, depth) {
       for (const group of data.favorites.filter(item => item.type === 'group' && item.parent === parent)) {
@@ -155,13 +155,13 @@
   function add(type) {
     const node = current(), parent = node?.type === 'group' ? node.id : node?.parent || null;
     const item = { id: crypto.randomUUID(), type, name: t(type === 'group' ? 'Neue Gruppe' : 'Neuer Favorit'), parent };
-    if (type === 'favorite') Object.assign(item, { path: '', target: '' });
+    if (type === 'favorite') Object.assign(item, { path: '' });
     data.favorites.push(item); if (parent) expanded.add(parent); expanded.add(item.id); modified(); select(item.id); $('#favorite-name').focus(); $('#favorite-name').select();
   }
   $('[data-add-group]').onclick = () => add('group'); $('[data-add-favorite]').onclick = () => add('favorite');
   $('[data-remove]').onclick = () => { const node = current(); if (!node) return; data.favorites = data.favorites.filter(item => !isDescendant(item.id, node.id)); selected = data.favorites[0]?.id || null; modified(); renderTree(); renderDetails(); };
   $('#favorite-name').oninput = event => { if (current()) { current().name = event.target.value; modified(); renderTree(); } };
-  for (const field of ['path', 'target']) $(`#favorite-${field}`).oninput = event => { if (current()) { current()[field] = paths.normalizePath(event.target.value, { input: true }); modified(); } };
+  $('#favorite-path').oninput = event => { if (current()) { current().path = paths.normalizePath(event.target.value, { input: true }); modified(); } };
   $('#favorite-parent').onchange = event => {
     try { data.favorites = model.moveFavorite(data.favorites, selected, event.target.value); if (event.target.value) expanded.add(event.target.value); modified(); renderTree(); } catch (failure) { error(failure.message); renderDetails(); }
   };
@@ -222,7 +222,7 @@
     else if (message?.type === 'configuration-browsed') {
       if (!pendingBrowse || pendingBrowse.requestId !== message.requestId || pendingBrowse.scope !== scope || message.scope !== scope || saving) return;
       pendingBrowse = null;
-      const node = data.favorites.find(item => item.id === message.id); if (node?.type === 'favorite' && ['path', 'target'].includes(message.field)) { node[message.field] = paths.normalizePath(message.value, { input: true }); modified(); if (node.id === selected) renderDetails(); }
+      const node = data.favorites.find(item => item.id === message.id); if (node?.type === 'favorite' && message.field === 'path') { node.path = paths.normalizePath(message.value, { input: true }); modified(); if (node.id === selected) renderDetails(); }
     }
     else if (message?.type === 'configuration-changed') { if (dirty || saving) error('Die Konfiguration wurde außerhalb dieses Editors geändert. Bitte neu laden.'); else host.postMessage({ type: 'configuration-reload' }); }
   });

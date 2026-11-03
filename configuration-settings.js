@@ -9,7 +9,7 @@ function createConfigurationSettings(vscode, options) {
   function readFavorites(scope) {
     const settings = configuration(), scopeKey = scope === 'workspace' ? 'workspaceValue' : 'globalValue';
     const value = key => settings.inspect(key)?.[scopeKey], items = value('favorites.items');
-    return Array.isArray(items) ? items.map(item => ({ ...item })) : favoritesFromTables(Object.fromEntries(['entries', 'labels', 'groups', 'targets', 'order'].map(key => [key, value(`favorites.${key}`)])));
+    return Array.isArray(items) ? items.map(item => { const result = { ...item }; delete result.target; return result; }) : favoritesFromTables(Object.fromEntries(['entries', 'labels', 'groups', 'order'].map(key => [key, value(`favorites.${key}`)])));
   }
   function read(scope) {
     const settings = configuration(), scopeKey = scope === 'workspace' ? 'workspaceValue' : 'globalValue';

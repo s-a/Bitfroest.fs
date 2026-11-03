@@ -70,21 +70,24 @@ test('favorite submenu preserves grouping and current-directory add/remove actio
   assert.equal(app.document.activeElement, app.document.querySelector('[data-favorites]'));
 });
 
-test('paired favorites wait for successful host navigation and then update the opposite panel', t => {
-  const p = path => ({ tabs: [path], tab: 0, selected: [], cursor: null });
+for (const side of [0, 1]) for (const cached of [false, true]) test(`legacy paired favorites affect only panel ${side}, cached=${cached}`, t => {
+  const p = path => ({ tabs: [path], tab: 0, selected: [], cursor: null, scrollTop: 0 });
   const saved = { version: 1, realFilesystem: true, active: 0, panes: [p('C:/tmp'), p('C:/temp')], folders: { 'C:/tmp': [], 'C:/temp': [] } };
+  if (cached) saved.folders['A:/Media'] = [];
   const app = createApp(t, saved);
   send(app, { entries: { Media: 'A:/Media' }, targets: { Media: 'C:/Downloads' }, caseSensitive: false });
-  app.click(app.document.querySelector('[data-pane="1"] [data-favorites]')); app.click(app.document.querySelector('[data-favorite-entry]'));
+  const opposite = structuredClone(app.state().panes[1 - side]);
+  const oppositeSection = app.document.querySelector(`[data-pane="${1 - side}"]`);
+  app.click(app.document.querySelector(`[data-pane="${side}"] [data-favorites]`)); app.click(app.document.querySelector('[data-favorite-entry]'));
   assert.equal(app.messages.filter(item => item.type === 'filesystem-navigate').length, 1);
   app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-result', ok: true, state: { ...saved, folders: { ...saved.folders, 'A:/Media': [] } } } }));
   const requests = app.messages.filter(item => item.type === 'filesystem-navigate');
-  assert.equal(requests[1].path, 'C:/Downloads'); assert.equal(requests[1].side, 0);
-  const next = app.state();
-  app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-result', ok: true, state: { ...next, folders: { ...next.folders, 'C:/Downloads': [] } } } }));
-  assert.equal(app.state().panes[1].tabs[0], 'A:/Media');
-  assert.equal(app.state().panes[0].tabs[0], 'C:/Downloads');
-  assert.equal(app.state().active, 1);
+  assert.equal(requests.length, 1, 'an old opposite target must not start another navigation');
+  assert.equal(requests[0].side, side);
+  assert.equal(app.state().panes[side].tabs[0], 'A:/Media');
+  assert.deepEqual(app.state().panes[1 - side], opposite);
+  assert.equal(app.document.querySelector(`[data-pane="${1 - side}"]`), oppositeSection);
+  assert.equal(app.state().active, side);
 });
 
 test('failed favorite navigation preserves tabs and does not request the opposite target', t => {

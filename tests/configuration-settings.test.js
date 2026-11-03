@@ -22,6 +22,16 @@ test('failed combined save restores the previous tree instead of leaving a parti
   assert.equal(values['favorites.items'].globalValue, undefined);
 });
 
+test('stored favorite trees discard opposite targets without changing paths or writing settings', () => {
+  const original = [{ id: 'work', type: 'favorite', name: 'Work', path: 'C:/work', target: 'D:/other', parent: null }];
+  const { backend, writes } = setup({ 'favorites.items': { globalValue: original } });
+  const favorite = backend.readFavorites('user')[0];
+  assert.equal(favorite.path, 'C:/work');
+  assert.equal(Object.hasOwn(favorite, 'target'), false);
+  assert.equal(original[0].target, 'D:/other');
+  assert.equal(writes.length, 0);
+});
+
 test('legacy width settings are ignored while localized defaults remain available', () => {
   const { backend } = setup({ 'columns.widths': { globalValue: { 'standard.name': 400 } } });
   const data = backend.read('user');

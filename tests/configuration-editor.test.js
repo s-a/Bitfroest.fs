@@ -377,10 +377,10 @@ test('closing and reopening during a save still initializes the replacement pane
 test('favorite fields display native Windows paths and normalize mixed quoted input before save', async t => {
   const app = await setup(t);
   app.click('[data-add-favorite]'); app.input('#favorite-name', 'Work');
-  app.input('#favorite-path', '"c:\\work/mixed"'); app.input('#favorite-target', '\\\\server\\share\\folder');
+  app.input('#favorite-path', '"c:\\work/mixed"');
   app.click('[data-save]'); await app.flush();
   assert.equal(app.saved[0].value.favorites[0].path, 'c:/work/mixed');
-  assert.equal(app.saved[0].value.favorites[0].target, '//server/share/folder');
+  assert.equal(app.saved[0].value.favorites[0].target, undefined);
   assert.equal(app.document.querySelector('#favorite-path').value, 'C:\\work\\mixed');
-  assert.equal(app.document.querySelector('#favorite-target').value, '\\\\server\\share\\folder');
+  assert.equal(app.document.querySelector('#favorite-target'), null);
 });
