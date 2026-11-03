@@ -106,12 +106,37 @@ test('Shift+F6 renames inline rather than moving to the other pane', t => {
 
 test('arrow keys traverse substring hits while the full list remains visible', t => {
   const app = createApp(t);
+  app.click(app.row('package.json'));
+  const selected = app.state().panes[0].selected;
+  const otherPane = app.state().panes[1];
+  const rows = [...app.document.querySelectorAll('.pane.active tbody tr[data-id]')];
+  const unchanged = () => {
+    assert.deepEqual(app.state().panes[0].selected, selected);
+    assert.deepEqual(app.state().panes[1], otherPane);
+    assert.deepEqual([...app.document.querySelectorAll('.pane.active tbody tr[data-id]')], rows);
+    assert.equal(app.row('package.json').getAttribute('aria-selected'), 'true');
+    for (const name of ['CHANGELOG.md', 'README.md']) assert.equal(app.row(name).getAttribute('aria-selected'), 'false');
+  };
+  const focused = name => {
+    assert.equal(app.row(name).classList.contains('focused'), true);
+    assert.equal(app.state().panes[0].cursor, app.row(name).dataset.id);
+    unchanged();
+  };
   for (const letter of '.md') app.key(letter);
-  assert.equal(app.row('CHANGELOG.md').getAttribute('aria-selected'), 'true');
+  assert.equal(app.state().panes[0].filter, '.md');
+  for (const name of ['CHANGELOG.md', 'README.md']) {
+    assert.equal(app.row(name).querySelector('[data-cell="type"] mark').textContent, 'md');
+    assert.equal(app.row(name).querySelector('[data-filename] mark'), null);
+  }
+  focused('CHANGELOG.md');
   app.key('ArrowDown');
-  assert.equal(app.row('README.md').getAttribute('aria-selected'), 'true');
+  focused('README.md');
   app.key('ArrowUp');
-  assert.equal(app.row('CHANGELOG.md').getAttribute('aria-selected'), 'true');
+  focused('CHANGELOG.md');
+  app.key('Escape');
+  assert.equal(app.state().panes[0].filter, '');
+  assert.equal(app.document.querySelector('.pane.active mark'), null);
+  unchanged();
 });
 
 test('native icons replace file row fallbacks while tabs remain text-only and layout stays free of image data', t => {
