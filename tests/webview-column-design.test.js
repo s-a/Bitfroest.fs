@@ -73,3 +73,17 @@ test('cell renderers leave intrinsic width available for native content autosizi
   assert.equal(app.rule('.file-cell').width, '');
   assert.equal(app.rule('[data-file-grid] .ag-cell-wrapper, [data-file-grid] .ag-cell-value')?.width || '', '');
 });
+
+test('content measurement adds no blank tail and uses the styled scrollbar width', async t => {
+  const app = styledApp(t);
+  await new Promise(resolve => setTimeout(resolve, 80));
+  for (const side of [0, 1]) {
+    const grid = app.grid(side);
+    assert.deepEqual(Array.from(grid.getAllDisplayedColumns(), column => column.getColId()), ['name', 'type', 'size', 'date']);
+    const measured = grid.getColumn('date').getActualWidth();
+    grid.setGridOption('autoSizePadding', 0);
+    grid.autoSizeColumns(['date']);
+    assert.equal(measured, grid.getColumn('date').getActualWidth(), 'initial measurement has no extra trailing padding');
+    assert.equal(grid.getGridOption('scrollbarWidth'), parseFloat(app.rule('[data-file-grid] ::-webkit-scrollbar').width));
+  }
+});

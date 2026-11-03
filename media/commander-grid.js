@@ -10,6 +10,40 @@
 
     function marks(record) { record.selected = new Set(record.p.selected); record.spaces = new Set(options.spaceMarks(record.p)); }
 
+    function updateAddress(record, preserveFocus = true) {
+      const template = document.createElement('template');
+      template.innerHTML = options.address(record.p);
+      const focused = record.address?.contains(document.activeElement) ? document.activeElement : null;
+      const samePath = record.address?.querySelector('input').getAttribute('value') === template.content.querySelector('input').getAttribute('value');
+      if (preserveFocus && samePath && record.address?.querySelector('.path-address.is-editing') && focused) template.content.querySelector('.path-address').classList.add('is-editing');
+      if (preserveFocus && samePath && focused) queueMicrotask(() => {
+        if (focused.isConnected && (document.activeElement === document.body || document.activeElement?.closest('.location-header')?.contains(record.address))) focused.focus({ preventScroll: true });
+      });
+      if (record.address) options.patch(record.address, template.content.firstElementChild);
+      else record.address = template.content.firstElementChild;
+      return record.address;
+    }
+
+    function groupedDefinitions(record) {
+      return [{
+        groupId: 'location',
+        headerName: '',
+        headerClass: 'location-header',
+        suppressHeaderKeyboardEvent: () => true,
+        headerGroupComponent: class {
+          init() {
+            this.element = updateAddress(record);
+            this.stopDrag = event => event.stopPropagation();
+            for (const type of ['mousedown', 'touchstart']) this.element.addEventListener(type, this.stopDrag);
+          }
+          getGui() { return this.element; }
+          refresh() { updateAddress(record); return true; }
+          destroy() { for (const type of ['mousedown', 'touchstart']) this.element.removeEventListener(type, this.stopDrag); }
+        },
+        children: definitions(record)
+      }];
+    }
+
     function definitions(record) {
       const p = record.p;
       const filename = p.columns.find(column => column.visible !== false && options.isFilename(column));
@@ -127,16 +161,23 @@
       const currentSignature = signature(p);
       const changed = !record || record.signature !== currentSignature;
       if (record) {
+        const focused = record.address?.contains(document.activeElement) ? document.activeElement : null;
+        const selection = focused?.matches('input') ? [focused.selectionStart, focused.selectionEnd] : null;
         const navigated = record.path !== options.path(p);
         record.path = options.path(p);
         record.p = p; record.signature = currentSignature; marks(record);
         record.updating = true;
         try {
-          if (changed) { record.manual.clear(); record.api.setGridOption('columnDefs', definitions(record)); }
+          updateAddress(record, false);
+          if (changed) { record.manual.clear(); record.api.setGridOption('columnDefs', groupedDefinitions(record)); }
           record.api.setGridOption('rowData', [{ id: parentId }, ...rows]);
           record.api.refreshCells({ force: true });
           record.api.applyColumnState({ state: p.columns.map(column => ({ colId: column.key, sort: column.key === p.sort ? p.descending ? 'desc' : 'asc' : null })) });
           if (navigated) { record.api.refreshHeader(); record.api.ensureIndexVisible(0, 'top'); }
+          if (focused?.isConnected) {
+            focused.focus({ preventScroll: true });
+            if (selection) focused.setSelectionRange(...selection);
+          }
         } finally { record.updating = false; }
         sync(section, p);
         options.decorate(section, p);
@@ -165,7 +206,7 @@
           rowBorder: false,
           rowHoverColor: 'var(--hover)',
           selectedRowBackgroundColor: 'var(--vscode-list-inactiveSelectionBackground, #37373d)',
-          cellHorizontalPadding: 5,
+          cellHorizontalPadding: 'var(--file-cell-padding)',
           headerColumnBorder: false,
           headerColumnResizeHandleWidth: 1,
           headerColumnResizeHandleHeight: '60%'
@@ -180,11 +221,14 @@
           return [record.selected.has(params.data.id) ? 'selected' : '', record.p.cursor === params.data.id ? 'focused' : '', record.spaces.has(params.data.id) ? 'space-marked' : '', groups && previous?.id !== parentId && groups[previous?.fsSource] !== groups[params.data.fsSource] ? 'search-group-start' : ''].filter(Boolean);
         },
         styleNonce: nonce,
-        columnDefs: definitions(record),
+        columnDefs: groupedDefinitions(record),
         rowData: [{ id: parentId }, ...rows],
         getRowId: params => String(params.data.id),
         rowHeight: options.rowHeight(),
         headerHeight: options.rowHeight(),
+        groupHeaderHeight: Math.max(26, options.controlHeight() + 3),
+        autoSizePadding: 0,
+        scrollbarWidth: 12,
         animateRows: false,
         ensureDomOrder: true,
         suppressCellFocus: true,

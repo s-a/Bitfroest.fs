@@ -100,6 +100,32 @@ test('address and popup icons use the same square with explicit centered alignme
   }
 });
 
+test('address icon and path use the file-cell inset, icon track and text gap', t => {
+  const app = styledApp(t);
+  const address = app.rule('.pathbar');
+  assert.equal(address.display, 'grid');
+  assert.equal(address.gridTemplateColumns, 'var(--icon-base-size) minmax(0, 1fr) var(--icon-control-size)');
+  assert.equal(address.paddingTop, '1px');
+  assert.equal(address.paddingRight, 'var(--file-cell-padding)');
+  assert.equal(address.paddingLeft, 'calc(var(--file-cell-padding) + var(--file-marker-width, 0px) + var(--file-marker-gap, 0px))');
+  assert.equal(address.gap, 'var(--icon-text-gap)');
+  assert.equal(app.rule('[data-file-grid]').getPropertyValue('--ag-cell-horizontal-padding'), 'var(--file-cell-padding)');
+  const button = app.rule('.pathbar > [data-favorites]');
+  assert.equal(button.width, 'var(--icon-base-size)');
+  assert.equal(button.minWidth, '0px');
+  const star = app.rule('.location-context-icon > .codicon-star-full');
+  assert.equal(star.getPropertyValue('--icon-size').replace(/\s/g, ''), 'calc(var(--icon-base-size)*.875)');
+  for (const pane of app.document.querySelectorAll('.pane')) {
+    app.click(pane.querySelector('[data-favorites]'));
+    assert.equal(pane.querySelector('[data-favorites]').getAttribute('aria-expanded'), 'true');
+    app.key('Escape');
+    app.click(pane.querySelector('[data-path-edit]'));
+    const input = pane.querySelector('.path-input');
+    assert.ok(app.document.activeElement === input);
+    assert.ok(input.closest('.path-address').classList.contains('is-editing'));
+  }
+});
+
 test('refresh glyph bounds and its rotation box retain the same center at every icon size', t => {
   const app = styledApp(t);
   const refresh = app.rule('[data-refresh-icon]');
