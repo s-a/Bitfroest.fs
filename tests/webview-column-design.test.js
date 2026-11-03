@@ -89,16 +89,16 @@ test('the address containing block fills the group row instead of centering a ze
   }
 });
 
-test('content measurement adds no blank tail and uses the styled scrollbar width', async t => {
+test('content measurement retains the native sizing margin and uses the styled scrollbar width', async t => {
   const app = styledApp(t);
   await new Promise(resolve => setTimeout(resolve, 80));
   for (const side of [0, 1]) {
     const grid = app.grid(side);
     assert.deepEqual(Array.from(grid.getAllDisplayedColumns(), column => column.getColId()), ['name', 'type', 'size', 'date']);
     const measured = grid.getColumn('date').getActualWidth();
-    grid.setGridOption('autoSizePadding', 0);
+    grid.setGridOption('autoSizePadding', undefined);
     grid.autoSizeColumns(['date']);
-    assert.equal(measured, grid.getColumn('date').getActualWidth(), 'initial measurement has no extra trailing padding');
+    assert.equal(measured, grid.getColumn('date').getActualWidth(), 'initial measurement matches the native sizing defaults');
     assert.equal(grid.getGridOption('scrollbarWidth'), parseFloat(app.rule('[data-file-grid] ::-webkit-scrollbar').width));
   }
 });

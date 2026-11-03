@@ -227,7 +227,6 @@
         rowHeight: options.rowHeight(),
         headerHeight: options.rowHeight(),
         groupHeaderHeight: Math.max(26, options.controlHeight() + 3),
-        autoSizePadding: 0,
         scrollbarWidth: 12,
         animateRows: false,
         ensureDomOrder: true,
