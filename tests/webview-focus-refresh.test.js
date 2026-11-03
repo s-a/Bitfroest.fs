@@ -199,3 +199,41 @@ test('returning focus during a copy conflict preserves the dialog until cancella
   assert.deepEqual(JSON.parse(JSON.stringify(app.state().folders)), folders);
   assert.deepEqual(Array.from(app.state().panes[0].selected), ['file']);
 });
+
+test('explicit refresh affects only the selected panel, including when both show the same folder', t => {
+  for (const samePath of [false, true]) for (const side of [0, 1]) {
+    const saved = fixture();
+    if (samePath) saved.panes[1].tabs[0] = 'C:/tmp';
+    else saved.folders['C:/temp'].push({ id: 'other', name: 'other.txt', fsSource: 'C:/temp/other.txt', type: 'text', size: 2 });
+    const app = createApp(t, saved);
+    const git = app.messages.find(message => message.type === 'git-status');
+    app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'git-status-result', requestId: git.requestId, snapshotId: git.snapshotId, directories: Object.fromEntries(git.directories.map(path => [path, { ok: true, repository: false }])) } }));
+    const sections = [...app.document.querySelectorAll('[data-pane]')];
+    const otherRows = [...sections[1 - side].querySelectorAll('[data-file-row][data-id]')];
+    app.click(sections[side].querySelector('[data-refresh]'));
+    const request = refreshes(app).at(-1);
+    assert.equal(request.side, side);
+    assert.equal(sections[side].querySelector('[data-refresh]').getAttribute('aria-busy'), 'true');
+    assert.equal(sections[1 - side].querySelector('[data-refresh]').getAttribute('aria-busy'), samePath ? 'true' : 'false');
+    const next = structuredClone(request.state), directory = saved.panes[side].tabs[0];
+    next.snapshotId = 'new'; next.folders[directory].push({ id: 'new', name: 'new.txt', fsSource: `${directory}/new.txt`, type: 'text', size: 1 });
+    app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-result', refreshRequestId: request.refreshRequestId, ok: true, state: next } }));
+    assert.ok(app.grid(side).getRowNode('new'), `side ${side}, same ${samePath}`);
+    assert.equal(Boolean(app.grid(1 - side).getRowNode('new')), samePath);
+    if (!samePath) assert.deepEqual([...sections[1 - side].querySelectorAll('[data-file-row][data-id]')], otherRows);
+  }
+});
+
+test('refresh requests in both panels are retained when the first is still running', t => {
+  const app = createApp(t, fixture());
+  const completeGit = request => app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'git-status-result', requestId: request.requestId, snapshotId: request.snapshotId, directories: Object.fromEntries(request.directories.map(path => [path, { ok: true, repository: false }])) } }));
+  completeGit(app.messages.find(message => message.type === 'git-status'));
+  app.click(app.document.querySelector('[data-pane="0"] [data-refresh]'));
+  const first = refreshes(app).at(-1);
+  app.click(app.document.querySelector('[data-pane="1"] [data-refresh]'));
+  assert.equal(refreshes(app).length, 1);
+  app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-result', refreshRequestId: first.refreshRequestId, ok: true, state: first.state } }));
+  completeGit(app.messages.filter(message => message.type === 'git-status').at(-1));
+  assert.equal(refreshes(app).length, 2);
+  assert.equal(refreshes(app).at(-1).side, 1);
+});

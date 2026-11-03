@@ -129,7 +129,7 @@ test('refresh activity names the busy panels and ends after their actual Git rep
     assert.equal(activity(app).textContent.split(git).length - 1, 1);
     finishGit(app, request, ['/right']);
     assert.equal(activity(app).hidden, true);
-    app.action('refresh');
+    send(app, { type: 'window-focus' });
     assert.ok(activity(app).textContent.includes(read));
     const refresh = app.messages.filter(message => message.type === 'filesystem-refresh').at(-1);
     send(app, { type: 'filesystem-refresh-step', refreshRequestId: refresh.refreshRequestId, path: '/left', phase: 'metadata' });
@@ -169,7 +169,7 @@ test('refresh counts actual metadata steps in the overall plan and keeps current
   const app = createApp(t, fixture());
   const snapshot = observeRefresh(app);
   finishGit(app, app.messages.find(message => message.type === 'git-status'));
-  app.action('refresh');
+  send(app, { type: 'window-focus' });
   const request = app.messages.filter(message => message.type === 'filesystem-refresh').at(-1);
   send(app, { type: 'filesystem-refresh-step', refreshRequestId: request.refreshRequestId, path: '/left', phase: 'metadata', completed: 50, total: 100 });
   assert.equal(app.document.querySelector('#status-percent').textContent, '—/50%');
@@ -186,7 +186,7 @@ test('refresh overall progress and elapsed time span metadata and the complete f
   finishGit(app, initial);
   let now = 10000;
   Object.defineProperty(app.window.performance, 'now', { value: () => now });
-  app.action('refresh');
+  send(app, { type: 'window-focus' });
   const refresh = app.messages.filter(message => message.type === 'filesystem-refresh').at(-1);
   const overall = app.document.querySelector('#status-progress-overall');
   const assertRunning = () => {
@@ -258,7 +258,7 @@ test('refresh recursively registers matrix rows and advances the same plan as th
   const app = createApp(t, fixture());
   const snapshot = observeRefresh(app);
   finishGit(app, app.messages.find(message => message.type === 'git-status'));
-  app.action('refresh');
+  send(app, { type: 'window-focus' });
   const refresh = app.messages.filter(message => message.type === 'filesystem-refresh').at(-1);
   for (const path of ['/left', '/right']) send(app, { type: 'filesystem-refresh-step', refreshRequestId: refresh.refreshRequestId, path, phase: 'done', completed: 100, total: 100 });
   send(app, { type: 'filesystem-result', ok: true, state: app.state() });
@@ -325,7 +325,7 @@ test('native comparisons extend the running plan and confirm prior comparisons r
   const Progress = require('../media/commander-progress'), app = createApp(t, fixture());
   const snapshot = observeRefresh(app);
   finishGit(app, app.messages.find(message => message.type === 'git-status'));
-  app.action('refresh'); send(app, { type: 'filesystem-result', ok: true, state: app.state() });
+  send(app, { type: 'window-focus' }); send(app, { type: 'filesystem-result', ok: true, state: app.state() });
   const request = app.messages.filter(message => message.type === 'git-status').at(-1), overall = app.document.querySelector('#status-progress-overall');
   const update = (paths, total, completed) => send(app, { type: 'git-status-result', requestId: request.requestId, snapshotId: request.snapshotId, partial: true, directories: { '/left': Progress.event({ phase: 'git-read-worktree', stage: 'inspect', ok: true, loading: true, nativeChecks: { paths, total, completed }, overall: Progress.unknown('items', completed, 'native-operation'), current: Progress.unknown('items', completed, 'native-operation') }) } });
   update(['/left/a', '/left/b'], 2, 1);

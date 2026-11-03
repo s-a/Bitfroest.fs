@@ -1680,9 +1680,17 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
               fresh = isolatedNavigation ? await navigationProvider.load({ directories: visibleDirectories, visibleOnly: true, signal: directoryJob?.controller.signal, onDirectory: update => { if (panel === current) return current.webview.postMessage({ type: 'filesystem-directory', navigationRequestId: message.navigationRequestId, ...update }); } }) : await provider.prepare(filesystemState, { directories, recursive: message.type === 'filesystem-prepare' && message.recursive !== false, ...(message.type === 'filesystem-navigate' ? { navigation: true, visibleDirectories, onDirectory: update => {
                 if (message.navigationRequestId && panel === current) return current.webview.postMessage({ type: 'filesystem-directory', navigationRequestId: message.navigationRequestId, ...update });
               }, getVisibleDirectories: visiblePaths, ...(directoryJob ? { signal: directoryJob.controller.signal } : {}) } : {}), ...(job ? { signal: job.controller.signal, onProgress } : {}) });
-            } else fresh = await loadView(message.state || savedState, { ...(refreshController ? { signal: refreshController.signal } : {}), ...(message.type === 'filesystem-refresh' && typeof message.refreshRequestId === 'string' ? { onDirectory: update => {
-              if (panel === current) return current.webview.postMessage({ type: 'filesystem-refresh-step', emittedAt: Date.now(), refreshRequestId: message.refreshRequestId, path: update.path, phase: update.phase || (update.done ? 'done' : 'metadata'), completed: update.completed, total: update.total, ...(update.progress ? { progress: Progress.read(update.progress) } : {}) });
-            } } : {}) });
+            } else {
+              const refreshView = message.state || savedState;
+              const refreshPath = [0, 1].includes(message.side) ? refreshView?.panes?.[message.side]?.tabs?.[refreshView.panes[message.side].tab] : undefined;
+              const onDirectory = update => {
+                if (panel === current) return current.webview.postMessage({ type: 'filesystem-refresh-step', emittedAt: Date.now(), refreshRequestId: message.refreshRequestId, path: update.path, phase: update.phase || (update.done ? 'done' : 'metadata'), completed: update.completed, total: update.total, ...(update.progress ? { progress: Progress.read(update.progress) } : {}) });
+              };
+              if (message.type === 'filesystem-refresh' && [0, 1].includes(message.side)) {
+                if (typeof refreshPath !== 'string' || !provider.canNavigate(refreshPath)) throw new Error(t('Ungültiger Datei- oder Ordnername.'));
+                fresh = await provider.prepare(filesystemState, { directories: [refreshPath], navigation: true, visibleDirectories: refreshView.panes.map(pane => pane.tabs[pane.tab]), signal: refreshController.signal, onDirectory });
+              } else fresh = await loadView(refreshView, { ...(refreshController ? { signal: refreshController.signal } : {}), ...(message.type === 'filesystem-refresh' && typeof message.refreshRequestId === 'string' ? { onDirectory } : {}) });
+            }
             if (!directoryJob && ['filesystem-apply', 'filesystem-delete'].includes(message.type) && initialNavigationRevision !== navigationRevision) fresh = await loadView(savedState);
             updatedDirectories = fresh.updatedDirectories;
             const publishState = async (fresh, authoritativeNavigation) => {
@@ -1727,7 +1735,7 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
             diagnostic = operationDiagnostic(error, message, message.state || filesystemState);
             const detail = Number.isInteger(error.deletedCount) ? t('Löschen fehlgeschlagen nach {count} Einträgen: {error}', { count: error.deletedCount, error: renderOperationError(error.cause, t) }) : renderOperationError(error, t);
             operationError = detail;
-            if (message.type !== 'filesystem-prepare' && message.type !== 'filesystem-navigate') {
+            if (message.type !== 'filesystem-prepare' && message.type !== 'filesystem-navigate' && !(message.type === 'filesystem-refresh' && [0, 1].includes(message.side))) {
               try { filesystemState = retainView(await loadView(savedState), savedState); } catch { /* Preserve the last confirmed state. */ }
             }
             }

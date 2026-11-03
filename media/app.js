@@ -537,6 +537,7 @@
   let filesystemTaskId = null, filesystemTaskSequence = 0;
   let refreshingFilesystem = false, refreshRequestId = null, refreshSequence = 0, refreshStartedAt = 0;
   let refreshPlan = null;
+  const pendingPanelRefreshes = new Map();
   const refreshStages = new Map();
   const refreshMeasurements = new Map(), statusTasks = new Map();
   const statusPlans = new Map();
@@ -561,12 +562,13 @@
     }
     updateDirectoryActivity();
   }
-  function beginDirectoryRefresh() {
+  function beginDirectoryRefresh(side) {
     iconGeneration++;
     for (const key of requestedIcons) if (!nativeIcons.has(key)) requestedIcons.delete(key);
-    state.panes.forEach(p => files(p).forEach(file => { if (file.type === 'folder') requestedIcons.delete(entryPath(p, file)); }));
+    const panes = [0, 1].includes(side) ? [state.panes[side]] : state.panes;
+    panes.forEach(p => files(p).forEach(file => { const key = entryPath(p, file); if ([0, 1].includes(side)) { requestedIcons.delete(key); nativeIcons.delete(key); } else if (file.type === 'folder') requestedIcons.delete(key); }));
     refreshingFilesystem = true; refreshStartedAt = performance.now(); refreshStages.clear(); refreshMeasurements.clear(); refreshRequestId = `refresh-${++refreshSequence}`;
-    const directories = [...new Set(state.panes.filter(p => !resultView(p)).map(currentPath))];
+    const directories = [...new Set(panes.filter(p => !resultView(p)).map(currentPath))];
     if (!directories.length) { refreshPlan = null; return; }
     const git = directories.filter(path => !isArchiveLocation(path));
     const plan = Progress.statusPlan({ id: refreshRequestId, startedAt: refreshStartedAt, steps: [...directories.map(path => `filesystem:${JSON.stringify(path)}`), 'state-save', ...git.map(path => `git:${JSON.stringify(path)}`)] });
@@ -582,7 +584,26 @@
       plan.openPlanning(root);
       repositories.set(path, { root, describe, inspect, publication, active: null, stage: null, key: null, sequence: 0, total: 0, completed: 0 });
     }
-    refreshPlan = { progress: plan, filesystem, repositories, confirmed: new Set(), directories, gitDirectories: git, filesystemDone: false, saving: false, gitRequest: null };
+    refreshPlan = { progress: plan, filesystem, repositories, confirmed: new Set(), directories, gitDirectories: git, side, filesystemDone: false, saving: false, gitRequest: null };
+  }
+  function startPanelRefresh(side, queued = false) {
+    const p = state.panes[side];
+    if (!queued && (refreshingFilesystem || pendingPanelRefreshes.size)) {
+      pendingPanelRefreshes.set(side, { path: currentPath(p), tabId: p.tabStates[p.tab].id });
+      return;
+    }
+    pendingFilesystemKind = 'filesystem-refresh'; beginDirectoryRefresh(side); filesystemPending = true;
+    $('#panes').inert = false; $('#functionbar').inert = false; updateDirectoryActivity();
+    host.postMessage({ type: 'filesystem-refresh', refreshRequestId, side, state });
+  }
+  function flushPanelRefreshes() {
+    if (filesystemPending || refreshingFilesystem || refreshPlan && !refreshPlan.progress.snapshot().plan.done) return;
+    for (const [side, request] of pendingPanelRefreshes) {
+      pendingPanelRefreshes.delete(side);
+      const p = state.panes[side];
+      if (currentPath(p) !== request.path || p.tabStates[p.tab].id !== request.tabId) continue;
+      startPanelRefresh(side, true); break;
+    }
   }
   function confirmRefreshStep(id) {
     if (refreshPlan.confirmed.has(id)) return;
@@ -987,6 +1008,7 @@
     }
     if (message.type === 'filesystem-delete') toast(t('Löschen wird ausgeführt'), 'info');
     host.postMessage({ ...message, ...(refreshingFilesystem ? { refreshRequestId } : {}), state });
+    if (refreshingFilesystem) updateDirectoryActivity();
     return true;
   }
   function prepareFolders(paths, action, resume, recursive = true, requireSnapshot = false) {
@@ -1130,7 +1152,7 @@
       const path = currentPath(state.panes[side]);
       const gitProgress = gitBindings.get(path)?.progress;
       const reading = [...navigationRequests.values()].find(request => request.side === side && request.tabId === state.panes[side].tabStates[state.panes[side].tab].id && [request.path, request.originPath].includes(path) && navigationByTab.get(navigationKey(request)) === request);
-      const refreshing = refreshingFilesystem && refreshStages.get(path) !== 'done';
+      const refreshing = refreshingFilesystem && refreshPlan?.filesystem.has(path) && refreshStages.get(path) !== 'done';
       const busy = Boolean(reading || gitPending.has(path) || refreshing);
       const stages = [];
       if (reading || refreshing) stages.push(t(({ comments: 'Verzeichniskommentare lesen', validation: 'Verzeichnisbestand prüfen', publication: 'Dateiliste bereitstellen' })[refreshStages.get(path)] || (reading?.metadataReading || refreshStages.get(path) === 'metadata' ? 'Dateieigenschaften lesen' : 'Verzeichnis einlesen')));
@@ -3154,7 +3176,7 @@
       render(true); toast(message, 'success'); return;
     }
     if (command === 'refresh' && operationQueue?.active) { requestFilesystem({ type: 'filesystem-navigate', path: currentPath(pane()), side: state.active }); return; }
-    if (command === 'refresh') { requestedIcons.clear(); nativeIcons.clear(); if (state.realFilesystem && host) { pendingFilesystemKind = 'filesystem-refresh'; beginDirectoryRefresh(); filesystemPending = true; $('#panes').inert = false; $('#functionbar').inert = false; updateDirectoryActivity(); host.postMessage({ type: 'filesystem-refresh', refreshRequestId, state }); } else { render(true); } return; }
+    if (command === 'refresh') { if (state.realFilesystem && host) startPanelRefresh(state.active); else render(true); return; }
     if (command === 'path' || command === 'path-clipboard') { focusPath(command === 'path-clipboard'); return; }
     if (command === 'filter') { searchInputTimes.delete(pane().tabStates[pane().tab]); document.querySelectorAll('.list')[state.active].focus(); return; }
     if (command === 'filter-search-matches') {
@@ -3669,7 +3691,7 @@
       }
       if (!refreshingFilesystem || event.data.refreshRequestId !== refreshRequestId || !['metadata', 'comments', 'validation', 'publication', 'done'].includes(event.data.phase) || typeof event.data.path !== 'string') return;
       const directory = state.panes.map(currentPath).find(path => paths.identity(path) === paths.identity(event.data.path));
-      if (directory) {
+      if (directory && refreshPlan?.filesystem.has(directory)) {
         refreshStages.set(directory, event.data.phase);
         const count = Number.isSafeInteger(event.data.total) && Number.isSafeInteger(event.data.completed) ? Progress.known('items', event.data.completed, event.data.total) : null;
         if (count) refreshMeasurements.set(directory, Progress.event({ phase: 'metadata', overall: count, current: count }));
@@ -3770,7 +3792,8 @@
       const previousFolders = !refreshingFilesystem && confirmedFolders ? JSON.parse(confirmedFolders) : null;
       const previousViews = refreshingFilesystem || navigatingFilesystem ? state.panes.map(paneDisplayState) : undefined;
       const previousIcons = refreshingFilesystem ? displayedIconEntries() : undefined;
-      if (refreshingFilesystem) { cancelFolderSizes(); folderSizes.clear(); gitBindings.clear(); }
+      const scopedRefreshDirectories = [0, 1].includes(refreshPlan?.side) ? refreshPlan.directories : null;
+      if (refreshingFilesystem) { if ([0, 1].includes(refreshPlan?.side)) invalidateChangedDirectories(state.folders, refreshPlan.directories); else { cancelFolderSizes(); folderSizes.clear(); gitBindings.clear(); } }
       const readingView = (transferJob || refreshingFilesystem || navigatingFilesystem) && { panes: clone(state.panes), active: state.active };
       if (refreshingFilesystem && refreshPlan) {
         if (!event.data.ok) { refreshPlan.progress.terminate(event.data.cancelled ? 'cancelled' : 'error'); refreshPlan = null; }
@@ -3797,7 +3820,9 @@
       if (event.data.state?.realFilesystem) { state = event.data.state; confirmedFolders = JSON.stringify(state.folders); nextId = Math.max(Date.now(), ...Object.values(state.folders).flat().map(item => Number(item.id) + 1).filter(Number.isFinite)); }
       else if (!event.data.ok && failedRename) { state = failedRename.before; confirmedFolders = JSON.stringify(state.folders); }
       if (gitMenuSelection && completedFilesystemKind === 'filesystem-refresh' && event.data.ok) gitMenuSelection.refreshSnapshot = state.snapshotId;
-      directoryListings.clear(); cacheDirectories();
+      if (completedFilesystemKind === 'filesystem-refresh' && scopedRefreshDirectories) { for (const path of scopedRefreshDirectories) directoryListings.delete(path); }
+      else directoryListings.clear();
+      cacheDirectories();
       if (previousFolders) invalidateChangedDirectories(previousFolders, navigatingFilesystem && event.data.ok && event.data.resumeNavigation ? [event.data.resumeNavigation.path] : event.data.refreshGitDirectories || []);
       if (readingView) {
         state.active = readingView.active;
@@ -3849,7 +3874,7 @@
       if (!event.data.ok) showOperationFailure(error, { inline: Boolean(failedRename && restoreRename(failedRename)), diagnostic: event.data.diagnostic, notify: !operationQueue?.active });
       if (pendingGitDiff) { const selection = pendingGitDiff; pendingGitDiff = null; if (event.data.ok) requestGitDiff(selection.selection, selection.action); else { gitMenuSelection = null; toast(t(selection.action === 'git-history' ? 'Ungültige Auswahl für Git History.' : 'Ungültige Dateiauswahl für Git Diff.'), 'error'); } }
     if (completedTransferJob?.queueJobId && operationQueue.active?.id === completedTransferJob.queueJobId && !continuePreparation) operationQueue.complete(completedTransferJob.queueJobId, { ok: event.data.ok, cancelled, message: resultMessage, ...(!event.data.ok ? { error } : {}) });
-      flushQueuedOperation(); flushDeferredNavigationReads(); flushFocusRefresh(); return;
+      flushQueuedOperation(); flushDeferredNavigationReads(); flushPanelRefreshes(); flushFocusRefresh(); return;
     }
     if (host && event.data?.type === 'git-settings-changed') {
       gitBindings.clear(); gitDirectories.clear(); directoryCache.clearGit(); refreshGitDisplay(); requestGitStatus(); return;
@@ -3901,6 +3926,7 @@
         for (const [directory, request] of gitBindings) if (!request.failed) failGitDirectory(directory, event.data, error);
         try { updateDirectoryActivity(); } catch { /* Existing file lists remain available when the Git status view fails. */ }
       }
+      flushPanelRefreshes();
       return;
     }
     if (host && event.data?.type === 'column-settings') { hostColumnSettings = event.data.settings || {}; render(); return; }

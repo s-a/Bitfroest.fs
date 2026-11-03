@@ -475,13 +475,14 @@ test('generated host HTML receives correlated metadata progress during an explic
   const Progress = require('../media/commander-progress');
   const bytes = Progress.event({ phase: 'directory-comments', overall: Progress.unknown('bytes', 4, 'enumerating'), current: Progress.known('bytes', 4, 10) });
   initial.panes.forEach(pane => { pane.filter = ''; pane.sort = 'name'; });
-  const app = harness(t, { filesystemLoad: async settings => {
+  const read = async settings => {
     await settings?.onDirectory?.({ path: 'C:/tmp', names: ['a.txt'], rows: [] });
     await settings?.onDirectory?.({ path: 'C:/tmp', phase: 'comments', completed: 1, total: 1, rows: [], progress: bytes });
     await settings?.onDirectory?.({ path: 'C:/tmp', phase: 'validation', completed: 1, total: 1, rows: [] });
     await settings?.onDirectory?.({ path: 'C:/tmp', done: true, rows: [] });
     return initial;
-  } });
+  };
+  const app = harness(t, { filesystemLoad: read, filesystemPrepare: (_state, settings) => read(settings) });
   await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
   const view = require('./support/webview.cjs').createApp(t, initial, { html: panel.webview.html });
   view.action('refresh');
@@ -5509,4 +5510,49 @@ test('reloading a panel document resets the readiness boundary before the next f
   assert.equal(app.status.command, 'bitfroest.show');
   assert.ok(panel.messages.some(message => message.type === 'filesystem-result' && message.refreshRequestId === 'reloaded-ready-refresh'));
   panel.dispose();
+});
+
+test('explicit panel refresh reads only the requested directory', async t => {
+  for (const side of [0, 1]) {
+    const initial = clipboardFixture(), calls = [];
+    const app = harness(t, { filesystemLoad: async () => initial, filesystemPrepare: async (_state, options) => { calls.push(options.directories); return structuredClone(initial); } });
+    await app.command('bitfroest.openPrototype');
+    const panel = app.panels[0];
+    await panel.receive({ type: 'filesystem-refresh', refreshRequestId: `refresh-panel-${side}`, side, state: initial });
+    assert.deepEqual(calls, [[initial.panes[side].tabs[initial.panes[side].tab]]]);
+    assert.equal(panel.messages.findLast(message => message.type === 'filesystem-result').ok, true);
+  }
+});
+
+test('panel refresh reads one real directory and retains the other snapshot', async t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'panel-refresh-')).replaceAll('\\', '/');
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const left = root + '/left', right = root + '/right'; fs.mkdirSync(left); fs.mkdirSync(right);
+  const reads = [], provider = require('../filesystem-provider').createProvider({ roots: [left, right], readDirectory: async directory => { reads.push(directory); return null; } });
+  const app = harness(t, { searchRoots: [left, right], containsPath: value => provider.contains(value), filesystemLoad: settings => provider.load(settings), filesystemPrepare: (before, settings) => provider.prepare(before, settings) });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  const view = require('./support/webview.cjs').createApp(t, undefined, { html: panel.webview.html });
+  for (const side of [0, 1]) {
+    const paths = [left, right]; fs.writeFileSync(paths[side] + `/new-${side}.txt`, 'new'); fs.writeFileSync(paths[1 - side] + `/unread-${side}.txt`, 'pending');
+    reads.length = 0;
+    view.click(view.document.querySelector(`[data-pane="${side}"] [data-refresh]`));
+    const request = view.messages.findLast(message => message.type === 'filesystem-refresh');
+    await panel.receive(request); const result = panel.messages.findLast(message => message.type === 'filesystem-result');
+    assert.equal(result.ok, true, result.error);
+    assert.deepEqual(reads, [paths[side]]);
+    assert.equal(result.state.folders[paths[side]].some(file => file.name === `new-${side}.txt`), true);
+    assert.equal(result.state.folders[paths[1 - side]].some(file => file.name === `unread-${side}.txt`), false);
+    view.window.dispatchEvent(new view.window.MessageEvent('message', { data: result }));
+  }
+});
+
+test('a failed panel refresh does not reload the opposite directory', async t => {
+  const initial = clipboardFixture(); let loads = 0;
+  const app = harness(t, { filesystemLoad: async () => { loads++; return structuredClone(initial); }, filesystemPrepare: async () => { throw new Error('Read failed'); } });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0], baseline = loads;
+  await panel.receive({ type: 'filesystem-refresh', refreshRequestId: 'refresh-failed', side: 1, state: initial });
+  assert.equal(loads, baseline);
+  const result = panel.messages.findLast(message => message.type === 'filesystem-result');
+  assert.equal(result.ok, false); assert.match(result.error, /Read failed/);
+  assert.deepEqual(result.state.folders, initial.folders);
 });
