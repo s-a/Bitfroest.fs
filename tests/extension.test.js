@@ -1558,6 +1558,13 @@ test('file search integrates real nested files with host HTML, apply, result tab
   view.click(view.row('two.txt')); view.row('two.txt').dispatchEvent(new view.window.MouseEvent('dblclick', { bubbles: true }));
   await panel.receive(view.messages.filter(message => message.type === 'open').at(-1));
   view.window.dispatchEvent(new view.window.Event('blur')); view.window.dispatchEvent(new view.window.Event('focus'));
+  assert.equal(view.messages.filter(message => message.type === 'filesystem-refresh').length, 0, 'browser focus alone does not represent a host window transition');
+  const focusStart = panel.messages.length;
+  app.windowFocus(false); app.windowFocus(true); app.windowFocus(true);
+  const focusMessages = panel.messages.slice(focusStart).filter(message => message.type === 'window-focus');
+  assert.equal(focusMessages.length, 1, 'one host window return produces one focus message');
+  view.window.dispatchEvent(new view.window.MessageEvent('message', { data: focusMessages[0] }));
+  assert.equal(view.messages.filter(message => message.type === 'filesystem-refresh').length, 1);
   const refresh = view.messages.filter(message => message.type === 'filesystem-refresh').at(-1); assert.ok(refresh);
   await panel.receive(refresh);
   const refreshed = panel.messages.filter(message => message.type === 'filesystem-result').at(-1); assert.equal(refreshed.ok, true);
