@@ -116,7 +116,7 @@ main { display: flex; flex-direction: column; flex: 1; min-height: 0; min-width:
 .list input, .list textarea { user-select: text; }
 .selection-marquee { position: absolute; border: 1px solid var(--vscode-focusBorder, #007fd4); background: var(--vscode-list-dropBackground, #007fd433); pointer-events: none; z-index: 4; }
 .drop-target { outline: 1px solid var(--vscode-list-dropBetweenBackground, var(--accent)); outline-offset: -1px; }
-.file-drag-feedback { position: fixed; z-index: 10000; pointer-events: none; display: flex; align-items: center; gap: 4px; padding: 3px 6px; border: 1px solid var(--vscode-contrastBorder, var(--vscode-editorHoverWidget-border, var(--line))); border-radius: 3px; background: var(--vscode-editorHoverWidget-background, var(--surface)); color: var(--vscode-editorHoverWidget-foreground, var(--text)); box-shadow: 0 2px 8px var(--vscode-widget-shadow, transparent); font-family: var(--vscode-font-family, inherit); font-size: 12px; font-weight: 400; line-height: 16px; white-space: nowrap; }
+.file-drag-feedback { position: fixed; z-index: 10000; pointer-events: none; display: flex; align-items: flex-start; gap: 4px; padding: 0; border: 0; background: transparent; color: var(--text); box-shadow: none; font-family: var(--vscode-font-family, inherit); font-size: inherit; font-weight: 400; white-space: nowrap; }
 .file-drag-feedback svg { width: 16px; height: 16px; flex-shrink: 0; }
 .list:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
 .file-table { min-width: 0; }
@@ -179,9 +179,11 @@ body.vscode-high-contrast .ag-header-cell-resize::after, body.vscode-high-contra
 .filename [data-filename] { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .filename-text { position: relative; z-index: 0; display: inline-block; max-width: 100%; overflow: hidden; color: inherit; text-decoration: inherit; text-underline-offset: inherit; text-overflow: ellipsis; vertical-align: top; isolation: isolate; }
 .filename [data-filename].rename-pending > .filename-text::before { position: absolute; z-index: -1; inset: 0; background: var(--vscode-editor-findMatchHighlightBackground, rgba(180, 140, 0, 0.22)); content: ""; transform: scaleX(0); transform-origin: left center; animation: rename-pending-fill 800ms linear forwards; pointer-events: none; }
+.filename [data-filename].drag-pending > .filename-text::before { position: absolute; z-index: -1; inset: 0; background: var(--vscode-editor-findMatchHighlightBackground, rgba(180, 140, 0, 0.22)); content: ""; transform: scaleX(0); transform-origin: left center; animation: rename-pending-fill 500ms linear forwards; pointer-events: none; }
 @keyframes rename-pending-fill { to { transform: scaleX(1); } }
 @media (prefers-reduced-motion: reduce) {
-  .filename [data-filename].rename-pending > .filename-text::before { animation: none; transform: scaleX(1); opacity: 0.45; }
+  .filename [data-filename].rename-pending > .filename-text::before,
+  .filename [data-filename].drag-pending > .filename-text::before { animation: none; transform: scaleX(1); opacity: 0.45; }
 }
 .fileicon { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; width: var(--icon-size); height: var(--icon-size); color: var(--vscode-icon-foreground, var(--muted)); font-size: 9px; }
 .fileicon.folder { position: relative; font-size: 0; color: #dcb67a; }
@@ -712,12 +714,11 @@ body .statusbar { height: var(--icon-row-size); min-height: var(--icon-row-size)
 
 .list > .grid-empty { position: absolute; top: calc(var(--icon-row-size) * 2); left: 0; right: 0; pointer-events: none; }
 
-body[data-file-drag-cursor="ready"] #panes * { cursor: grab !important; }
-body[data-file-drag-cursor="copy"] *, body[data-file-drag-cursor="move"] * { cursor: grabbing !important; }
+body[data-file-drag-cursor="ready"] #panes *, body[data-file-drag-cursor="copy"] *, body[data-file-drag-cursor="move"] * { cursor: default !important; }
 body[data-file-drag-cursor="none"] * { cursor: no-drop !important; }
-.file-drag-feedback { flex-wrap: wrap; max-width: 320px; }
-.file-drag-preview { padding: 3px 6px; background: var(--vscode-editorWidget-background, var(--surface)); color: var(--vscode-editorWidget-foreground, var(--text)); border: 1px solid var(--vscode-editorWidget-border, var(--line)); opacity: .85; max-width: 300px; }
-.file-drag-feedback .file-drag-preview { flex-basis: 100%; }
-.file-drag-row { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.file-drag-count { float: right; margin-left: 12px; font-weight: bold; }
+.file-drag-preview { position: relative; padding: 0; border: 0; color: var(--vscode-list-activeSelectionForeground, var(--text)); opacity: .6; max-width: min(60vw, 600px); overflow: hidden; pointer-events: none; }
+.file-drag-row { position: relative; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-height: var(--icon-row-size); background: var(--vscode-list-activeSelectionBackground, var(--surface)); color: var(--vscode-list-activeSelectionForeground, var(--text)); }
+.file-drag-row > .ag-cell { position: absolute; top: 0; height: 100%; padding: 0 var(--file-cell-padding); display: flex; align-items: center; }
+.file-drag-count { position: absolute; z-index: 1; right: 0; top: 0; padding: 0 4px; font-weight: bold; background: var(--vscode-badge-background, var(--surface)); color: var(--vscode-badge-foreground, var(--text)); }
+.file-drag-more { padding: 0 4px; background: var(--vscode-list-activeSelectionBackground, var(--surface)); }
 .native-file-drag-preview { position: fixed; left: -10000px; top: 0; pointer-events: none; }

@@ -1604,6 +1604,7 @@
   let renameTimer;
   let pendingRenameTarget = null;
   let filePointerGesture = null;
+  let fileDragPointer = null, suppressRightContext = false;
   let lastNameClick = null;
   function clearPendingRenameCue() {
     clearTimeout(renameTimer); renameTimer = null;
@@ -1880,6 +1881,7 @@
   }
   function render(focusList = false, previousViews, git = true) {
     filePointerGesture?.cancel();
+    cancelPointerDrag();
     if (backgroundNavigation) focusList = false;
     updateTitleDirectory();
     const container = $('#panes');
@@ -2310,6 +2312,7 @@
     mountOperationFailure();
   }
   function modal(title, body, label, callback, eyebrow = t('DATEIAKTION')) {
+    filePointerGesture?.cancel(); cancelPointerDrag();
     clearPendingRenameCue();
     document.querySelectorAll('.modal-actions [data-dialog-secondary]').forEach(button => button.remove());
     operationErrorDialog = false; operationFailureInline = false;
@@ -3291,8 +3294,7 @@
     tabs.close(pane(), Number(tab.dataset.tab)); render(true);
   });
   let dragged;
-  let rightPointer = null, suppressRightContext = false;
-  function moveRightDrop(source, destination) {
+  function pointerFileDrop(source, destination, mode) {
     if (filesystemPending && !refreshingFilesystem || transferPending || $('#modal').open) return;
     if (!validFileDropTarget(source, destination)) return;
     const path = destination.path, parentRow = (state.folders[parent(path)] || []).find(file => file.type === 'folder' && file.name === base(path));
@@ -3300,27 +3302,42 @@
     const origin = currentPath(state.panes[destination.side]);
     const validate = () => validDraggedFiles(source) && (Object.hasOwn(state.folders, path) || destination.parent && currentPath(state.panes[destination.side]) === origin) && (!signature || JSON.stringify((state.folders[parent(path)] || []).find(file => file.type === 'folder' && file.name === base(path))) === signature);
     if (!validate()) { toast(t('Die gezogene Auswahl wurde geändert. Bitte erneut ziehen.')); return; }
-    runTransfer({ sourceSide: source.side, sourcePath: source.sourcePath, targetSide: destination.side, ids: source.ids, targetPath: destination.parent ? path.replace(/\/$/, '') + '/' : path, targetIsDirectory: destination.parent, mode: 'move', validateSelection: validate });
+    runTransfer({ sourceSide: source.side, sourcePath: source.sourcePath, targetSide: destination.side, ids: source.ids, targetPath: destination.parent ? path.replace(/\/$/, '') + '/' : path, targetIsDirectory: destination.parent, mode, validateSelection: validate });
   }
   function pointerDestination(event) {
     const target = typeof document.elementFromPoint === 'function' ? document.elementFromPoint(event.clientX, event.clientY) : event.target;
+    const deleteButton = target?.closest?.('#functionbar [data-action="delete"]');
+    if (deleteButton) return { action: 'delete', element: deleteButton };
     return target?.closest ? fileDropTarget(target) : null;
   }
-  document.addEventListener('pointerdown', event => {
-    if (event.button !== 2) return;
-    suppressRightContext = false;
-    const row = event.target.closest('#panes [data-file-row][data-id]');
-    if (!row || event.target.closest('input,textarea,select,[contenteditable="true"]') || filesystemPending && !refreshingFilesystem || transferPending || $('#modal').open) return;
+  function pointerDeleteAllowed(gesture, destination, event) {
+    return gesture.button === 0 && destination?.action === 'delete' && !event.ctrlKey && !event.metaKey && !event.altKey;
+  }
+  function startPointerDrag(row, event) {
     const side = Number(row.closest('[data-pane]').dataset.pane), p = state.panes[side], ids = p.selected.includes(row.dataset.id) ? [...p.selected] : [row.dataset.id];
     if (resultView(p)) return;
-    const source = { kind: 'files', side, sourcePath: currentPath(p), ids, items: files(p).filter(file => ids.includes(file.id)).map(file => ({ id: file.id, signature: JSON.stringify(file) })) };
-    rightPointer = { source, rowId: row.dataset.id, id: event.pointerId, x: event.clientX, y: event.clientY, list: row.closest('.list'), active: false };
+    const source = { kind: 'files', side, sourcePath: currentPath(p), context: { tabId: p.tabStates[p.tab].id }, ids, items: files(p).filter(file => ids.includes(file.id)).map(file => ({ id: file.id, signature: JSON.stringify(file) })) };
+    fileDragPointer = { source, tabId: p.tabStates[p.tab].id, rowId: row.dataset.id, button: event.button, id: event.pointerId, x: event.clientX, y: event.clientY, list: row.closest('.list'), active: false };
+  }
+  document.addEventListener('pointerdown', event => {
+    if (event.button !== 0 && event.button !== 2) return;
+    cancelPointerDrag();
+    suppressRightContext = false;
+    if (event.button !== 0) return;
+    const row = event.target.closest('#panes [data-file-row][data-id]');
+    if (!row || row.querySelector('.inline-rename') || event.target.closest('input,textarea,select,[contenteditable="true"]') || filesystemPending && !refreshingFilesystem || transferPending || $('#modal').open) return;
+    startPointerDrag(row, event);
   });
+  const pointerDropMode = (gesture, event) => gesture.button === 2 && window.CommanderTransfer.dropMode(event) !== 'link' ? 'move' : window.CommanderTransfer.dropMode(event);
+  function validPointerDrag(gesture) {
+    const p = state.panes[gesture.source.side];
+    return gesture.list.isConnected && p.tabStates[p.tab].id === gesture.tabId && currentPath(p) === gesture.source.sourcePath && validDraggedFiles(gesture.source);
+  }
   document.addEventListener('pointermove', event => {
-    const gesture = rightPointer;
-    if (!gesture || gesture.cancelled || gesture.id !== event.pointerId || !(event.buttons & 2)) return;
+    const gesture = fileDragPointer;
+    if (!gesture || gesture.cancelled || gesture.id !== event.pointerId || !(event.buttons & (gesture.button === 2 ? 2 : 1))) return;
     if (!gesture.active && Math.hypot(event.clientX - gesture.x, event.clientY - gesture.y) < 5) return;
-    if (!validDraggedFiles(gesture.source)) { rightPointer = null; clearDropTarget(); return; }
+    if (!validPointerDrag(gesture)) { cancelPointerDrag(); return; }
     event.preventDefault(); clearPendingRenameCue();
     if (!gesture.active) {
       gesture.active = true; state.active = gesture.source.side;
@@ -3328,35 +3345,42 @@
       refreshSelection(); gesture.list.setPointerCapture?.(gesture.id);
     }
     clearDropTarget(true); const destination = pointerDestination(event);
-    const allowed = validFileDropTarget(gesture.source, destination) && window.CommanderTransfer.dropMode(event) !== 'link';
+    const allowed = !$('#modal').open && (pointerDeleteAllowed(gesture, destination, event) || validFileDropTarget(gesture.source, destination) && window.CommanderTransfer.dropMode(event) !== 'link');
     if (allowed) destination.element.classList.add('drop-target');
-    showFileDragFeedback(event, 'move', gesture.source, allowed);
+    showFileDragFeedback(event, destination?.action === 'delete' ? 'move' : pointerDropMode(gesture, event), gesture.source, allowed);
   });
   document.addEventListener('pointerup', event => {
-    const gesture = rightPointer;
-    if (!gesture || gesture.id !== event.pointerId || event.button !== 2) return;
-    rightPointer = null;
-    if (!gesture.active) return;
-    event.preventDefault(); suppressRightContext = true; clearDropTarget();
+    const gesture = fileDragPointer;
+    if (!gesture || gesture.id !== event.pointerId || event.button !== gesture.button) return;
+    fileDragPointer = null;
+    if (!gesture.active) { clearDropTarget(); return; }
+    event.preventDefault(); suppressRightContext = gesture.button === 2; clearDropTarget();
+    if (gesture.button === 0) { suppressPointerClick = true; setTimeout(() => { suppressPointerClick = false; }, 0); }
     gesture.list.releasePointerCapture?.(gesture.id);
-    if (window.CommanderTransfer.dropMode(event) === 'link') { toast(t('Verknüpfungen sind für diese Dateiaktion noch nicht verfügbar.')); return; }
+    if (gesture.cancelled || !validPointerDrag(gesture)) return;
     const destination = pointerDestination(event);
-    if (destination && !gesture.cancelled) moveRightDrop(gesture.source, destination);
+    if (pointerDeleteAllowed(gesture, destination, event)) {
+      if (!$('#modal').open && !(filesystemPending && !refreshingFilesystem) && !transferPending) action(event.shiftKey ? 'delete-alternate' : 'delete', gesture.source);
+      return;
+    }
+    if (window.CommanderTransfer.dropMode(event) === 'link') { toast(t('Verknüpfungen sind für diese Dateiaktion noch nicht verfügbar.')); return; }
+    if (destination) pointerFileDrop(gesture.source, destination, pointerDropMode(gesture, event));
   });
-  document.addEventListener('pointercancel', event => { if (rightPointer?.id === event.pointerId) { suppressRightContext = rightPointer.active; rightPointer = null; clearDropTarget(); } });
-  document.addEventListener('keydown', event => { if (rightPointer?.active && event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); rightPointer.cancelled = true; clearDropTarget(); } }, true);
+  document.addEventListener('pointercancel', event => { if (fileDragPointer?.id === event.pointerId) cancelPointerDrag(); });
+  document.addEventListener('lostpointercapture', event => { if (fileDragPointer?.id === event.pointerId) cancelPointerDrag(); });
+  document.addEventListener('keydown', event => { if (fileDragPointer && event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); fileDragPointer.cancelled = true; clearDropTarget(); } }, true);
   document.addEventListener('contextmenu', event => {
     const text = event.target.closest('input,textarea,[contenteditable="true"]');
     if (text) { text.dataset.vscodeContext = JSON.stringify({ webviewSection: 'textInput', preventDefaultContextMenuItems: false }); suppressRightContext = false; return; }
     if (suppressRightContext) { suppressRightContext = false; if (event.target.closest('.ag-header') || event.button !== 2) return; event.preventDefault(); event.stopPropagation(); }
   }, true);
-  function cancelRightDrag() {
-    const gesture = rightPointer; rightPointer = null;
-    if (gesture) { suppressRightContext = gesture.active; gesture.list.releasePointerCapture?.(gesture.id); }
+  function cancelPointerDrag() {
+    const gesture = fileDragPointer; fileDragPointer = null;
+    if (gesture) { suppressRightContext = gesture.button === 2 && gesture.active; gesture.list.releasePointerCapture?.(gesture.id); }
     clearDropTarget();
   }
-  window.addEventListener('blur', cancelRightDrag);
-  window.addEventListener('pagehide', cancelRightDrag);
+  window.addEventListener('blur', cancelPointerDrag);
+  window.addEventListener('pagehide', cancelPointerDrag);
   function clearDropTarget(keepFeedback = false) {
     document.querySelectorAll('.drop-target').forEach(element => element.classList.remove('drop-target'));
     delete $('#panes').dataset.dropMode;
@@ -3365,15 +3389,47 @@
     delete document.body.dataset.fileDragCursor;
   }
   function fileDragPreview(source) {
-    const preview = document.createElement('div'); preview.className = 'file-drag-preview';
+    const preview = document.createElement('div'); preview.className = 'file-drag-preview file-table';
     preview.dataset.count = String(source.ids.length);
     const count = document.createElement('span'); count.className = 'file-drag-count'; count.textContent = String(source.ids.length); preview.append(count);
+    const section = document.querySelector(`[data-pane="${source.side}"]`), p = state.panes[source.side];
+    for (const element of [document.documentElement, $('#panes'), section, section.querySelector('.file-table')]) {
+      const style = getComputedStyle(element);
+      for (const key of ['--file-cell-padding', '--file-marker-width', '--file-marker-gap', '--match-background', '--match-foreground', '--icon-base-size', '--icon-size', '--icon-row-size', '--icon-text-gap']) {
+        const value = style.getPropertyValue(key); if (value) preview.style.setProperty(key, value);
+      }
+    }
+    const rows = new Map([...section.querySelectorAll('[data-file-row][data-id]')].map(row => [row.dataset.id, row]));
     const selected = source.items;
     for (const item of selected.slice(0, 5)) {
       const file = JSON.parse(item.signature);
-      const row = document.createElement('div'); row.className = 'file-drag-row'; row.textContent = file.name; preview.append(row);
+      const original = rows.get(item.id), row = original ? original.cloneNode(true) : document.createElement('div');
+      row.classList.add('file-drag-row'); row.classList.remove('focused');
+      row.style.height = original?.style.height || `${window.CommanderIcons.layout().row}px`;
+      row.removeAttribute('data-file-row'); row.removeAttribute('data-id'); row.setAttribute('inert', ''); row.draggable = false;
+      row.setAttribute('aria-label', file.name);
+      if (!original) {
+        let left = 0;
+        for (const displayed of fileGrid.api(section).getAllDisplayedColumns()) {
+          const column = p.columns.find(column => column.key === displayed.getColId()), width = displayed.getActualWidth();
+          const cell = document.createElement('div'); cell.className = 'ag-cell';
+          Object.assign(cell.style, { left: `${left}px`, width: `${width}px` }); left += width;
+          const content = document.createElement('div'); content.className = `file-cell column-align-${column.align || 'left'}`; content.dataset.cell = column.key;
+          content.innerHTML = renderFileCell(file, column, p); cell.append(content); row.append(cell);
+        }
+        row.style.width = `${left}px`;
+      }
+      for (const element of [row, ...row.querySelectorAll('*')]) {
+        element.removeAttribute('id'); element.removeAttribute('tabindex'); element.removeAttribute('data-vscode-context');
+        element.removeAttribute('draggable'); element.classList.remove('drag-pending', 'rename-pending');
+      }
+      if (original) {
+        const bounds = original.getBoundingClientRect();
+        Object.assign(row.style, { position: 'relative', top: 'auto', left: 'auto', transform: 'none', width: `${bounds.width || bounds.right - bounds.left || original.offsetWidth}px` });
+      }
+      preview.append(row);
     }
-    if (selected.length > 5) { const more = document.createElement('div'); more.textContent = `+${selected.length - 5}`; preview.append(more); }
+    if (selected.length > 5) { const more = document.createElement('div'); more.className = 'file-drag-more'; more.textContent = `+${selected.length - 5}`; preview.append(more); }
     return preview;
   }
   function showFileDragFeedback(event, mode, source, allowed = true) {
@@ -3386,7 +3442,7 @@
     if (feedback.dataset.mode !== mode) {
       feedback.dataset.mode = mode;
       feedback.innerHTML = window.CommanderIcons.svg('workbench', mode);
-      const label = document.createElement('span'); label.textContent = t(mode === 'copy' ? 'Kopieren' : 'Verschieben'); feedback.append(label);
+      feedback.setAttribute('aria-label', t(mode === 'copy' ? 'Kopieren' : 'Verschieben'));
     }
     feedback.dataset.allowed = String(allowed);
     document.body.dataset.fileDragCursor = allowed ? mode : 'none';
@@ -3423,13 +3479,12 @@
     if (event.target.closest('.pathbar')) { event.preventDefault(); event.stopPropagation(); return; }
     if (event.target.closest('input,textarea,[contenteditable="true"]')) return;
     if (event.target.closest('[data-file-row]')?.querySelector('.inline-rename')) { event.preventDefault(); return; }
-    if (rightPointer || filesystemPending && !refreshingFilesystem || event.target.closest('[data-history]')) { event.preventDefault(); return; }
+    if (fileDragPointer || filesystemPending && !refreshingFilesystem || event.target.closest('[data-history]')) { event.preventDefault(); return; }
     const tab = event.target.closest('[data-tab-drag]'), row = event.target.closest('[data-file-row][data-id]');
     if (!tab && !row) return;
     clearPendingRenameCue();
     if (row) {
-      if (filePointerGesture && !filePointerGesture.armed) { event.preventDefault(); return; }
-      filePointerGesture?.finish();
+      if (filePointerGesture) { event.preventDefault(); return; }
       const side = Number(row.closest('[data-pane]').dataset.pane), p = state.panes[side];
       if (resultView(p)) { event.preventDefault(); return; }
       state.active = side;
@@ -3498,57 +3553,60 @@
     dragged = null; render(true);
   });
   let suppressPointerClick = false;
-  $('#panes').addEventListener('click', event => {
-    if (!suppressPointerClick) return;
+  document.addEventListener('click', event => {
+    if (!suppressPointerClick || !event.target.closest('#panes,#functionbar')) return;
     suppressPointerClick = false; event.preventDefault(); event.stopImmediatePropagation();
   }, true);
   $('#panes').addEventListener('selectstart', event => {
     if (event.target.closest('.list') && !event.target.closest('input,textarea,[contenteditable="true"]')) event.preventDefault();
   });
   $('#panes').addEventListener('pointerdown', event => {
-    if (event.button === 0) {
+    if (event.button === 2) {
       const list = event.target.closest('.list');
       if (!list || event.target.closest('.ag-header,[data-parent],input,textarea,button,[contenteditable="true"]')) return;
       const row = event.target.closest('[data-file-row][data-id]');
-      if (row?.querySelector('.inline-rename') || $('#modal').open || filesystemPending && !refreshingFilesystem) return;
+      if (row?.querySelector('.inline-rename') || $('#modal').open || filesystemPending && !refreshingFilesystem || transferPending) return;
       if (!row) event.preventDefault();
       clearPendingRenameCue();
       const section = list.closest('[data-pane]'), side = Number(section.dataset.pane), p = state.panes[side];
       const initial = [...p.selected], initialCursor = p.cursor, additive = event.ctrlKey || event.metaKey || event.shiftKey;
       const startX = event.clientX, startY = event.clientY;
-      const wasDraggable = row?.draggable, tabId = p.tabStates[p.tab].id, source = currentPath(p);
+      const tabId = p.tabStates[p.tab].id, source = currentPath(p);
       state.active = side; list.focus({ preventScroll: true });
-      if (row) row.draggable = false;
       const marquee = document.createElement('div'); marquee.className = 'selection-marquee';
       marquee.setAttribute('aria-hidden', 'true');
       let selecting = false, holdTimer;
+      const holdTarget = row?.querySelector('[data-filename]');
       const events = new AbortController();
-      const valid = () => list.isConnected && (!row || row.isConnected) && state.active === side && p.tabStates[p.tab].id === tabId && currentPath(p) === source;
+      const valid = () => list.isConnected && (!row || row.isConnected) && !$('#modal').open && !transferPending && state.active === side && p.tabStates[p.tab].id === tabId && currentPath(p) === source;
       const finish = current => {
         if (current?.pointerId !== undefined && current.pointerId !== event.pointerId) return;
-        clearTimeout(holdTimer); events.abort();
+        if (current?.type === 'pointerup' && current.button !== event.button) return;
+        clearTimeout(holdTimer); holdTarget?.classList.remove('drag-pending'); events.abort();
         delete document.body.dataset.fileDragCursor;
-        if (row) row.draggable = wasDraggable;
         if (list.hasPointerCapture?.(event.pointerId)) list.releasePointerCapture(event.pointerId);
         marquee.remove();
         filePointerGesture = null;
         if (current?.type === 'pointercancel' && selecting && p.tabStates[p.tab].id === tabId && currentPath(p) === source) { p.selected = initial; p.cursor = initialCursor; refreshSelection(); }
-        if (selecting) { suppressPointerClick = true; setTimeout(() => { suppressPointerClick = false; }, 0); }
+        if (selecting) suppressRightContext = true;
         persist();
       };
       const cancel = () => finish({ type: 'pointercancel' });
-      const gesture = { armed: false, finish, cancel };
+      const gesture = { finish, cancel };
       filePointerGesture = gesture;
-      if (wasDraggable) holdTimer = setTimeout(() => {
-        if (!valid()) { cancel(); return; }
-        gesture.armed = true; row.draggable = true; document.body.dataset.fileDragCursor = 'ready';
-      }, 500);
+      if (row && !resultView(p)) {
+        holdTarget?.classList.add('drag-pending');
+        holdTimer = setTimeout(() => {
+          if (!valid()) { cancel(); return; }
+          finish(); startPointerDrag(row, event); document.body.dataset.fileDragCursor = 'ready';
+        }, 500);
+      }
       const move = current => {
         if (current.pointerId !== event.pointerId) return;
         if (!valid()) { cancel(); return; }
-        if (gesture.armed) return;
+        if (!(current.buttons & 2)) { cancel(); return; }
         if (!selecting && Math.hypot(current.clientX - startX, current.clientY - startY) < 4) return;
-        if (!selecting) { clearTimeout(holdTimer); lastNameClick = null; list.setPointerCapture?.(event.pointerId); }
+        if (!selecting) { clearTimeout(holdTimer); holdTarget?.classList.remove('drag-pending'); lastNameClick = null; list.setPointerCapture?.(event.pointerId); }
         selecting = true;
         current.preventDefault();
         if (!marquee.parentNode) list.appendChild(marquee);

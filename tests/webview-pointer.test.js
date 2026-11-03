@@ -57,104 +57,125 @@ function timedApp(t) {
   return app;
 }
 
-test('immediate movement from a filename or data cell starts the existing selection rectangle', t => {
+test('immediate right movement from every data cell starts rectangle selection without arming a drag', t => {
   for (const selector of ['[data-filename]', '.fileicon', '[data-cell="size"]']) {
     const app = timedApp(t), list = layout(app), target = app.row('a.txt').querySelector(selector);
-    pointer(app, 'pointerdown', target, { clientX: 10, clientY: 40 });
-    assert.equal(app.row('a.txt').draggable, false);
-    const data = transfer();
-    assert.equal(drag(app, 'dragstart', target, data).defaultPrevented, true);
-    pointer(app, 'pointermove', list, { clientX: 20, clientY: 80 });
+    pointer(app, 'pointerdown', target, { button: 2, buttons: 2, clientX: 10, clientY: 40 });
+    pointer(app, 'pointermove', list, { button: 2, buttons: 2, clientX: 20, clientY: 80 });
     assert.ok(list.querySelector('.selection-marquee'));
+    assert.equal(target.closest('[data-file-row]').querySelector('.drag-pending'), null);
     app.tick(1000);
-    assert.equal(drag(app, 'dragstart', target, data).defaultPrevented, true);
-    pointer(app, 'pointerup', list, { clientX: 20, clientY: 80 });
-    app.click(target);
+    assert.equal(drag(app, 'dragstart', target, transfer()).defaultPrevented, true);
+    pointer(app, 'pointerup', list, { button: 2, clientX: 20, clientY: 80 });
     assert.deepEqual(app.state().panes[0].selected, ['1', '2', '3']);
-    assert.equal(app.row('a.txt').draggable, true);
     assert.equal(list.querySelector('.selection-marquee'), null);
-    assert.equal(data.getData('application/x-bitfroest-files'), '');
+    assert.equal(app.document.querySelector('.file-drag-feedback'), null);
   }
 });
 
-test('holding a file still for 500 ms arms dragging and retains a multiple selection', t => {
-  const app = timedApp(t), list = layout(app), data = transfer();
+test('holding right for 500 ms shows the filename wait cue then arms dragging with the full selection', t => {
+  const app = timedApp(t), list = layout(app);
   app.click(name(app, 'a.txt')); app.click(name(app, 'b.txt'), { ctrlKey: true });
   const target = name(app, 'a.txt');
-  pointer(app, 'pointerdown', target, { clientX: 10, clientY: 40 });
-  pointer(app, 'pointermove', list, { clientX: 12, clientY: 41 });
+  pointer(app, 'pointerdown', target, { button: 2, buttons: 2, clientX: 10, clientY: 40 });
+  assert.equal(target.classList.contains('drag-pending'), true);
+  pointer(app, 'pointermove', list, { button: 2, buttons: 2, clientX: 12, clientY: 41 });
   app.tick(499);
-  assert.equal(app.row('a.txt').draggable, false);
-  assert.equal(drag(app, 'dragstart', target, data).defaultPrevented, true);
+  assert.equal(app.document.body.dataset.fileDragCursor, undefined);
+  assert.equal(target.classList.contains('drag-pending'), true);
   app.tick(1);
+  assert.equal(target.classList.contains('drag-pending'), false);
   assert.equal(app.document.body.dataset.fileDragCursor, 'ready');
   const style = app.document.createElement('style');
   style.textContent = require('node:fs').readFileSync(require('node:path').join(__dirname, '../media/app.css'), 'utf8');
   app.document.head.append(style);
-  assert.equal(app.window.getComputedStyle(app.row('a.txt')).cursor, 'grab');
-  assert.equal(app.row('a.txt').draggable, true);
-  pointer(app, 'pointermove', list, { clientX: 20, clientY: 80 });
+  assert.equal(app.window.getComputedStyle(app.row('a.txt')).cursor, 'default');
+  assert.match(style.textContent, /\.drag-pending[^}]*animation[^}]*500ms/);
+  assert.match(style.textContent, /prefers-reduced-motion: reduce[^}]*drag-pending/s);
+  const destination = app.document.querySelector('[data-pane="1"] .list');
+  pointer(app, 'pointermove', destination, { button: 2, buttons: 2, clientX: 500, clientY: 200 });
   assert.equal(list.querySelector('.selection-marquee'), null);
-  assert.equal(drag(app, 'dragstart', target, data).defaultPrevented, false);
-  assert.deepEqual(JSON.parse(data.getData('application/x-bitfroest-files')).ids, ['1', '2']);
-  drag(app, 'drop', app.document.querySelector('[data-pane="1"] .list'), data);
+  assert.equal(app.document.querySelector('.file-drag-feedback')?.dataset.count, '2');
+  assert.equal(app.window.getComputedStyle(app.row('a.txt')).cursor, 'default');
+  pointer(app, 'pointerup', destination, { button: 2, clientX: 500, clientY: 200 });
   assert.equal(app.document.querySelector('#modal').open, true);
+  assert.match(app.document.querySelector('#modal-title').textContent, /verschieben/i);
 });
 
 for (const cancel of ['pointerup', 'pointercancel', 'blur', 'pagehide', 'escape', 'navigation']) {
-  test(`file hold is cleaned up on ${cancel}`, t => {
+  test(`right hold and filename cue are cleaned up on ${cancel}`, t => {
     const app = timedApp(t), list = layout(app), row = app.row('a.txt');
-    pointer(app, 'pointerdown', row, { clientX: 10, clientY: 40 });
-    assert.equal(row.draggable, false);
+    pointer(app, 'pointerdown', row, { button: 2, buttons: 2 });
+    assert.ok(row.querySelector('.drag-pending'));
     if (cancel === 'blur' || cancel === 'pagehide') app.window.dispatchEvent(new app.window.Event(cancel));
     else if (cancel === 'escape') app.key('Escape');
     else if (cancel === 'navigation') app.key('Backspace', {}, list);
-    else pointer(app, cancel, app.document.body);
-    assert.equal(row.draggable, true);
+    else pointer(app, cancel, app.document.body, { button: 2 });
+    assert.equal(row.querySelector('.drag-pending'), null);
     app.tick(1000);
-    pointer(app, 'pointermove', list, { clientX: 20, clientY: 80 });
+    pointer(app, 'pointermove', list, { button: 2, buttons: 2, clientX: 20, clientY: 80 });
     assert.equal(list.querySelector('.selection-marquee'), null);
     assert.equal(app.document.body.dataset.fileDragCursor, undefined);
   });
 }
 
-test('cancelling a rectangle started on a row restores the previous selection', t => {
+test('cancelling a right rectangle started on a row restores the previous selection', t => {
   const app = timedApp(t), list = layout(app);
   app.click(name(app, 'c.txt'));
-  pointer(app, 'pointerdown', name(app, 'a.txt'), { clientX: 10, clientY: 40 });
-  pointer(app, 'pointermove', list, { clientX: 20, clientY: 60 });
+  pointer(app, 'pointerdown', name(app, 'a.txt'), { button: 2, buttons: 2, clientX: 10, clientY: 40 });
+  pointer(app, 'pointermove', list, { button: 2, buttons: 2, clientX: 20, clientY: 60 });
   assert.deepEqual(app.state().panes[0].selected, ['1', '2']);
-  pointer(app, 'pointercancel', list);
+  pointer(app, 'pointercancel', list, { button: 2 });
   assert.deepEqual(app.state().panes[0].selected, ['3']);
   assert.equal(app.state().panes[0].cursor, '3');
   assert.equal(list.querySelector('.selection-marquee'), null);
 });
 
-test('Ctrl rectangle selection can start on a row and extend upwards', t => {
+test('Ctrl right rectangle selection can start on a row and extend upwards', t => {
   const app = timedApp(t), list = layout(app);
   app.click(name(app, 'a.txt'));
-  pointer(app, 'pointerdown', name(app, 'c.txt'), { ctrlKey: true, clientX: 10, clientY: 80 });
-  pointer(app, 'pointermove', list, { ctrlKey: true, clientX: 20, clientY: 55 });
-  pointer(app, 'pointerup', list, { ctrlKey: true, clientX: 20, clientY: 55 });
-  app.click(name(app, 'c.txt'), { ctrlKey: true });
+  pointer(app, 'pointerdown', name(app, 'c.txt'), { button: 2, buttons: 2, ctrlKey: true, clientX: 10, clientY: 80 });
+  pointer(app, 'pointermove', list, { button: 2, buttons: 2, ctrlKey: true, clientX: 20, clientY: 55 });
+  pointer(app, 'pointerup', list, { button: 2, ctrlKey: true, clientX: 20, clientY: 55 });
   assert.deepEqual(app.state().panes[0].selected, ['1', '2', '3']);
 });
 
-test('a new pointer gesture cancels the previous file hold and ignores unrelated pointers', t => {
+test('a new pointer gesture cancels the previous right hold and ignores unrelated pointers', t => {
   const app = timedApp(t), list = layout(app), first = app.row('a.txt'), second = app.row('b.txt');
-  pointer(app, 'pointerdown', first);
+  pointer(app, 'pointerdown', first, { button: 2, buttons: 2 }); app.tick(250);
+  pointer(app, 'pointerdown', second, { button: 2, buttons: 2, pointerId: 2 });
+  assert.equal(first.querySelector('.drag-pending'), null);
+  assert.ok(second.querySelector('.drag-pending'));
   app.tick(250);
-  pointer(app, 'pointerdown', second, { pointerId: 2 });
-  assert.equal(first.draggable, true);
-  assert.equal(second.draggable, false);
-  app.tick(250);
-  pointer(app, 'pointerup', list, { pointerId: 1 });
-  pointer(app, 'pointermove', list, { pointerId: 1, clientX: 20, clientY: 80 });
-  assert.equal(second.draggable, false);
+  pointer(app, 'pointerup', list, { button: 2, pointerId: 1 });
+  pointer(app, 'pointermove', list, { button: 2, buttons: 2, pointerId: 1, clientX: 20, clientY: 80 });
+  assert.ok(second.querySelector('.drag-pending'));
   assert.equal(list.querySelector('.selection-marquee'), null);
   app.tick(250);
-  assert.equal(second.draggable, true);
-  pointer(app, 'pointerup', list, { pointerId: 2 });
+  assert.equal(second.querySelector('.drag-pending'), null);
+  assert.equal(app.document.body.dataset.fileDragCursor, 'ready');
+  pointer(app, 'pointerup', list, { button: 2, pointerId: 2 });
+  assert.equal(app.document.body.dataset.fileDragCursor, undefined);
+});
+
+test('tab navigation clears an armed right drag before any further pointer event', t => {
+  const app = timedApp(t);
+  pointer(app, 'pointerdown', app.row('a.txt'), { button: 2, buttons: 2 }); app.tick(500);
+  assert.equal(app.document.body.dataset.fileDragCursor, 'ready');
+  app.action('new-tab');
+  assert.equal(app.document.body.dataset.fileDragCursor, undefined);
+  assert.equal(app.document.querySelector('.drag-pending'), null);
+});
+
+test('opening a dialog clears the pending right hold cue immediately', t => {
+  const app = timedApp(t), target = name(app, 'a.txt');
+  pointer(app, 'pointerdown', target, { button: 2, buttons: 2 }); app.tick(250);
+  assert.equal(target.classList.contains('drag-pending'), true);
+  app.action('mkdir');
+  assert.equal(target.classList.contains('drag-pending'), false);
+  app.tick(1000);
+  assert.equal(app.document.body.dataset.fileDragCursor, undefined);
+  assert.equal(app.document.querySelector('#modal').open, true);
 });
 
 test('short pointer clicks retain selection and double-click opening without capturing the pointer', t => {
@@ -174,11 +195,11 @@ test('short pointer clicks retain selection and double-click opening without cap
   assert.equal(captures, 0);
 });
 
-test('dragging from empty list space selects intersected files instead of selecting text', t => {
+test('right dragging from empty list space selects intersected files instead of selecting text', t => {
   const app = createApp(t, fixture()), list = layout(app);
-  pointer(app, 'pointerdown', list, { clientX: 590, clientY: 200 });
-  pointer(app, 'pointermove', list, { clientX: 10, clientY: 55 });
-  pointer(app, 'pointerup', list, { clientX: 10, clientY: 55 });
+  pointer(app, 'pointerdown', list, { button: 2, buttons: 2, clientX: 590, clientY: 200 });
+  pointer(app, 'pointermove', list, { button: 2, buttons: 2, clientX: 10, clientY: 55 });
+  pointer(app, 'pointerup', list, { button: 2, buttons: 2, clientX: 10, clientY: 55 });
   assert.deepEqual(app.state().panes[0].selected, ['2', '3']);
   const selectStart = new app.window.Event('selectstart', { bubbles: true, cancelable: true });
   name(app, 'b.txt').dispatchEvent(selectStart);
@@ -186,16 +207,16 @@ test('dragging from empty list space selects intersected files instead of select
   assert.equal(app.window.getSelection().toString(), '');
 });
 
-test('Ctrl rectangle selection extends the marked files and pointercancel restores them', t => {
+test('Ctrl right rectangle selection extends the marked files and pointercancel restores them', t => {
   const app = createApp(t, fixture());
   app.click(name(app, 'a.txt'));
   const list = layout(app);
-  pointer(app, 'pointerdown', list, { ctrlKey: true, clientX: 590, clientY: 200 });
-  pointer(app, 'pointermove', list, { ctrlKey: true, clientX: 10, clientY: 55 });
-  pointer(app, 'pointerup', list, { ctrlKey: true, clientX: 10, clientY: 55 });
+  pointer(app, 'pointerdown', list, { button: 2, buttons: 2, ctrlKey: true, clientX: 590, clientY: 200 });
+  pointer(app, 'pointermove', list, { button: 2, buttons: 2, ctrlKey: true, clientX: 10, clientY: 55 });
+  pointer(app, 'pointerup', list, { button: 2, buttons: 2, ctrlKey: true, clientX: 10, clientY: 55 });
   assert.deepEqual(app.state().panes[0].selected, ['1', '2', '3']);
-  pointer(app, 'pointerdown', list, { clientX: 590, clientY: 200 });
-  pointer(app, 'pointermove', list, { clientX: 10, clientY: 75 });
+  pointer(app, 'pointerdown', list, { button: 2, buttons: 2, clientX: 590, clientY: 200 });
+  pointer(app, 'pointermove', list, { button: 2, buttons: 2, clientX: 10, clientY: 75 });
   pointer(app, 'pointercancel', list);
   assert.deepEqual(app.state().panes[0].selected, ['1', '2', '3']);
 });
@@ -213,14 +234,13 @@ test('every data cell keeps native row clicks and file dragging while empty list
   }
 });
 
-test('Shift rectangle selection adds files and the trailing click does not start rename', async t => {
+test('Shift right rectangle selection adds files without starting rename', async t => {
   const app = createApp(t, fixture());
   let now = 1000; app.window.Date.now = () => now;
   app.click(name(app, 'a.txt')); const list = layout(app); now += 800;
-  pointer(app, 'pointerdown', list, { shiftKey: true, clientX: 590, clientY: 200 });
-  pointer(app, 'pointermove', list, { shiftKey: true, clientX: 10, clientY: 55 });
-  pointer(app, 'pointerup', list, { shiftKey: true, clientX: 10, clientY: 55 });
-  app.click(name(app, 'b.txt'));
+  pointer(app, 'pointerdown', list, { button: 2, buttons: 2, shiftKey: true, clientX: 590, clientY: 200 });
+  pointer(app, 'pointermove', list, { button: 2, buttons: 2, shiftKey: true, clientX: 10, clientY: 55 });
+  pointer(app, 'pointerup', list, { button: 2, buttons: 2, shiftKey: true, clientX: 10, clientY: 55 });
   assert.deepEqual(app.state().panes[0].selected, ['1', '2', '3']);
   await new Promise(resolve => setTimeout(resolve, 400));
   assert.equal(app.document.querySelector('.inline-rename'), null);

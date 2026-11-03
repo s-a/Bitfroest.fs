@@ -117,54 +117,69 @@ test('generated host HTML searches complete names without changing marks or requ
   assert.equal(view.document.querySelector('.pane.active mark'), null);
 });
 
-test('generated host HTML separates immediate rectangle selection from held file dragging', async t => {
-  const initial = clipboardFixture(); initial.realFilesystem = false;
+test('generated host HTML separates left dragging, right selection and held right dragging through its host protocol', async t => {
+  const initial = clipboardFixture();
   initial.panes.forEach(pane => { pane.filter = ''; pane.sort = 'name'; pane.selected = []; });
-  const app = harness(t, { filesystemLoad: async () => initial });
+  initial.folders['C:/tmp'].push({ id: 'b', name: 'b.txt', type: 'text', fsSource: 'C:/tmp/b.txt' });
+  let writes = 0;
+  const app = harness(t, { filesystemLoad: async () => initial, filesystemApply: async (_before, after) => { writes++; return after; } });
   await app.command('bitfroest.openPrototype');
-  const html = app.panels[0].webview.html;
+  const panel = app.panels[0], html = panel.webview.html;
   assert.match(html, /Content-Security-Policy/); assert.match(html, /script-src 'nonce-[^']+'/);
-  let arm;
+  let now = 0, sequence = 0;
+  const timers = new Map();
   const view = require('./support/webview.cjs').createApp(t, initial, { html, beforeApp({ window }) {
-    const timeout = window.setTimeout.bind(window);
-    window.setTimeout = (fn, delay, ...args) => { if (delay === 500) { arm = fn; return timeout(fn, 60000); } return timeout(fn, delay, ...args); };
+    window.setTimeout = (fn, delay = 0) => { const id = ++sequence; timers.set(id, { fn, due: now + delay }); return id; };
+    window.clearTimeout = id => timers.delete(id);
   } });
   const list = view.document.querySelector('[data-pane="0"] .list'), row = view.row('a.txt');
+  const destination = view.document.querySelector('[data-pane="1"] .list');
   list.getBoundingClientRect = () => ({ left: 0, top: 0, right: 600, bottom: 300 });
-  row.getBoundingClientRect = () => ({ left: 0, top: 30, right: 600, bottom: 50 });
+  [...list.querySelectorAll('[data-file-row][data-id]')].forEach((entry, index) => { entry.getBoundingClientRect = () => ({ left: 0, top: 30 + index * 22, right: 600, bottom: 50 + index * 22 }); });
   const pointer = (type, target, clientY, button = 0) => {
     const event = new view.window.MouseEvent(type, { bubbles: true, cancelable: true, button, buttons: type === 'pointerup' ? 0 : button === 2 ? 2 : 1, clientX: clientY, clientY });
     Object.defineProperty(event, 'pointerId', { value: 1 }); target.dispatchEvent(event);
   };
-  pointer('pointerdown', row, 40);
-  pointer('pointermove', list, 45);
+  pointer('pointerdown', row, 40, 2);
+  assert.ok(row.querySelector('.drag-pending'));
+  pointer('pointermove', list, 75, 2);
   assert.ok(list.querySelector('.selection-marquee'));
-  pointer('pointerup', list, 45); view.click(row);
-  assert.deepEqual(view.state().panes[0].selected, ['a']);
+  assert.equal(row.querySelector('.drag-pending'), null);
+  pointer('pointerup', list, 75, 2);
+  assert.deepEqual(view.state().panes[0].selected, ['a', 'b']);
   pointer('pointerdown', row, 40);
-  assert.equal(row.draggable, false);
-  arm();
-  assert.equal(row.draggable, true);
-  const data = new Map();
-  const drag = (type, target) => {
-    const event = new view.window.MouseEvent(type, { bubbles: true, cancelable: true });
-    Object.defineProperty(event, 'dataTransfer', { value: { setData(key, value) { data.set(key, value); } } });
-    target.dispatchEvent(event);
-  };
-  drag('dragstart', row);
-  assert.deepEqual(JSON.parse(data.get('application/x-bitfroest-files')).ids, ['a']);
-  drag('drop', view.document.querySelector('[data-pane="1"] .list'));
-  assert.equal(view.document.querySelector('#modal').open, true);
+  pointer('pointermove', destination, 200);
+  assert.equal(list.querySelector('.selection-marquee'), null);
+  assert.equal(view.document.querySelector('.file-drag-feedback').dataset.mode, 'copy');
+  assert.equal(view.document.querySelector('.file-drag-feedback').dataset.count, '2');
+  pointer('pointerup', destination, 200);
+  assert.match(view.document.querySelector('#modal-title').textContent, /kopieren/i);
   assert.equal(view.messages.some(message => message.type === 'filesystem-apply'), false);
   view.document.querySelector('#modal-cancel').click();
-  const destination = view.document.querySelector('[data-pane="1"] .list');
-  pointer('pointerdown', view.row('a.txt'), 40, 2);
+  assert.equal(view.document.querySelector('#modal').open, false);
+  pointer('pointerdown', row, 40, 2);
+  now += 500; for (const [id, timer] of [...timers]) if (timer.due <= now && timers.delete(id)) timer.fn();
+  assert.equal(row.querySelector('.drag-pending'), null);
+  assert.equal(view.document.body.dataset.fileDragCursor, 'ready');
   pointer('pointermove', destination, 200, 2);
   assert.equal(view.document.querySelector('.file-drag-feedback').dataset.mode, 'move');
   pointer('pointerup', destination, 200, 2);
   assert.match(view.document.querySelector('#modal-title').textContent, /verschieben/i);
   assert.equal(view.messages.some(message => message.type === 'choose-drop-action'), false);
   assert.equal(view.messages.some(message => message.type === 'filesystem-apply'), false);
+  view.document.querySelector('#modal-cancel').click();
+  pointer('pointerdown', row, 40); pointer('pointermove', destination, 200); pointer('pointerup', destination, 200);
+  view.document.querySelector('#modal-form').dispatchEvent(new view.window.Event('submit', { bubbles: true, cancelable: true }));
+  await tick();
+  const request = view.messages.find(message => message.type === 'filesystem-apply'); assert.ok(request);
+  assert.deepEqual([...request.transfer.ids], ['a', 'b']); assert.equal(request.transfer.mode, 'copy');
+  await panel.receive(request);
+  assert.equal(writes, 1);
+  const reply = panel.messages.findLast(message => message.type === 'filesystem-result'); assert.equal(reply.ok, true);
+  view.window.dispatchEvent(new view.window.MessageEvent('message', { data: reply }));
+  assert.equal(view.state().folders['C:/tmp'].length, 2);
+  assert.equal(view.state().folders['C:/temp'].length, 2);
+  assert.equal(view.document.querySelector('#modal').open, false);
 });
 
 test('generated host HTML delays name editing and shows both drag operations with its CSP', async t => {

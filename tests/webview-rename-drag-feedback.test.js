@@ -89,7 +89,7 @@ for (const language of ['de', 'en']) {
       const feedback = app.document.querySelector('.file-drag-feedback');
       assert.ok(feedback);
       assert.equal(feedback.dataset.mode, shiftKey ? 'move' : 'copy');
-      assert.match(feedback.textContent, language === 'de' ? shiftKey ? /Verschieben/ : /Kopieren/ : shiftKey ? /Move/ : /Copy/);
+      assert.match(feedback.getAttribute('aria-label'), language === 'de' ? shiftKey ? /Verschieben/ : /Kopieren/ : shiftKey ? /Move/ : /Copy/);
       const expected = app.document.createElement('div'); expected.innerHTML = app.window.CommanderIcons.svg('workbench', shiftKey ? 'move' : 'copy');
       assert.equal(feedback.querySelector('svg').dataset.iconReviewed, `workbench:${shiftKey ? 'move' : 'copy'}`);
       assert.equal(feedback.querySelector('svg').outerHTML, expected.innerHTML);
@@ -112,10 +112,12 @@ test('drag feedback cannot cover a drop target and uses readable theme colors an
   const feedback = app.document.querySelector('.file-drag-feedback'); assert.ok(feedback);
   assert.equal(app.window.getComputedStyle(feedback).pointerEvents, 'none');
   const styleFeedback = app.window.getComputedStyle(feedback);
-  assert.equal(styleFeedback.fontSize, '12px');
+  assert.equal(styleFeedback.fontSize, app.window.getComputedStyle(app.row('a.txt')).fontSize);
   assert.equal(styleFeedback.fontWeight, '400');
-  assert.equal(styleFeedback.padding, '3px 6px');
-  assert.equal(styleFeedback.borderTopWidth, '1px');
+  assert.equal(styleFeedback.padding, '0px');
+  assert.equal(styleFeedback.borderTopWidth, '0px');
+  assert.equal(styleFeedback.backgroundColor, 'rgba(0, 0, 0, 0)');
+  assert.equal(styleFeedback.boxShadow, 'none');
   assert.equal(app.window.getComputedStyle(feedback.querySelector('svg')).width, '16px');
   drag(app, 'dragover', app.row('a.txt'));
   assert.equal(app.document.querySelector('.file-drag-feedback').dataset.allowed, 'false');
@@ -134,10 +136,67 @@ test('native drag image contains all marked names and the total selection count'
   app.row('b.txt').dispatchEvent(event);
   assert.ok(preview);
   assert.equal(preview.dataset.count, '2');
-  assert.match(preview.textContent, /a\.txt/); assert.match(preview.textContent, /b\.txt/);
+  assert.deepEqual([...preview.querySelectorAll('.file-drag-row')].map(row => row.getAttribute('aria-label')), ['a.txt', 'b.txt']);
   assert.deepEqual(JSON.parse(values.get('application/x-bitfroest-files')).ids, ['a', 'b']);
   drag(app, 'dragend', app.row('b.txt'));
   assert.equal(preview.isConnected, false);
+});
+
+test('drag preview preserves the rendered rows and icons with a transparent presentation', t => {
+  const app = setup(t); app.click(app.name('b.txt'), { ctrlKey: true });
+  const rows = [app.row('a.txt'), app.row('b.txt')];
+  const image = app.document.createElement('img'); image.className = 'native-icon'; image.src = 'data:image/png;base64,aGVsbG8=';
+  rows[0].querySelector('.fileicon').append(image);
+  drag(app, 'dragstart', rows[1]);
+  drag(app, 'dragover', app.document.querySelector('[data-pane="1"] .list'));
+  const preview = app.document.querySelector('.file-drag-feedback .file-drag-preview');
+  const ghosts = [...preview.querySelectorAll('.file-drag-row')];
+  assert.equal(ghosts.length, 2);
+  for (const [index, ghost] of ghosts.entries()) {
+    assert.equal(ghost.querySelectorAll('[data-cell]').length, rows[index].querySelectorAll('[data-cell]').length);
+    assert.equal(ghost.querySelector('.filename-text').textContent, rows[index].querySelector('.filename-text').textContent);
+    assert.equal(ghost.hasAttribute('data-file-row'), false);
+    assert.equal(ghost.querySelector('[id],[tabindex],[draggable="true"]'), null);
+    assert.equal(ghost.hasAttribute('inert'), true);
+  }
+  assert.equal(ghosts[0].querySelector('.native-icon').src, image.src);
+  const style = app.document.createElement('style');
+  style.textContent = resolveThemeCss(fs.readFileSync(path.join(__dirname, '../media/app.css'), 'utf8'));
+  app.document.head.append(style);
+  assert.equal(app.window.getComputedStyle(preview).opacity, '0.6');
+  assert.equal(app.window.getComputedStyle(preview).borderTopWidth, '0px');
+  assert.equal(app.window.getComputedStyle(preview).pointerEvents, 'none');
+});
+
+test('drag preview renders virtualized selected rows with the same columns without changing the list', t => {
+  const app = setup(t); app.click(app.name('b.txt'), { ctrlKey: true });
+  const original = app.row('a.txt'), cellCount = original.querySelectorAll('[data-cell]').length;
+  original.remove();
+  drag(app, 'dragstart', app.row('b.txt'));
+  drag(app, 'dragover', app.document.querySelector('[data-pane="1"] .list'));
+  const ghost = app.document.querySelector('.file-drag-feedback .file-drag-row');
+  assert.equal(ghost.getAttribute('aria-label'), 'a.txt');
+  assert.equal(ghost.querySelectorAll('[data-cell]').length, cellCount);
+  assert.ok(ghost.querySelector('.fileicon,.git-icon'));
+  const style = app.document.createElement('style');
+  style.textContent = resolveThemeCss(fs.readFileSync(path.join(__dirname, '../media/app.css'), 'utf8'));
+  app.document.head.append(style);
+  assert.equal(app.window.getComputedStyle(ghost).position, 'relative');
+  assert.equal(ghost.style.height, `${app.window.CommanderIcons.layout().row}px`);
+  assert.deepEqual(app.state().panes[0].selected, ['a', 'b']);
+  assert.equal(original.isConnected, false);
+});
+
+test('drag preview retains source panel spacing and search colors outside the panel', t => {
+  const app = setup(t), section = app.document.querySelector('[data-pane="0"]');
+  section.style.setProperty('--file-cell-padding', '9px');
+  section.querySelector('.file-table').style.setProperty('--file-marker-width', '12px');
+  section.querySelector('.file-table').style.setProperty('--file-marker-gap', '3px');
+  app.document.querySelector('#panes').style.setProperty('--match-background', 'rgb(200, 100, 0)');
+  drag(app, 'dragstart', app.row('a.txt'));
+  drag(app, 'dragover', app.document.querySelector('[data-pane="1"] .list'));
+  const preview = app.document.querySelector('.file-drag-feedback .file-drag-preview');
+  for (const [key, value] of Object.entries({ '--file-cell-padding': '9px', '--file-marker-width': '12px', '--file-marker-gap': '3px', '--match-background': 'rgb(200, 100, 0)' })) assert.equal(preview.style.getPropertyValue(key), value);
 });
 
 for (const shiftKey of [false, true]) test(`native drag retains selection feedback over invalid and valid targets with shift=${shiftKey}`, t => {
@@ -149,7 +208,7 @@ for (const shiftKey of [false, true]) test(`native drag retains selection feedba
     assert.equal(feedback.dataset.count, '2');
     assert.equal(feedback.dataset.mode, shiftKey ? 'move' : 'copy');
     assert.equal(feedback.dataset.allowed, String(side === 1));
-    assert.match(feedback.textContent, /a\.txt/); assert.match(feedback.textContent, /b\.txt/);
+    assert.deepEqual([...feedback.querySelectorAll('.file-drag-row')].map(row => row.getAttribute('aria-label')), ['a.txt', 'b.txt']);
     assert.equal(event.dataTransfer.dropEffect, side ? shiftKey ? 'move' : 'copy' : 'none');
   }
   drag(app, 'dragend', app.row('b.txt'));

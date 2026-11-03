@@ -1,6 +1,16 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createApp } = require('./support/webview.cjs');
+function createDragApp(t, saved) {
+  let now = 0, sequence = 0;
+  const timers = new Map();
+  const app = createApp(t, saved, { beforeApp({ window }) {
+    window.setTimeout = (fn, delay = 0) => { const id = ++sequence; timers.set(id, { fn, due: now + delay }); return id; };
+    window.clearTimeout = id => timers.delete(id);
+  } });
+  app.hold = () => { now += 500; for (const [id, timer] of [...timers]) if (timer.due <= now && timers.delete(id)) timer.fn(); };
+  return app;
+}
 function fixture() {
   const pane = path => ({ tabs: [path], tab: 0, selected: [], cursor: null, filter: '', sort: 'name' });
   const state = { version: 1, active: 0, panes: [pane('/left'), pane('/right')], folders: { '/left': [{ id: 'a', name: 'a.txt', type: 'text', content: 'a' }, { id: 'b', name: 'b.txt', type: 'text', content: 'b' }], '/right': [{ id: 'folder', name: 'target', type: 'folder' }], '/right/target': [] } };
@@ -9,11 +19,11 @@ function fixture() {
 function pointer(app, type, target, extra = {}) {
   const event = new app.window.Event(type, { bubbles: true, cancelable: true });
   for (const [key, value] of Object.entries({ button: 2, buttons: type === 'pointerup' ? 0 : 2, pointerId: 7, clientX: 5, clientY: 5, ...extra })) Object.defineProperty(event, key, { value });
-  target.dispatchEvent(event); return event;
+  target.dispatchEvent(event); if (type === 'pointerdown') app.hold(); return event;
 }
 
 test('column context remains available after a cancelled right drag without a further pointer press', t => {
-  const app = createApp(t, fixture()), target = app.document.querySelector('[data-pane="1"] .list');
+  const app = createDragApp(t, fixture()), target = app.document.querySelector('[data-pane="1"] .list');
   pointer(app, 'pointerdown', app.row('a.txt'));
   pointer(app, 'pointermove', target, { clientX: 500, clientY: 200 });
   pointer(app, 'pointercancel', target);
@@ -30,7 +40,7 @@ const submit = app => app.document.querySelector('#modal-form').dispatchEvent(ne
 test('right dragging onto the source list or a tab for the same path offers no action', t => {
   for (const selector of ['[data-pane="0"] .list', '[data-pane="1"] [data-tab="0"]']) {
     const saved = fixture(); saved.panes[1].tabs[0] = '/left';
-    const app = createApp(t, saved), target = app.document.querySelector(selector);
+    const app = createDragApp(t, saved), target = app.document.querySelector(selector);
     pointer(app, 'pointerdown', app.row('a.txt'));
     pointer(app, 'pointermove', target, { clientX: 500, clientY: 200 });
     assert.equal(app.document.querySelector('.drop-target'), null);
@@ -40,7 +50,7 @@ test('right dragging onto the source list or a tab for the same path offers no a
   }
 });
 test('right pointer drag shows move feedback and opens move confirmation directly', async t => {
-  const app = createApp(t, fixture()), before = JSON.stringify(app.state().folders);
+  const app = createDragApp(t, fixture()), before = JSON.stringify(app.state().folders);
   const target = app.document.querySelector('[data-pane="1"] .list');
   pointer(app, 'pointerdown', app.row('a.txt'));
   pointer(app, 'pointermove', target, { clientX: 500, clientY: 200 });
@@ -56,13 +66,13 @@ test('right pointer drag shows move feedback and opens move confirmation directl
 });
 test('right drag captures folder and inactive-tab destinations without navigating there', t => {
   for (const selector of ['[data-pane="1"] [data-file-row][data-id="folder"]', '[data-pane="1"] [data-tab="1"]']) {
-    const app = createApp(t, fixture()); gesture(app, app.document.querySelector(selector));
+    const app = createDragApp(t, fixture()); gesture(app, app.document.querySelector(selector));
     assert.equal(app.document.querySelector('#value').value, '/right/target'); assert.equal(app.state().panes[1].tab, 0);
     assert.match(app.document.querySelector('#modal-title').textContent, /verschieben/i);
   }
 });
-test('right-drag cancellation, unsupported links and short right clicks cannot transfer files', t => {
-  const app = createApp(t, fixture()), target = app.document.querySelector('[data-pane="1"] .list'), before = JSON.stringify(app.state().folders);
+test('right-drag cancellation, unsupported links and right holds without movement cannot transfer files', t => {
+  const app = createDragApp(t, fixture()), target = app.document.querySelector('[data-pane="1"] .list'), before = JSON.stringify(app.state().folders);
   gesture(app, target); app.document.querySelector('#modal-cancel').click(); assert.equal(app.document.querySelector('#modal').open, false);
   gesture(app, target, { ctrlKey: true, shiftKey: true }); assert.equal(app.messages.filter(item => item.type === 'choose-drop-action').length, 0);
   assert.equal(app.document.querySelector('#modal').open, false);
@@ -76,7 +86,7 @@ test('right-drag cancellation, unsupported links and short right clicks cannot t
 test('changed drag sources and removed targets are rejected before move confirmation completes', t => {
   for (const change of ['source', 'target']) {
     const saved = { ...fixture(), realFilesystem: true, snapshotId: 'before' };
-    const app = createApp(t, saved); gesture(app, app.document.querySelector('[data-pane="1"] [data-file-row][data-id="folder"]'));
+    const app = createDragApp(t, saved); gesture(app, app.document.querySelector('[data-pane="1"] [data-file-row][data-id="folder"]'));
     const changed = fixture();
     if (change === 'source') changed.folders['/left'][0].name = 'different.txt';
     else { changed.folders['/right'] = []; delete changed.folders['/right/target']; changed.panes[1].tabs = ['/right']; }
@@ -87,21 +97,21 @@ test('changed drag sources and removed targets are rejected before move confirma
   }
 });
 test('right drag suppresses its generated context menu and duplicate pointer releases retain the move confirmation', t => {
-  const app = createApp(t, fixture()), target = app.document.querySelector('[data-pane="1"] .list'); gesture(app, target);
+  const app = createDragApp(t, fixture()), target = app.document.querySelector('[data-pane="1"] .list'); gesture(app, target);
   pointer(app, 'pointerup', target, { clientX: 500, clientY: 200 });
   const context = new app.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }); target.dispatchEvent(context);
   assert.equal(context.defaultPrevented, true); assert.equal(app.messages.filter(item => item.type === 'choose-drop-action').length, 0);
   assert.match(app.document.querySelector('#modal-title').textContent, /verschieben/i);
 });
 test('a dialog opened during a right gesture is not overlaid by a drop picker', t => {
-  const app = createApp(t, fixture()), target = app.document.querySelector('[data-pane="1"] .list');
+  const app = createDragApp(t, fixture()), target = app.document.querySelector('[data-pane="1"] .list');
   pointer(app, 'pointerdown', app.row('a.txt')); pointer(app, 'pointermove', target, { clientX: 500, clientY: 200 });
   app.action('mkdir'); pointer(app, 'pointerup', target, { clientX: 500, clientY: 200 });
   assert.equal(app.messages.some(item => item.type === 'choose-drop-action'), false); assert.equal(app.document.querySelector('#modal').open, true);
 });
 
 for (const end of ['pointerup', 'pointercancel', 'blur', 'pagehide', 'escape']) test(`right drag previews the whole selection over its source and cleans up on ${end}`, t => {
-  const app = createApp(t, fixture()), target = app.document.querySelector('[data-pane="0"] .list');
+  const app = createDragApp(t, fixture()), target = app.document.querySelector('[data-pane="0"] .list');
   pointer(app, 'pointerdown', app.row('b.txt'));
   pointer(app, 'pointermove', target, { clientX: 100, clientY: 100 });
   const feedback = app.document.querySelector('.file-drag-feedback');
@@ -109,7 +119,7 @@ for (const end of ['pointerup', 'pointercancel', 'blur', 'pagehide', 'escape']) 
   assert.equal(feedback.dataset.mode, 'move');
   assert.equal(feedback.dataset.allowed, 'false');
   assert.equal(feedback.dataset.count, '2');
-  assert.match(feedback.textContent, /a\.txt/); assert.match(feedback.textContent, /b\.txt/);
+  assert.deepEqual([...feedback.querySelectorAll('.file-drag-row')].map(row => row.getAttribute('aria-label')), ['a.txt', 'b.txt']);
   assert.equal(app.document.body.dataset.fileDragCursor, 'none');
   assert.equal(app.document.querySelector('.drop-target'), null);
   if (end === 'blur' || end === 'pagehide') app.window.dispatchEvent(new app.window.Event(end));
@@ -123,7 +133,7 @@ for (const end of ['pointerup', 'pointercancel', 'blur', 'pagehide', 'escape']) 
 test('large right-drag selections show five names and the complete count without losing entries', t => {
   const saved = fixture();
   for (let index = 0; index < 8; index++) { saved.folders['/left'].push({ id: `extra${index}`, name: `extra${index}.txt`, type: 'text' }); saved.panes[0].selected.push(`extra${index}`); }
-  const app = createApp(t, saved);
+  const app = createDragApp(t, saved);
   pointer(app, 'pointerdown', app.row('b.txt'));
   pointer(app, 'pointermove', app.document.querySelector('[data-pane="1"] .list'), { clientX: 500, clientY: 200 });
   const preview = app.document.querySelector('.file-drag-preview');
