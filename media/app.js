@@ -953,7 +953,7 @@
     }
     updateDirectoryActivity();
   }
-  function requestFilesystem(message, resume, rollback) {
+  function requestFilesystem(message, resume, rollback, loadingEntry) {
     if (!['filesystem-navigate', 'zip-open', 'filesystem-refresh'].includes(message.type)) prioritizeFilesystemOperation();
     if (message.type === 'zip-open' && (!filesystemPending || operationQueue?.active)) {
       const origin = state.panes[message.side], navigationRequestId = `directory-${++navigationSequence}`;
@@ -978,7 +978,7 @@
       const origin = state.panes[message.side];
       const previous = navigationByTab.get(`${message.side}:${origin.tabStates[origin.tab].id}`);
       if (!rollback && previous?.path === message.path) rollback = previous.rollback;
-      const request = { ...message, navigationRequestId, startedAt: performance.now(), resume, rollback, tabId: origin.tabStates[origin.tab].id, originPath: currentPath(origin), activeAtStart: state.active, pathNavigation: pendingPathNavigation };
+      const request = { ...message, navigationRequestId, startedAt: performance.now(), resume, rollback, loadingEntry, tabId: origin.tabStates[origin.tab].id, originPath: currentPath(origin), activeAtStart: state.active, pathNavigation: pendingPathNavigation };
       pendingPathNavigation = null;
       navigationRequests.set(navigationRequestId, request); navigationByTab.set(navigationKey(request), request);
       for (const path of directoryListings.keys()) if (!state.panes.some(p => currentPath(p) === path)) directoryListings.delete(path);
@@ -1024,10 +1024,11 @@
     const contextValid = latest && origin.tabStates[origin.tab].id === request.tabId && [request.originPath, request.path].includes(currentPath(origin));
     const displayed = currentPath(state.panes[request.side]) === request.path;
     if (data.type === 'filesystem-directory') {
-      if (!latest || origin.tabStates[origin.tab].id !== request.tabId || !displayed || data.path !== request.path) return true;
+      if (!latest || origin.tabStates[origin.tab].id !== request.tabId || !displayed && !request.loadingEntry || data.path !== request.path) return true;
       if (data.done) { request.metadataCompleted = request.metadataTotal; updateDirectoryActivity(); return true; }
       if (Array.isArray(data.names)) { request.metadataReading = true; request.metadataTotal = data.names.length; request.metadataCompleted = 0; }
       else request.metadataCompleted = Math.min(request.metadataTotal || 0, (request.metadataCompleted || 0) + (data.rows?.length || 0));
+      if (!displayed) { updateDirectoryActivity(); return true; }
       rememberScroll(); const previousViews = state.panes.map(paneDisplayState);
       let rows = directoryListings.get(request.path) || directoryCache.get(request.path) || state.folders[request.path] || [];
       if (Array.isArray(data.names)) { const names = new Set(data.names); rows = rows.filter(row => names.has(row.name)); }
@@ -1179,13 +1180,17 @@
       const refreshIcon = section.querySelector('[data-refresh-icon]');
       if (refreshIcon) window.CommanderIcons.setFont(refreshIcon, busy ? 'loading' : 'refresh', busy);
       const locationIcon = section.querySelector('[data-location-icon]');
-      const overlay = locationIcon?.querySelector('[data-directory-loading]');
-      if (reading && locationIcon && !overlay) {
-        const spinner = window.CommanderIcons.element('loading', { class: 'directory-loading', 'data-directory-loading': '' });
-        window.CommanderIcons.setFont(spinner, 'loading', true);
-        locationIcon.append(spinner);
-      } else if (!reading) overlay?.remove();
-      section.querySelector('[data-favorites]')?.setAttribute('aria-busy', String(Boolean(reading)));
+      const loadingRow = reading?.loadingEntry && path === reading.originPath ? [...section.querySelectorAll('[data-file-row][data-id]')].find(row => row.dataset.id === reading.loadingEntry) : null;
+      for (const overlay of section.querySelectorAll('[data-directory-loading]')) {
+        if (overlay.closest('[data-file-row]') === loadingRow && overlay.dataset.navigationId === reading.navigationRequestId) continue;
+        overlay.closest('[data-file-row]')?.setAttribute('aria-busy', 'false'); overlay.remove();
+      }
+      if (loadingRow && !loadingRow.querySelector('[data-directory-loading]')) {
+        const overlay = document.createElement('span'); overlay.className = 'directory-loading'; overlay.dataset.directoryLoading = ''; overlay.dataset.navigationId = reading.navigationRequestId; overlay.setAttribute('aria-hidden', 'true');
+        const spinner = window.CommanderIcons.element('loading'); window.CommanderIcons.setFont(spinner, 'loading', true);
+        overlay.append(spinner); loadingRow.querySelector('.filename')?.append(overlay); loadingRow.setAttribute('aria-busy', 'true');
+      }
+      section.querySelector('[data-favorites]')?.setAttribute('aria-busy', 'false');
       locationIcon?.setAttribute('aria-busy', String(Boolean(reading) || gitPending.has(path)));
       section.querySelector('[data-git-branch]')?.setAttribute('aria-busy', String(gitPending.has(path)));
     });
@@ -2145,12 +2150,17 @@
     if (version !== undefined && version !== statusbar.version) return;
     toast(message, outcome); return statusbar.version;
   }
-  function go(path) {
+  function go(path, loadingEntry) {
     path = Object.keys(state.archiveLocations || {}).find(value => displayArchivePath(value) === path) || path;
     path = inputPath(path, displayArchivePath(currentPath(pane())));
     path = Object.keys(state.archiveLocations || {}).find(value => paths.identity(inputPath(displayArchivePath(value))) === paths.identity(path)) || path;
     const existing = Object.keys(state.folders).find(value => paths.identity(value) === paths.identity(path));
     if (existing) path = existing;
+    if (host && state.realFilesystem && loadingEntry && !isArchiveLocation(path) && path !== currentPath(pane())) {
+      cacheDirectories();
+      requestFilesystem({ type: 'filesystem-navigate', path, side: state.active }, () => go(path), undefined, loadingEntry);
+      return;
+    }
     if (host && state.realFilesystem && !path.includes('!') && validatedNavigation !== path && (!Object.hasOwn(state.folders, path) || state.unloadedFolders?.includes(path) || path !== currentPath(pane()))) {
       const side = state.active;
       cacheDirectories();
@@ -2250,15 +2260,15 @@
       else go(response.path);
     });
   }
-  function openFile(file) {
+  function openFile(file, doubleClick = false) {
     if (!file) return;
     if (file.type === 'folder') {
       if (resultView(pane())) {
         const path = file.fsSource, side = state.active;
         const open = () => { state.active = side; rememberScroll(); tabs.openPath(pane(), path); go(path); };
-        if (host && state.realFilesystem && (!Object.hasOwn(state.folders, path) || state.unloadedFolders?.includes(path))) requestFilesystem({ type: 'filesystem-navigate', path, side }, open);
+        if (host && state.realFilesystem && (!Object.hasOwn(state.folders, path) || state.unloadedFolders?.includes(path))) requestFilesystem({ type: 'filesystem-navigate', path, side }, open, undefined, doubleClick ? file.id : undefined);
         else open();
-      } else go(join(currentPath(pane()), file.name));
+      } else go(join(currentPath(pane()), file.name), doubleClick ? file.id : undefined);
     }
     else if (state.archiveLocations?.[currentPath(pane())]) modal(file.name, `<dl><dt>${t('Pfad')}</dt><dd>${escape(file.archiveEntry || file.name)}</dd><dt>${t('Größe')}</dt><dd>${size(file.size || 0)}</dd><dt>${t('Komprimierte Größe')}</dt><dd>${size(file.compressedSize || 0)}</dd><dt>${t('Kompressionsverhältnis')}</dt><dd>${file.size ? Math.round(100 * (file.compressedSize || 0) / file.size) + ' %' : '–'}</dd><dt>${t('Kompressionsmethode')}</dt><dd>${escape(String(file.compressionMethod ?? ''))}</dd><dt>${t('Verschlüsselung')}</dt><dd>${escape(file.encryption || 'none')}</dd></dl>`, t('Entpacken und öffnen'), () => { host.postMessage({ type: 'zip-open-entry', path: file.fsSource }); return true; });
     else if (host && state.realFilesystem && /\.zip$/i.test(file.name)) requestFilesystem({ type: 'zip-open', path: file.fsSource, side: state.active });
@@ -3303,7 +3313,7 @@
     const tab = event.target.closest('[data-tab]');
     if (tab) { rememberScroll(); tabs.close(pane(), Number(tab.dataset.tab)); render(true); return; }
     if (event.target.closest('[data-parent]')) return goUp();
-    const row = event.target.closest('[data-id]'); if (row) openFile(files(pane()).find(file => file.id === row.dataset.id));
+    const row = event.target.closest('[data-id]'); if (row) openFile(files(pane()).find(file => file.id === row.dataset.id), true);
   });
   $('#panes').addEventListener('auxclick', event => {
     const tab = event.target.closest('[data-tab]');

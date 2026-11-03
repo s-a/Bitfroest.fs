@@ -10,6 +10,38 @@ const extensionPath = path.join(root, 'extension.js');
 const manifest = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
 const tick = () => new Promise(resolve => setImmediate(resolve));
 const Progress = require('../media/commander-progress');
+
+test('generated host HTML keeps the double-clicked folder visible while loading and preserves opposite focus', async t => {
+  const initial = clipboardFixture(), reading = deferred(), started = deferred();
+  t.after(() => reading.resolve());
+  initial.panes.forEach(p => { p.filter = ''; p.selected = []; p.cursor = null; });
+  initial.folders['C:/tmp'] = [{ id: 'docs', name: 'docs', type: 'folder', fsSource: 'C:/tmp/docs' }];
+  initial.folders['C:/tmp/docs'] = [];
+  const app = harness(t, { filesystemLoad: async () => structuredClone(initial), filesystemPrepare: async (before, options) => {
+    await options.onDirectory({ path: 'C:/tmp/docs', names: ['loaded.txt'], rows: [{ id: 'loaded', name: 'loaded.txt', type: 'text' }] });
+    started.resolve(); await reading.promise;
+    return { ...before, folders: { ...before.folders, 'C:/tmp/docs': [{ id: 'loaded', name: 'loaded.txt', type: 'text' }] } };
+  } });
+  await app.command('bitfroest.openPrototype');
+  const panel = app.panels[0], view = require('./support/webview.cjs').createApp(t, initial, { html: panel.webview.html });
+  assert.match(panel.webview.html, /Content-Security-Policy/);
+  view.row('docs').querySelector('[data-filename]').dispatchEvent(new view.window.MouseEvent('dblclick', { bubbles: true, button: 0 }));
+  const request = view.messages.findLast(message => message.type === 'filesystem-navigate');
+  const pending = panel.receive(request); await started.promise;
+  for (const message of panel.messages.filter(message => message.type === 'filesystem-directory')) view.window.dispatchEvent(new view.window.MessageEvent('message', { data: message }));
+  assert.ok(view.row('docs').querySelector('[data-directory-loading]'));
+  assert.equal(view.state().panes[0].tabs[0], 'C:/tmp');
+  assert.equal(view.document.querySelector('[data-location-icon] [data-directory-loading]'), null);
+  const other = view.document.querySelector('[data-pane="1"] .list'); other.focus();
+  const otherPath = view.state().panes[1].tabs[0];
+  reading.resolve(); await pending;
+  view.window.dispatchEvent(new view.window.MessageEvent('message', { data: panel.messages.findLast(message => message.type === 'filesystem-result') }));
+  assert.equal(view.state().panes[0].tabs[0], 'C:/tmp/docs');
+  assert.equal(view.state().panes[1].tabs[0], otherPath);
+  assert.equal(view.state().active, 1); assert.equal(view.document.activeElement, other);
+  assert.equal(view.document.querySelector('[data-directory-loading]'), null);
+});
+
 function progressSample(fields) {
   return Progress.event({ ...fields, phase: fields.phase || 'preparing',
     overall: Number.isSafeInteger(fields.totalBytes) ? Progress.known('bytes', fields.completedBytes || 0, fields.totalBytes) : Progress.unknown('items', 0, 'enumerating'),
