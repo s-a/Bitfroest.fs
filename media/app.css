@@ -61,7 +61,6 @@ main { display: flex; flex-direction: column; flex: 1; min-height: 0; min-width:
 .tabs { display: flex; align-items: stretch; flex-shrink: 0; height: calc(var(--icon-control-size) + 3px); overflow-x: auto; scrollbar-width: thin; background: var(--vscode-editorGroupHeader-tabsBackground, var(--surface)); border-bottom: 1px solid var(--line); }
 .tab-wrap { display: flex; flex-shrink: 0; align-items: center; color: var(--vscode-tab-inactiveForeground, var(--muted)); background: var(--vscode-tab-inactiveBackground, transparent); border-right: 1px solid var(--vscode-tab-border, var(--line)); border-top: 1px solid transparent; }
 .tab-wrap.selected { background: var(--vscode-tab-activeBackground, var(--bg)); color: var(--vscode-tab-activeForeground, var(--text)); }
-.pane.active .tab-wrap.selected { border-top-color: var(--accent); }
 .tab { display: flex; align-items: center; gap: var(--icon-text-gap); padding: 2px 7px; white-space: nowrap; font-weight: 400; }
 .tab-icon { flex: 0 0 var(--icon-size); align-self: center; color: inherit; }
 .close-tab { padding: 0 4px; width: 19px; color: var(--muted); }

@@ -65,6 +65,18 @@ test('archive tab contrast uses the tab surface fallback when header theme color
   assert.ok(app.window.CommanderFileColors.ratio(color, '#252526') >= 4.5);
 });
 
+test('active folder tabs keep their selected state without an accent border line', t => {
+  const app = createApp(t, fixture());
+  const style = app.document.createElement('style');
+  style.textContent = fs.readFileSync(path.join(__dirname, '../media/app.css'), 'utf8');
+  app.document.head.append(style);
+  const active = [...style.sheet.cssRules].find(rule => rule.selectorText === '.pane.active .tab-wrap.selected');
+  assert.equal(active?.style.borderTopColor || '', '');
+  assert.equal(app.document.querySelector('.pane.active .tab[aria-selected="true"]').dataset.tab, '1');
+  app.click(app.document.querySelector('.pane.active [data-tab="0"]'));
+  assert.equal(app.document.querySelector('.pane.active .tab[aria-selected="true"]').dataset.tab, '0');
+});
+
 test('status badges use the default two-thirds size and filled Bootstrap geometry', t => {
   const state = fixture(); state.panes.forEach(pane => { pane.tab = 0; }); state.folders['/repo'] = [{ id: 'a', name: 'a.txt', type: 'text' }];
   const app = createApp(t, state);
