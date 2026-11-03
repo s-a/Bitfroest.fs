@@ -1053,7 +1053,12 @@
     return true;
   }
   const selected = () => selectedFor(pane());
-  const size = value => value >= 1048576 ? `${(value / 1048576).toFixed(1)} MB` : value >= 1024 ? `${(value / 1024).toFixed(1)} KB` : `${value} B`;
+  const size = value => {
+    const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB'];
+    let amount = value, unit = 0;
+    while (amount >= 1024 && unit < units.length - 1) { amount /= 1024; unit++; }
+    return unit ? `${amount.toFixed(1)} ${units[unit]}` : `${amount} B`;
+  };
   function persist() {
     if (transferPending && !transferCompletion) {
       if (host && state.realFilesystem) {
