@@ -12,6 +12,9 @@ test('the busy indicator keeps its circular frame and radius at every configured
   dom.window.CommanderIcons.setFont(icon, 'loading', true);
   assert.equal(icon.querySelector('svg')?.getAttribute('viewBox'), '2 2 12 12');
   assert.equal(icon.querySelector('svg')?.dataset.iconReviewed, 'workbench:loading');
+  const spinner = icon.querySelector('svg');
+  dom.window.CommanderIcons.setFont(icon, 'loading', true);
+  assert.equal(icon.querySelector('svg'), spinner, 'an unrelated activity update must not restart the existing spinner');
   for (const size of [8, 9.5, 12, 24]) {
     for (const angle of [0, Math.PI / 2, Math.PI, Math.PI * 1.5]) {
       const x = (8 + 6 * Math.cos(angle) - 2) * size / 12;

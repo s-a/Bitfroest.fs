@@ -51,6 +51,7 @@
   function setFont(node, name, spinning = false) {
     const fit = checkFont(name);
     if (!node?.dataset.iconReviewed?.startsWith('font:')) throw new Error('Icon must be created by the central renderer.');
+    if (node.dataset.iconReviewed === `font:${name}` && fit.classes.every(value => node.classList.contains(value)) && node.classList.contains('codicon-modifier-spin') === spinning && Boolean(node.querySelector('[data-icon-reviewed="workbench:loading"]')) === spinning) return;
     const previous = checkFont(node.dataset.iconReviewed.slice(5));
     node.classList.remove(...previous.classes, 'codicon-modifier-spin');
     node.classList.add(...fit.classes);
