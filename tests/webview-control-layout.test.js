@@ -156,3 +156,11 @@ test('the favorite badge occupies a clipped lower-left recess separate from the 
   const main = app.rule('.location-context-icon:has([data-location-badge]) > :first-child');
   assert.ok(main?.clipPath.includes('polygon('));
 });
+
+test('the address grid centers the refresh control within the available header height', t => {
+  const app = styledApp(t);
+  const address = app.rule('.pathbar');
+  assert.equal(address.gridTemplateRows, 'minmax(0, 1fr)');
+  assert.equal(address.alignItems, 'center');
+  assert.equal(app.rule('.pathbar > [data-refresh]').alignSelf, 'center');
+});

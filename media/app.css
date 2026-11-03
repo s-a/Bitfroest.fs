@@ -65,11 +65,11 @@ main { display: flex; flex-direction: column; flex: 1; min-height: 0; min-width:
 .tab-icon { flex: 0 0 var(--icon-size); align-self: center; color: inherit; }
 .close-tab { padding: 0 4px; width: 19px; color: var(--muted); }
 .add-tab { min-width: 25px; color: var(--muted); }
-.pathbar { display: grid; grid-template-columns: var(--icon-base-size) minmax(0, 1fr) var(--icon-control-size); align-items: center; gap: var(--icon-text-gap); min-height: 26px; padding-top: 1px; padding-bottom: 1px; padding-right: var(--file-cell-padding); padding-left: calc(var(--file-cell-padding) + var(--file-marker-width, 0px) + var(--file-marker-gap, 0px)); border-bottom: 1px solid var(--line); }
+.pathbar { display: grid; grid-template-columns: var(--icon-base-size) minmax(0, 1fr) var(--icon-control-size); grid-template-rows: minmax(0, 1fr); align-items: center; gap: var(--icon-text-gap); min-height: 26px; padding-top: 1px; padding-bottom: 1px; padding-right: var(--file-cell-padding); padding-left: calc(var(--file-cell-padding) + var(--file-marker-width, 0px) + var(--file-marker-gap, 0px)); border-bottom: 1px solid var(--line); }
 .pane.active .pathbar { background: var(--vscode-list-inactiveSelectionBackground, var(--surface)); }
 .pathbar > button { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 var(--icon-control-size); width: var(--icon-control-size); min-width: var(--icon-control-size); height: var(--icon-control-size); box-sizing: border-box; padding: 0; }
 .pathbar > [data-favorites] { width: var(--icon-base-size); min-width: 0; }
-.pathbar > [data-refresh] { justify-self: end; width: var(--icon-base-size); min-width: 0; }
+.pathbar > [data-refresh] { justify-self: end; align-self: center; width: var(--icon-base-size); min-width: 0; }
 .path { display: flex; align-items: center; flex: 1; min-width: 0; gap: 3px; }
 .path > span { color: var(--muted); }
 .location-context-icon { position: relative; display: inline-flex; flex: 0 0 var(--icon-size); width: var(--icon-size); height: var(--icon-size); align-items: center; justify-content: center; color: var(--location-color, var(--vscode-icon-foreground)); pointer-events: none; }
