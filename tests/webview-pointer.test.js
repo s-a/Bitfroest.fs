@@ -43,6 +43,131 @@ function transfer() {
 
 function name(app, text) { return app.row(text).querySelector('[data-filename]'); }
 
+function timedApp(t) {
+  let now = 0, sequence = 0;
+  const timers = new Map();
+  const app = createApp(t, fixture(), { beforeApp({ window }) {
+    window.setTimeout = (fn, delay = 0) => { const id = ++sequence; timers.set(id, { fn, due: now + delay }); return id; };
+    window.clearTimeout = id => timers.delete(id);
+  } });
+  app.tick = ms => {
+    now += ms;
+    for (const [id, timer] of [...timers]) if (timer.due <= now && timers.delete(id)) timer.fn();
+  };
+  return app;
+}
+
+test('immediate movement from a filename or data cell starts the existing selection rectangle', t => {
+  for (const selector of ['[data-filename]', '.fileicon', '[data-cell="size"]']) {
+    const app = timedApp(t), list = layout(app), target = app.row('a.txt').querySelector(selector);
+    pointer(app, 'pointerdown', target, { clientX: 10, clientY: 40 });
+    assert.equal(app.row('a.txt').draggable, false);
+    const data = transfer();
+    assert.equal(drag(app, 'dragstart', target, data).defaultPrevented, true);
+    pointer(app, 'pointermove', list, { clientX: 20, clientY: 80 });
+    assert.ok(list.querySelector('.selection-marquee'));
+    app.tick(1000);
+    assert.equal(drag(app, 'dragstart', target, data).defaultPrevented, true);
+    pointer(app, 'pointerup', list, { clientX: 20, clientY: 80 });
+    app.click(target);
+    assert.deepEqual(app.state().panes[0].selected, ['1', '2', '3']);
+    assert.equal(app.row('a.txt').draggable, true);
+    assert.equal(list.querySelector('.selection-marquee'), null);
+    assert.equal(data.getData('application/x-bitfroest-files'), '');
+  }
+});
+
+test('holding a file still for 500 ms arms dragging and retains a multiple selection', t => {
+  const app = timedApp(t), list = layout(app), data = transfer();
+  app.click(name(app, 'a.txt')); app.click(name(app, 'b.txt'), { ctrlKey: true });
+  const target = name(app, 'a.txt');
+  pointer(app, 'pointerdown', target, { clientX: 10, clientY: 40 });
+  pointer(app, 'pointermove', list, { clientX: 12, clientY: 41 });
+  app.tick(499);
+  assert.equal(app.row('a.txt').draggable, false);
+  assert.equal(drag(app, 'dragstart', target, data).defaultPrevented, true);
+  app.tick(1);
+  assert.equal(app.row('a.txt').draggable, true);
+  pointer(app, 'pointermove', list, { clientX: 20, clientY: 80 });
+  assert.equal(list.querySelector('.selection-marquee'), null);
+  assert.equal(drag(app, 'dragstart', target, data).defaultPrevented, false);
+  assert.deepEqual(JSON.parse(data.getData('application/x-bitfroest-files')).ids, ['1', '2']);
+  drag(app, 'drop', app.document.querySelector('[data-pane="1"] .list'), data);
+  assert.equal(app.document.querySelector('#modal').open, true);
+});
+
+for (const cancel of ['pointerup', 'pointercancel', 'blur', 'pagehide', 'escape', 'navigation']) {
+  test(`file hold is cleaned up on ${cancel}`, t => {
+    const app = timedApp(t), list = layout(app), row = app.row('a.txt');
+    pointer(app, 'pointerdown', row, { clientX: 10, clientY: 40 });
+    assert.equal(row.draggable, false);
+    if (cancel === 'blur' || cancel === 'pagehide') app.window.dispatchEvent(new app.window.Event(cancel));
+    else if (cancel === 'escape') app.key('Escape');
+    else if (cancel === 'navigation') app.key('Backspace', {}, list);
+    else pointer(app, cancel, app.document.body);
+    assert.equal(row.draggable, true);
+    app.tick(1000);
+    pointer(app, 'pointermove', list, { clientX: 20, clientY: 80 });
+    assert.equal(list.querySelector('.selection-marquee'), null);
+  });
+}
+
+test('cancelling a rectangle started on a row restores the previous selection', t => {
+  const app = timedApp(t), list = layout(app);
+  app.click(name(app, 'c.txt'));
+  pointer(app, 'pointerdown', name(app, 'a.txt'), { clientX: 10, clientY: 40 });
+  pointer(app, 'pointermove', list, { clientX: 20, clientY: 60 });
+  assert.deepEqual(app.state().panes[0].selected, ['1', '2']);
+  pointer(app, 'pointercancel', list);
+  assert.deepEqual(app.state().panes[0].selected, ['3']);
+  assert.equal(app.state().panes[0].cursor, '3');
+  assert.equal(list.querySelector('.selection-marquee'), null);
+});
+
+test('Ctrl rectangle selection can start on a row and extend upwards', t => {
+  const app = timedApp(t), list = layout(app);
+  app.click(name(app, 'a.txt'));
+  pointer(app, 'pointerdown', name(app, 'c.txt'), { ctrlKey: true, clientX: 10, clientY: 80 });
+  pointer(app, 'pointermove', list, { ctrlKey: true, clientX: 20, clientY: 55 });
+  pointer(app, 'pointerup', list, { ctrlKey: true, clientX: 20, clientY: 55 });
+  app.click(name(app, 'c.txt'), { ctrlKey: true });
+  assert.deepEqual(app.state().panes[0].selected, ['1', '2', '3']);
+});
+
+test('a new pointer gesture cancels the previous file hold and ignores unrelated pointers', t => {
+  const app = timedApp(t), list = layout(app), first = app.row('a.txt'), second = app.row('b.txt');
+  pointer(app, 'pointerdown', first);
+  app.tick(250);
+  pointer(app, 'pointerdown', second, { pointerId: 2 });
+  assert.equal(first.draggable, true);
+  assert.equal(second.draggable, false);
+  app.tick(250);
+  pointer(app, 'pointerup', list, { pointerId: 1 });
+  pointer(app, 'pointermove', list, { pointerId: 1, clientX: 20, clientY: 80 });
+  assert.equal(second.draggable, false);
+  assert.equal(list.querySelector('.selection-marquee'), null);
+  app.tick(250);
+  assert.equal(second.draggable, true);
+  pointer(app, 'pointerup', list, { pointerId: 2 });
+});
+
+test('short pointer clicks retain selection and double-click opening without capturing the pointer', t => {
+  const app = timedApp(t), list = layout(app);
+  let captures = 0;
+  list.setPointerCapture = () => { captures++; };
+  const target = app.row('a.txt');
+  for (let click = 0; click < 2; click++) {
+    pointer(app, 'pointerdown', target);
+    app.tick(100);
+    pointer(app, 'pointerup', target);
+    app.click(target, { detail: click + 1 });
+    assert.deepEqual(app.state().panes[0].selected, ['1']);
+  }
+  target.dispatchEvent(new app.window.MouseEvent('dblclick', { bubbles: true, detail: 2 }));
+  assert.ok(app.document.querySelector('[data-lister]'));
+  assert.equal(captures, 0);
+});
+
 test('dragging from empty list space selects intersected files instead of selecting text', t => {
   const app = createApp(t, fixture()), list = layout(app);
   pointer(app, 'pointerdown', list, { clientX: 590, clientY: 200 });

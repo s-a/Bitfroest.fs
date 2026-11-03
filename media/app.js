@@ -1552,8 +1552,9 @@
     if (found) activeRow(found.id)?.scrollIntoView({ block: 'nearest' });
   }
   let renameTimer;
+  let filePointerGesture = null;
   let lastNameClick = null;
-  document.addEventListener('pointerdown', () => clearTimeout(renameTimer), true);
+  document.addEventListener('pointerdown', () => { clearTimeout(renameTimer); filePointerGesture?.cancel(); }, true);
   document.addEventListener('focusin', event => {
     if (!event.target.closest('.pane.active .list')) { clearTimeout(renameTimer); lastNameClick = null; }
   });
@@ -1813,6 +1814,7 @@
     while (cursor) { const removed = cursor; cursor = cursor.nextSibling; removed.remove(); }
   }
   function render(focusList = false, previousViews, git = true) {
+    filePointerGesture?.cancel();
     if (backgroundNavigation) focusList = false;
     updateTitleDirectory();
     const container = $('#panes');
@@ -3342,6 +3344,8 @@
     if (!tab && !row) return;
     clearTimeout(renameTimer);
     if (row) {
+      if (filePointerGesture && !filePointerGesture.armed) { event.preventDefault(); return; }
+      filePointerGesture?.finish();
       const side = Number(row.closest('[data-pane]').dataset.pane), p = state.panes[side];
       if (resultView(p)) { event.preventDefault(); return; }
       state.active = side;
@@ -3415,18 +3419,48 @@
   $('#panes').addEventListener('pointerdown', event => {
     if (event.button === 0) {
       const list = event.target.closest('.list');
-      if (!list || event.target.closest('.ag-header,[data-file-row][data-id],[data-parent],input,textarea,button,[contenteditable="true"],[data-filename],.fileicon')) return;
-      event.preventDefault(); clearTimeout(renameTimer);
+      if (!list || event.target.closest('.ag-header,[data-parent],input,textarea,button,[contenteditable="true"]')) return;
+      const row = event.target.closest('[data-file-row][data-id]');
+      if (row?.querySelector('.inline-rename') || $('#modal').open || filesystemPending && !refreshingFilesystem) return;
+      if (!row) event.preventDefault();
+      clearTimeout(renameTimer);
       const section = list.closest('[data-pane]'), side = Number(section.dataset.pane), p = state.panes[side];
       const initial = [...p.selected], initialCursor = p.cursor, additive = event.ctrlKey || event.metaKey || event.shiftKey;
       const startX = event.clientX, startY = event.clientY;
-      state.active = side; list.focus({ preventScroll: true }); list.setPointerCapture?.(event.pointerId);
+      const wasDraggable = row?.draggable, tabId = p.tabStates[p.tab].id, source = currentPath(p);
+      state.active = side; list.focus({ preventScroll: true });
+      if (row) row.draggable = false;
       const marquee = document.createElement('div'); marquee.className = 'selection-marquee';
       marquee.setAttribute('aria-hidden', 'true');
-      let selecting = false;
+      let selecting = false, holdTimer;
+      const events = new AbortController();
+      const valid = () => list.isConnected && (!row || row.isConnected) && state.active === side && p.tabStates[p.tab].id === tabId && currentPath(p) === source;
+      const finish = current => {
+        if (current?.pointerId !== undefined && current.pointerId !== event.pointerId) return;
+        clearTimeout(holdTimer); events.abort();
+        if (row) row.draggable = wasDraggable;
+        if (list.hasPointerCapture?.(event.pointerId)) list.releasePointerCapture(event.pointerId);
+        marquee.remove();
+        filePointerGesture = null;
+        if (current?.type === 'pointercancel' && selecting && p.tabStates[p.tab].id === tabId && currentPath(p) === source) { p.selected = initial; p.cursor = initialCursor; refreshSelection(); }
+        if (selecting) { suppressPointerClick = true; setTimeout(() => { suppressPointerClick = false; }, 0); }
+        persist();
+      };
+      const cancel = () => finish({ type: 'pointercancel' });
+      const gesture = { armed: false, finish, cancel };
+      filePointerGesture = gesture;
+      if (wasDraggable) holdTimer = setTimeout(() => {
+        if (!valid()) { cancel(); return; }
+        gesture.armed = true; row.draggable = true;
+      }, 500);
       const move = current => {
+        if (current.pointerId !== event.pointerId) return;
+        if (!valid()) { cancel(); return; }
+        if (gesture.armed) return;
         if (!selecting && Math.hypot(current.clientX - startX, current.clientY - startY) < 4) return;
+        if (!selecting) { clearTimeout(holdTimer); lastNameClick = null; list.setPointerCapture?.(event.pointerId); }
         selecting = true;
+        current.preventDefault();
         if (!marquee.parentNode) list.appendChild(marquee);
         const bounds = list.getBoundingClientRect();
         const left = Math.max(bounds.left, Math.min(startX, current.clientX)), right = Math.min(bounds.right, Math.max(startX, current.clientX));
@@ -3440,14 +3474,14 @@
         if (hits.length) p.cursor = current.clientY >= startY ? hits.at(-1) : hits[0];
         refreshSelection();
       };
-      const finish = current => {
-        list.removeEventListener('pointermove', move); list.removeEventListener('pointerup', finish); list.removeEventListener('pointercancel', finish);
-        marquee.remove();
-        if (current.type === 'pointercancel') { p.selected = initial; p.cursor = initialCursor; refreshSelection(); }
-        if (selecting && current.type !== 'pointercancel') { suppressPointerClick = true; setTimeout(() => { suppressPointerClick = false; }, 0); }
-        persist();
-      };
-      list.addEventListener('pointermove', move); list.addEventListener('pointerup', finish); list.addEventListener('pointercancel', finish);
+      const options = { signal: events.signal };
+      document.addEventListener('pointermove', move, options);
+      document.addEventListener('pointerup', finish, options);
+      document.addEventListener('pointercancel', finish, options);
+      document.addEventListener('lostpointercapture', cancel, options);
+      document.addEventListener('keydown', cancel, options);
+      window.addEventListener('blur', cancel, options);
+      window.addEventListener('pagehide', cancel, options);
       return;
     }
   });

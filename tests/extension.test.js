@@ -116,6 +116,47 @@ test('generated host HTML searches complete names without changing marks or requ
   assert.equal(view.document.querySelector('.pane.active mark'), null);
 });
 
+test('generated host HTML separates immediate rectangle selection from held file dragging', async t => {
+  const initial = clipboardFixture(); initial.realFilesystem = false;
+  initial.panes.forEach(pane => { pane.filter = ''; pane.sort = 'name'; pane.selected = []; });
+  const app = harness(t, { filesystemLoad: async () => initial });
+  await app.command('bitfroest.openPrototype');
+  const html = app.panels[0].webview.html;
+  assert.match(html, /Content-Security-Policy/); assert.match(html, /script-src 'nonce-[^']+'/);
+  let arm;
+  const view = require('./support/webview.cjs').createApp(t, initial, { html, beforeApp({ window }) {
+    const timeout = window.setTimeout.bind(window);
+    window.setTimeout = (fn, delay, ...args) => { if (delay === 500) { arm = fn; return timeout(fn, 60000); } return timeout(fn, delay, ...args); };
+  } });
+  const list = view.document.querySelector('[data-pane="0"] .list'), row = view.row('a.txt');
+  list.getBoundingClientRect = () => ({ left: 0, top: 0, right: 600, bottom: 300 });
+  row.getBoundingClientRect = () => ({ left: 0, top: 30, right: 600, bottom: 50 });
+  const pointer = (type, target, clientY) => {
+    const event = new view.window.MouseEvent(type, { bubbles: true, cancelable: true, button: 0, clientX: clientY, clientY });
+    Object.defineProperty(event, 'pointerId', { value: 1 }); target.dispatchEvent(event);
+  };
+  pointer('pointerdown', row, 40);
+  pointer('pointermove', list, 45);
+  assert.ok(list.querySelector('.selection-marquee'));
+  pointer('pointerup', list, 45); view.click(row);
+  assert.deepEqual(view.state().panes[0].selected, ['a']);
+  pointer('pointerdown', row, 40);
+  assert.equal(row.draggable, false);
+  arm();
+  assert.equal(row.draggable, true);
+  const data = new Map();
+  const drag = (type, target) => {
+    const event = new view.window.MouseEvent(type, { bubbles: true, cancelable: true });
+    Object.defineProperty(event, 'dataTransfer', { value: { setData(key, value) { data.set(key, value); } } });
+    target.dispatchEvent(event);
+  };
+  drag('dragstart', row);
+  assert.deepEqual(JSON.parse(data.get('application/x-bitfroest-files')).ids, ['a']);
+  drag('drop', view.document.querySelector('[data-pane="1"] .list'));
+  assert.equal(view.document.querySelector('#modal').open, true);
+  assert.equal(view.messages.some(message => message.type === 'filesystem-apply'), false);
+});
+
 test('generated host HTML delays name editing and shows both drag operations with its CSP', async t => {
   const initial = clipboardFixture(); initial.realFilesystem = false;
   initial.panes.forEach(pane => { pane.filter = ''; pane.sort = 'name'; });
