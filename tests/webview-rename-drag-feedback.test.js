@@ -35,7 +35,7 @@ test('a preselected file needs two deliberate name clicks and a delayed edit', t
   app.click(app.name('a.txt')); app.tick(1000);
   assert.equal(app.document.querySelector('.inline-rename'), null);
   app.click(app.name('a.txt'));
-  app.tick(799);
+  app.tick(649);
   assert.equal(app.document.querySelector('.inline-rename'), null);
   assert.equal(app.document.querySelector('#modal').open, false);
   assert.equal(app.state().active, 0);
@@ -90,13 +90,12 @@ for (const language of ['de', 'en']) {
       assert.ok(feedback);
       assert.equal(feedback.dataset.mode, shiftKey ? 'move' : 'copy');
       assert.match(feedback.getAttribute('aria-label'), language === 'de' ? shiftKey ? /Verschieben/ : /Kopieren/ : shiftKey ? /Move/ : /Copy/);
-      const expected = app.document.createElement('div'); expected.innerHTML = app.window.CommanderIcons.svg('workbench', shiftKey ? 'move' : 'copy');
-      assert.equal(feedback.querySelector('svg').dataset.iconReviewed, `workbench:${shiftKey ? 'move' : 'copy'}`);
-      assert.equal(feedback.querySelector('svg').outerHTML, expected.innerHTML);
+      assert.equal(feedback.querySelector(':scope > svg'), null);
+      assert.equal(feedback.children.length, 1);
       assert.equal(event.dataTransfer.dropEffect, shiftKey ? 'move' : 'copy');
     }
     drag(app, 'dragover', target, { ctrlKey: true, shiftKey: true });
-    assert.equal(app.document.querySelector('.file-drag-feedback'), null);
+    assert.equal(app.document.querySelector('.file-drag-feedback').dataset.allowed, 'false');
     drag(app, 'dragover', target); drag(app, 'dragend', target);
     assert.equal(app.document.querySelector('.file-drag-feedback'), null);
     assert.equal(app.document.querySelector('.drop-target'), null);
@@ -118,7 +117,7 @@ test('drag feedback cannot cover a drop target and uses readable theme colors an
   assert.equal(styleFeedback.borderTopWidth, '0px');
   assert.equal(styleFeedback.backgroundColor, 'rgba(0, 0, 0, 0)');
   assert.equal(styleFeedback.boxShadow, 'none');
-  assert.equal(app.window.getComputedStyle(feedback.querySelector('svg')).width, '16px');
+  assert.equal(feedback.querySelector(':scope > svg'), null);
   drag(app, 'dragover', app.row('a.txt'));
   assert.equal(app.document.querySelector('.file-drag-feedback').dataset.allowed, 'false');
   assert.equal(app.document.querySelector('.file-drag-feedback').dataset.mode, 'copy');

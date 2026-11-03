@@ -29,7 +29,15 @@ test('column context remains available after a cancelled right drag without a fu
   pointer(app, 'pointercancel', target);
   const event = new app.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 0 });
   app.document.querySelector('.ag-header-cell-label').dispatchEvent(event);
-  assert.equal(event.defaultPrevented, false);
+  assert.equal(event.defaultPrevented, true);
+  const configure = app.document.querySelector('[data-context-action="configure-columns"]');
+  assert.ok(configure, 'the column menu remains available after cancelling the drag');
+  assert.equal(configure.disabled, false);
+  assert.equal(app.document.querySelector('.file-drag-feedback'), null);
+  assert.equal(app.document.querySelector('#modal').open, false);
+  app.click(configure);
+  assert.equal(app.messages.filter(message => message.type === 'configure-columns').length, 1);
+  assert.equal(app.messages.some(message => message.type === 'filesystem-apply'), false);
 });
 function gesture(app, target, extra = {}) {
   pointer(app, 'pointerdown', app.row('a.txt')); pointer(app, 'pointermove', target, { clientX: 500, clientY: 200, ...extra });

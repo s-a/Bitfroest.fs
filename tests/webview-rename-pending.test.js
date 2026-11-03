@@ -27,7 +27,7 @@ function scheduleRename(app) {
   assert.equal(app.name('a-long-filename.txt').classList.contains('rename-pending'), true, 'cue starts as soon as the existing delay is scheduled');
 }
 
-test('delayed rename paints a filename-only cue after the existing wait and clears it on entry', t => {
+test('delayed rename paints a full-cell cue during the shorter wait and clears it on entry', t => {
   const app = setup(t); scheduleRename(app);
   const style = app.document.createElement('style');
   const css = fs.readFileSync(path.join(__dirname, '../media/app.css'), 'utf8');
@@ -40,9 +40,9 @@ test('delayed rename paints a filename-only cue after the existing wait and clea
   assert.equal(app.window.getComputedStyle(name).backgroundImage, 'none', 'the flex filename cell must not receive a background');
   assert.equal(app.window.getComputedStyle(wrapper).display, 'inline-block');
   assert.equal(app.window.getComputedStyle(wrapper).textOverflow, 'ellipsis');
-  assert.match(style.textContent, /filename-text::before[^}]*animation: rename-pending-fill 800ms linear forwards/);
-  assert.match(css, /filename-text::before[^}]*background: var\(--vscode-editor-findMatchHighlightBackground/);
-  app.tick(799);
+  assert.match(style.textContent, /ag-cell:has\(.rename-pending\)::before[^}]*animation: rename-pending-fill 650ms linear forwards/);
+  assert.match(css, /ag-cell:has\(.rename-pending,.drag-pending\)::before[^}]*background: var\(--vscode-editor-findMatchHighlightBackground/);
+  app.tick(649);
   assert.equal(name.classList.contains('rename-pending'), true);
   assert.equal(app.document.querySelector('.inline-rename'), null);
   app.tick(1);
@@ -62,7 +62,7 @@ test('filename text wrapper inherits link and selection decoration and text colo
 
 for (const cancel of ['pointerdown', 'focus', 'blur', 'key', 'selection', 'dblclick', 'dragstart', 'tab', 'command', 'pagehide']) {
   test(`delayed rename cue is removed immediately on ${cancel}`, t => {
-    const app = setup(t); scheduleRename(app); app.tick(799);
+    const app = setup(t); scheduleRename(app); app.tick(649);
     const name = app.name('a-long-filename.txt');
     assert.equal(name.classList.contains('rename-pending'), true);
     if (cancel === 'focus') app.document.querySelector('[data-action="copy"]').focus();

@@ -73,14 +73,14 @@ test('immediate right movement from every data cell starts rectangle selection w
   }
 });
 
-test('holding right for 500 ms shows the filename wait cue then arms dragging with the full selection', t => {
+test('holding right for 400 ms shows the filename wait cue then arms dragging with the full selection', t => {
   const app = timedApp(t), list = layout(app);
   app.click(name(app, 'a.txt')); app.click(name(app, 'b.txt'), { ctrlKey: true });
   const target = name(app, 'a.txt');
   pointer(app, 'pointerdown', target, { button: 2, buttons: 2, clientX: 10, clientY: 40 });
   assert.equal(target.classList.contains('drag-pending'), true);
   pointer(app, 'pointermove', list, { button: 2, buttons: 2, clientX: 12, clientY: 41 });
-  app.tick(499);
+  app.tick(399);
   assert.equal(app.document.body.dataset.fileDragCursor, undefined);
   assert.equal(target.classList.contains('drag-pending'), true);
   app.tick(1);
@@ -90,7 +90,7 @@ test('holding right for 500 ms shows the filename wait cue then arms dragging wi
   style.textContent = require('node:fs').readFileSync(require('node:path').join(__dirname, '../media/app.css'), 'utf8');
   app.document.head.append(style);
   assert.equal(app.window.getComputedStyle(app.row('a.txt')).cursor, 'default');
-  assert.match(style.textContent, /\.drag-pending[^}]*animation[^}]*500ms/);
+  assert.match(style.textContent, /\.drag-pending[^}]*animation[^}]*400ms/);
   assert.match(style.textContent, /prefers-reduced-motion: reduce[^}]*drag-pending/s);
   const destination = app.document.querySelector('[data-pane="1"] .list');
   pointer(app, 'pointermove', destination, { button: 2, buttons: 2, clientX: 500, clientY: 200 });
@@ -227,8 +227,9 @@ test('every data cell keeps native row clicks and file dragging while empty list
     assert.equal(pointer(app, 'pointerdown', cell).defaultPrevented, false, `${key} must retain its native click and drag gesture`);
     pointer(app, 'pointerup', cell); app.click(cell);
     assert.deepEqual(app.state().panes[0].selected, ['1']);
-    const data = transfer(); drag(app, 'dragstart', cell, data);
-    drag(app, 'drop', app.document.querySelector('[data-pane="1"] .list'), data);
+    pointer(app, 'pointerdown', cell);
+    pointer(app, 'pointermove', app.document.querySelector('[data-pane="1"] .list'), { clientX: 800 });
+    pointer(app, 'pointerup', app.document.querySelector('[data-pane="1"] .list'), { clientX: 800 });
     assert.equal(app.document.querySelector('dialog').open, true);
     assert.equal(app.document.querySelector('.inline-rename'), null);
   }

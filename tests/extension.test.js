@@ -180,6 +180,14 @@ test('generated host HTML separates left dragging, right selection and held righ
   assert.equal(view.state().folders['C:/tmp'].length, 2);
   assert.equal(view.state().folders['C:/temp'].length, 2);
   assert.equal(view.document.querySelector('#modal').open, false);
+  const nextRow = view.row('a.txt'), nextDestination = view.document.querySelector('[data-pane="1"] .list');
+  pointer('pointerdown', nextRow, 40); pointer('pointermove', nextDestination, 200);
+  const chord = new view.window.MouseEvent('pointermove', { bubbles: true, cancelable: true, button: 2, buttons: 3, clientX: 210, clientY: 210 });
+  Object.defineProperty(chord, 'pointerId', { value: 1 }); nextDestination.dispatchEvent(chord);
+  pointer('pointerup', nextDestination, 210, 2);
+  assert.equal(view.document.querySelectorAll('.file-drag-preview,.drag-pending').length, 0);
+  assert.equal(view.document.querySelector('#modal').open, false);
+  assert.equal(view.messages.filter(message => message.type === 'filesystem-apply').length, 1);
 });
 
 test('generated host HTML delays name editing and shows both drag operations with its CSP', async t => {
@@ -205,7 +213,8 @@ test('generated host HTML delays name editing and shows both drag operations wit
   for (const shiftKey of [false, true]) {
     drag('dragover', target, shiftKey);
     assert.equal(view.document.querySelector('.file-drag-feedback').dataset.mode, shiftKey ? 'move' : 'copy');
-    assert.ok(view.document.querySelector('.file-drag-feedback svg'));
+    assert.equal(view.document.querySelector('.file-drag-feedback > svg'), null);
+    assert.ok(view.document.querySelector('.file-drag-feedback .file-drag-row'));
   }
   drag('dragend', target); assert.equal(view.document.querySelector('.file-drag-feedback'), null);
   assert.equal(view.messages.some(message => message.type === 'filesystem-apply'), false);
