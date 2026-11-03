@@ -2,6 +2,7 @@
   {
     "id": "codicon",
     "file": "codicon.ttf",
-    "source": "codicons.css"
+    "source": "codicons.css",
+    "contourGlyphs": ["refresh"]
   }
 ]

@@ -1,6 +1,25 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
+test('refresh alignment uses the visible contour rather than the oversized font header bounds', () => {
+  const fs = require('node:fs');
+  const { readGlyph } = require('../scripts/true-type-metrics.cjs');
+  const { generate } = require('../scripts/generate-icon-metrics.cjs');
+  const font = fs.readFileSync(require.resolve('../media/codicon.ttf'));
+  const glyph = readGlyph(font, 0xeb37, { contourBounds: true });
+  assert.deepEqual(glyph.bounds, { xMin: 38, yMin: 38, xMax: 262, yMax: 263 });
+  const output = generate(fs.readFileSync(require.resolve('../media/codicons.css'), 'utf8'), font);
+  const fit = JSON.parse(output.catalog.match(/Object.freeze\(([\s\S]*)\);/)[1]).refresh;
+  for (const size of [12, 16, 28, 48]) {
+    const left = size * fit.left + 38 * size * fit.fontScale / 300;
+    const right = size * fit.left + 262 * size * fit.fontScale / 300;
+    const top = size * (fit.top + fit.fontScale) - 263 * size * fit.fontScale / 300;
+    const bottom = size * (fit.top + fit.fontScale) - 38 * size * fit.fontScale / 300;
+    assert.ok(Math.abs(left - (size - right)) < 1e-8);
+    assert.ok(Math.abs(top - (size - bottom)) < 1e-8);
+  }
+});
+
 test('font glyphs retain their designed em padding without being enlarged to their contour bounds', () => {
   const fit = require('../scripts/icon-metrics.cjs').fitIcon({ xMin: 0, yMin: 0, xMax: 263, yMax: 263 }, 300);
   assert.equal(fit.fontScale, 1);

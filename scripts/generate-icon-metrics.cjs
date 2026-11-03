@@ -9,7 +9,7 @@ function generateFontSet(entries) {
   const metrics = {}, faces = [], rules = [], identifiers = new Set(), hash = createHash('sha256');
   const number = value => Number(value.toFixed(10));
   const identifier = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
-  for (const { id, file, source = '', glyphs = {}, font } of entries) {
+  for (const { id, file, source = '', glyphs = {}, contourGlyphs = [], font } of entries) {
     if (!identifier.test(id) || identifiers.has(id) || !/^[a-zA-Z\d_/-]+\.ttf$/.test(file)) throw new Error('Invalid or duplicate icon font registration.');
     identifiers.add(id); hash.update(font);
     const mappings = Object.entries(glyphs);
@@ -25,7 +25,7 @@ function generateFontSet(entries) {
         if (metrics[key].codePoint !== codePoint) throw new Error(`Conflicting icon glyph: ${key}.`);
         continue;
       }
-      const glyph = readGlyph(font, codePoint), fit = fitIcon(glyph.bounds, glyph.unitsPerEm);
+      const glyph = readGlyph(font, codePoint, { contourBounds: contourGlyphs.includes(name) }), fit = fitIcon(glyph.bounds, glyph.unitsPerEm);
       const glyphClass = id === 'codicon' ? `codicon-${name}` : `${prefix}--${name}`;
       const classes = id === 'codicon' ? ['codicon', glyphClass] : ['icon-font', prefix, glyphClass];
       metrics[key] = { codePoint, fontId: id, classes, ...fit };
@@ -47,7 +47,7 @@ function generateFontSet(entries) {
   return { css, catalog: `/* Generated icon metrics. Source SHA-256: ${signature}. */\nwindow.CommanderIconFontMetrics = Object.freeze(${JSON.stringify(metrics, null, 2)});\n` };
 }
 
-function generate(source, font) { return generateFontSet([{ id: 'codicon', file: 'codicon.ttf', source, font }]); }
+function generate(source, font) { return generateFontSet([{ id: 'codicon', file: 'codicon.ttf', source, contourGlyphs: ['refresh'], font }]); }
 function generateIconCss(source, font) { return generate(source, font).css; }
 
 function main(check) {

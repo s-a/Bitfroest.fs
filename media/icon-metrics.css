@@ -1,4 +1,4 @@
-/* Generated icon metrics. Source SHA-256: a6ad3dda625bd1e7114cdd954a7f4e2e6524537b5ecfd7421eea341999adaecb. */
+/* Generated icon metrics. Source SHA-256: 2f4ced509ca4e41cbbbb276b54c758714e8459d682060eb08bfb6c7205cc5be8. */
 .codicon,.icon-font{position:relative;vertical-align:middle}
 .icon-font{display:inline-block;width:var(--icon-size, 16px);height:var(--icon-size, 16px);flex:0 0 var(--icon-size, 16px);font-size:16px;line-height:1}
 .codicon-modifier-spin{transform-origin:50% 50%;animation:codicon-spin 1s cubic-bezier(0.53, 0.21, 0.29, 0.67) infinite}
@@ -8,7 +8,7 @@ svg[data-icon-reviewed]{width:var(--icon-size, 16px);height:var(--icon-size, 16p
 .codicon::before,.icon-font::before{position:absolute;display:block;height:1em;font-style:normal;font-weight:normal;font-synthesis:none;line-height:1;text-align:left;white-space:pre}
 @font-face{font-family:commander-codicon-metrics;src:url('./codicon.ttf') format('truetype');font-weight:normal;font-style:normal;font-display:block;ascent-override:100%;descent-override:0%;line-gap-override:0%}
 .codicon::before{font-family:commander-codicon-metrics}
-.codicon-refresh::before{font-size:calc(var(--icon-size, 16px) * 1);left:calc(var(--icon-size, 16px) * 0.0616666667);top:calc(var(--icon-size, 16px) * -0.0616666667);content:'\eb37'}
+.codicon-refresh::before{font-size:calc(var(--icon-size, 16px) * 1);left:calc(var(--icon-size, 16px) * 0);top:calc(var(--icon-size, 16px) * 0.0016666667);content:'\eb37'}
 .codicon-star-empty::before{font-size:calc(var(--icon-size, 16px) * 1);left:calc(var(--icon-size, 16px) * 0.0166666667);top:calc(var(--icon-size, 16px) * -0.03);content:'\ea6a'}
 .codicon-loading::before{font-size:calc(var(--icon-size, 16px) * 1);left:calc(var(--icon-size, 16px) * 0.0616666667);top:calc(var(--icon-size, 16px) * -0.0616666667);content:'\eb19'}
 .codicon-arrow-right::before{font-size:calc(var(--icon-size, 16px) * 1);left:calc(var(--icon-size, 16px) * 0.0616666667);top:calc(var(--icon-size, 16px) * -0.0933333333);content:'\ea9c'}

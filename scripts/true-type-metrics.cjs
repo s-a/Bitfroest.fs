@@ -1,4 +1,4 @@
-function readGlyph(font, codePoint) {
+function readGlyph(font, codePoint, { contourBounds = false } = {}) {
   function fail() { throw new Error('Invalid or unsupported TrueType font table.'); }
   function slice(data, offset, length) {
     if (!Number.isInteger(offset) || !Number.isInteger(length) || offset < 0 || length < 0 || offset + length > data.length) fail();
@@ -66,8 +66,69 @@ function readGlyph(font, codePoint) {
   const bearing = hmtx.readInt16BE(glyph < metricsCount ? glyph * 4 + 2 : metricsCount * 4 + (glyph - metricsCount) * 2);
   const width = data.readInt16BE(6) - data.readInt16BE(2);
   const bounds = { xMin: bearing, yMin: data.readInt16BE(4), xMax: bearing + width, yMax: data.readInt16BE(8) };
+  if (contourBounds) Object.assign(bounds, readContourBounds(data, bearing - data.readInt16BE(2)));
   if (width <= 0 || bounds.yMax <= bounds.yMin) throw new Error(`Empty font glyph U+${codePoint.toString(16)}.`);
   return { unitsPerEm, bounds };
+}
+
+function readContourBounds(data, shiftX) {
+  const contours = data.readInt16BE(0);
+  if (contours <= 0) throw new Error('Contour measurement requires a simple TrueType glyph.');
+  let cursor = 10;
+  const ends = [];
+  for (let index = 0; index < contours; index++, cursor += 2) ends.push(data.readUInt16BE(cursor));
+  const count = ends.at(-1) + 1;
+  cursor += 2 + data.readUInt16BE(cursor);
+  const flags = [];
+  while (flags.length < count) {
+    const flag = data.readUInt8(cursor++); flags.push(flag);
+    if (flag & 8) {
+      const repeats = data.readUInt8(cursor++);
+      if (flags.length + repeats > count) throw new Error('Invalid TrueType contour flags.');
+      for (let index = 0; index < repeats; index++) flags.push(flag);
+    }
+  }
+  const coordinates = (short, positive) => {
+    let value = 0;
+    return flags.map(flag => {
+      if (flag & short) { const delta = data.readUInt8(cursor++); value += flag & positive ? delta : -delta; }
+      else if (!(flag & positive)) { value += data.readInt16BE(cursor); cursor += 2; }
+      return value;
+    });
+  };
+  const xs = coordinates(2, 16), ys = coordinates(4, 32);
+  const bounds = { xMin: Infinity, yMin: Infinity, xMax: -Infinity, yMax: -Infinity };
+  const include = point => {
+    bounds.xMin = Math.min(bounds.xMin, point.x + shiftX); bounds.xMax = Math.max(bounds.xMax, point.x + shiftX);
+    bounds.yMin = Math.min(bounds.yMin, point.y); bounds.yMax = Math.max(bounds.yMax, point.y);
+  };
+  const middle = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, on: true });
+  let first = 0;
+  for (const end of ends) {
+    const points = [];
+    for (let index = first; index <= end; index++) points.push({ x: xs[index], y: ys[index], on: Boolean(flags[index] & 1) });
+    first = end + 1;
+    const expanded = [];
+    for (let index = 0; index < points.length; index++) {
+      const a = points[index], b = points[(index + 1) % points.length];
+      expanded.push(a); if (!a.on && !b.on) expanded.push(middle(a, b));
+    }
+    const start = expanded.findIndex(point => point.on);
+    if (start < 0) throw new Error('Invalid TrueType contour.');
+    const ordered = [...expanded.slice(start), ...expanded.slice(0, start)]; ordered.push(ordered[0]);
+    for (let index = 0; index < ordered.length - 1; index++) {
+      const a = ordered[index], b = ordered[index + 1]; include(a);
+      if (b.on) continue;
+      const c = ordered[index + 2]; include(c);
+      for (const axis of ['x', 'y']) {
+        const denominator = a[axis] - 2 * b[axis] + c[axis];
+        const t = denominator ? (a[axis] - b[axis]) / denominator : 0;
+        if (t > 0 && t < 1) include({ x: (1 - t) ** 2 * a.x + 2 * (1 - t) * t * b.x + t ** 2 * c.x, y: (1 - t) ** 2 * a.y + 2 * (1 - t) * t * b.y + t ** 2 * c.y });
+      }
+      index++;
+    }
+  }
+  return bounds;
 }
 
 module.exports = { readGlyph };

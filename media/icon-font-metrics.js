@@ -1,4 +1,4 @@
-/* Generated icon metrics. Source SHA-256: a6ad3dda625bd1e7114cdd954a7f4e2e6524537b5ecfd7421eea341999adaecb. */
+/* Generated icon metrics. Source SHA-256: 2f4ced509ca4e41cbbbb276b54c758714e8459d682060eb08bfb6c7205cc5be8. */
 window.CommanderIconFontMetrics = Object.freeze({
   "refresh": {
     "codePoint": 60215,
@@ -8,8 +8,8 @@ window.CommanderIconFontMetrics = Object.freeze({
       "codicon-refresh"
     ],
     "fontScale": 1,
-    "left": 0.06166666666666665,
-    "top": -0.06166666666666665
+    "left": 0,
+    "top": 0.0016666666666667052
   },
   "star-empty": {
     "codePoint": 60010,
