@@ -3,6 +3,13 @@ const moduleStartedAt = performance.now();
 const Progress = require('./media/commander-progress');
 const { productIcon } = require('./product-icons');
 const extensionVersion = require('./package.json').version;
+const helpLinks = Object.freeze({
+  marketplace: 'https://marketplace.visualstudio.com/items?itemName=bitfroest.bitfroest-fs-prototype',
+  github: 'https://github.com/s-a/Bitfroest.fs',
+  documentation: 'https://github.com/s-a/Bitfroest.fs#readme',
+  'developer-documentation': 'https://github.com/s-a/Bitfroest.fs/blob/main/DEVELOPMENT.md',
+  issue: 'https://github.com/s-a/Bitfroest.fs/issues/new'
+});
 const iconLayout = require('./media/icon-layout');
 const { createSelectionIO } = require('./selection-io');
 const { selectStartupRoots, existingDirectories } = require('./startup-paths');
@@ -966,6 +973,14 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
         const entry = shortcutCatalog.find(item => item.id === message.id);
         const resolved = typeof message.key === 'string' && resolveShortcut(shortcutCatalog, shortcutBindings, message.key, shortcutContext, process.platform);
         if (panel === messagePanel && panelReady && messagePanel.active && entry?.editable && resolved?.entry?.id === entry.id && entry.source !== 'local') await vscode.commands.executeCommand(entry.command, entry.args);
+        return;
+      }
+      if (message?.type === 'open-help-link') {
+        try {
+          if (typeof message.id !== 'string' || !Object.hasOwn(helpLinks, message.id)) throw new Error(t('Link konnte nicht geöffnet werden.'));
+          if (!await vscode.env.openExternal(vscode.Uri.parse(helpLinks[message.id]))) throw new Error(t('Link konnte nicht geöffnet werden.'));
+          await replyUiAction(message, { ok: true });
+        } catch (error) { await replyUiAction(message, { ok: false, error: t(error.message) }); }
         return;
       }
       if (['open-settings', 'show-licenses'].includes(message?.type)) {

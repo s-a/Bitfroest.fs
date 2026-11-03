@@ -1978,7 +1978,7 @@
     const request = uiActionRequests.get(result.requestId); if (!request) return;
     uiActionRequests.delete(result.requestId);
     statusTask(result.requestId, null);
-    const labels = { edit: 'Datei zum Bearbeiten geöffnet.', open: 'Datei geöffnet.', preview: 'Datei angezeigt.', 'open-settings': 'Einstellungen geöffnet.', 'show-licenses': 'Lizenzen geöffnet.', 'open-trash': 'Papierkorb geöffnet.', 'open-terminal': 'Terminal geöffnet.', 'git-diff': 'Git-Diff geöffnet.' };
+    const labels = { edit: 'Datei zum Bearbeiten geöffnet.', open: 'Datei geöffnet.', preview: 'Datei angezeigt.', 'open-settings': 'Einstellungen geöffnet.', 'show-licenses': 'Lizenzen geöffnet.', 'open-help-link': 'Link geöffnet.', 'open-trash': 'Papierkorb geöffnet.', 'open-terminal': 'Terminal geöffnet.', 'git-diff': 'Git-Diff geöffnet.' };
     reportStatus(result.cancelled ? t('Aktion abgebrochen.') : result.ok ? t(labels[request.type]) : result.error || t('Dateiaktion fehlgeschlagen.'), result.cancelled ? 'cancelled' : result.ok ? 'success' : result.unsupported ? 'info' : 'error', request.statusVersion);
   });
   function rememberSelection(p = pane()) {
@@ -3010,6 +3010,7 @@
     if (command === 'git-branches') { if (gitInfo(currentPath(pane()))?.repository) host?.postMessage({ type: 'git-branches', path: currentPath(pane()), snapshotId: state.snapshotId }); return; }
     if (command === 'settings') { hostAction('configure-settings'); return; }
     if (command === 'licenses') { hostAction('show-licenses'); return; }
+    if (command.startsWith('help-link:')) { hostAction('open-help-link', { id: command.slice(10) }); return; }
     if (state.archiveLocations?.[currentPath(pane())] && ['shell-context-menu', 'inspect-folder-locks', 'clipboard-copy', 'clipboard-cut', 'clipboard-paste', 'copy-same'].includes(command)) return toast(t('Diese Aktion ist innerhalb eines ZIP-Archivs nicht verfügbar.'));
     if (command.startsWith('search-key:')) { fileSearch.key(command.slice(11)); return; }
     if (command === 'search' || command === 'search-separate') { if (!filesystemPending && !transferPending && !$('#modal').open) fileSearch.open(command === 'search-separate'); return; }

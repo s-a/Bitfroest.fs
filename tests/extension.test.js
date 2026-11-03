@@ -1061,6 +1061,7 @@ function harness(t, options = {}) {
     context, commands, calls, panels, errors, information, contexts, textDocuments, textEditors, quickPicks, nativeCalls, updateCalls, deleteCalls, clipboardCalls, readonlyPaths, trashCalls, shellCalls, shellDisposals, openCalls, documentProviders,
     get status() { return status; },
     deactivate: () => extension.deactivate(),
+    env: vscode.env,
     get serializer() { return serializer; },
     restore: (...args) => { serializer.deserializeWebviewPanel(...args); return vscode.commands.executeCommand('bitfroest.show'); },
     tabGroups,
@@ -1267,6 +1268,51 @@ test('main menu settings in generated host HTML open the searchable settings dia
   assert.equal(settings.messages.at(-1).section, 'settings');
   assert.ok(settings.messages.at(-1).settings.some(item => item.key === 'bitfroest.shortcuts.bindings'));
   panel.dispose();
+});
+
+test('Help links in generated host HTML open fixed product destinations', async t => {
+  const app = harness(t);
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  const view = require('./support/webview.cjs').createApp(t, undefined, { html: panel.webview.html });
+  const targets = {
+    marketplace: 'https://marketplace.visualstudio.com/items?itemName=bitfroest.bitfroest-fs-prototype',
+    github: 'https://github.com/s-a/Bitfroest.fs',
+    documentation: 'https://github.com/s-a/Bitfroest.fs#readme',
+    'developer-documentation': 'https://github.com/s-a/Bitfroest.fs/blob/main/DEVELOPMENT.md',
+    issue: 'https://github.com/s-a/Bitfroest.fs/issues/new'
+  };
+  for (const [id, url] of Object.entries(targets)) {
+    const help = [...view.document.querySelectorAll('[data-main-menu] > button')].at(-1);
+    view.click(help); view.click(view.document.querySelector(`[data-menu-action="help-link:${id}"]`));
+    const request = view.messages.findLast(message => message.type === 'open-help-link');
+    assert.ok(request);
+    await panel.receive({ ...request, href: 'https://example.invalid/ignored' });
+    assert.equal(app.calls.filter(call => call.id === 'openExternal').at(-1).args[0], url);
+    const result = panel.messages.findLast(message => message.type === 'ui-action-result' && message.requestId === request.requestId);
+    assert.equal(result.ok, true);
+    view.window.dispatchEvent(new view.window.MessageEvent('message', { data: result }));
+    assert.equal(view.document.querySelector('#status-message').dataset.outcome, 'success');
+  }
+  const count = app.calls.filter(call => call.id === 'openExternal').length;
+  for (const id of ['unknown', '__proto__', 'constructor']) await panel.receive({ type: 'open-help-link', id, requestId: 'ui-action-99' });
+  assert.equal(app.calls.filter(call => call.id === 'openExternal').length, count);
+  assert.match(panel.webview.html, /Content-Security-Policy/);
+});
+
+test('Help link requests wait for readiness and report refused or failed opening', async t => {
+  const app = harness(t, { manualReadiness: true });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  await panel.receive({ type: 'open-help-link', id: 'github', requestId: 'ui-action-1' });
+  assert.equal(app.calls.some(call => call.id === 'openExternal'), false);
+  await panel.receive({ type: 'app-ready' });
+  app.env.openExternal = async () => false;
+  await panel.receive({ type: 'open-help-link', id: 'github', requestId: 'ui-action-2' });
+  assert.equal(panel.messages.findLast(message => message.requestId === 'ui-action-2').ok, false);
+  app.env.openExternal = async () => { throw new Error('Browser unavailable'); };
+  await panel.receive({ type: 'open-help-link', id: 'github', requestId: 'ui-action-3' });
+  const result = panel.messages.findLast(message => message.requestId === 'ui-action-3');
+  assert.equal(result.ok, false);
+  assert.equal(result.error, 'Browser unavailable');
 });
 
 test('failed license opening reports the actual failure instead of a green command dispatch', async t => {

@@ -2,6 +2,32 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createApp } = require('./support/webview.cjs');
 
+test('Help groups product links, documentation, issue reporting and acknowledgements', t => {
+  for (const language of ['de', 'en']) for (const key of [null, 'Enter', ' ']) {
+    const app = createApp(t, undefined, { language });
+    const menu = app.document.querySelector('[data-main-menu]');
+    const help = [...menu.querySelectorAll(':scope > button')].at(-1);
+    app.click(help);
+    const rows = [...menu.querySelector('[role="menu"]').children].filter(row => row.dataset.group === 'Hilfe');
+    assert.deepEqual(rows.map(row => row.getAttribute('role') === 'separator' ? '---' : row.textContent.trim()), language === 'de'
+      ? ['Microsoft Marketplace', 'GitHub', '---', 'Dokumentation', 'Entwicklerdokumentation', '---', 'Problem melden', '---', 'Lizenzen und Danksagungen']
+      : ['Microsoft Marketplace', 'GitHub', '---', 'Documentation', 'Developer documentation', '---', 'Report an issue', '---', 'Licenses and acknowledgements']);
+    app.key('Escape', {}, app.document.activeElement);
+    for (const id of ['marketplace', 'github', 'documentation', 'developer-documentation', 'issue']) {
+      app.click(help);
+      const entry = menu.querySelector(`[data-menu-action="help-link:${id}"]`);
+      const before = JSON.stringify(app.state()), start = app.messages.length;
+      if (key) { entry.focus(); app.key(key, {}, entry); } else app.click(entry);
+      assert.equal(menu.querySelector('[role="menu"]').hidden, true);
+      assert.equal(app.document.activeElement, help);
+      const requests = app.messages.slice(start).filter(message => message.type === 'open-help-link');
+      assert.equal(requests.length, 1);
+      assert.equal(requests[0].id, id);
+      assert.equal(JSON.stringify(app.state()), before);
+    }
+  }
+});
+
 test('Help opens license acknowledgements by mouse and keyboard without changing the file lists', t => {
   for (const language of ['de', 'en']) for (const key of [null, 'Enter', ' ']) {
     const app = createApp(t, undefined, { language });
@@ -194,7 +220,11 @@ test('menu arrows wrap between entries and supported groups, and outside clicks 
   assert.equal(app.document.activeElement.dataset.menuAction, 'unpack');
   app.key('ArrowUp'); assert.equal(app.document.activeElement, first);
   app.key('ArrowLeft');
-  assert.equal(app.document.activeElement.dataset.menuAction, 'licenses');
+  assert.equal(app.document.activeElement.dataset.menuAction, 'help-link:marketplace');
+  app.key('ArrowUp'); assert.equal(app.document.activeElement.dataset.menuAction, 'licenses');
+  app.key('ArrowDown'); assert.equal(app.document.activeElement.dataset.menuAction, 'help-link:marketplace');
+  app.key('ArrowDown'); assert.equal(app.document.activeElement.dataset.menuAction, 'help-link:github');
+  app.key('ArrowDown'); assert.equal(app.document.activeElement.dataset.menuAction, 'help-link:documentation');
   app.key('ArrowRight'); assert.equal(app.document.activeElement, first);
   app.click(app.document.querySelector('.pane.active .list'));
   assert.equal(menu.querySelector('[role="menu"]').hidden, true);
