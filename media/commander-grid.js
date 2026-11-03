@@ -11,6 +11,10 @@
     function marks(record) { record.selected = new Set(record.p.selected); record.spaces = new Set(options.spaceMarks(record.p)); }
 
     function updateAddress(record, preserveFocus = true) {
+      if (!record.p.columns.some(column => column.visible !== false)) {
+        record.addressHost?.remove(); record.addressHost = null; record.address = null;
+        return;
+      }
       const template = document.createElement('template');
       template.innerHTML = options.address(record.p);
       const focused = record.address?.contains(document.activeElement) ? document.activeElement : null;
@@ -20,7 +24,16 @@
         if (focused.isConnected && (document.activeElement === document.body || document.activeElement?.closest('.location-header')?.contains(record.address))) focused.focus({ preventScroll: true });
       });
       if (record.address) options.patch(record.address, template.content.firstElementChild);
-      else record.address = template.content.firstElementChild;
+      else {
+        record.address = template.content.firstElementChild;
+        for (const type of ['pointerdown', 'mousedown', 'touchstart']) record.address.addEventListener(type, event => event.stopPropagation());
+      }
+      if (!record.addressHost) {
+        record.addressHost = document.createElement('div');
+        record.addressHost.className = 'location-header';
+        record.section.querySelector('[data-file-grid]').prepend(record.addressHost);
+      }
+      if (record.address.parentElement !== record.addressHost) record.addressHost.append(record.address);
       return record.address;
     }
 
@@ -28,17 +41,14 @@
       return [{
         groupId: 'location',
         headerName: '',
-        headerClass: 'location-header',
+        headerClass: 'location-columns',
         suppressHeaderKeyboardEvent: () => true,
         headerGroupComponent: class {
           init() {
-            this.element = updateAddress(record);
-            this.stopDrag = event => event.stopPropagation();
-            for (const type of ['pointerdown', 'mousedown', 'touchstart']) this.element.addEventListener(type, this.stopDrag);
+            this.element = document.createElement('span');
           }
           getGui() { return this.element; }
-          refresh() { updateAddress(record); return true; }
-          destroy() { for (const type of ['pointerdown', 'mousedown', 'touchstart']) this.element.removeEventListener(type, this.stopDrag); }
+          refresh() { if (record.address) updateAddress(record); return true; }
         },
         children: definitions(record)
       }];
@@ -156,7 +166,7 @@
       const container = section.querySelector('[data-file-grid]');
       if (!container) return;
       let record = instances.get(container);
-      if (record && record.view !== options.view(p)) { record.api.destroy(); instances.delete(container); record = undefined; }
+      if (record && record.view !== options.view(p)) { record.addressHost?.remove(); record.api.destroy(); instances.delete(container); record = undefined; }
       const source = options.source(p);
       const currentSignature = signature(p);
       const changed = !record || record.signature !== currentSignature;
@@ -231,7 +241,7 @@
         getRowId: params => String(params.data.id),
         rowHeight: options.rowHeight(),
         headerHeight: options.rowHeight(),
-        groupHeaderHeight: Math.max(26, options.controlHeight() + 3),
+        groupHeaderHeight: Math.max(26, options.controlHeight() + 6),
         scrollbarWidth: 12,
         animateRows: false,
         ensureDomOrder: true,
@@ -257,6 +267,7 @@
         overlayNoRowsTemplate: '<span></span>'
       });
       record.updating = false;
+      updateAddress(record);
       instances.set(container, record);
       sync(section, p);
       options.decorate(record.section, record.p);
@@ -307,7 +318,7 @@
         if (!container.isConnected) { record.api.destroy(); instances.delete(container); }
       }
     }
-    function dispose() { for (const record of instances.values()) record.api.destroy(); instances.clear(); }
+    function dispose() { for (const record of instances.values()) { record.addressHost?.remove(); record.api.destroy(); } instances.clear(); }
     root.addEventListener('pagehide', dispose, { once: true });
     return { mount, sync, ensure, prepareAutosize, remeasure, prune, dispose, api };
   }

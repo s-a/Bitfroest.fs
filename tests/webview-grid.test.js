@@ -13,18 +13,23 @@ test('both file panels use the community grid and retain their address and statu
   }
 });
 
-test('the location row spans every displayed column above the individual headings', async t => {
+test('the location row stays anchored to the panel viewport while columns resize', async t => {
   const app = createApp(t);
   for (const side of [0, 1]) {
     const pane = app.document.querySelector(`[data-pane="${side}"]`);
     const address = pane.querySelector('.pathbar');
-    const group = address.closest('.ag-header-group-cell');
-    assert.ok(group, 'the location belongs to the grid group header');
+    const group = address.closest('.location-header');
+    assert.equal(group.parentElement, pane.querySelector('[data-file-grid]'), 'address width belongs to the viewport, not the columns');
     assert.equal(pane.querySelectorAll('.pathbar').length, 1);
-    const displayed = app.grid(side).getAllDisplayedColumns();
-    assert.equal(parseFloat(group.style.width), displayed.reduce((sum, column) => sum + column.getActualWidth(), 0));
+    for (const width of [80, 800, 120]) {
+      const last = app.grid(side).getAllDisplayedColumns().at(-1).getColId();
+      app.grid(side).setColumnWidths([{ key: last, newWidth: width }]);
+      assert.equal(address.closest('.ag-header-group-cell'), null);
+      assert.equal(group.parentElement, pane.querySelector('[data-file-grid]'));
+      assert.equal(group.style.width, '');
+    }
     assert.equal(address.lastElementChild.dataset.refresh, '');
-    assert.ok(group.closest('.ag-header-row').nextElementSibling.querySelector('[data-column="date"]'));
+    assert.ok(pane.querySelector('.ag-header-row [data-column="date"]'));
     const input = address.querySelector('input'); input.focus(); input.value = '/unfinished'; input.setSelectionRange(2, 5);
     app.grid(side).refreshHeader();
     await Promise.resolve();
@@ -42,7 +47,7 @@ test('the location row spans every displayed column above the individual heading
   assert.ok(app.document.activeElement === right, 'a pending header refresh cannot steal focus from the other panel');
 });
 
-test('the grouped address retains a long branch and follows the last visible column', async t => {
+test('the viewport address retains a long branch when columns move or hide', async t => {
   const directory = '/work/' + 'long-path/'.repeat(12).slice(0, -1);
   const pane = () => ({ tabs: [directory], tab: 0, selected: [], cursor: null, sort: 'name', filter: '' });
   const app = createApp(t, { version: 1, realFilesystem: true, snapshotId: 'branch-layout', active: 0, panes: [pane(), pane()], folders: { [directory]: [] } });
@@ -60,7 +65,7 @@ test('the grouped address retains a long branch and follows the last visible col
     grid.setColumnWidths([{ key: 'type', newWidth: 180 }]);
     await Promise.resolve();
     const group = section.querySelector('.location-header');
-    assert.equal(parseFloat(group.style.width), grid.getAllDisplayedColumns().reduce((sum, column) => sum + column.getActualWidth(), 0));
+    assert.equal(group.parentElement, section.querySelector('[data-file-grid]'));
     assert.equal(grid.getAllDisplayedColumns().at(-1).getColId(), 'type');
     assert.ok(group.querySelector('[data-refresh]'));
     assert.equal(group.querySelector('[data-git-branch]').textContent, `(${branch})`);
@@ -70,7 +75,7 @@ test('the grouped address retains a long branch and follows the last visible col
   }
   for (const size of [12, 28, 48]) {
     app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'file-settings', settings: { iconSize: size } } }));
-    for (const side of [0, 1]) assert.equal(app.grid(side).getGridOption('groupHeaderHeight'), Math.max(26, app.window.CommanderIcons.layout().control + 3));
+    for (const side of [0, 1]) assert.equal(app.grid(side).getGridOption('groupHeaderHeight'), Math.max(26, app.window.CommanderIcons.layout().control + 6));
   }
 });
 

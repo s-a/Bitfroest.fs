@@ -70,7 +70,7 @@ main { display: flex; flex-direction: column; flex: 1; min-height: 0; min-width:
 .pane.active .pathbar { background: var(--vscode-list-inactiveSelectionBackground, var(--surface)); }
 .pathbar > button { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 var(--icon-control-size); width: var(--icon-control-size); min-width: var(--icon-control-size); height: var(--icon-control-size); box-sizing: border-box; padding: 0; }
 .pathbar > [data-favorites] { width: var(--icon-base-size); min-width: 0; }
-.pathbar > [data-refresh] { position: absolute; top: 50%; right: var(--file-cell-padding); transform: translateY(-50%); justify-self: end; align-self: center; width: var(--icon-base-size); min-width: 0; }
+.pathbar > [data-refresh] { justify-self: end; align-self: center; }
 .path { display: flex; align-items: center; flex: 1; min-width: 0; gap: 3px; }
 .path > span { color: var(--muted); }
 .location-context-icon { position: relative; display: inline-flex; flex: 0 0 var(--icon-size); width: var(--icon-size); height: var(--icon-size); align-items: center; justify-content: center; color: var(--location-color, var(--vscode-icon-foreground)); pointer-events: none; }
@@ -668,7 +668,7 @@ body .statusbar { height: var(--icon-row-size); min-height: var(--icon-row-size)
 
 .list:has([data-file-grid]) { overflow: hidden; min-width: 0; }
 [data-file-grid] {
-  width: 100%; height: 100%; min-width: 0;
+  position: relative; width: 100%; height: 100%; min-width: 0;
   --ag-font-family: var(--vscode-font-family, system-ui, sans-serif);
   --ag-font-size: var(--vscode-font-size, 13px);
   --ag-background-color: var(--bg);
@@ -684,11 +684,9 @@ body .statusbar { height: var(--icon-row-size); min-height: var(--icon-row-size)
   --ag-header-column-resize-handle-color: var(--vscode-panel-border, var(--line));
 }
 [data-file-grid] .ag-root-wrapper { border: 0; }
-[data-file-grid] .location-header { padding: 0; }
-[data-file-grid] .location-header > .ag-header-cell-comp-wrapper { height: 100%; }
-[data-file-grid] .location-header .pathbar { position: absolute; inset: 0; }
-[data-file-grid] .location-header > .ag-header-cell-resize { display: none; }
-[data-file-grid] .location-header .pathbar { width: 100%; height: 100%; min-width: 0; font-size: var(--vscode-font-size, 13px); font-weight: 400; }
+[data-file-grid] > .location-header { position: absolute; inset: 0 0 auto; z-index: 4; height: max(26px, calc(var(--icon-control-size) + 6px)); background: var(--bg); }
+[data-file-grid] .location-columns > .ag-header-cell-resize { display: none; }
+[data-file-grid] > .location-header .pathbar { width: 100%; height: 100%; min-width: 0; padding-top: 3px; padding-bottom: 3px; border-bottom: 0; box-shadow: inset 0 -1px var(--line); font-size: var(--vscode-font-size, 13px); font-weight: 400; }
 [data-file-grid] .ag-cell { padding-top: 0; padding-bottom: 0; line-height: var(--icon-row-size); }
 [data-file-grid] .ag-cell-wrapper, [data-file-grid] .ag-cell-value { min-width: 0; }
 .file-cell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

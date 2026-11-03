@@ -164,10 +164,15 @@ test('the address grid centers the refresh control within the available header h
   assert.equal(address.alignItems, 'center');
   assert.equal(app.rule('.pathbar > [data-refresh]').alignSelf, 'center');
   const refresh = app.rule('.pathbar > [data-refresh]');
-  assert.equal(refresh.position, 'absolute');
-  assert.equal(refresh.top, '50%');
-  assert.equal(refresh.transform, 'translateY(-50%)');
-  assert.equal(refresh.right, 'var(--file-cell-padding)');
+  assert.equal(refresh.position, '');
+  assert.equal(refresh.transform, '');
+  const viewport = app.rule('[data-file-grid] > .location-header');
+  assert.equal(viewport.inset, '0 0 auto');
+  assert.equal(viewport.height, 'max(26px, calc(var(--icon-control-size) + 6px))');
+  const row = app.rule('[data-file-grid] > .location-header .pathbar');
+  assert.equal(row.paddingTop, '3px');
+  assert.equal(row.paddingBottom, '3px');
+  assert.equal(row.borderBottom, '0px');
   for (const pane of app.document.querySelectorAll('.pane')) {
     const button = pane.querySelector('[data-refresh]');
     assert.ok(button.closest('.pathbar'));

@@ -3841,7 +3841,7 @@
       if (before !== after) document.querySelectorAll('[data-pane]').forEach(section => {
         fileGrid.api(section)?.setGridOption('rowHeight', window.CommanderIcons.layout().row);
         fileGrid.api(section)?.setGridOption('headerHeight', window.CommanderIcons.layout().row);
-        fileGrid.api(section)?.setGridOption('groupHeaderHeight', Math.max(26, window.CommanderIcons.layout().control + 3));
+        fileGrid.api(section)?.setGridOption('groupHeaderHeight', Math.max(26, window.CommanderIcons.layout().control + 6));
         fileGrid.api(section)?.resetRowHeights();
         fileGrid.remeasure(section, true);
       });
