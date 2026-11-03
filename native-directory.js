@@ -32,7 +32,7 @@ function createDirectoryReader(options = {}) {
         if (entry.attributes & 1024 || entry.fileId === 0n) return { name: entry.name, stat: null, attributes };
         const directory = attributes.directory;
         const stat = { dev: result.volume, ino: entry.fileId, size: directory ? 0n : entry.size,
-          mode: BigInt((directory ? 0o040000 | 0o111 : 0o100000) | (attributes.readonly ? 0o444 : 0o666)),
+          mode: BigInt((directory ? 0o040000 : 0o100000) | (attributes.readonly ? 0o444 : 0o666)),
           isDirectory: () => directory, isFile: () => !directory, isSymbolicLink: () => false };
         for (const [key, field] of [['mtime', 'lastWriteTime'], ['ctime', 'changeTime'], ['birthtime', 'creationTime'], ['atime', 'lastAccessTime']]) {
           stat[`${key}Ns`] = (entry[field] - 116444736000000000n) * 100n;
