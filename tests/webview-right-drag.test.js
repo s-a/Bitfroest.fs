@@ -99,3 +99,36 @@ test('a dialog opened during a right gesture is not overlaid by a drop picker', 
   app.action('mkdir'); pointer(app, 'pointerup', target, { clientX: 500, clientY: 200 });
   assert.equal(app.messages.some(item => item.type === 'choose-drop-action'), false); assert.equal(app.document.querySelector('#modal').open, true);
 });
+
+for (const end of ['pointerup', 'pointercancel', 'blur', 'pagehide', 'escape']) test(`right drag previews the whole selection over its source and cleans up on ${end}`, t => {
+  const app = createApp(t, fixture()), target = app.document.querySelector('[data-pane="0"] .list');
+  pointer(app, 'pointerdown', app.row('b.txt'));
+  pointer(app, 'pointermove', target, { clientX: 100, clientY: 100 });
+  const feedback = app.document.querySelector('.file-drag-feedback');
+  assert.ok(feedback);
+  assert.equal(feedback.dataset.mode, 'move');
+  assert.equal(feedback.dataset.allowed, 'false');
+  assert.equal(feedback.dataset.count, '2');
+  assert.match(feedback.textContent, /a\.txt/); assert.match(feedback.textContent, /b\.txt/);
+  assert.equal(app.document.body.dataset.fileDragCursor, 'none');
+  assert.equal(app.document.querySelector('.drop-target'), null);
+  if (end === 'blur' || end === 'pagehide') app.window.dispatchEvent(new app.window.Event(end));
+  else if (end === 'escape') app.key('Escape');
+  else pointer(app, end, target);
+  assert.equal(app.document.querySelector('.file-drag-feedback'), null);
+  assert.equal(app.document.body.dataset.fileDragCursor, undefined);
+  assert.equal(app.document.querySelector('#modal').open, false);
+});
+
+test('large right-drag selections show five names and the complete count without losing entries', t => {
+  const saved = fixture();
+  for (let index = 0; index < 8; index++) { saved.folders['/left'].push({ id: `extra${index}`, name: `extra${index}.txt`, type: 'text' }); saved.panes[0].selected.push(`extra${index}`); }
+  const app = createApp(t, saved);
+  pointer(app, 'pointerdown', app.row('b.txt'));
+  pointer(app, 'pointermove', app.document.querySelector('[data-pane="1"] .list'), { clientX: 500, clientY: 200 });
+  const preview = app.document.querySelector('.file-drag-preview');
+  assert.equal(preview.dataset.count, '10'); assert.equal(preview.querySelectorAll('.file-drag-row').length, 5);
+  assert.match(preview.textContent, /\+5/);
+  assert.equal(app.state().panes[0].selected.length, 10);
+  pointer(app, 'pointercancel', app.document.body);
+});

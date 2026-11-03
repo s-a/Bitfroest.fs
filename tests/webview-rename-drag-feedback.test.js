@@ -118,5 +118,40 @@ test('drag feedback cannot cover a drop target and uses readable theme colors an
   assert.equal(styleFeedback.borderTopWidth, '1px');
   assert.equal(app.window.getComputedStyle(feedback.querySelector('svg')).width, '16px');
   drag(app, 'dragover', app.row('a.txt'));
-  assert.equal(app.document.querySelector('.file-drag-feedback'), null);
+  assert.equal(app.document.querySelector('.file-drag-feedback').dataset.allowed, 'false');
+  assert.equal(app.document.querySelector('.file-drag-feedback').dataset.mode, 'copy');
+});
+
+test('native drag image contains all marked names and the total selection count', t => {
+  const app = setup(t); app.click(app.name('b.txt'), { ctrlKey: true });
+  const event = new app.window.Event('dragstart', { bubbles: true, cancelable: true });
+  let preview;
+  const values = new Map();
+  Object.defineProperty(event, 'dataTransfer', { value: {
+    setData: (key, value) => values.set(key, value),
+    setDragImage: element => { preview = element; }
+  } });
+  app.row('b.txt').dispatchEvent(event);
+  assert.ok(preview);
+  assert.equal(preview.dataset.count, '2');
+  assert.match(preview.textContent, /a\.txt/); assert.match(preview.textContent, /b\.txt/);
+  assert.deepEqual(JSON.parse(values.get('application/x-bitfroest-files')).ids, ['a', 'b']);
+  drag(app, 'dragend', app.row('b.txt'));
+  assert.equal(preview.isConnected, false);
+});
+
+for (const shiftKey of [false, true]) test(`native drag retains selection feedback over invalid and valid targets with shift=${shiftKey}`, t => {
+  const app = setup(t); app.click(app.name('b.txt'), { ctrlKey: true });
+  drag(app, 'dragstart', app.row('b.txt'));
+  for (const side of [0, 1, 0]) {
+    const event = drag(app, 'dragover', app.document.querySelector(`[data-pane="${side}"] .list`), { shiftKey });
+    const feedback = app.document.querySelector('.file-drag-feedback');
+    assert.equal(feedback.dataset.count, '2');
+    assert.equal(feedback.dataset.mode, shiftKey ? 'move' : 'copy');
+    assert.equal(feedback.dataset.allowed, String(side === 1));
+    assert.match(feedback.textContent, /a\.txt/); assert.match(feedback.textContent, /b\.txt/);
+    assert.equal(event.dataTransfer.dropEffect, side ? shiftKey ? 'move' : 'copy' : 'none');
+  }
+  drag(app, 'dragend', app.row('b.txt'));
+  assert.equal(app.document.body.dataset.fileDragCursor, undefined);
 });

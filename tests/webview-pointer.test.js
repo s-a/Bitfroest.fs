@@ -87,6 +87,11 @@ test('holding a file still for 500 ms arms dragging and retains a multiple selec
   assert.equal(app.row('a.txt').draggable, false);
   assert.equal(drag(app, 'dragstart', target, data).defaultPrevented, true);
   app.tick(1);
+  assert.equal(app.document.body.dataset.fileDragCursor, 'ready');
+  const style = app.document.createElement('style');
+  style.textContent = require('node:fs').readFileSync(require('node:path').join(__dirname, '../media/app.css'), 'utf8');
+  app.document.head.append(style);
+  assert.equal(app.window.getComputedStyle(app.row('a.txt')).cursor, 'grab');
   assert.equal(app.row('a.txt').draggable, true);
   pointer(app, 'pointermove', list, { clientX: 20, clientY: 80 });
   assert.equal(list.querySelector('.selection-marquee'), null);
@@ -109,6 +114,7 @@ for (const cancel of ['pointerup', 'pointercancel', 'blur', 'pagehide', 'escape'
     app.tick(1000);
     pointer(app, 'pointermove', list, { clientX: 20, clientY: 80 });
     assert.equal(list.querySelector('.selection-marquee'), null);
+    assert.equal(app.document.body.dataset.fileDragCursor, undefined);
   });
 }
 

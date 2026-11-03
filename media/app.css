@@ -701,3 +701,13 @@ body .statusbar { height: var(--icon-row-size); min-height: var(--icon-row-size)
 [data-file-grid] ::-webkit-scrollbar-corner { background: transparent; }
 
 .list > .grid-empty { position: absolute; top: calc(var(--icon-row-size) * 2); left: 0; right: 0; pointer-events: none; }
+
+body[data-file-drag-cursor="ready"] #panes * { cursor: grab !important; }
+body[data-file-drag-cursor="copy"] *, body[data-file-drag-cursor="move"] * { cursor: grabbing !important; }
+body[data-file-drag-cursor="none"] * { cursor: no-drop !important; }
+.file-drag-feedback { flex-wrap: wrap; max-width: 320px; }
+.file-drag-preview { padding: 3px 6px; background: var(--vscode-editorWidget-background, var(--surface)); color: var(--vscode-editorWidget-foreground, var(--text)); border: 1px solid var(--vscode-editorWidget-border, var(--line)); opacity: .85; max-width: 300px; }
+.file-drag-feedback .file-drag-preview { flex-basis: 100%; }
+.file-drag-row { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-drag-count { float: right; margin-left: 12px; font-weight: bold; }
+.native-file-drag-preview { position: fixed; left: -10000px; top: 0; pointer-events: none; }

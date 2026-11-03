@@ -3311,8 +3311,10 @@
       const p = pane(); p.selected = [...gesture.source.ids]; if (!p.selected.includes(p.cursor)) p.cursor = gesture.rowId;
       refreshSelection(); gesture.list.setPointerCapture?.(gesture.id);
     }
-    clearDropTarget(); const destination = pointerDestination(event);
-    if (validFileDropTarget(gesture.source, destination)) { destination.element.classList.add('drop-target'); showFileDragFeedback(event, 'move'); }
+    clearDropTarget(true); const destination = pointerDestination(event);
+    const allowed = validFileDropTarget(gesture.source, destination) && window.CommanderTransfer.dropMode(event) !== 'link';
+    if (allowed) destination.element.classList.add('drop-target');
+    showFileDragFeedback(event, 'move', gesture.source, allowed);
   });
   document.addEventListener('pointerup', event => {
     const gesture = rightPointer;
@@ -3332,13 +3334,34 @@
     if (text) { text.dataset.vscodeContext = JSON.stringify({ webviewSection: 'textInput', preventDefaultContextMenuItems: false }); suppressRightContext = false; return; }
     if (suppressRightContext) { suppressRightContext = false; if (event.target.closest('.ag-header') || event.button !== 2) return; event.preventDefault(); event.stopPropagation(); }
   }, true);
-  function clearDropTarget() {
+  function cancelRightDrag() {
+    const gesture = rightPointer; rightPointer = null;
+    if (gesture) { suppressRightContext = gesture.active; gesture.list.releasePointerCapture?.(gesture.id); }
+    clearDropTarget();
+  }
+  window.addEventListener('blur', cancelRightDrag);
+  window.addEventListener('pagehide', cancelRightDrag);
+  function clearDropTarget(keepFeedback = false) {
     document.querySelectorAll('.drop-target').forEach(element => element.classList.remove('drop-target'));
     delete $('#panes').dataset.dropMode;
-    document.querySelector('.file-drag-feedback')?.remove();
+    if (!keepFeedback) document.querySelector('.file-drag-feedback')?.remove();
+    document.querySelector('.native-file-drag-preview')?.remove();
+    delete document.body.dataset.fileDragCursor;
   }
-  function showFileDragFeedback(event, mode) {
-    if (mode !== 'copy' && mode !== 'move') return;
+  function fileDragPreview(source) {
+    const preview = document.createElement('div'); preview.className = 'file-drag-preview';
+    preview.dataset.count = String(source.ids.length);
+    const count = document.createElement('span'); count.className = 'file-drag-count'; count.textContent = String(source.ids.length); preview.append(count);
+    const selected = source.items;
+    for (const item of selected.slice(0, 5)) {
+      const file = JSON.parse(item.signature);
+      const row = document.createElement('div'); row.className = 'file-drag-row'; row.textContent = file.name; preview.append(row);
+    }
+    if (selected.length > 5) { const more = document.createElement('div'); more.textContent = `+${selected.length - 5}`; preview.append(more); }
+    return preview;
+  }
+  function showFileDragFeedback(event, mode, source, allowed = true) {
+    if (mode !== 'copy' && mode !== 'move') { document.querySelector('.file-drag-feedback')?.remove(); delete document.body.dataset.fileDragCursor; return; }
     let feedback = document.querySelector('.file-drag-feedback');
     if (!feedback) {
       feedback = document.createElement('div'); feedback.className = 'file-drag-feedback';
@@ -3349,6 +3372,9 @@
       feedback.innerHTML = window.CommanderIcons.svg('workbench', mode);
       const label = document.createElement('span'); label.textContent = t(mode === 'copy' ? 'Kopieren' : 'Verschieben'); feedback.append(label);
     }
+    feedback.dataset.allowed = String(allowed);
+    document.body.dataset.fileDragCursor = allowed ? mode : 'none';
+    if (!feedback.querySelector('.file-drag-preview') && source) { feedback.dataset.count = String(source.ids.length); feedback.append(fileDragPreview(source)); }
     const bounds = feedback.getBoundingClientRect();
     feedback.style.left = `${Math.max(0, Math.min(event.clientX + 20, window.innerWidth - bounds.width))}px`;
     feedback.style.top = `${Math.max(0, Math.min(event.clientY + 20, window.innerHeight - bounds.height))}px`;
@@ -3393,7 +3419,12 @@
       state.active = side;
       if (!p.selected.includes(row.dataset.id)) { p.selected = [row.dataset.id]; p.cursor = row.dataset.id; refreshSelection(); }
       dragged = { kind: 'files', side, ids: [...p.selected], sourcePath: currentPath(p), items: files(p).filter(file => p.selected.includes(file.id)).map(file => ({ id: file.id, signature: JSON.stringify(file) })) };
-      if (event.dataTransfer) { event.dataTransfer.effectAllowed = 'copyMove'; event.dataTransfer.setData('application/x-bitfroest-files', JSON.stringify(dragged)); }
+      if (event.dataTransfer) {
+        event.dataTransfer.effectAllowed = 'copyMove'; event.dataTransfer.setData('application/x-bitfroest-files', JSON.stringify(dragged));
+        document.querySelector('.native-file-drag-preview')?.remove();
+        const preview = fileDragPreview(dragged); preview.classList.add('native-file-drag-preview');
+        document.body.append(preview); event.dataTransfer.setDragImage?.(preview, 0, 0);
+      }
       return;
     }
     dragged = { kind: 'tab', side: Number(event.target.closest('[data-pane]').dataset.pane), index: Number(tab.dataset.tabDrag) };
@@ -3401,15 +3432,15 @@
   });
   $('#panes').addEventListener('dragover', event => {
     if (dragged?.kind === 'files') {
-      const destination = fileDropTarget(event.target); clearDropTarget();
-      if (!validFileDropTarget(dragged, destination)) { if (event.dataTransfer) event.dataTransfer.dropEffect = 'none'; return; }
+      const destination = fileDropTarget(event.target); clearDropTarget(true);
+      if (!validFileDropTarget(dragged, destination)) { if (event.dataTransfer) event.dataTransfer.dropEffect = 'none'; showFileDragFeedback(event, window.CommanderTransfer.dropMode(event), dragged, false); return; }
       event.preventDefault();
       const mode = window.CommanderTransfer.dropMode(event);
       if (mode === 'link' && dragged.mode !== 'link') toast(t('Verknüpfungen sind für diese Dateiaktion noch nicht verfügbar.'));
       dragged.mode = mode;
       if (event.dataTransfer) event.dataTransfer.dropEffect = mode === 'link' ? 'none' : mode;
       destination.element.classList.add('drop-target'); $('#panes').dataset.dropMode = mode;
-      showFileDragFeedback(event, mode);
+      showFileDragFeedback(event, mode, dragged);
       return;
     }
     if (dragged && event.target.closest(dragged.kind === 'tab' ? '.tabs' : '[data-column]')) event.preventDefault();
@@ -3480,6 +3511,7 @@
       const finish = current => {
         if (current?.pointerId !== undefined && current.pointerId !== event.pointerId) return;
         clearTimeout(holdTimer); events.abort();
+        delete document.body.dataset.fileDragCursor;
         if (row) row.draggable = wasDraggable;
         if (list.hasPointerCapture?.(event.pointerId)) list.releasePointerCapture(event.pointerId);
         marquee.remove();
@@ -3493,7 +3525,7 @@
       filePointerGesture = gesture;
       if (wasDraggable) holdTimer = setTimeout(() => {
         if (!valid()) { cancel(); return; }
-        gesture.armed = true; row.draggable = true;
+        gesture.armed = true; row.draggable = true; document.body.dataset.fileDragCursor = 'ready';
       }, 500);
       const move = current => {
         if (current.pointerId !== event.pointerId) return;
