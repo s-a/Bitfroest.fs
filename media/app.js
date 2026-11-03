@@ -1949,6 +1949,7 @@
     refreshFileColors();
     columnResizeObserver?.disconnect();
     document.querySelectorAll('.pane').forEach((section, index) => {
+      if (previousViews && paneDisplayState(state.panes[index], index) === previousViews[index]) return;
       const list = section.querySelector('.list');
       if (!list) return;
       list.scrollTop = state.panes[index].scrollTop || 0;
