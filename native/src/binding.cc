@@ -30,6 +30,7 @@
 #include "binding-desktop-win.h"
 #include "window-inspection-win.h"
 #include "shell-context-win.h"
+#include "git-index-win.h"
 #include "windows-async-work.h"
 #include "binding-transfer-win.h"
 #include "file-transfer-win.h"
@@ -44,7 +45,7 @@ constexpr const char* operations[] = {
   "shell.openTrash", "shell.openTerminal", "icons.resolve", "metadata.query", "paths.resolveNetwork",
   "encoding.describe", "encoding.decodeBlock", "encoding.decodeChunk", "windows.resolveOwner",
   "windows.maximize", "windows.inspect", "locks.scan", "locks.releaseHandles", "locks.unloadModules", "locks.rename",
-  "processes.terminate", "restartDeletion.prepare", "restartDeletion.commit", "git.status", "git.info"
+  "processes.terminate", "restartDeletion.prepare", "restartDeletion.commit", "git.status", "git.info", "git.untrack"
 };
 const napi_type_tag session_tag = {0xc08f3d2b2abe4601ULL, 0xa16d35e8dc1a4b94ULL};
 std::atomic<uint64_t> next_generation{1};
@@ -107,6 +108,19 @@ napi_value Close(napi_env env, napi_callback_info info) {
     CloseNativeLocksSession(session->state);
     napi_value closing = CloseWindowsClipboardSessionAsync(env, session->state);
     if (!closing) return nullptr;
+    napi_value index_closing = CloseGitIndexSession(env, session->state);
+    if (!index_closing) return nullptr;
+    {
+      napi_value global, constructor, all, promises, combined;
+      CHECK(napi_get_global(env, &global));
+      CHECK(napi_get_named_property(env, global, "Promise", &constructor));
+      CHECK(napi_get_named_property(env, constructor, "all", &all));
+      CHECK(napi_create_array_with_length(env, 2, &promises));
+      CHECK(napi_set_element(env, promises, 0, closing));
+      CHECK(napi_set_element(env, promises, 1, index_closing));
+      CHECK(napi_call_function(env, constructor, all, 1, &promises, &combined));
+      closing = combined;
+    }
     if (session->state->copy_session) {
       napi_value copy = ShutdownNativeCopies(env, session->state);
       if (!copy) return nullptr;
@@ -350,6 +364,10 @@ napi_value Invoke(napi_env env, napi_callback_info info) {
         if (count != 2) return Fail(env, "InvalidRequest", "A rename request is required.");
         return StartCaseRename(env, session->state, args[1]);
       }
+      if (std::strcmp(known, "git.untrack") == 0) {
+        if (count != 2) return Fail(env, "InvalidRequest", "A Git index request is required.");
+        return StartGitUntrack(env, session->state, args[1]);
+      }
       if (IsWindowsQuery(known)) {
         if (count != 2) return Fail(env, "InvalidRequest", "A query request is required.");
         return StartWindowsQuery(env, session->state, known, args[1]);
@@ -430,7 +448,7 @@ napi_value Init(napi_env env, napi_value exports) {
   napi_value version, major, minor, capabilities;
   CHECK(napi_create_object(env, &version));
   CHECK(napi_create_uint32(env, 1, &major));
-  CHECK(napi_create_uint32(env, 6, &minor));
+  CHECK(napi_create_uint32(env, 7, &minor));
   CHECK(napi_set_named_property(env, version, "major", major));
   CHECK(napi_set_named_property(env, version, "minor", minor));
   CHECK(napi_object_freeze(env, version));
@@ -458,7 +476,7 @@ napi_value Init(napi_env env, napi_value exports) {
     supported = std::strcmp(operation, "shell.openTerminal") == 0 || std::strcmp(operation, "git.status") == 0 || std::strcmp(operation, "git.info") == 0 || std::strcmp(operation, "metadata.query") == 0 || std::strcmp(operation, "files.rename") == 0 || std::strcmp(operation, "files.copy") == 0 || std::strcmp(operation, "icons.resolve") == 0 || std::strcmp(operation, "shell.openAssociated") == 0 || std::strcmp(operation, "shell.openTrash") == 0 || std::strcmp(operation, "shell.showContextMenu") == 0 || std::strcmp(operation, "windows.maximize") == 0 || IsWindowsQuery(operation) || IsWindowsClipboardOperation(operation);
     locks = IsLocksOperation(operation) && NativeLocksSupported();
     supported = supported || std::strcmp(operation, "windows.inspect") == 0 || std::strcmp(operation, "files.readDirectory") == 0;
-    supported = supported || locks;
+    supported = supported || locks || std::strcmp(operation, "git.untrack") == 0;
 #endif
     const bool rename = std::strcmp(operation, "files.rename") == 0 && supported;
     const bool codepage = (std::strcmp(operation, "encoding.decodeBlock") == 0 || std::strcmp(operation, "encoding.decodeChunk") == 0) && supported;

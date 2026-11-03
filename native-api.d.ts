@@ -9,7 +9,7 @@ export type NativeOperation =
   | 'windows.resolveOwner' | 'windows.maximize'
   | 'locks.scan' | 'locks.releaseHandles' | 'locks.unloadModules' | 'locks.rename'
   | 'processes.terminate' | 'restartDeletion.prepare' | 'restartDeletion.commit'
-  | 'git.status' | 'git.info';
+  | 'git.status' | 'git.info' | 'git.untrack';
 
 export interface NativeCapability {
   readonly dirtySummary?: boolean;
@@ -120,6 +120,20 @@ export interface NativeGitStatusEntry {
 
 export interface NativeGitStatusProgress extends NativeCompletion, ProgressEvent {
   readonly path: string;
+}
+
+export interface NativeGitUntrackRequest {
+  readonly repositoryRoot: string;
+  readonly target: string;
+  readonly expectedHead: string;
+  readonly expectedReference: string;
+  readonly expectedIndex: string;
+  readonly expectedIno: string;
+}
+
+export interface NativeGitUntrackResult {
+  readonly status: 'committed';
+  readonly removed: true;
 }
 
 export interface NativeGitStatusResult {
@@ -333,6 +347,7 @@ export interface NativeSession {
   invoke(operation: 'clipboard.cancelFiles', request: NativeClipboardCancelRequest): Promise<NativeClipboardAcknowledgeResult & NativeCompletion>;
   invoke(operation: 'git.status', request: { readonly directory: string; readonly scope: string; readonly summary?: boolean; readonly recursive?: boolean; readonly showIgnored?: boolean; readonly includeScopes?: readonly string[]; readonly excludeScopes?: readonly string[] }, options?: { readonly signal?: AbortSignal; readonly onProgress?: (event: NativeGitStatusProgress) => void }): Promise<NativeGitStatusResult & NativeCompletion>;
   invoke(operation: 'git.info', request: { readonly directory: string }, options?: { readonly signal?: AbortSignal }): Promise<NativeGitStatusResult & NativeCompletion>;
+  invoke(operation: 'git.untrack', request: NativeGitUntrackRequest, options?: { readonly signal?: AbortSignal }): Promise<NativeGitUntrackResult & NativeCompletion>;
   invoke(operation: 'encoding.describe', request: { readonly codepage: number }): Promise<NativeCodepage & NativeCompletion>;
   invoke(operation: 'encoding.decodeBlock', request: NativeDecodeRequest): Promise<NativeDecodedBlock & NativeCompletion>;
   invoke(operation: 'encoding.decodeChunk', request: NativeDecodeChunkRequest): Promise<NativeDecodedChunk & NativeCompletion>;
@@ -370,6 +385,7 @@ export interface NativeBinding {
   invoke(operation: 'clipboard.cancelFiles', request: NativeClipboardCancelRequest): Promise<NativeClipboardAcknowledgeResult>;
     invoke(operation: 'git.status', request: { readonly directory: string; readonly scope: string; readonly summary?: boolean; readonly recursive?: boolean; readonly showIgnored?: boolean; readonly includeScopes?: readonly string[]; readonly excludeScopes?: readonly string[] }, progress?: (event: { readonly path: string }) => void): Promise<NativeGitStatusResult> & { cancel(): boolean };
     invoke(operation: 'git.info', request: { readonly directory: string }): Promise<NativeGitStatusResult> & { cancel(): boolean };
+    invoke(operation: 'git.untrack', request: NativeGitUntrackRequest): Promise<NativeGitUntrackResult> & { cancel(): boolean };
     invoke(operation: 'encoding.describe', request: { readonly codepage: number }): Promise<NativeCodepage>;
     invoke(operation: 'encoding.decodeBlock', request: NativeDecodeRequest): Promise<NativeDecodedBlock>;
     invoke(operation: 'encoding.decodeChunk', request: NativeDecodeChunkRequest): Promise<NativeDecodedChunk>;
