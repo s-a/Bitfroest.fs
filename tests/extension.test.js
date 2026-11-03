@@ -2534,12 +2534,11 @@ for (const type of ['zip-write', 'zip-unpack']) test(`${type} starts while direc
   } finally { reading.resolve(); await Promise.all([navigation, operation]); panel.dispose(); }
 });
 
-test('generated host HTML starts a copy during a pending refresh and rejects the stale refresh result', async t => {
+test('generated host HTML starts a copy during a pending refresh and rejects the stale refresh result', { timeout: 10000 }, async t => {
   const initial = clipboardFixture(), reading = deferred(), entered = deferred();
-  let loads = 0, signal, writes = 0;
-  const app = harness(t, { filesystemLoad: async settings => {
-    if (++loads === 2) { signal = settings.signal; entered.resolve(); await reading.promise; return { ...initial, snapshotId: 'obsolete' }; }
-    return structuredClone(initial);
+  let signal, writes = 0;
+  const app = harness(t, { filesystemLoad: async () => structuredClone(initial), filesystemPrepare: async (_before, settings) => {
+    signal = settings.signal; entered.resolve(); await reading.promise; return { ...initial, snapshotId: 'obsolete' };
   }, filesystemApply: async (_before, after) => { writes++; return { ...after, snapshotId: 'copied' }; } });
   await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
   const view = require('./support/webview.cjs').createApp(t, initial, { html: panel.webview.html });

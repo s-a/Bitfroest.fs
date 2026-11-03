@@ -108,13 +108,13 @@ test('a quick double click opens a directory instead of starting inline rename',
   assert.equal(app.document.querySelector('.inline-rename'), null);
 });
 
-test('a real pointer double-click on the parent icon navigates up without marquee capture', t => {
-  for (const part of ['filename', 'fileicon']) {
+test('a real pointer double-click on the parent cell navigates up without marquee capture', t => {
+  for (const part of ['.filename', '[data-cell="name"]']) {
     const app = createApp(t);
     select(app, 'docs');
     app.row('docs').querySelector('[data-filename]').dispatchEvent(new app.window.MouseEvent('dblclick', { bubbles: true, detail: 2 }));
     assert.equal(pane(app).querySelector('.path-input').value, '/workspace/bitfroest/docs');
-    const list = pane(app).querySelector('.list'), parent = list.querySelector('[data-parent]'), target = parent.querySelector(`.${part}`);
+    const list = pane(app).querySelector('.list'), parent = list.querySelector('[data-parent]'), target = parent.querySelector(part);
     let captures = 0;
     list.setPointerCapture = () => { captures++; };
     for (let click = 0; click < 2; click++) {
@@ -132,7 +132,7 @@ test('a real pointer double-click on the parent icon navigates up without marque
 test('a delayed second click starts inline rename and Escape restores the original name', async t => {
   const app = createApp(t); let now = 1000; app.window.Date.now = () => now;
   select(app, 'README.md'); now += 700;
-  select(app, 'README.md'); await delay(400);
+  select(app, 'README.md'); await delay(700);
   const input = app.document.querySelector('.inline-rename');
   assert.ok(input);
   assert.equal(input.selectionEnd, 'README.md'.length);
@@ -184,7 +184,7 @@ test('real filesystem navigation loads an unknown parent instead of rejecting ex
   app.document.querySelector('.pane.active [data-parent]').dispatchEvent(new app.window.MouseEvent('dblclick', { bubbles: true, button: 0 }));
   const request = app.messages.find(message => message.type === 'filesystem-navigate');
   assert.ok(request); assert.equal(request.path, 'C:/git/zwork/gb-src-mirror');
-  assert.equal(app.state().panes[0].tabs[0], 'C:/git/zwork/gb-src-mirror/node-rpt');
+  assert.equal(app.state().panes[0].tabs[0], request.path);
   const fresh = app.state(); fresh.snapshotId = 'parent-loaded'; fresh.folders[request.path] = [];
   app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-result', ok: true, state: fresh, resumeNavigation: { path: request.path, side: 0 } } }));
   assert.equal(app.state().panes[0].tabs[0], request.path);

@@ -60,14 +60,15 @@ test('a pending read belongs to its tab and does not mark a newly opened tab as 
   assert.equal(app.document.querySelector('#status-activity').textContent.includes('Verzeichnis einlesen'), false);
 });
 
-test('directory return creates a fresh grid without restoring live column widths', t => {
+test('directory return retains the grid and manually resized column widths', t => {
   const app = createApp(t, fixture());
   const original = app.grid(0), configured = app.state().panes[0].columns.find(column => column.key === 'name').width;
   original.setColumnWidths([{ key: 'name', newWidth: 390 }], true, 'uiColumnResized');
   enter(app);
-  assert.equal(original.isDestroyed(), true);
+  assert.equal(original.isDestroyed(), false);
   app.key('Backspace');
-  assert.notEqual(app.grid(0), original);
+  assert.equal(app.grid(0), original);
+  assert.equal(original.getColumn('name').getActualWidth(), 390);
   assert.equal(app.state().panes[0].columns.find(column => column.key === 'name').width, configured);
   const request = app.messages.filter(message => message.type === 'filesystem-navigate').at(-1);
   send(app, { type: 'filesystem-directory', navigationRequestId: request.navigationRequestId, path: '/root', rows: [{ id: 'keep', name: 'keep.txt', type: 'text', size: 123456 }, { id: 'long', name: 'another.verylongextensionforautosizing', type: 'text' }] });

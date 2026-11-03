@@ -16,7 +16,7 @@ function fixture() {
   }
   return { version: 1, realFilesystem: true, snapshotId: 'confirmed', active: 0, panes: ['C:/left', 'C:/right'].map(pane), folders, unloadedFolders: ['C:/left/folder', 'C:/right/folder'] };
 }
-for (const command of ['delete-permanently', 'rename']) test(`${command} opens for an unread folder before preparing its selected subtree`, t => {
+for (const command of ['delete-permanently', 'rename']) test(`${command} opens for an unread folder before starting the confirmed operation`, t => {
   const app = createApp(t, fixture());
   app.click(app.document.querySelector('[data-pane="1"] [data-file-row][data-id="C:/right/folder"] [data-filename]')); app.key('Enter');
   app.click(app.document.querySelector('[data-pane="0"] [data-file-row][data-id="C:/left/folder"] [data-filename]')); app.action(command);
@@ -24,6 +24,14 @@ for (const command of ['delete-permanently', 'rename']) test(`${command} opens f
   assert.equal(app.messages.some(message => message.type === 'filesystem-prepare'), false);
   if (command === 'rename') app.document.querySelector('#mask').value = 'chosen';
   submit(app);
+  if (command === 'delete-permanently') {
+    assert.equal(app.messages.some(message => message.type === 'filesystem-prepare'), false);
+    const deletion = app.messages.find(message => message.type === 'filesystem-delete');
+    assert.ok(deletion);
+    assert.deepEqual([...deletion.paths], ['C:/left/folder']);
+    assert.equal(deletion.useTrash, false);
+    return;
+  }
   const preparation = app.messages.find(message => message.type === 'filesystem-prepare'); assert.ok(preparation);
   assert.deepEqual([...preparation.paths], ['C:/left/folder']);
   const fresh = app.state(); fresh.snapshotId = 'prepared'; fresh.unloadedFolders = ['C:/right/folder'];

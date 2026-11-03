@@ -152,7 +152,7 @@ test('parent drop cancellation, failed target reading and root self-drops preser
   assert.equal(result.event.defaultPrevented, false); assert.equal(result.row.classList.contains('drop-target'), false);
 });
 
-test('right dragging onto an unloaded parent retains the directory target through its action choice', t => {
+test('right dragging onto an unloaded parent opens move confirmation for that directory', async t => {
   const app = createApp(t, fixture());
   const row = app.document.querySelector('[data-pane="0"] [data-parent]');
   const pointer = (type, target, x) => {
@@ -160,11 +160,12 @@ test('right dragging onto an unloaded parent retains the directory target throug
     for (const [key, value] of Object.entries({ button: 2, buttons: type === 'pointerup' ? 0 : 2, pointerId: 7, clientX: x, clientY: 5 })) Object.defineProperty(event, key, { value });
     target.dispatchEvent(event);
   };
-  pointer('pointerdown', app.row('film.mp4'), 5); pointer('pointermove', row, 500);
+  pointer('pointerdown', app.row('film.mp4'), 5);
+  await new Promise(resolve => app.window.setTimeout(resolve, 450));
+  pointer('pointermove', row, 500);
   assert.equal(row.classList.contains('drop-target'), true);
   pointer('pointerup', row, 500);
-  const request = app.messages.find(message => message.type === 'choose-drop-action'); assert.ok(request);
-  send(app, { type: 'drop-action-result', requestId: request.requestId, action: 'copy' });
-  assert.equal(app.document.querySelector('#modal-title').textContent, 'Kopieren');
+  assert.equal(app.messages.some(message => message.type === 'choose-drop-action'), false);
+  assert.equal(app.document.querySelector('#modal-title').textContent, 'Verschieben');
   assert.equal(app.document.querySelector('#value').value, 'C:\\base');
 });

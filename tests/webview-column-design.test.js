@@ -4,11 +4,14 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { createApp } = require('./support/webview.cjs');
 
-function styledApp(t, options) {
-  const app = createApp(t, null, options);
-  const style = app.document.createElement('style');
-  style.textContent = fs.readFileSync(path.join(__dirname, '../media/app.css'), 'utf8');
-  app.document.head.append(style);
+function styledApp(t, options = {}) {
+  let style;
+  const app = createApp(t, null, { ...options, beforeApp(context) {
+    style = context.document.createElement('style');
+    style.textContent = fs.readFileSync(path.join(__dirname, '../media/app.css'), 'utf8');
+    context.document.head.append(style);
+    options.beforeApp?.(context);
+  } });
   const rule = selector => [...style.sheet.cssRules].find(rule => rule.selectorText === selector)?.style;
   return { ...app, rule };
 }

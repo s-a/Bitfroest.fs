@@ -68,24 +68,32 @@ test('icon acknowledgements resolve row identities in linear work without replac
   assert.equal(app.row('item-0.txt').getAttribute('aria-selected'), 'true');
 });
 
-test('validating a multi-file right drag uses bounded identity lookups and retains the captured selection', t => {
-  let reads = 0;
-  const items = Array.from({ length: 250 }, (_, index) => ({ get id() { reads++; return String(index); }, name: `item-${index}.txt`, type: 'text', size: index }));
-  const pane = path => ({ tabs: [path], tab: 0, selected: [], cursor: null, sort: 'name', filter: '' });
-  const left = pane('/left'); left.selected = items.map(file => file.id); left.cursor = '0';
-  const app = createApp(t, { version: 1, active: 0, panes: [left, pane('/right')], folders: { '/left': items, '/right': [] } });
-  function pointer(type, target, x) {
-    const event = new app.window.Event(type, { bubbles: true, cancelable: true });
-    for (const [key, value] of Object.entries({ button: 2, buttons: type === 'pointerup' ? 0 : 2, pointerId: 1, clientX: x, clientY: 10 })) Object.defineProperty(event, key, { value });
-    target.dispatchEvent(event);
+test('validating a multi-file right drag scales linearly and retains the captured selection', async t => {
+  const measurements = [];
+  for (const count of [125, 250]) {
+    let reads = 0;
+    const items = Array.from({ length: count }, (_, index) => ({ get id() { reads++; return String(index); }, name: `item-${index}.txt`, type: 'text', size: index }));
+    const pane = path => ({ tabs: [path], tab: 0, selected: [], cursor: null, sort: 'name', filter: '' });
+    const left = pane('/left'); left.selected = items.map(file => file.id); left.cursor = '0';
+    const app = createApp(t, { version: 1, active: 0, panes: [left, pane('/right')], folders: { '/left': items, '/right': [] } });
+    function pointer(type, target, x) {
+      const event = new app.window.Event(type, { bubbles: true, cancelable: true });
+      for (const [key, value] of Object.entries({ button: 2, buttons: type === 'pointerup' ? 0 : 2, pointerId: 1, clientX: x, clientY: 10 })) Object.defineProperty(event, key, { value });
+      target.dispatchEvent(event);
+    }
+    const target = app.document.querySelector('[data-pane="1"] .list');
+    pointer('pointerdown', app.row('item-0.txt'), 10);
+    await new Promise(resolve => app.window.setTimeout(resolve, 450));
+    reads = 0;
+    pointer('pointermove', target, 600); pointer('pointerup', target, 600);
+    t.diagnostic(`Drag identity reads for ${items.length} marked rows: ${reads}`);
+    measurements.push(reads);
+    assert.equal(app.document.querySelector('#modal-title').textContent, 'Verschieben');
+    assert.equal(app.document.querySelector('#modal').open, true);
+    assert.equal(app.messages.some(message => message.type === 'choose-drop-action'), false);
+    assert.equal(app.state().panes[0].selected.length, items.length);
   }
-  const target = app.document.querySelector('[data-pane="1"] .list');
-  pointer('pointerdown', app.row('item-0.txt'), 10); reads = 0;
-  pointer('pointermove', target, 600); pointer('pointerup', target, 600);
-  t.diagnostic(`Drag identity reads for ${items.length} marked rows: ${reads}`);
-  assert.ok(reads <= items.length * 10, `drag identity reads must be linear; got ${reads}`);
-  assert.equal(app.messages.filter(message => message.type === 'choose-drop-action').length, 1);
-  assert.equal(app.state().panes[0].selected.length, items.length);
+  assert.ok(measurements[1] <= measurements[0] * 2 + 20, `doubling the selection must keep identity lookups linear: ${measurements}`);
 });
 
 test('selection painting does not repeatedly scan a large marked selection for every row', t => {
