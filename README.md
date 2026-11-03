@@ -15,7 +15,10 @@ Bitfroest.fs is for developers managing source and build folders, administrators
 - Search for files and duplicates, and inspect text, binary and hexadecimal content.
 - Browse ZIP archives and use supported archive operations.
 - View local Git status, configure columns and file colors, and save favorite locations.
+- Open a file or folder's Git log with a commit graph, compact commit message and a larger list of changed files. Double-click a changed file to compare its committed versions in the VS Code diff editor.
 - Customize shortcuts and settings, with interface text in English or German.
+
+On Windows, the Git file menu also offers **Delete (Keep Local)** and **Delete and Add to Ignore List**. Both keep the local file and stage its removal from Git; the second action adds an exact rule to the `.gitignore` beside the file. Neither action creates a commit. Index changes that would discard staged-only content are refused.
 
 ## Get started
 

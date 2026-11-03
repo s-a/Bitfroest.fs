@@ -1,0 +1,37 @@
+:root { color-scheme: light dark; --top: 43; --middle: 12; --bottom: 45; }
+* { box-sizing: border-box; }
+body { margin: 0; padding: 8px 12px; height: 100vh; display: flex; flex-direction: column; color: var(--vscode-foreground); background: var(--vscode-editor-background); font-family: var(--vscode-font-family); font-size: var(--vscode-font-size); }
+header { display: flex; gap: 12px; min-height: 30px; align-items: center; }
+#target { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#branch { margin-left: auto; white-space: nowrap; }
+main { min-height: 280px; flex: 1; display: grid; grid-template-rows: minmax(80px, 43fr) 5px minmax(50px, 12fr) 5px minmax(90px, 45fr); }
+section { overflow: auto; border: 1px solid var(--vscode-panel-border, var(--vscode-contrastBorder)); min-width: 0; min-height: 0; }
+table { width: 100%; border-spacing: 0; border-collapse: separate; text-align: left; }
+th { position: sticky; top: 0; z-index: 1; font-weight: normal; background: var(--vscode-editor-background); border-bottom: 1px solid var(--vscode-panel-border, var(--vscode-contrastBorder)); }
+th, td { padding: 3px 8px; height: 28px; text-align: left; white-space: nowrap; }
+td.subject { max-width: 50vw; overflow: hidden; text-overflow: ellipsis; width: 100%; }
+td.graph { padding: 0 4px; }
+td.graph svg { display: block; }
+tr[data-commit], tr[data-file] { cursor: default; }
+tbody tr:hover { background: var(--vscode-list-hoverBackground); color: var(--vscode-list-hoverForeground); }
+tbody tr[aria-selected="true"] { background: var(--vscode-list-inactiveSelectionBackground); color: var(--vscode-list-inactiveSelectionForeground); }
+tbody tr[aria-selected="true"]:focus { background: var(--vscode-list-activeSelectionBackground); color: var(--vscode-list-activeSelectionForeground); }
+:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
+tbody tr:focus-visible { outline: 1px solid var(--vscode-list-focusOutline, var(--vscode-focusBorder)); }
+.splitter { cursor: row-resize; touch-action: none; }
+.splitter:hover, .splitter:focus { background: var(--vscode-focusBorder); }
+#message-pane { padding: 6px 10px; }
+#commit-info { color: var(--vscode-descriptionForeground); user-select: text; }
+#message { margin: 4px 0; font: inherit; white-space: pre-wrap; overflow-wrap: anywhere; }
+footer { min-height: 24px; display: flex; align-items: center; gap: 16px; color: var(--vscode-descriptionForeground); font-size: 0.9em; }
+#activity { white-space: nowrap; }
+#activity[data-error="true"] { color: var(--vscode-errorForeground); }
+#notice { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-left: auto; }
+.graph-line { fill: none; stroke-width: 1.5; }
+.graph-dot { stroke: var(--vscode-editor-background); stroke-width: 1; }
+.lane-0 { color: var(--vscode-scmGraph-foreground1, var(--vscode-charts-blue)); }
+.lane-1 { color: var(--vscode-scmGraph-foreground2, var(--vscode-charts-purple)); }
+.lane-2 { color: var(--vscode-scmGraph-foreground3, var(--vscode-charts-orange)); }
+.lane-3 { color: var(--vscode-scmGraph-foreground4, var(--vscode-charts-green)); }
+.lane-4 { color: var(--vscode-scmGraph-foreground5, var(--vscode-charts-red)); }
+body.vscode-high-contrast section, body.vscode-high-contrast-light section { border-color: var(--vscode-contrastBorder); }

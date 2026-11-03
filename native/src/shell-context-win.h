@@ -20,6 +20,7 @@ struct ShellContextMenuRequest {
   std::wstring lock_inspection_label;
   bool git_diff = false;
   bool git_history = false;
+  bool git_file_actions = false;
 };
 
 struct ShellContextMenuEntry {
@@ -38,6 +39,7 @@ struct ShellContextMenuResult {
   bool inspect_locks = false;
   bool git_diff = false;
   bool git_history = false;
+  std::wstring git_file_action;
   DWORD native_milliseconds = 0;
   const char* error_stage = nullptr;
   HRESULT error_hresult = S_OK;
@@ -55,7 +57,8 @@ bool EnumerateShellMenu(HMENU menu, IContextMenu* context,
                        std::vector<ShellContextMenuEntry>* entries,
                        DWORD* native_error);
 
-bool AppendGitMenu(HMENU menu, bool diff, bool history, DWORD* native_error);
+bool AppendGitMenu(HMENU menu, bool diff, bool history, DWORD* native_error, bool file_actions = false);
+bool SelectGitFileMenuCommand(UINT command, bool enabled, ShellContextMenuResult* result);
 bool SelectGitHistoryMenuCommand(UINT command, bool enabled, ShellContextMenuResult* result);
 bool AppendGitDiffMenu(HMENU menu, bool enabled, DWORD* native_error);
 bool SelectGitDiffMenuCommand(UINT command, bool enabled, ShellContextMenuResult* result);

@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><!--POLICY--><meta name="viewport" content="width=device-width, initial-scale=1"><title>Git History</title><link rel="stylesheet" href="git-history.css"></head>
+<body>
+  <header><strong>Git History</strong><span id="target"></span><span id="branch"></span></header>
+  <main id="layout">
+    <section id="commits" tabindex="0" aria-label="Commits"><table><thead><tr><th data-label="graph">Graph</th><th data-label="subject">Message</th><th data-label="author">Author</th><th data-label="date">Date</th><th>Commit</th></tr></thead><tbody id="commit-rows"></tbody></table></section>
+    <div class="splitter" role="separator" tabindex="0" aria-orientation="horizontal" aria-label="Commit list height" aria-valuemin="20" aria-valuemax="65" aria-valuenow="43" data-split="top"></div>
+    <section id="message-pane" aria-label="Commit message"><div id="commit-info"></div><pre id="message" tabindex="0"></pre></section>
+    <div class="splitter" role="separator" tabindex="0" aria-orientation="horizontal" aria-label="File list height" aria-valuemin="51" aria-valuemax="68" aria-valuenow="55" data-split="bottom"></div>
+    <section id="files" tabindex="0" aria-label="Changed files"><table><thead><tr><th data-label="path">Path</th><th data-label="extension">Extension</th><th data-label="status">Status</th><th data-label="added">Lines added</th><th data-label="removed">Lines removed</th></tr></thead><tbody id="file-rows"></tbody></table></section>
+  </main>
+  <footer><span id="activity" role="status" aria-live="polite"></span><span id="notice"></span></footer>
+  <script src="git-history-model.js"></script><script src="git-history.js"></script>
+</body></html>

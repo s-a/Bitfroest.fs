@@ -829,6 +829,16 @@
         "category": "Git"
       },
       {
+        "command": "bitfroest.gitUntrack",
+        "title": "%git.untrack.title%",
+        "category": "Git"
+      },
+      {
+        "command": "bitfroest.gitIgnore",
+        "title": "%git.ignore.title%",
+        "category": "Git"
+      },
+      {
         "command": "bitfroest.open-terminal",
         "title": "%command.bitfroest.open-terminal.title%",
         "category": "Bitfroest.fs",
@@ -1313,6 +1323,16 @@
           "command": "bitfroest.gitHistory",
           "when": "gitHistory",
           "group": "2_history"
+        },
+        {
+          "command": "bitfroest.gitUntrack",
+          "when": "gitFile",
+          "group": "3_tracking@1"
+        },
+        {
+          "command": "bitfroest.gitIgnore",
+          "when": "gitFile",
+          "group": "3_tracking@2"
         }
       ],
       "editor/title": [
@@ -1480,6 +1500,14 @@
         }
       ],
       "commandPalette": [
+        {
+          "command": "bitfroest.gitUntrack",
+          "when": "false"
+        },
+        {
+          "command": "bitfroest.gitIgnore",
+          "when": "false"
+        },
         {
           "command": "bitfroest.gitHistory",
           "when": "false"

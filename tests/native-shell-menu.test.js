@@ -16,6 +16,16 @@ test('Git Diff is an explicitly enabled file action returned separately from she
 });
 const { createNativeApi } = require('../native-api');
 
+test('Git file actions require explicit enablement and reject folders and unsolicited native replies', { skip: process.platform !== 'win32' }, async t => {
+  const files = await fixture(t), directory = path.join(files.root, 'folder'); await fs.mkdir(directory);
+  for (const action of ['git-untrack', 'git-ignore']) {
+    const provider = createShellMenuProvider({ roots: [files.root], invokeNative: async request => ({ ok: true, displayed: true, invoked: true, cancelled: false, action, enabled: request.gitFileActions }) }); t.after(() => provider.dispose());
+    const result = await provider.show([files.a], { gitFileActions: true }); assert.equal(result.action, action); assert.equal(result.enabled, true);
+    await assert.rejects(provider.show([directory], { gitFileActions: true }), /Systemmenü/);
+    await assert.rejects(provider.show([files.a]), /Systemmenü/);
+  }
+});
+
 test('Git History is explicitly enabled for one file or folder and rejects unsolicited actions', { skip: process.platform !== 'win32' }, async t => {
   const files = await fixture(t), directory = path.join(files.root, 'folder'); await fs.mkdir(directory);
   let request;

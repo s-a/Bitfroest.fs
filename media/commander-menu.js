@@ -3,7 +3,7 @@
   const icons = {
     'clipboard-copy': 'copy', 'clipboard-cut': 'arrow-right', 'clipboard-paste': 'clippy',
     'copy-path': 'link', 'close-tab': 'close', 'new-tab': 'add',
-    'configure-columns': 'settings-gear', 'inspect-folder-locks': 'lock', git: 'git-compare', 'git-diff': 'git-compare', 'git-history': 'history',
+    'configure-columns': 'settings-gear', 'inspect-folder-locks': 'lock', git: 'git-compare', 'git-diff': 'git-compare', 'git-history': 'history', 'git-untrack': 'remove', 'git-ignore': 'close',
     pack: 'file-zip', unpack: 'file-zip', 'test-archives': 'check-all', rename: 'edit', 'rename-one': 'edit',
     'select-group': 'checklist', 'unselect-group': 'checklist', 'select-all': 'check-all', clear: 'remove', invert: 'selection',
     'select-extension': 'symbol-key', 'save-selection': 'save', 'restore-selection': 'history',

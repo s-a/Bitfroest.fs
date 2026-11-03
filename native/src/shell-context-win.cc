@@ -25,6 +25,8 @@ constexpr UINT kLastCommand = 0x7fff;
 constexpr UINT kLockCommand = 0x8000;
 constexpr UINT kGitDiffCommand = 0x8001;
 constexpr UINT kGitHistoryCommand = 0x8002;
+constexpr UINT kGitUntrackCommand = 0x8003;
+constexpr UINT kGitIgnoreCommand = 0x8004;
 constexpr wchar_t kWindowClass[] = L"VisualStudioCodeFileShellMenuOwner";
 
 struct MenuPoint { LONG x; LONG y; };
@@ -337,7 +339,8 @@ void RunMenu(const ShellContextMenuRequest& request, const std::vector<std::wstr
   DWORD menu_error = ERROR_SUCCESS;
   const bool git_diff = request.git_diff && paths.size() == 1 && !IsDirectory(paths.front());
   const bool git_history = request.git_history && paths.size() == 1;
-  if (!AppendGitMenu(menu, git_diff, git_history, &menu_error)) throw NativeError{menu_error};
+  const bool git_file_actions = request.git_file_actions && paths.size() == 1 && !IsDirectory(paths.front());
+  if (!AppendGitMenu(menu, git_diff, git_history, &menu_error, git_file_actions)) throw NativeError{menu_error};
   if (!EnumerateShellMenu(menu, context.get(), &result->entries, &menu_error)) throw NativeError{menu_error};
   if (request.mode == L"inspect") return;
   MenuWindow window(owner, second.get(), third.get(), &session_closed);
@@ -348,7 +351,7 @@ void RunMenu(const ShellContextMenuRequest& request, const std::vector<std::wstr
   const UINT command = TrackPopupMenuEx(menu, TPM_RETURNCMD | TPM_RIGHTBUTTON, point.x, point.y, window.get(), nullptr);
   result->cancelled = command == 0;
   if (session_closed.load()) throw NativeError{ERROR_CANCELLED};
-  if (SelectGitDiffMenuCommand(command, git_diff, result) || SelectGitHistoryMenuCommand(command, git_history, result)) return;
+  if (SelectGitDiffMenuCommand(command, git_diff, result) || SelectGitHistoryMenuCommand(command, git_history, result) || SelectGitFileMenuCommand(command, git_file_actions, result)) return;
   if (command == kLockCommand && inspect_folder) {
     result->inspect_locks = true;
     result->invoked = true;
@@ -445,19 +448,31 @@ bool AppendGitDiffMenu(HMENU menu, bool enabled, DWORD* native_error) {
   return AppendGitMenu(menu, enabled, false, native_error);
 }
 
-bool AppendGitMenu(HMENU menu, bool diff, bool history, DWORD* native_error) {
+bool AppendGitMenu(HMENU menu, bool diff, bool history, DWORD* native_error, bool file_actions) {
   if (native_error) *native_error = ERROR_SUCCESS;
-  if (!diff && !history) return true;
+  if (!diff && !history && !file_actions) return true;
   HMENU submenu = CreatePopupMenu();
   if (!submenu) { if (native_error) *native_error = GetLastError(); return false; }
   if ((diff && !AppendMenuW(submenu, MF_STRING, kGitDiffCommand, L"Diff")) ||
-      (history && !AppendMenuW(submenu, MF_STRING, kGitHistoryCommand, L"Git History")) ||
+      (history && !AppendMenuW(submenu, MF_STRING, kGitHistoryCommand, L"Show Log")) ||
+      (file_actions && (!AppendMenuW(submenu, MF_SEPARATOR, 0, nullptr) ||
+        !AppendMenuW(submenu, MF_STRING, kGitUntrackCommand, L"Delete (Keep Local)") ||
+        !AppendMenuW(submenu, MF_STRING, kGitIgnoreCommand, L"Delete and Add to Ignore List"))) ||
       !AppendMenuW(menu, MF_SEPARATOR, 0, nullptr) ||
       !AppendMenuW(menu, MF_POPUP, reinterpret_cast<UINT_PTR>(submenu), L"Git")) {
     if (native_error) *native_error = GetLastError();
     DestroyMenu(submenu);
     return false;
   }
+  return true;
+}
+
+bool SelectGitFileMenuCommand(UINT command, bool enabled, ShellContextMenuResult* result) {
+  if (!enabled || !result) return false;
+  if (command == kGitUntrackCommand) result->git_file_action = L"git-untrack";
+  else if (command == kGitIgnoreCommand) result->git_file_action = L"git-ignore";
+  else return false;
+  result->invoked = true; result->cancelled = false;
   return true;
 }
 
@@ -601,6 +616,13 @@ bool ParseRequest(napi_env env, napi_value value, ShellContextMenuRequest* reque
   std::wstring label;
   if (!ReadWide(env, value, "lockInspectionLabel", 120, &label, true)) return false;
   request->lock_inspection_label = label.empty() ? L"Ordnersperren untersuchen" : std::move(label);
+  bool has_file_actions = false;
+  if (napi_has_named_property(env, value, "gitFileActions", &has_file_actions) != napi_ok) return false;
+  if (has_file_actions) {
+    napi_value enabled;
+    if (napi_get_named_property(env, value, "gitFileActions", &enabled) != napi_ok ||
+        napi_get_value_bool(env, enabled, &request->git_file_actions) != napi_ok) return false;
+  }
   bool has_git_history = false;
   if (napi_has_named_property(env, value, "gitHistory", &has_git_history) != napi_ok) return false;
   if (has_git_history) {
@@ -668,6 +690,7 @@ napi_value ResultValue(napi_env env, const ShellContextMenuResult& result) {
   if (result.inspect_locks && !Set(env, output, "action", WideValue(env, L"inspect-locks"))) return nullptr;
   if (result.git_diff && !Set(env, output, "action", WideValue(env, L"git-diff"))) return nullptr;
   if (result.git_history && !Set(env, output, "action", WideValue(env, L"git-history"))) return nullptr;
+  if (!result.git_file_action.empty() && !Set(env, output, "action", WideValue(env, result.git_file_action))) return nullptr;
   if (result.refresh_required && !Set(env, output, "refreshRequired", (napi_get_boolean(env, true, &value) == napi_ok) ? value : nullptr)) return nullptr;
   return output;
 }

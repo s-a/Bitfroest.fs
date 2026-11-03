@@ -84,6 +84,8 @@ const { favoritesToTables, validateColumns } = require('./media/configuration-mo
 const { archiveEntries } = require('./search-archives');
 const { createShellMenuProvider } = require('./native-shell-menu');
 const { createLockInspector } = require('./lock-inspector');
+const { createGitHistory } = require('./git-history');
+const { createGitFileActions } = require('./git-file-actions');
 const { createLicenseInformation } = require('./license-information');
 const os = require('node:os');
 
@@ -357,6 +359,10 @@ function activate(context) {
   function knownFilePath(value) {
     return typeof value === 'string' && value.length <= 4096 && !value.includes('\0') && filesystemState && (extractedSearchFiles.has(value) || provider.contains(value) && (searchCatalog.has(value) || Object.values(filesystemState.folders).flat().some(file => file.type !== 'folder' && file.fsSource === value)));
   }
+  const gitFileActions = createGitFileActions();
+  context.subscriptions.push(gitFileActions);
+  const gitHistoryView = createGitHistory(vscode, context);
+  context.subscriptions.push(gitHistoryView);
   const readonlyResources = createReadonlyResources(vscode, { validate: knownFilePath, t });
   context.subscriptions.push(readonlyResources);
   const fileSnapshot = target => Object.values(filesystemState?.folders || {}).flat().find(file => file.fsSource === target) || searchCatalog.get(target);
@@ -962,14 +968,16 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
     const replyUiAction = (message, result) => {
       if (panel === messagePanel && !listerDisposed && typeof message.requestId === 'string' && /^ui-action-\d{1,15}$/.test(message.requestId)) return messagePanel.webview.postMessage({ type: 'ui-action-result', requestId: message.requestId, ...result });
     };
+    let gitMutationBusy = false;
     async function openGitDiff(message) {
-      const history = message.type === 'git-history';
+      const directoryHistory = message.type === 'git-history-directory';
+      const history = message.type === 'git-history' || directoryHistory;
       const invalid = history ? 'Ungültige Auswahl für Git History.' : 'Ungültige Dateiauswahl für Git Diff.';
-      const validSelection = () => panel === messagePanel && !listerDisposed && filesystemState?.realFilesystem && message.snapshotId === filesystemState.snapshotId && typeof message.directory === 'string' && !filesystemState.archiveLocations?.[message.directory] && !message.directory.startsWith('zip:') && provider.contains(message.directory) && savedState?.panes?.some(pane => pane.tabs[pane.tab] === message.directory) && Array.isArray(message.ids) && message.ids.length === 1;
+      const validSelection = () => panel === messagePanel && !listerDisposed && filesystemState?.realFilesystem && message.snapshotId === filesystemState.snapshotId && typeof message.directory === 'string' && !filesystemState.archiveLocations?.[message.directory] && !message.directory.startsWith('zip:') && provider.contains(message.directory) && savedState?.panes?.some(pane => pane.tabs[pane.tab] === message.directory) && (directoryHistory || Array.isArray(message.ids) && message.ids.length === 1);
       if (!validSelection()) throw new Error(t(invalid));
-      const row = filesystemState.folders[message.directory]?.find(file => file.id === message.ids[0]);
+      const row = directoryHistory ? { name: path.basename(message.directory), type: 'folder', fsSource: message.directory } : filesystemState.folders[message.directory]?.find(file => file.id === message.ids[0]);
       const target = row?.fsSource;
-      if (!row || (!history && row.type === 'folder') || !(history && row.type === 'folder' ? typeof target === 'string' && provider.contains(target) : knownFilePath(target)) || clipboardIdentity(target) !== clipboardIdentity(`${message.directory.replace(/\/$/, '')}/${row.name}`)) throw new Error(t(invalid));
+      if (!row || (!history && row.type === 'folder') || !(history && row.type === 'folder' ? typeof target === 'string' && provider.contains(target) : knownFilePath(target)) || !directoryHistory && clipboardIdentity(target) !== clipboardIdentity(`${message.directory.replace(/\/$/, '')}/${row.name}`)) throw new Error(t(invalid));
       const extension = vscode.extensions.getExtension('vscode.git');
       const git = extension && await extension.activate();
       if (!git?.enabled) throw new Error(t('Die Git-Integration von VS Code ist nicht verfügbar.'));
@@ -977,14 +985,25 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
       const repository = api.getRepository(uri) || await api.openRepository(vscode.Uri.file(message.directory));
       if (!repository) throw new Error(t('Für diese Datei ist kein Git-Repository verfügbar.'));
       if (!history) await repository.status();
-      if (!validSelection() || filesystemState.folders[message.directory]?.find(file => file.id === message.ids[0])?.fsSource !== target) throw new Error(t(invalid));
+      if (!validSelection() || !directoryHistory && filesystemState.folders[message.directory]?.find(file => file.id === message.ids[0])?.fsSource !== target) throw new Error(t(invalid));
       if (history) {
-        if (row.type === 'folder') {
-          const [major, minor] = (vscode.version || '').split('.').map(Number);
-          if (!(major > 1 || major === 1 && minor >= 144)) throw new Error(t('Git History für Ordner benötigt VS Code 1.144 oder neuer.'));
-        }
-        await vscode.commands.executeCommand('files.openTimeline', uri);
+        gitHistoryView.open({ repository, api, target, folder: row.type === 'folder', language: displayLanguage() });
         return;
+      }
+      if (['git-untrack', 'git-ignore'].includes(message.type)) {
+        if (gitMutationBusy || filesystemRequests || transferJobs.size) throw new Error(t('Eine Dateisystemoperation läuft bereits.'));
+        gitMutationBusy = true;
+        try {
+          const ignore = message.type === 'git-ignore';
+          const ticket = await gitFileActions.prepare({ repositoryRoot: repository.rootUri.fsPath, target, ignore });
+          const button = t('Aus Git entfernen');
+          const warning = ignore ? 'Die Datei bleibt lokal erhalten und wird aus dem Git-Index entfernt. Zusätzlich wird eine genaue Regel in der .gitignore ergänzt. Die Änderung wird nicht automatisch committet.' : 'Die Datei bleibt lokal erhalten und wird aus dem Git-Index entfernt. Die Entfernung wird für den nächsten Commit vorgemerkt.';
+          const answer = await vscode.window.showWarningMessage(t(warning), { modal: true, detail: target }, button);
+          if (answer !== button) return { cancelled: true };
+          if (!validSelection() || filesystemRequests || transferJobs.size || filesystemState.folders[message.directory]?.find(file => file.id === message.ids[0])?.fsSource !== target) throw new Error(t(invalid));
+          await gitFileActions.execute(ticket);
+          return { gitChanged: true };
+        } finally { gitMutationBusy = false; }
       }
       const changes = ['workingTreeChanges', 'indexChanges', 'mergeChanges', 'untrackedChanges'].flatMap(key => repository.state[key] || []);
       if (changes.some(change => clipboardIdentity(change.uri.fsPath) === clipboardIdentity(target))) await vscode.commands.executeCommand('git.openChange', uri);
@@ -1073,11 +1092,11 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
         } catch (error) { if (currentGitDirectory(query, message.path) && filesystemState?.snapshotId === message.snapshotId) vscode.window.showWarningMessage(t('Git-Status nicht verfügbar: {error}', { error: error.message })); }
         return;
       }
-      if (message?.type === 'git-diff' || message?.type === 'git-history') {
+      if (['git-diff', 'git-history', 'git-history-directory', 'git-untrack', 'git-ignore'].includes(message?.type)) {
         try {
-          await openGitDiff(message);
-          await replyUiAction(message, { ok: true });
-        } catch (error) { await replyUiAction(message, { ok: false, error: t(error.message) }); }
+          const result = await openGitDiff(message);
+          await replyUiAction(message, { ok: true, ...result });
+        } catch (error) { await replyUiAction(message, { ok: false, error: t(error.message), gitChanged: error.untracked === true, unsupported: error.code === 'UnsupportedOperation' }); }
         return;
       }
       if (message?.type === 'configure-settings') { configurationEditor.open('settings'); return; }
@@ -1334,22 +1353,14 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
             const query = gitDirectoryQueries.get(directory);
             const gitHistory = paths.length === 1 && query && currentGitDirectory(query, directory) && query.repositories?.has(directory) === true && gitSettings().enabled;
             const gitDiff = paths.length === 1 && rows.get(message.ids[0])?.type !== 'folder' && query && currentGitDirectory(query, directory) && query.repositories?.has(directory) === true && gitSettings().enabled;
-            const result = message.inspectLocks === true ? { action: 'inspect-locks' } : await shellMenu.show(paths, { keyboard, ownerTitle: messagePanel.title, lockInspectionLabel: t('Ordnersperren untersuchen'), gitDiff: Boolean(gitDiff), gitHistory: Boolean(gitHistory) });
+            const result = message.inspectLocks === true ? { action: 'inspect-locks' } : await shellMenu.show(paths, { keyboard, ownerTitle: messagePanel.title, lockInspectionLabel: t('Ordnersperren untersuchen'), gitDiff: Boolean(gitDiff), gitHistory: Boolean(gitHistory), gitFileActions: Boolean(gitDiff) });
             if (panel !== messagePanel) return;
-            if (result.action === 'git-history') {
+            if (['git-history', 'git-diff', 'git-untrack', 'git-ignore'].includes(result.action)) {
               try {
-                if (!gitHistory) throw new Error(t('Ungültige Auswahl für Git History.'));
-                await openGitDiff({ ...message, type: 'git-history' });
-                await reply({ ok: true, action: 'git-history', invoked: false, cancelled: false, refreshed: false });
-              } catch (error) { await reply({ ok: false, action: 'git-history', error: t(error.message), refreshed: false }); }
-              return;
-            }
-            if (result.action === 'git-diff') {
-              try {
-                if (!gitDiff) throw new Error(t('Ungültige Dateiauswahl für Git Diff.'));
-                await openGitDiff(message);
-                await reply({ ok: true, action: 'git-diff', invoked: false, cancelled: false, refreshed: false });
-              } catch (error) { await reply({ ok: false, action: 'git-diff', error: t(error.message), refreshed: false }); }
+                if (!(result.action === 'git-history' ? gitHistory : gitDiff)) throw new Error(t('Ungültige Git-Dateiauswahl.'));
+                const outcome = await openGitDiff({ ...message, type: result.action });
+                await reply({ ok: true, action: result.action, invoked: false, cancelled: false, refreshed: false, ...outcome });
+              } catch (error) { await reply({ ok: false, action: result.action, error: t(error.message), gitChanged: error.untracked === true, refreshed: false }); }
               return;
             }
             if (result.action === 'inspect-locks') {
@@ -1875,6 +1886,7 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
   context.subscriptions.push(vscode.commands.registerCommand('bitfroest.configureShortcuts', () => configurationEditor.open('shortcuts')));
   context.subscriptions.push(vscode.commands.registerCommand('bitfroest.showLocalBranches', () => { if (panel && panelReady) panel.webview.postMessage({ type: 'action', action: 'git-branches' }); }));
   context.subscriptions.push(vscode.commands.registerCommand('bitfroest.gitHistory', selection => { if (panel && panelReady && selection?.gitHistory === true && ['files', 'folder'].includes(selection.webviewSection)) panel.webview.postMessage({ type: 'action', action: 'git-history', contextSelection: { directory: selection.directory, ids: selection.ids, snapshotId: selection.snapshotId } }); }));
+  for (const [id, action] of [['gitUntrack', 'git-untrack'], ['gitIgnore', 'git-ignore']]) context.subscriptions.push(vscode.commands.registerCommand(`bitfroest.${id}`, selection => { if (panel && panelReady && selection?.gitFile === true && selection.webviewSection === 'files') panel.webview.postMessage({ type: 'action', action, contextSelection: { directory: selection.directory, ids: selection.ids, snapshotId: selection.snapshotId } }); }));
   context.subscriptions.push(vscode.commands.registerCommand('bitfroest.gitDiff', selection => { if (panel && panelReady && selection?.gitFile === true && selection.webviewSection === 'files') panel.webview.postMessage({ type: 'action', action: 'git-diff', contextSelection: { directory: selection.directory, ids: selection.ids, snapshotId: selection.snapshotId } }); }));
   context.subscriptions.push(vscode.commands.registerCommand('bitfroest.configureFavorites', () => configurationEditor.open('favorites')));
   for (const action of ['conflict-target', 'conflict-source', 'conflict-target-plain', 'conflict-source-plain', 'conflict-compare', 'conflict-compare-internal']) context.subscriptions.push(vscode.commands.registerCommand(`bitfroest.${action}`, () => { if (panel && panelReady) panel.webview.postMessage({ type: 'action', action }); }));

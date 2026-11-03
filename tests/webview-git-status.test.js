@@ -29,6 +29,22 @@ test('Git History captures files and folders in the Git submenu and preserves th
   }
 });
 
+test('Git file actions are limited to one file and the location Git menu opens log for its captured directory', t => {
+  for (const name of ['a.txt', 'folder']) {
+    const app = createApp(t, fixture()); reply(app, app.messages.find(m => m.type === 'git-status'));
+    app.row(name).dispatchEvent(new app.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }));
+    app.document.querySelector('[data-context-action="git"]').dispatchEvent(new app.window.MouseEvent('mouseenter'));
+    const untrack = app.document.querySelector('[data-context-action="git-untrack"]'), ignore = app.document.querySelector('[data-context-action="git-ignore"]');
+    assert.equal(Boolean(untrack), name === 'a.txt'); assert.equal(Boolean(ignore), name === 'a.txt');
+    if (ignore) { app.click(ignore); const request = app.messages.find(m => m.type === 'git-ignore'); assert.deepEqual([...request.ids], ['a']); }
+  }
+  const app = createApp(t, fixture()); reply(app, app.messages.find(m => m.type === 'git-status'));
+  app.click(app.document.querySelector('[data-favorites]'));
+  app.document.querySelector('[data-location-section="git"]').dispatchEvent(new app.window.MouseEvent('mouseenter'));
+  const log = app.document.querySelector('[data-location-action="git-history-directory"]'); assert.ok(log); app.click(log);
+  const request = app.messages.find(m => m.type === 'git-history-directory'); assert.equal(request.directory, '/repo'); assert.equal(request.snapshotId, 'one');
+});
+
 test('Git History preserves folder selection through focus refresh and reports failed refresh without opening history', t => {
   for (const ok of [true, false]) {
     const app = createApp(t, fixture()); reply(app, app.messages.find(m => m.type === 'git-status'));

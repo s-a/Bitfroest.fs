@@ -239,6 +239,7 @@
     if (kind) {
       const actions = kind === 'git' ? [
         { id: 'git-branches', label: t('Verfügbare Branches'), icon: 'git-compare' },
+        { id: 'git-history-directory', label: t('Show Log'), icon: 'history' },
         { id: 'git-refresh', label: t('Git-Status aktualisieren'), icon: 'refresh' }
       ] : [
         { id: 'archive-root', label: t('Archivwurzel öffnen'), icon: 'folder-opened' },
@@ -255,7 +256,8 @@
         if (state.panes[side] !== origin || currentPath(origin) !== originPath || origin.tabStates[origin.tab].id !== originTab || favoritesBlocked()) { closeFavorites(false); return; }
         if (item.attrs?.['data-location-action']) {
           closeFavorites();
-          if (item.id === 'git-branches') host?.postMessage({ type: 'git-branches', path: originPath, snapshotId: state.snapshotId });
+          if (item.id === 'git-history-directory') hostAction('git-history-directory', { directory: originPath, snapshotId: state.snapshotId });
+          else if (item.id === 'git-branches') host?.postMessage({ type: 'git-branches', path: originPath, snapshotId: state.snapshotId });
           else if (item.id === 'git-refresh') { gitBindings.delete(originPath); requestGitStatus(); }
           else {
             const root = originPath.slice(0, originPath.indexOf('!') + 1);
@@ -2009,7 +2011,8 @@
     const request = uiActionRequests.get(result.requestId); if (!request) return;
     uiActionRequests.delete(result.requestId);
     statusTask(result.requestId, null);
-    const labels = { edit: 'Datei zum Bearbeiten geöffnet.', open: 'Datei geöffnet.', preview: 'Datei angezeigt.', 'open-settings': 'Einstellungen geöffnet.', 'show-licenses': 'Lizenzen geöffnet.', 'open-help-link': 'Link geöffnet.', 'open-trash': 'Papierkorb geöffnet.', 'open-terminal': 'Terminal geöffnet.', 'git-diff': 'Git-Diff geöffnet.', 'git-history': 'Git History geöffnet.' };
+    if (result.gitChanged) { gitBindings.clear(); gitDirectories.clear(); directoryCache.clearGit(); refreshGitDisplay(); if (request.type === 'git-ignore') action('refresh'); else requestGitStatus(); }
+    const labels = { edit: 'Datei zum Bearbeiten geöffnet.', open: 'Datei geöffnet.', preview: 'Datei angezeigt.', 'open-settings': 'Einstellungen geöffnet.', 'show-licenses': 'Lizenzen geöffnet.', 'open-help-link': 'Link geöffnet.', 'open-trash': 'Papierkorb geöffnet.', 'open-terminal': 'Terminal geöffnet.', 'git-diff': 'Git-Diff geöffnet.', 'git-history': 'Git History geöffnet.', 'git-history-directory': 'Git History geöffnet.', 'git-untrack': 'Datei aus Git entfernt; lokal erhalten.', 'git-ignore': 'Datei aus Git entfernt und ignoriert; lokal erhalten.' };
     reportStatus(result.cancelled ? t('Aktion abgebrochen.') : result.ok ? t(labels[request.type]) : result.error || t('Dateiaktion fehlgeschlagen.'), result.cancelled ? 'cancelled' : result.ok ? 'success' : result.unsupported ? 'info' : 'error', request.statusVersion);
   });
   function rememberSelection(p = pane()) {
@@ -3118,7 +3121,7 @@
   }
   function run(command, reverseDirectories = false, contextSelection) {
     clearTimeout(renameTimer); lastNameClick = null;
-    if (command === 'git-diff' || command === 'git-history') { requestGitDiff(contextSelection, command); return; }
+    if (['git-diff', 'git-history', 'git-untrack', 'git-ignore'].includes(command)) { requestGitDiff(contextSelection, command); return; }
     if (typeof command !== 'string') return;
     if (command === 'open-terminal') {
       if ($('#modal').open || document.activeElement?.matches('input,textarea,select,[contenteditable="true"]') || !document.activeElement?.closest('.list') || filesystemPending) return;
@@ -3747,6 +3750,8 @@
       statusTask(shellMenuPending.requestId, null); shellMenuPending = null;
       if (event.data.clipboardInvalidated) { clipboardGeneration++; setClipboardSelection(null); refreshClipboardAvailability(); }
       if (event.data.refreshed) focusRefreshRequested = false;
+      if (event.data.gitChanged) { gitBindings.clear(); gitDirectories.clear(); directoryCache.clearGit(); refreshGitDisplay(); if (event.data.action === 'git-ignore') action('refresh'); else requestGitStatus(); }
+      if (['git-untrack', 'git-ignore'].includes(event.data.action)) toast(event.data.cancelled ? t('Aktion abgebrochen.') : event.data.ok ? t('Datei aus Git entfernt; lokal erhalten.') : event.data.error, event.data.ok ? 'success' : 'error');
       if (event.data.action === 'git-diff' || event.data.action === 'git-history') toast(event.data.ok ? t(event.data.action === 'git-history' ? 'Git History geöffnet.' : 'Git-Diff geöffnet.') : event.data.error, event.data.ok ? 'success' : 'error');
       else if (!event.data.ok) { if (event.data.unsupported) toast(event.data.error, 'info'); else showOperationFailure(event.data.error || t('Das native Systemmenü konnte nicht geöffnet werden.'), { diagnostic: event.data.diagnostic }); }
       flushFocusRefresh(); return;
@@ -4054,7 +4059,7 @@
     if (kind === 'files' && selection.ids.length === 1) {
       const file = files(p).find(file => file.id === selection.ids[0]);
       if (file?.type === 'folder' && nativeDesktopSupported && !directory.startsWith('zip:')) definitions.push(['inspect-folder-locks', 'Ordnersperren untersuchen', []]);
-      if (selection.gitHistory) definitions.push(['git', 'Git', [], [...(selection.gitFile ? [['git-diff', 'Git-Diff', []]] : []), ['git-history', 'Git History', []]]]);
+      if (selection.gitHistory) definitions.push(['git', 'Git', [], [...(selection.gitFile ? [['git-diff', 'Git-Diff', []]] : []), ['git-history', 'Show Log', []], ...(selection.gitFile ? [['git-untrack', 'Delete (Keep Local)', []], ['git-ignore', 'Delete and Add to Ignore List', []]] : [])]]);
     }
     const root = document.createElement('div'); root.className = 'main-menu context-menu'; root.dataset.contextMenu = '';
     function describe([action, label, keys, children]) {

@@ -503,12 +503,12 @@ test('system-menu Git Diff is absent after repository inspection fails', async t
   assert.equal(app.calls.some(call => call.id === 'git.openChange'), false);
 });
 
-test('Git History delegates captured file and folder URIs to the built-in timeline and rejects stale selections', async t => {
+test('Git History opens its own editor for captured files and folders and rejects stale selections', async t => {
   for (const folder of [false, true]) {
     const initial = clipboardFixture();
     if (folder) { initial.folders['C:/tmp'][0] = { id: 'a', name: 'docs', type: 'folder', fsSource: 'C:/tmp/docs' }; initial.folders['C:/tmp/docs'] = []; }
     const app = harness(t, { filesystemLoad: async () => initial,
-      gitExtension: { enabled: true, getAPI: () => ({ getRepository: () => ({}) }) } });
+      gitExtension: { enabled: true, getAPI: () => ({ getRepository: () => ({ rootUri: { fsPath: 'C:/tmp' }, state: {} }) }) } });
     await app.command('bitfroest.openPrototype'); const panel = app.panels[0]; await panel.receive({ type: 'app-ready' });
     assert.match(panel.webview.html, /Content-Security-Policy/);
     const view = require('./support/webview.cjs').createApp(t, initial, { html: panel.webview.html });
@@ -520,17 +520,18 @@ test('Git History delegates captured file and folder URIs to the built-in timeli
     view.window.dispatchEvent(new view.window.MessageEvent('message', { data: panel.messages.at(-1) }));
     const request = view.messages.find(m => m.type === 'git-history'); assert.ok(request);
     await panel.receive(request);
-    const call = app.calls.find(call => call.id === 'files.openTimeline'); assert.ok(call);
-    assert.equal(call.args[0].fsPath, folder ? 'C:/tmp/docs' : 'C:/tmp/a.txt');
+    const history = app.panels.find(p => p.viewType === 'bitfroestGitHistory'); assert.ok(history);
+    assert.match(history.webview.html, /git-history/);
+    assert.equal(app.calls.some(call => call.id === 'files.openTimeline'), false);
     assert.equal(panel.messages.find(m => m.requestId === request.requestId)?.ok, true);
     await panel.receive({ ...request, requestId: 'ui-action-2', snapshotId: 'stale' });
     assert.equal(panel.messages.find(m => m.requestId === 'ui-action-2')?.ok, false);
-    assert.equal(app.calls.filter(call => call.id === 'files.openTimeline').length, 1);
+    assert.equal(app.panels.filter(p => p.viewType === 'bitfroestGitHistory').length, 1);
   }
 });
 
-test('Git History reports integration, repository, command and older folder host failures through status replies', async t => {
-  for (const mode of ['missing', 'disabled', 'repository', 'command', 'older-folder']) {
+test('Git History reports integration and repository failures through status replies', async t => {
+  for (const mode of ['missing', 'disabled', 'repository']) {
     const initial = clipboardFixture();
     if (mode === 'older-folder') initial.folders['C:/tmp'][0] = { id: 'a', name: 'docs', type: 'folder', fsSource: 'C:/tmp/docs' };
     const app = harness(t, { filesystemLoad: async () => initial, vscodeVersion: '1.100.0', commandError: mode === 'command' ? 'files.openTimeline' : undefined,
@@ -543,16 +544,45 @@ test('Git History reports integration, repository, command and older folder host
   }
 });
 
+test('Git Keep Local confirms a prepared file identity and cancellation never removes tracking', async t => {
+  for (const accept of [false, true]) {
+    const operations = [], initial = clipboardFixture();
+    const app = harness(t, { filesystemLoad: async () => initial,
+      gitExtension: { enabled: true, getAPI: () => ({ getRepository: () => ({ rootUri: { fsPath: 'C:/tmp' }, status: async () => {} }) }) },
+      gitFilePrepare: async input => { operations.push(['prepare', input]); return { captured: true }; },
+      gitFileExecute: async ticket => { assert.equal(ticket.captured, true); operations.push(['execute']); },
+      showWarningMessage: async (_message, _settings, button) => accept ? button : undefined });
+    await app.command('bitfroest.openPrototype'); const panel = app.panels[0]; await panel.receive({ type: 'app-ready' });
+    await panel.receive({ type: 'git-ignore', requestId: 'ui-action-1', directory: 'C:/tmp', ids: ['a'], snapshotId: 'clipboard' });
+    const result = panel.messages.find(m => m.type === 'ui-action-result'); assert.equal(result?.ok, true); assert.equal(Boolean(result.cancelled), !accept);
+    assert.equal(operations[0][1].target, 'C:/tmp/a.txt'); assert.equal(operations[0][1].ignore, true);
+    assert.equal(operations.some(o => o[0] === 'execute'), accept);
+    assert.equal(app.deleteCalls.length, 0);
+  }
+});
+
+test('location history opens the current directory without requiring or accepting a stale row selection', async t => {
+  const app = harness(t, { filesystemLoad: async () => clipboardFixture(),
+    gitExtension: { enabled: true, getAPI: () => ({ getRepository: () => ({ rootUri: { fsPath: 'C:/tmp' }, state: {} }) }) } });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0]; await panel.receive({ type: 'app-ready' });
+  await panel.receive({ type: 'git-history-directory', requestId: 'ui-action-1', directory: 'C:/tmp', snapshotId: 'clipboard' });
+  assert.equal(app.panels.filter(p => p.viewType === 'bitfroestGitHistory').length, 1);
+  await panel.receive({ type: 'git-history-directory', requestId: 'ui-action-2', directory: 'C:/temp/unknown', snapshotId: 'clipboard' });
+  assert.equal(panel.messages.find(m => m.requestId === 'ui-action-2').ok, false);
+  assert.equal(app.panels.filter(p => p.viewType === 'bitfroestGitHistory').length, 1);
+});
+
 test('system-menu Git History delegates a selected folder without refreshing or invoking a shell verb', async t => {
   const initial = clipboardFixture(); initial.folders['C:/tmp'][0] = { id: 'a', name: 'docs', type: 'folder', fsSource: 'C:/tmp/docs' }; initial.folders['C:/tmp/docs'] = [];
   const app = harness(t, { filesystemLoad: async () => initial,
     gitInspect: async directories => Object.fromEntries(directories.map(directory => [directory, { ok: true, repository: true, statuses: {} }])),
-    gitExtension: { enabled: true, getAPI: () => ({ getRepository: () => ({}) }) },
+    gitExtension: { enabled: true, getAPI: () => ({ getRepository: () => ({ rootUri: { fsPath: 'C:/tmp' }, state: {} }) }) },
     shellMenuShow: async (_paths, settings) => { assert.equal(settings.gitHistory, true); assert.equal(settings.gitDiff, false); return { ok: true, displayed: true, invoked: true, cancelled: false, action: 'git-history' }; } });
   await app.command('bitfroest.openPrototype'); const panel = app.panels[0]; await panel.receive({ type: 'app-ready' });
   await panel.receive({ type: 'git-status', requestId: 'git-1', snapshotId: 'clipboard', directories: ['C:/tmp'] });
   await panel.receive({ type: 'shell-context-menu', requestId: 'shell-menu-1', directory: 'C:/tmp', ids: ['a'], snapshotId: 'clipboard' });
-  assert.equal(app.calls.find(call => call.id === 'files.openTimeline')?.args[0].fsPath, 'C:/tmp/docs');
+  assert.ok(app.panels.find(p => p.viewType === 'bitfroestGitHistory'));
+  assert.equal(app.calls.some(call => call.id === 'files.openTimeline'), false);
   assert.equal(panel.messages.at(-1).action, 'git-history'); assert.equal(panel.messages.at(-1).refreshed, false); assert.equal(panel.messages.at(-1).invoked, false);
 });
 
@@ -1193,6 +1223,7 @@ function harness(t, options = {}) {
   Module._load = function (request, parent, isMain) {
     if (parent?.filename === extensionPath) {
       if (request === 'vscode') return vscode;
+      if (request === './git-file-actions') return { createGitFileActions: () => ({ prepare: async input => options.gitFilePrepare ? options.gitFilePrepare(input) : input, execute: async ticket => options.gitFileExecute?.(ticket), dispose() {} }) };
       if (request === './open-terminal') return { openTerminal: async target => { if (options.terminalOpen) return options.terminalOpen(target); throw new Error('Terminal unavailable'); } };
       if (request === './license-information' && options.licenseOpenError) return { createLicenseInformation: () => ({ dispose() {}, async open() { throw new Error(options.licenseOpenError); } }) };
       if (request === './network-paths') return { prepareNetworkDeletion: require('../network-paths').prepareNetworkDeletion,

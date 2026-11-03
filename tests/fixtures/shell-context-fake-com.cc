@@ -60,12 +60,25 @@ int wmain() {
     HMENU submenu = GetSubMenu(menu, GetMenuItemCount(menu) - 1);
     wchar_t label[32]{};
     if (!submenu || GetMenuItemCount(submenu) != (diff ? 2 : 1) ||
-        !GetMenuStringW(submenu, diff ? 1 : 0, label, 32, MF_BYPOSITION) || wcscmp(label, L"Git History") != 0) return 15;
+        !GetMenuStringW(submenu, diff ? 1 : 0, label, 32, MF_BYPOSITION) || wcscmp(label, L"Show Log") != 0) return 15;
     const UINT command = GetMenuItemID(submenu, diff ? 1 : 0);
     ShellContextMenuResult result;
     if (SelectGitHistoryMenuCommand(command, false, &result) ||
         !SelectGitHistoryMenuCommand(command, true, &result) || !result.git_history || !result.invoked || result.cancelled || result.git_diff ||
         SelectGitHistoryMenuCommand(0, true, &result)) return 16;
+    DestroyMenu(menu);
+  }
+  {
+    HMENU menu = CreatePopupMenu(); DWORD error = 0;
+    if (!AppendGitMenu(menu, true, true, &error, true)) return 17;
+    HMENU submenu = GetSubMenu(menu, GetMenuItemCount(menu) - 1);
+    if (!submenu || GetMenuItemCount(submenu) != 5) return 18;
+    for (const int position : {3, 4}) {
+      ShellContextMenuResult result;
+      const UINT command = GetMenuItemID(submenu, position);
+      if (SelectGitFileMenuCommand(command, false, &result) || !SelectGitFileMenuCommand(command, true, &result) ||
+          result.git_file_action != (position == 3 ? L"git-untrack" : L"git-ignore") || !result.invoked || result.cancelled) return 19;
+    }
     DestroyMenu(menu);
   }
   FakeContextMenu fake;
