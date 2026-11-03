@@ -108,6 +108,34 @@ test('autosize includes content outside the viewport and releases rows back to v
   assert.equal(app.grid().getDisplayedRowAtIndex(160).data.name, items.at(-1).name);
 });
 
+test('directory navigation retains measured columns and only resizes for different content', async t => {
+  const pane = path => ({ tabs: [path], tab: 0, selected: [], cursor: null, sort: 'name', filter: '' });
+  const folder = { id: 'child', name: 'child', type: 'folder' };
+  const app = createApp(t, { version: 1, active: 0, panes: [pane('/left'), pane('/right')], folders: {
+    '/left': [folder], '/left/child': [{ ...folder, id: 'deeper' }],
+    '/left/child/child': [{ id: 'long', name: 'z'.repeat(100) + '.txt', type: 'text' }], '/right': []
+  } });
+  await settled(app);
+  const grid = app.grid(), other = app.grid(1);
+  const before = grid.getColumnState().map(({ colId, width }) => ({ colId, width }));
+  const intermediate = [];
+  grid.addEventListener('columnResized', () => intermediate.push(grid.getColumnState().map(({ colId, width }) => ({ colId, width }))));
+  const open = () => app.row('child').querySelector('[data-filename]').dispatchEvent(new app.window.MouseEvent('dblclick', { bubbles: true, detail: 2 }));
+  open();
+  assert.equal(app.grid(), grid, 'navigation reuses the measured grid');
+  assert.deepEqual(grid.getColumnState().map(({ colId, width }) => ({ colId, width })), before);
+  await settled(app);
+  assert.deepEqual(grid.getColumnState().map(({ colId, width }) => ({ colId, width })), before);
+  assert.ok(intermediate.every(columns => JSON.stringify(columns) === JSON.stringify(before)), 'unchanged content never resets widths during measurement');
+  assert.equal(app.document.querySelector('.pane.active [data-history="back"]').getAttribute('aria-disabled'), 'false');
+  resize(app, 'size', 310); await delay(5);
+  open(); await settled(app);
+  assert.ok(width(app, 'name') >= 800, 'new longer content still triggers autosizing');
+  assert.equal(width(app, 'size'), 310, 'navigation preserves explicit widths');
+  assert.equal(app.grid(1), other);
+  assert.equal(other.isDestroyed(), false);
+});
+
 test('native separator double-click measures content again without changing file selection', async t => {
   const app = configured(t); await settled(app);
   app.click(app.row('README.md')); const selected = app.state().panes[0].selected;

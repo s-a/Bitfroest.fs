@@ -74,7 +74,16 @@
             }
             getGui() { return this.element; }
             destroy() { this.column.removeEventListener('sortChanged', this.sortChanged); }
-            refresh(params) { this.element.querySelector('.column-caption').textContent = params.displayName; return true; }
+            refresh(params) {
+              this.element.querySelector('.column-caption').textContent = params.displayName;
+              const history = this.element.querySelector('.history-controls');
+              if (history) {
+                const next = this.element.cloneNode(false);
+                next.innerHTML = options.history(record.p);
+                options.patch(history, next.firstElementChild);
+              }
+              return true;
+            }
           }
         }
       }));
@@ -113,11 +122,13 @@
       const container = section.querySelector('[data-file-grid]');
       if (!container) return;
       let record = instances.get(container);
-      if (record && (record.path !== options.path(p) || record.view !== options.view(p))) { record.api.destroy(); instances.delete(container); record = undefined; }
+      if (record && record.view !== options.view(p)) { record.api.destroy(); instances.delete(container); record = undefined; }
       const source = options.source(p);
       const currentSignature = signature(p);
       const changed = !record || record.signature !== currentSignature;
       if (record) {
+        const navigated = record.path !== options.path(p);
+        record.path = options.path(p);
         record.p = p; record.signature = currentSignature; marks(record);
         record.updating = true;
         try {
@@ -125,6 +136,7 @@
           record.api.setGridOption('rowData', [{ id: parentId }, ...rows]);
           record.api.refreshCells({ force: true });
           record.api.applyColumnState({ state: p.columns.map(column => ({ colId: column.key, sort: column.key === p.sort ? p.descending ? 'desc' : 'asc' : null })) });
+          if (navigated) { record.api.refreshHeader(); record.api.ensureIndexVisible(0, 'top'); }
         } finally { record.updating = false; }
         sync(section, p);
         options.decorate(section, p);
