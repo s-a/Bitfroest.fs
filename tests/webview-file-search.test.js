@@ -173,8 +173,10 @@ test('opening a ZIP from results keeps the result tab after archive metadata arr
   const app = createApp(t, saved); app.row('data.zip').dispatchEvent(new app.window.MouseEvent('dblclick', { bubbles: true }));
   const request = app.messages.find(message => message.type === 'zip-open'), fresh = structuredClone(request.state), target = 'zip:opaque!';
   fresh.folders[target] = []; fresh.archiveLocations = { [target]: { archive: archive.fsSource, parent: 'C:/tmp' } };
-  respond(app, { type: 'filesystem-result', state: fresh, ok: true, resumeNavigation: { side: 0, path: target } });
+  respond(app, { type: 'filesystem-result', navigationRequestId: request.navigationRequestId, state: fresh, ok: true, resumeNavigation: { side: 0, path: target } });
   const pane = app.state().panes[0]; assert.equal(pane.tabs.length, 2); assert.equal(pane.tabStates[0].searchResult.id, 'result'); assert.equal(pane.tabs[pane.tab], target);
+  assert.equal(pane.tabs[0], 'C:/tmp');
+  assert.equal(app.state().panes[1].tabs[0], 'C:/temp');
 });
 
 test('F2 narrows the next search, result history survives new search and Ctrl+C copies actual result paths', t => {

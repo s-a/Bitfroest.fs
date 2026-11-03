@@ -957,7 +957,11 @@
     if (!['filesystem-navigate', 'zip-open', 'filesystem-refresh'].includes(message.type)) prioritizeFilesystemOperation();
     if (message.type === 'zip-open' && (!filesystemPending || operationQueue?.active)) {
       const origin = state.panes[message.side], navigationRequestId = `directory-${++navigationSequence}`;
-      const request = { ...message, navigationRequestId, startedAt: performance.now(), tabId: origin.tabStates[origin.tab].id, originPath: currentPath(origin), activeAtStart: state.active, resume: () => { if (request.archivePath) go(request.archivePath); } };
+      const request = { ...message, navigationRequestId, startedAt: performance.now(), tabId: origin.tabStates[origin.tab].id, originPath: currentPath(origin), activeAtStart: state.active, resume: () => {
+        if (!request.archivePath) return;
+        if (resultView(pane())) { rememberScroll(); tabs.openPath(pane(), request.archivePath); }
+        go(request.archivePath);
+      } };
       navigationRequests.set(navigationRequestId, request); navigationByTab.set(navigationKey(request), request);
       updateDirectoryActivity(); host.postMessage({ ...message, navigationRequestId, navigationTabId: request.tabId, state }); return true;
     }
