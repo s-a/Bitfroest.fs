@@ -1485,17 +1485,17 @@
         },
         {
           "command": "bitfroest.clipboard-copy",
-          "when": "bitfroest.ready && webviewId == bitfroestPrototype && webviewSection != columns && webviewSection != textInput && webviewSection != address && webviewSection != fileBackground",
+          "when": "bitfroest.ready && webviewId == bitfroestPrototype && (webviewSection == files || webviewSection == folder)",
           "group": "1_fileclipboard@1"
         },
         {
           "command": "bitfroest.clipboard-cut",
-          "when": "bitfroest.ready && webviewId == bitfroestPrototype && webviewSection != columns && webviewSection != textInput && webviewSection != address && webviewSection != fileBackground",
+          "when": "bitfroest.ready && webviewId == bitfroestPrototype && (webviewSection == files || webviewSection == folder)",
           "group": "1_fileclipboard@2"
         },
         {
           "command": "bitfroest.clipboard-paste",
-          "when": "bitfroest.ready && webviewId == bitfroestPrototype && webviewSection != columns && webviewSection != textInput && webviewSection != address",
+          "when": "bitfroest.ready && webviewId == bitfroestPrototype && (webviewSection == files || webviewSection == folder || webviewSection == fileBackground)",
           "group": "1_fileclipboard@3"
         }
       ],

@@ -24,6 +24,7 @@ test('generated host HTML keeps rename text editing and confirms outside clicks 
   await app.command('bitfroest.openPrototype'); const panel = app.panels[0], html = panel.webview.html;
   assert.match(html, /Content-Security-Policy/); assert.match(html, /script-src 'nonce-[^']+'/);
   const view = require('./support/webview.cjs').createApp(t, initial, { html });
+  assert.equal(JSON.parse(view.document.body.dataset.vscodeContext).preventDefaultContextMenuItems, true);
   view.click(view.row('a.txt')); view.action('rename-one'); const input = view.document.querySelector('.inline-rename');
   assert.equal(input.closest('[data-file-row]').draggable, false);
   input.value = 'edited.txt'; input.setSelectionRange(0, 6);

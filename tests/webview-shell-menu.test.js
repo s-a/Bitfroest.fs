@@ -165,7 +165,7 @@ test('textbox menu exposes a declared native select-all command and hides file c
   assert.ok(menus.some(item => item.command === 'bitfroest.select-all-text' && item.when.includes('webviewSection == textInput')));
   assert.ok(require('../package.json').contributes.commands.some(item => item.command === 'bitfroest.select-all-text'));
   assert.ok(menus.every(item => item.command !== 'editor.action.selectAll'));
-  for (const item of menus.filter(item => item.submenu || /bitfroest\.clipboard-/.test(item.command || ''))) assert.match(item.when, /webviewSection != textInput/);
+  for (const item of menus.filter(item => item.submenu || /bitfroest\.clipboard-/.test(item.command || ''))) assert.doesNotMatch(item.when, /webviewSection == textInput/);
 });
 
 test('inline rename text keeps the native editing menu inside a file row', t => {
@@ -222,5 +222,5 @@ test('default background context offers paste without capturing previously selec
   assert.deepEqual(captured.ids, []);
   assert.equal(requests(app).length, 0);
   const menu = require('../package.json').contributes.menus['webview/context'];
-  for (const command of ['bitfroest.clipboard-copy', 'bitfroest.clipboard-cut']) assert.match(menu.find(item => item.command === command).when, /webviewSection != fileBackground/);
+  for (const command of ['bitfroest.clipboard-copy', 'bitfroest.clipboard-cut']) assert.doesNotMatch(menu.find(item => item.command === command).when, /webviewSection == fileBackground/);
 });

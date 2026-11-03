@@ -165,3 +165,14 @@ test('inactive tab path copy uses its target and swapping panes invalidates an o
   app.action('swap'); app.click(copy);
   assert.equal(app.messages.filter(message => message.type === 'selection-io').length, 1);
 });
+
+test('file clipboard contributions are limited to file contexts', () => {
+  const items = require('../package.json').contributes.menus['webview/context'];
+  for (const action of ['copy', 'cut', 'paste']) {
+    const condition = items.find(item => item.command === `bitfroest.clipboard-${action}`).when;
+    assert.match(condition, /webviewSection == files/);
+    assert.match(condition, /webviewSection == folder/);
+    assert.equal(condition.includes('webviewSection == fileBackground'), action === 'paste');
+    assert.doesNotMatch(condition, /webviewSection !=/);
+  }
+});

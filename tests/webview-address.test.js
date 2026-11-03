@@ -34,7 +34,7 @@ test('address context excludes generic file commands and native text copy duplic
   assert.equal(context.preventDefaultContextMenuItems, true);
   const manifest = require('../package.json');
   const generic = manifest.contributes.menus['webview/context'].filter(item => item.submenu === 'bitfroest.menu' || /bitfroest\.clipboard-/.test(item.command || ''));
-  for (const item of generic) assert.match(item.when, /webviewSection != address/);
+  for (const item of generic) assert.doesNotMatch(item.when, /webviewSection == address/);
 });
 test('breadcrumbs navigate the clicked panel and Ctrl-click preserves its original tab', t => {
   for (const ctrlKey of [false, true]) {
