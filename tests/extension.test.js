@@ -4822,7 +4822,12 @@ test('switching from English restores German column headings across saved layout
     const after = createApp(t, saved, { html: panel.webview.html });
     assert.equal(after.document.documentElement.lang, 'de');
     for (const pane of after.document.querySelectorAll('.pane')) {
-      assert.deepEqual([...pane.querySelectorAll('thead button')].map(button => button.textContent.replace(/ [↑↓]$/, '')), ['Name', 'Erw.', 'Größe', 'Datum', 'Attr.']);
+      assert.deepEqual([...pane.querySelectorAll('thead th')].map(header => header.dataset.column), ['name', 'type', 'size', 'date', 'attributes']);
+      assert.deepEqual([...pane.querySelectorAll('thead button[data-sort]')].map(button => button.textContent.replace(/ [↑↓]$/, '')), ['Name', 'Erw.', 'Größe', 'Datum', 'Attr.']);
+      const history = [...pane.querySelectorAll('thead button[data-history]')];
+      assert.deepEqual(history.map(button => [button.dataset.history, button.getAttribute('aria-label')]), [['back', 'Zurück'], ['forward', 'Vorwärts']]);
+      assert.equal(pane.querySelectorAll('thead button').length, 7, 'five sort controls and two localized history controls');
+      assert.ok(history.every(button => !button.hasAttribute('data-sort')));
     }
     assert.equal(configuration.language, 'de');
     if (source['columns.layout']) assert.deepEqual(configuration['columns.layout'], source['columns.layout']);
