@@ -5,6 +5,20 @@
 })(typeof globalThis === 'object' ? globalThis : this, function () {
   'use strict';
   const pairs = {
+    'Uhrzeit': 'Time',
+    'Gleicher Wert': 'Equal value',
+    'Unterschiedlicher Wert': 'Different value',
+    'Dateinamen vergleichen': 'Compare filenames',
+    'Version': 'Version',
+    'Vergleicht Quell- und Zielinhalt nach dem Kopieren. Dateiidentitäts- und Sicherheitsprüfungen bleiben aktiv.': 'Compares source and destination contents after copying. File identity and safety checks remain active.',
+    'Dateiname im Zielordner': 'Filename in the target folder',
+    'Dateinamen im Ziel einzeln festlegen': 'Set each destination filename',
+    'Fragt vor jeder Datei nach dem Namen im Zielordner. Der bisherige Name kann übernommen werden.': 'Asks for each filename in the target folder. The current name can be kept.',
+    'Den Namen für diesen Eintrag im Zielordner festlegen.': 'Choose the name for this item in the target folder.',
+    'Bisheriger Name': 'Original name',
+    'Neuer Dateiname': 'New filename',
+    'Ohne neue Erweiterung bleibt die bisherige erhalten.': 'The original extension is kept unless a new one is entered.',
+    'Name im Zielordner': 'Name in the target folder',
     'Veröffentlichtes Kopierziel fehlt oder wurde extern geändert.': 'The published copy destination is missing or changed externally.',
     'Das gespeicherte ZIP-Archiv fehlt oder wurde geändert.': 'The saved ZIP archive is missing or changed.',
     'Eine erwartete Dateiidentität und verschiedene Pfade sind erforderlich.': 'An expected file identity and distinct paths are required.',

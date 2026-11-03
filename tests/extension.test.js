@@ -145,6 +145,47 @@ test('generated host HTML delays name editing and shows both drag operations wit
   assert.equal(view.messages.some(message => message.type === 'filesystem-apply'), false);
 });
 
+test('generated host HTML compares conflict metadata and keeps explicit decisions in the footer', async t => {
+  const initial = clipboardFixture(); initial.realFilesystem = false;
+  Object.assign(initial.folders['C:/tmp'][0], { size: 1024, date: '29.10.2026 14:32', attributes: '-a--', content: 'source' });
+  initial.folders['C:/temp'] = [{ ...initial.folders['C:/tmp'][0], id: 'target', fsSource: 'C:/temp/a.txt', content: 'target' }];
+  initial.panes.forEach(pane => { pane.filter = ''; pane.sort = 'name'; });
+  const app = harness(t, { filesystemLoad: async () => initial });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  assert.match(panel.webview.html, /Content-Security-Policy/); assert.match(panel.webview.html, /script-src 'nonce-[^']+'/);
+  const view = require('./support/webview.cjs').createApp(t, initial, { html: panel.webview.html });
+  view.click(view.row('a.txt').querySelector('[data-filename]')); view.action('copy');
+  view.document.querySelector('#modal-form').dispatchEvent(new view.window.Event('submit', { bubbles: true, cancelable: true })); await tick();
+  assert.equal(view.document.querySelectorAll('.comparison-name').length, 1);
+  assert.equal(view.document.querySelector('[data-property="size"]').dataset.comparisonState, 'equal');
+  assert.equal(view.document.activeElement.id, 'conflict-name');
+  view.click(view.document.querySelector('.modal-actions [data-conflict-action="skip"]')); await tick();
+  assert.equal(view.document.querySelector('#modal').open, false);
+  assert.equal(view.state().folders['C:/temp'][0].content, 'target');
+});
+
+test('generated host HTML supports destination filename editing with its original extension', async t => {
+  const initial = clipboardFixture(); initial.realFilesystem = false;
+  initial.panes.forEach(pane => { pane.filter = ''; pane.sort = 'name'; });
+  const app = harness(t, { filesystemLoad: async () => initial });
+  await app.command('bitfroest.openPrototype');
+  const panel = app.panels[0];
+  assert.match(panel.webview.html, /Content-Security-Policy/);
+  assert.match(panel.webview.html, /script-src 'nonce-[^']+'/);
+  const view = require('./support/webview.cjs').createApp(t, initial, { html: panel.webview.html });
+  view.click(view.row('a.txt').querySelector('[data-filename]')); view.action('copy');
+  view.document.querySelector('#transfer-individual').checked = true;
+  const submit = () => view.document.querySelector('#modal-form').dispatchEvent(new view.window.Event('submit', { bubbles: true, cancelable: true }));
+  submit(); await tick();
+  const input = view.document.querySelector('#value'); input.value = 'renamed';
+  input.dispatchEvent(new view.window.Event('input', { bubbles: true }));
+  assert.equal(view.document.querySelector('[data-rename-preview]').textContent, 'renamed.txt');
+  assert.ok(view.document.querySelector('.modal-actions #transfer-skip'));
+  submit(); await tick();
+  assert.ok(view.state().folders['C:/temp'].some(file => file.name === 'renamed.txt'));
+  assert.equal(view.document.querySelector('#modal').open, false);
+});
+
 test('generated host HTML suppresses file-action context menus while retaining native text editing', async t => {
   const initial = clipboardFixture();
   initial.panes.forEach(pane => { pane.filter = ''; pane.sort = 'name'; });

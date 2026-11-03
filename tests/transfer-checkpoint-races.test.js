@@ -38,7 +38,7 @@ test('a conflict uses fresh metadata returned after the preceding host write', a
   const first = applies(app)[0], native = confirmed(first);
   native.folders['C:/temp'].find(row => row.name === 'b.txt').date = '01.01.2030 00:00';
   reply(app, first, native); await tick();
-  assert.match(app.document.querySelector('[data-conflict-file="target"] .comparison-meta').textContent, /2030/);
+  assert.match(app.document.querySelector('[data-property="date"] [data-role="target"]').textContent, /2030/);
 });
 
 test('later writes have distinct operation ids and reject stale earlier acknowledgements', async t => {
@@ -49,7 +49,7 @@ test('later writes have distinct operation ids and reject stale earlier acknowle
   reply(app, first, confirmed(first)); await tick();
   assert.equal(app.document.querySelector('#modal').open, false);
   reply(app, second, confirmed(second)); await tick();
-  assert.equal(app.document.querySelector('[data-conflict-file="source"] .comparison-name').textContent, 'c.txt');
+  assert.equal(app.document.querySelector('.conflict-file-heading .comparison-name').textContent, 'c.txt');
 });
 
 test('a later failed write acknowledges only the already confirmed cut prefix', async t => {

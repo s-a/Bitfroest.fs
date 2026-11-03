@@ -83,7 +83,8 @@ test('English conflict and permanent delete dialogs state their effects in Engli
   assert.equal(app.document.querySelector('#modal-title').textContent, 'File already exists');
   assert.equal(app.document.querySelector('[data-conflict-action="overwrite-all"]').textContent, 'Overwrite all');
   assert.match(app.document.querySelector('#modal-body').textContent, /Neuer Ordner\.txt/);
-  assert.equal(app.document.querySelector('[data-conflict-file="source"] .comparison-meta-label').textContent, 'Size / Date');
+  assert.match(app.document.querySelector('[data-property="size"] [data-property-label]').textContent, /Size/);
+  assert.match(app.document.querySelector('[data-property="time"] [data-property-label]').textContent, /Time/);
   app.click(app.document.querySelector('[data-conflict-action="cancel"]'));
   await new Promise(resolve => setImmediate(resolve));
 });

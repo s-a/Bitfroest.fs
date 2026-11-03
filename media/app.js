@@ -2316,8 +2316,10 @@
   }
   function modal(title, body, label, callback, eyebrow = t('DATEIAKTION')) {
     clearTimeout(renameTimer);
+    document.querySelectorAll('.modal-actions [data-dialog-secondary]').forEach(button => button.remove());
     operationErrorDialog = false; operationFailureInline = false;
     $('#modal-title').textContent = title; $('#modal-eyebrow').textContent = eyebrow; $('#modal-body').innerHTML = body;
+    $('#modal').classList.toggle('conflict-dialog', Boolean($('#modal-body').querySelector('[data-conflict-layout]')));
     $('#modal-confirm').textContent = label; $('#modal-confirm').hidden = !label; $('#modal-cancel').hidden = false; $('#modal-cancel').textContent = label ? t('Abbrechen') : t('Schließen');
     const description = $('#modal-body').querySelector('#modal-description');
     if (description) $('#modal').setAttribute('aria-describedby', 'modal-description');
@@ -2357,10 +2359,51 @@
     } else body = `<pre class="preview-text">${escape(file.content || t('Keine Textvorschau verfügbar.'))}</pre>`;
     modal(file.name, body, edit ? t('Mockup speichern') : null, () => { file.content = $('.editor').value; file.size = new TextEncoder().encode(file.content).length; render(); toast(t('Beispieldatei aktualisiert'), 'success'); return true; }, edit ? t('BEARBEITEN · F4') : t('VORSCHAU · F3'));
   }
+  function conflictMetadata(file) {
+    const known = (key, text = String(key)) => ({ key, text });
+    const values = { size: null, date: null, time: null, attributes: null, version: null };
+    if (file.type !== 'folder' && Number.isSafeInteger(file.size) && file.size >= 0) values.size = known(file.size, `${file.size.toLocaleString(document.body.dataset.language === 'de' ? 'de-DE' : 'en-GB')} B`);
+    const stamp = Number.isFinite(file.mtimeMs) ? new Date(file.mtimeMs) : null;
+    const two = value => String(value).padStart(2, '0');
+    if (stamp && Number.isFinite(stamp.getTime())) {
+      values.date = known(`${two(stamp.getDate())}.${two(stamp.getMonth() + 1)}.${stamp.getFullYear()}`);
+      const time = `${two(stamp.getHours())}:${two(stamp.getMinutes())}:${two(stamp.getSeconds())}.${String(stamp.getMilliseconds()).padStart(3, '0')}`;
+      values.time = known(`milliseconds:${time}`, time);
+    } else {
+      const match = /^(\d{2})\.(\d{2})\.(\d{4})(?: (\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{3}))?)?)?$/.exec(file.date || '');
+      if (match) {
+        const date = new Date(Number(match[3]), Number(match[2]) - 1, Number(match[1]));
+        if (date.getFullYear() === Number(match[3]) && date.getMonth() + 1 === Number(match[2]) && date.getDate() === Number(match[1])) values.date = known(`${match[1]}.${match[2]}.${match[3]}`);
+        if (values.date && match[4] !== undefined && Number(match[4]) < 24 && Number(match[5]) < 60 && Number(match[6] || 0) < 60) {
+          const time = `${match[4]}:${match[5]}${match[6] === undefined ? '' : `:${match[6]}`}${match[7] === undefined ? '' : `.${match[7]}`}`;
+          values.time = known(`${match[7] !== undefined ? 'milliseconds' : match[6] !== undefined ? 'seconds' : 'minutes'}:${time}`, time);
+        }
+      }
+    }
+    const attributes = file.attributes ?? file.attr;
+    if (typeof attributes === 'string' && attributes.length) values.attributes = known(attributes);
+    if (Array.isArray(file.fileVersion) && file.fileVersion.length === 4 && file.fileVersion.every(part => Number.isInteger(part) && part >= 0 && part <= 65535)) values.version = known(file.fileVersion.join('.'));
+    return values;
+  }
+  function conflictComparison(conflict) {
+    const source = conflictMetadata(conflict.source), target = conflictMetadata(conflict.target);
+    const commonName = conflict.source.name === conflict.target.name;
+    const sourceFolder = parent(conflict.sourcePath), targetFolder = parent(conflict.targetPath);
+    const sameFolder = paths.identity(sourceFolder) === paths.identity(targetFolder);
+    const property = (key, label, left, right, role) => {
+      const state = !left || !right ? 'unknown' : left.key === right.key ? 'equal' : 'different';
+      const description = t(state === 'equal' ? 'Gleicher Wert' : state === 'different' ? 'Unterschiedlicher Wert' : 'Unbekannt');
+      const entry = role === 'source' ? left : right;
+      return `<div data-property="${key}" data-comparison-state="${state}"><dt data-property-label>${t(label)}</dt><dd class="comparison-value" data-role="${role}" title="${description}" aria-description="${description}">${entry ? escape(entry.text) : '—'}</dd></div>`;
+    };
+    const known = (key, text = key) => ({ key, text });
+    const properties = [['size', 'Größe'], ['date', 'Datum'], ['time', 'Uhrzeit'], ['attributes', 'Attribute'], ...(source.version || target.version ? [['version', 'Version']] : [])];
+    const side = role => `<section class="comparison-side" data-conflict-file="${role}" aria-label="${t(role === 'source' ? 'Quelle' : 'Ziel')}"><h3>${t(role === 'source' ? 'Quelle' : 'Ziel')}</h3>${sameFolder ? '' : `<div class="comparison-path">${escape(displayPath(role === 'source' ? sourceFolder : targetFolder))}</div>`}<dl class="comparison-metadata">${commonName ? '' : property('name', 'Name', known(conflict.source.name), known(conflict.target.name), role)}${properties.map(([key, label]) => property(key, label, source[key], target[key], role)).join('')}</dl></section>`;
+    return `<div id="modal-description" class="conflict-file-heading">${commonName ? `<span class="comparison-name">${escape(conflict.source.name)}</span>` : t('Dateinamen vergleichen')}${sameFolder ? `<div class="comparison-path" data-shared-path>${escape(displayPath(sourceFolder))}</div>` : ''}</div><div class="file-comparison-grid"><div class="conflict-comparison">${side('source')}${side('target')}</div></div>`;
+  }
   function transferConflict(conflict) {
     return new Promise(resolve => {
       const choices = [['overwrite', t('Überschreiben')], ['overwrite-all', t('Alle überschreiben')], ['skip', t('Überspringen')], ['skip-all', t('Alle überspringen')], ['rename-source', t('Kopie umbenennen')], ['rename-target', t('Ziel umbenennen')], ['autorename-source', t('Kopien automatisch umbenennen')], ['autorename-target', t('Ziele automatisch umbenennen')], ['overwrite-older', t('Alle älteren überschreiben')], ['overwrite-older-equal', t('Alle älteren und gleich alten überschreiben')], ['rename-older-target', t('Ältere Ziele umbenennen, neuere überspringen')], ['larger', t('Nur größere kopieren')], ['smaller', t('Nur kleinere kopieren')], ['append', t('Anhängen')], ['cancel', t('Abbrechen')]];
-      const text = file => `${size(file.size || 0)} · ${file.date || t('Datum unbekannt')}`;
       const labels = Object.fromEntries(choices);
       const ordinaryFiles = !['folder', 'archive'].includes(conflict.source.type) && !['folder', 'archive'].includes(conflict.target.type);
       const nativeComparison = host && state.realFilesystem && ordinaryFiles && typeof conflict.source.fsSource === 'string' && typeof conflict.target.fsSource === 'string';
@@ -2371,8 +2414,10 @@
         const reason = samePathDisabled ? t('Quelle und Ziel sind identisch. Zum Kopieren einen neuen Namen wählen.') : appendDisabled ? t('Anhängen ist für diese Dateien nicht verfügbar.') : '';
         return `<button type="button" data-conflict-action="${value}" ${value.startsWith('overwrite') || value === 'append' ? 'data-destructive="true"' : ''} ${reason ? `disabled title="${escape(reason)}" aria-describedby="conflict-limitations"` : ''}>${labels[value]}</button>`;
       };
-      const fileCard = (file, role, path) => `<section class="file-comparison" data-conflict-file="${role}" aria-label="${t(role === 'source' ? 'Quelle' : 'Ziel')}"><h3>${t(role === 'source' ? 'Quelle' : 'Ziel')}</h3><div class="comparison-name">${escape(file.name)}</div><div class="comparison-path">${escape(displayPath(path))}</div><div class="comparison-meta"><span class="comparison-meta-label">${t('Größe / Datum')}</span><span>${escape(text(file))}</span></div></section>`;
-      modal(t('Datei bereits vorhanden'), `<p id="modal-description" class="dialog-description">${t('Eine Datei mit diesem Namen ist bereits im Ziel vorhanden.')}</p><div class="file-comparison-grid">${fileCard(conflict.source, 'source', conflict.sourcePath)}${fileCard(conflict.target, 'target', conflict.targetPath)}</div>${conflict.samePath ? `<p class="dialog-notice">${t('Quelle und Ziel sind identisch. Zum Kopieren einen neuen Namen wählen.')}</p>` : ''}${field(t('Neuer Name für Kopie oder Ziel'), window.CommanderTransfer.uniqueName([conflict.source, conflict.target], conflict.source.name), 'conflict-name')}<fieldset class="conflict-single"><legend>${t('Für diese Datei')}</legend><div class="conflict-actions">${['overwrite', 'skip', 'rename-source', 'rename-target', 'append'].map(button).join('')}</div></fieldset><details class="dialog-options"><summary>${t('Weitere Konfliktentscheidungen')}</summary><div class="conflict-actions">${['overwrite-all', 'skip-all', 'autorename-source', 'autorename-target', 'overwrite-older', 'overwrite-older-equal', 'rename-older-target', 'larger', 'smaller'].map(button).join('')}</div></details><p id="conflict-limitations" class="dialog-hint">${conflict.samePath ? t('Identische Dateien können nicht überschrieben werden.') : t('Entscheidungen für alle Dateien gelten für weitere Konflikte dieses Auftrags.')}</p><button type="button" id="conflict-compare" class="dialog-link" ${typeof conflict.source.content !== 'string' || typeof conflict.target.content !== 'string' || ['folder', 'archive'].includes(conflict.source.type) || ['folder', 'archive'].includes(conflict.target.type) ? `disabled title="${t('Keine vollständigen Textdaten für einen Vergleich vorhanden')}"` : ''}>${t('Inhalt vergleichen')}</button><pre id="conflict-comparison" class="preview-text" hidden></pre>`, null, () => false, t('KOPIER-/VERSCHIEBEKONFLIKT'));
+      modal(t('Datei bereits vorhanden'), `<section class="conflict-layout" data-conflict-layout>${conflictComparison(conflict)}${conflict.samePath ? `<p class="dialog-notice">${t('Quelle und Ziel sind identisch. Zum Kopieren einen neuen Namen wählen.')}</p>` : ''}<div class="conflict-rename-grid">${field(t('Neuer Name für Kopie oder Ziel'), window.CommanderTransfer.uniqueName([conflict.source, conflict.target], conflict.source.name), 'conflict-name')}<div class="conflict-rename-actions">${['rename-source', 'rename-target'].map(button).join('')}</div></div><details class="dialog-options"><summary>${t('Weitere Konfliktentscheidungen')}</summary><div class="conflict-actions">${['overwrite-all', 'skip-all', 'autorename-source', 'autorename-target', 'overwrite-older', 'overwrite-older-equal', 'rename-older-target', 'larger', 'smaller'].map(button).join('')}</div></details><p id="conflict-limitations" class="sr-only">${conflict.samePath ? t('Quelle und Ziel sind identisch. Zum Kopieren einen neuen Namen wählen.') : t('Entscheidungen für alle Dateien gelten für weitere Konflikte dieses Auftrags.')}</p><button type="button" id="conflict-compare" class="dialog-link" ${typeof conflict.source.content !== 'string' || typeof conflict.target.content !== 'string' || ['folder', 'archive'].includes(conflict.source.type) || ['folder', 'archive'].includes(conflict.target.type) ? `disabled title="${t('Keine vollständigen Textdaten für einen Vergleich vorhanden')}"` : ''}>${t('Inhalt vergleichen')}</button><pre id="conflict-comparison" class="preview-text" hidden></pre></section>`, null, () => false, t('KOPIER-/VERSCHIEBEKONFLIKT'));
+      const primary = document.createElement('fieldset'); primary.className = 'conflict-single conflict-footer-actions'; primary.dataset.dialogSecondary = '';
+      primary.innerHTML = `<legend>${t('Für diese Datei')}</legend><div class="conflict-actions">${['overwrite', 'skip', 'append'].map(button).join('')}</div>`;
+      $('.modal-actions').prepend(primary);
       $('#modal-cancel').textContent = t('Abbrechen');
       $('#modal-cancel').dataset.conflictAction = 'cancel';
       $('#modal-cancel').hidden = true;
@@ -2388,7 +2433,7 @@
             toast(t('Der neue Dateiname ist ungültig oder bereits vorhanden.')); input.focus(); return;
           }
         }
-        settled = true; conflictAction = null; dialog.removeEventListener('close', cancelled); $('#modal-body').removeEventListener('click', clicked); delete $('#modal-cancel').dataset.conflictAction;
+        settled = true; conflictAction = null; dialog.removeEventListener('close', cancelled); dialog.removeEventListener('click', clicked); delete $('#modal-cancel').dataset.conflictAction;
         dialog.close(); resolve(decision);
       };
       const cancelled = () => { if (!dialog.open) finish({ action: 'cancel' }); };
@@ -2397,7 +2442,7 @@
         if (button && !button.disabled) finish({ action: button.dataset.conflictAction, name: $('#conflict-name').value });
       };
       dialog.addEventListener('close', cancelled);
-      $('#modal-body').addEventListener('click', clicked);
+      dialog.addEventListener('click', clicked);
       conflictAction = command => {
         if (!['conflict-target', 'conflict-source', 'conflict-target-plain', 'conflict-source-plain', 'conflict-compare', 'conflict-compare-internal'].includes(command)) return false;
         if (command.includes('compare')) {
@@ -2418,14 +2463,16 @@
       reportFocus();
     });
   }
-  function transferIndividualName(source, directory) {
+  function transferIndividualName(source, directory, mode, plannedFolders) {
     return new Promise(resolve => {
-      const dialog = $('#modal'), folders = state.folders;
+      const dialog = $('#modal'), folders = plannedFolders || state.folders;
       let settled = false;
       const finish = decision => { if (settled) return; settled = true; dialog.removeEventListener('close', cancelled); dialog.close(); resolve(decision); };
       const cancelled = () => { if (!dialog.open) finish({ action: 'cancel' }); };
-      modal(t('Jede Datei einzeln umbenennen'), `${field(t('Neuer Name für Kopie oder Ziel'), source.name)}<button type="button" id="transfer-skip">${t('Überspringen')}</button>`, t('Kopieren'), () => {
-        const name = $('#value').value;
+      const extension = columns.splitName(source).extension;
+      const completeName = value => value && !value.includes('.') && extension ? `${value}.${extension}` : value;
+      modal(t('Dateiname im Zielordner'), `<section class="individual-rename"><p id="modal-description" class="dialog-description">${t('Den Namen für diesen Eintrag im Zielordner festlegen.')}</p><dl class="rename-context"><div><dt>${t('Bisheriger Name')}</dt><dd data-rename-source>${escape(source.name)}</dd></div><div><dt>${t('Zielordner')}</dt><dd data-rename-directory>${escape(displayPath(directory))}</dd></div></dl>${field(t('Neuer Dateiname'), source.name)}<div id="rename-preview" class="rename-preview"><span>${t('Name im Zielordner')}</span><output for="value" data-rename-preview aria-live="polite">${escape(source.name)}</output></div></section>`, mode === 'move' ? t('Verschieben') : t('Kopieren'), () => {
+        const name = completeName($('#value').value);
         if (!validName(name) || [...name].some(character => character.charCodeAt(0) < 32) || /^[a-z]:\//i.test(directory) && /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(name)) { toast(t('Der neue Dateiname ist ungültig oder bereits vorhanden.')); $('#value').focus(); return false; }
         if (source.type === 'folder') {
           const target = join(directory, name);
@@ -2440,7 +2487,14 @@
         }
         finish({ name }); return false;
       });
-      $('#transfer-skip').onclick = () => finish({ action: 'skip' });
+      const input = $('#value');
+      input.setAttribute('aria-describedby', 'rename-preview');
+      input.title = t('Ohne neue Erweiterung bleibt die bisherige erhalten.');
+      input.setAttribute('aria-description', input.title);
+      input.addEventListener('input', () => { $('[data-rename-preview]').textContent = completeName(input.value); });
+      const skip = document.createElement('button'); skip.type = 'button'; skip.id = 'transfer-skip'; skip.dataset.dialogSecondary = ''; skip.textContent = t('Überspringen');
+      skip.onclick = () => finish({ action: 'skip' });
+      $('.modal-actions').prepend(skip);
       dialog.addEventListener('close', cancelled);
     });
   }
@@ -2540,7 +2594,7 @@
     };
     transferPlanning = true;
     const result = await window.CommanderTransfer.execute({ ...options, policy: options.policyState?.value || options.policy, signal: planningJob.controller.signal, folders: state.folders, createId: () => String(nextId++),
-      onBeforeDecision: flushCompleted, onConflict: async (...args) => { const decision = await transferConflict(...args); if (options.policyState && window.CommanderTransfer.policies.includes(decision?.action) && decision.action !== 'ask') options.policyState.value = decision.action; return decision; }, onRename: transferIndividualName });
+      onBeforeDecision: flushCompleted, onConflict: async (...args) => { const decision = await transferConflict(...args); if (options.policyState && window.CommanderTransfer.policies.includes(decision?.action) && decision.action !== 'ask') options.policyState.value = decision.action; return decision; }, onRename: (source, directory) => transferIndividualName(source, directory, options.mode) });
     if (transferJob !== planningJob) return;
     if (planningJob.cancelRequested) {
       state.folders = originalFolders;
@@ -2680,7 +2734,20 @@
     if (!picked.length) { toast(t('Zuerst eine Datei oder einen Ordner auswählen.')); onComplete?.({ confirmed: false, completed: 0, completedIds: [], errors: [], cancelled: true }); return; }
     const policies = [['ask', t('Bei Konflikten nachfragen')], ['overwrite-all', t('Alle überschreiben')], ['skip-all', t('Alle vorhandenen überspringen')], ['overwrite-older', t('Alle älteren überschreiben')], ['overwrite-older-equal', t('Alle älteren und gleich alten überschreiben')], ['rename-older-target', t('Ältere Ziele umbenennen, neuere überspringen')], ['autorename-source', t('Kopien automatisch umbenennen')], ['autorename-target', t('Vorhandene Ziele automatisch umbenennen')], ['larger', t('Nur größere Dateien kopieren')], ['smaller', t('Nur kleinere Dateien kopieren')]];
     const cancelled = () => { if ($('#modal').open) return; $('#modal').removeEventListener('close', cancelled); onComplete?.({ confirmed: false, completed: 0, completedIds: [], errors: [], cancelled: true }); };
-    modal(mode === 'move' ? t('Verschieben') : t('Kopieren'), `<p id="modal-description" class="dialog-description">${count('selectedEntry', picked.length)}</p><div class="transfer-source"><span>${t('Quelle')}</span><div data-transfer-source>${escape(displayPath(sourcePath))}</div></div>${field(mode === 'move' ? t('Verschieben nach') : t('Kopieren nach'), targetPath || currentPath(state.panes[1 - sourceSide]))}${field(t('Nur Dateien dieses Typs'), '*.*', 'transfer-filter')}<label><input type="checkbox" id="transfer-verify"> ${t('Dateiinhalt nach dem Kopieren vergleichen')}</label><label><input type="checkbox" id="transfer-individual"> ${t('Jede Datei einzeln umbenennen')}</label><details class="dialog-options"><summary>${t('Optionen')}</summary><div class="field"><label for="transfer-policy">${t('Bei vorhandenen Zieldateien')}</label><select id="transfer-policy">${policies.map(([value, label]) => `<option value="${value}">${label}</option>`).join('')}</select></div><p class="dialog-hint">${t('Bei einer einzelnen Datei kann das Ziel auch einen neuen Dateinamen enthalten. Filter unterstützen * und ? sowie Ausschlüsse hinter |.')}</p></details>`, mode === 'move' ? t('Verschieben') : t('Kopieren'), () => {
+    const option = (id, label, hint) => `<label class="transfer-check" title="${escape(t(hint))}"><input type="checkbox" id="${id}" title="${escape(t(hint))}" aria-description="${escape(t(hint))}"><span>${t(label)}</span></label>`;
+    modal(mode === 'move' ? t('Verschieben') : t('Kopieren'), `<section class="transfer-dialog">
+      <p id="modal-description" class="dialog-description">${count('selectedEntry', picked.length)}</p>
+      <div class="transfer-source"><span>${t('Quelle')}</span><div data-transfer-source>${escape(displayPath(sourcePath))}</div></div>
+      ${field(mode === 'move' ? t('Verschieben nach') : t('Kopieren nach'), targetPath || currentPath(state.panes[1 - sourceSide]))}
+      <fieldset class="transfer-options"><legend>${t('Optionen')}</legend>
+        ${field(t('Nur Dateien dieses Typs'), '*.*', 'transfer-filter')}
+        <div class="transfer-checks">
+          ${option('transfer-verify', 'Dateiinhalt nach dem Kopieren vergleichen', 'Vergleicht Quell- und Zielinhalt nach dem Kopieren. Dateiidentitäts- und Sicherheitsprüfungen bleiben aktiv.')}
+          ${option('transfer-individual', 'Dateinamen im Ziel einzeln festlegen', 'Fragt vor jeder Datei nach dem Namen im Zielordner. Der bisherige Name kann übernommen werden.')}
+        </div>
+        <details class="dialog-options"><summary>${t('Bei vorhandenen Zieldateien')}</summary><div class="field"><label for="transfer-policy">${t('Bei vorhandenen Zieldateien')}</label><select id="transfer-policy">${policies.map(([value, label]) => `<option value="${value}">${label}</option>`).join('')}</select></div></details>
+      </fieldset>
+    </section>`, mode === 'move' ? t('Verschieben') : t('Kopieren'), () => {
       let destination = $('#value').value;
       if (sourceGroups?.length && sourceGroups.reduce((sum, group) => sum + group.ids.length, 0) > 1 && destination.trim() && !/[\\/]$/.test(destination)) destination += '/';
       if (validateSelection && !validateSelection()) { toast(t('Die gezogene Auswahl wurde geändert. Bitte erneut ziehen.')); return false; }
@@ -2705,6 +2772,8 @@
     });
     if (sourceGroups?.length) { $('#modal-description').textContent = count('selectedEntry', sourceGroups.reduce((sum, group) => sum + group.ids.length, 0)); document.querySelector('[data-transfer-source]').textContent = sourceGroups.map(group => displayPath(group.sourcePath)).join('\n'); }
     $('#value').dataset.transferName = mode;
+    const targetHint = t('Bei einer einzelnen Datei kann das Ziel auch einen neuen Dateinamen enthalten. Filter unterstützen * und ? sowie Ausschlüsse hinter |.');
+    for (const input of [$('#value'), $('#transfer-filter')]) { input.title = targetHint; input.setAttribute('aria-description', targetHint); }
     $('#transfer-verify').checked = fileSettings.verifyAfterCopy === true;
     $('#transfer-verify').addEventListener('change', event => {
       fileSettings.verifyAfterCopy = event.target.checked;

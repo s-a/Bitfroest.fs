@@ -27,11 +27,40 @@ test('transfer dialog exposes its accessible name, source, description and selec
   assert.ok(app.document.querySelector('details.dialog-options #transfer-policy'));
 });
 
+test('transfer options use separate aligned checkbox rows and localized tooltips in every theme', t => {
+  for (const theme of ['vscode-light', 'vscode-dark', 'vscode-high-contrast', 'vscode-high-contrast-light']) for (const language of ['de', 'en']) {
+    const app = createApp(t, fixture(), { language });
+    const style = app.document.createElement('style');
+    style.textContent = resolveThemeCss(fs.readFileSync(path.join(__dirname, '../media/app.css'), 'utf8'));
+    app.document.head.append(style); app.document.body.className = theme;
+    copy(app);
+    const body = app.document.querySelector('#modal-body');
+    const group = body.querySelector('.transfer-checks'); assert.ok(group);
+    assert.equal(app.window.getComputedStyle(group).display, 'grid');
+    for (const id of ['transfer-verify', 'transfer-individual']) {
+      const checkbox = body.querySelector(`#${id}`), label = checkbox.closest('label');
+      assert.equal(label.parentElement, group);
+      assert.equal(app.window.getComputedStyle(label).display, 'grid');
+      assert.equal(app.window.getComputedStyle(label.querySelector('span')).overflowWrap, 'anywhere');
+      assert.ok(checkbox.title.length > 25);
+      assert.equal(label.title, checkbox.title);
+      assert.equal(checkbox.getAttribute('aria-description'), checkbox.title);
+      assert.equal(checkbox.checked, false);
+      app.click(label.querySelector('span')); assert.equal(checkbox.checked, true);
+      checkbox.focus(); assert.equal(app.document.activeElement, checkbox);
+    }
+    assert.equal(body.querySelectorAll('.dialog-hint').length, 0);
+    assert.match(body.querySelector('#transfer-filter').title, /\*/);
+    assert.match(body.querySelector('#transfer-individual').title, language === 'de' ? /Zielordner/ : /target folder/);
+    assert.ok(group.closest('fieldset').querySelector('legend').textContent);
+  }
+});
+
 test('conflict compares source and target and separates single decisions from bulk policies', async t => {
   const app = createApp(t, fixture(), { language: 'en' }); copy(app); submit(app); await tick();
-  assert.equal(app.document.querySelector('[data-conflict-file="source"] .comparison-name').textContent, 'same.txt');
-  assert.equal(app.document.querySelector('[data-conflict-file="target"] .comparison-name').textContent, 'same.txt');
-  assert.match(app.document.querySelector('[data-conflict-file="target"]').textContent, /28.10.2026/);
+  assert.equal(app.document.querySelector('.conflict-file-heading .comparison-name').textContent, 'same.txt');
+  assert.equal(app.document.querySelectorAll('.comparison-name').length, 1);
+  assert.match(app.document.querySelector('[data-property="date"] [data-role="target"]').textContent, /28.10.2026/);
   assert.ok(app.document.querySelector('fieldset.conflict-single [data-conflict-action="overwrite"]'));
   assert.ok(app.document.querySelector('details.dialog-options [data-conflict-action="overwrite-all"]'));
   assert.equal(app.document.querySelector('[data-conflict-action="overwrite"]').getAttribute('data-destructive'), 'true');
@@ -66,6 +95,27 @@ test('a delayed close event from the transfer form cannot cancel its newly opene
   assert.equal(app.document.querySelector('#modal').open, false);
 });
 
+test('destination filename dialog wraps long names and retains a shared action row in all themes', async t => {
+  for (const theme of ['vscode-light', 'vscode-dark', 'vscode-high-contrast', 'vscode-high-contrast-light']) {
+    const state = fixture(); state.folders['/left'][0].name = `${'long-name-'.repeat(30)}.txt`;
+    const app = createApp(t, state);
+    const style = app.document.createElement('style');
+    style.textContent = resolveThemeCss(fs.readFileSync(path.join(__dirname, '../media/app.css'), 'utf8'));
+    app.document.head.append(style); app.document.body.className = theme;
+    app.click(app.row(state.folders['/left'][0].name).querySelector('[data-filename]')); app.action('copy');
+    app.document.querySelector('#transfer-individual').checked = true; submit(app); await tick();
+    const computed = selector => app.window.getComputedStyle(app.document.querySelector(selector));
+    assert.equal(computed('.individual-rename').minWidth, '0px');
+    assert.equal(computed('[data-rename-source]').overflowWrap, 'anywhere');
+    assert.equal(computed('[data-rename-preview]').overflowWrap, 'anywhere');
+    assert.equal(computed('.modal-actions').display, 'flex');
+    assert.ok(app.document.querySelector('.modal-actions #transfer-skip'));
+    assert.equal(app.document.activeElement.id, 'value');
+    app.click(app.document.querySelector('#modal-cancel')); await tick();
+    assert.equal(app.state().folders['/right'].length, 1);
+  }
+});
+
 test('dark and contrast dialogs avoid permanent comparison and individual action frames', async t => {
   for (const theme of ['vscode-dark', 'vscode-high-contrast']) {
     const app = createApp(t, fixture());
@@ -76,7 +126,7 @@ test('dark and contrast dialogs avoid permanent comparison and individual action
     copy(app); submit(app); await tick();
     const computed = selector => app.window.getComputedStyle(app.document.querySelector(selector));
     assert.equal(computed('.file-comparison-grid').borderTopWidth, '0px', `${theme} comparison frame`);
-    assert.equal(computed('.file-comparison + .file-comparison').borderLeftWidth, '0px', `${theme} comparison divider`);
+    assert.equal(computed('.conflict-comparison').display, 'grid', `${theme} compact metadata`);
     assert.equal(computed('[data-conflict-action="overwrite"]').borderTopWidth, theme === 'vscode-dark' ? '1px' : '0px', `${theme} action frame`);
     assert.equal(computed('[data-conflict-action="overwrite"]').borderLeftWidth, theme === 'vscode-dark' ? '1px' : '0px', `${theme} destructive stripe`);
     assert.equal(app.document.activeElement.id, 'conflict-name');
