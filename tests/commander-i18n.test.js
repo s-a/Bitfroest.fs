@@ -96,3 +96,8 @@ test('short extension column heading follows the selected interface language', t
     assert.equal(create(language).t('Ext.'), expected);
   }
 });
+
+test('file manager initialization availability is localized in English', () => {
+  const { t } = require('../media/commander-i18n').create('en');
+  assert.equal(t('Dateiverwaltung wird initialisiert…'), 'Initializing file manager…');
+});

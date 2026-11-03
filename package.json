@@ -2,7 +2,7 @@
   "name": "bitfroest-fs-prototype",
   "displayName": "Bitfroest.fs (Beta)",
   "description": "%extension.description%",
-  "version": "0.0.48",
+  "version": "0.0.49",
   "preview": true,
   "publisher": "bitfroest",
   "author": "Stephan Ahlf",
@@ -926,11 +926,13 @@
       },
       {
         "command": "bitfroest.openPrototype",
-        "title": "%command.bitfroest.openPrototype.title%"
+        "title": "%command.bitfroest.openPrototype.title%",
+        "enablement": "bitfroest.canOpen"
       },
       {
         "command": "bitfroest.show",
         "title": "%command.bitfroest.show.title%",
+        "enablement": "bitfroest.canOpen",
         "category": "Bitfroest.fs"
       },
       {

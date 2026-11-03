@@ -44,6 +44,7 @@
     'Git-Status aktualisieren': 'Refresh Git status',
     'Git-Änderungsstatus prüfen': 'Check Git dirty state',
     'Dateiverwaltung öffnen oder nach vorn holen': 'Open or reveal the file manager',
+    'Dateiverwaltung wird initialisiert…': 'Initializing file manager…',
     'Git-Prüfung fehlgeschlagen: {error}': 'Git check failed: {error}',
     'Leer – von Git nicht erfasst': 'Empty – not tracked by Git',
     'Ansichtszustand speichern': 'Save view state',

@@ -1808,8 +1808,10 @@ test('lister host protocol opens only known files, renders generated HTML, copie
   panel.dispose();
 });
 
-test('activation registers a right-aligned show entry without opening a production window', t => {
+test('activation registers a right-aligned show entry after initialization without opening a production window', async t => {
   const app = harness(t);
+  assert.equal(app.status.command, undefined);
+  await tick();
   assert.equal(app.status.alignment, 2);
   assert.equal(app.status.priority, 101);
   assert.equal(app.status.shown, true);
@@ -2538,7 +2540,10 @@ test('native webview file menus require a rendered ready application', () => {
     else assert.match(item.when, /bitfroest\.ready/);
     assert.match(item.when, /webviewId == bitfroestPrototype/);
   }
-  for (const item of manifest.contributes.commands.filter(item => item.enablement)) assert.match(item.enablement, /bitfroest\.ready/);
+  for (const item of manifest.contributes.commands.filter(item => item.enablement)) {
+    if (['bitfroest.openPrototype', 'bitfroest.show'].includes(item.command)) assert.equal(item.enablement, 'bitfroest.canOpen');
+    else assert.match(item.enablement, /bitfroest\.ready/);
+  }
 });
 
 test('file shortcuts require this webview, list focus and absence of text input', () => {
@@ -2870,6 +2875,7 @@ test('preview and comparison editors do not force compact mode over their additi
 
 test('the labelled status button opens or reveals the application without toggling it closed', async t => {
   const app = harness(t);
+  await tick();
   assert.match(app.status.text, /Bitfroest\.fs/);
   await app.command(app.status.command); const panel = app.panels[0];
   await app.command(app.status.command);
@@ -3045,9 +3051,11 @@ test('a hidden existing panel is revealed without moving another editor into a n
 });
 
 test('overlapping opens wait for the first theme load rather than creating duplicate windows', async t => {
-  const barrier = deferred();
-  const app = harness(t, { theme: async (_, icons) => { await barrier.promise; return icons; } });
+  const barrier = deferred(), entered = deferred();
+  t.after(() => barrier.resolve());
+  const app = harness(t, { theme: async (_, icons) => { entered.resolve(); await barrier.promise; return icons; } });
   const first = app.command('bitfroest.openPrototype');
+  await entered.promise;
   await app.command('bitfroest.openPrototype');
   assert.equal(app.panels.length, 1);
   barrier.resolve(); await first;
@@ -5216,5 +5224,110 @@ test('hiding a restored panel during window verification still acknowledges its 
   panel.changeVisibility(false); gate.resolve(); await ready;
   assert.equal(app.panels.length, 1); assert.equal(panel.disposed, false);
   assert.equal(app.contexts.get('bitfroest.ready'), true);
+  panel.dispose();
+});
+test('early open waits for initial host contexts before creating or moving a new panel', async t => {
+  const gate = deferred(), started = deferred(); let held = false;
+  t.after(() => gate.resolve());
+  const copy = require('../shortcut-settings').catalog.find(item => item.command === 'bitfroest.copy' && item.key === 'f5');
+  const app = harness(t, { manualReadiness: true, configuration: { 'shortcuts.bindings': { [copy.id]: 'ctrl+shift+k' } }, commandEffect: async (id, args) => {
+    if (!held && id === 'setContext' && String(args[0]).startsWith('bitfroest.shortcutOverride.')) {
+      held = true; started.resolve(); await gate.promise;
+    }
+  } });
+  await started.promise;
+  assert.equal(app.status.command, undefined);
+  assert.equal(app.contexts.get('bitfroest.canOpen'), false);
+  const first = app.command('bitfroest.show'), second = app.command('bitfroest.show');
+  await tick();
+  assert.equal(app.panels.length, 0);
+  assert.equal(app.calls.some(call => call.id === 'workbench.action.moveEditorToNewWindow'), false);
+  assert.equal(app.nativeCalls.length, 0);
+  gate.resolve(); await Promise.all([first, second]);
+  assert.equal(app.panels.length, 1);
+  assert.equal(app.status.command, undefined, 'the visible button still waits for browser readiness');
+  await app.panels[0].receive({ type: 'app-ready' });
+  assert.equal(app.status.command, 'bitfroest.show');
+  assert.equal(app.contexts.get('bitfroest.canOpen'), true);
+  app.panels[0].dispose();
+});
+
+test('fresh panel readiness and immediately following focus refresh share one completion boundary', async t => {
+  let loads = 0; const state = clipboardFixture();
+  const app = harness(t, { manualReadiness: true, filesystemLoad: async () => { loads++; return state; } });
+  await app.command('bitfroest.show'); const panel = app.panels[0];
+  const ready = panel.receive({ type: 'app-ready' });
+  const refresh = panel.receive({ type: 'filesystem-refresh', refreshRequestId: 'fresh-ready-refresh', state });
+  await Promise.all([ready, refresh]);
+  assert.equal(loads, 2);
+  assert.ok(panel.messages.some(message => message.type === 'filesystem-result' && message.refreshRequestId === 'fresh-ready-refresh'));
+  panel.dispose();
+});
+
+test('the native open commands require actual file manager availability', () => {
+  for (const id of ['bitfroest.openPrototype', 'bitfroest.show']) {
+    assert.equal(manifest.contributes.commands.find(command => command.command === id).enablement, 'bitfroest.canOpen');
+  }
+});
+
+test('an early open waits for the initial renderer acknowledgement without custom shortcuts', async t => {
+  const gate = deferred(), started = deferred(); let held = false;
+  t.after(() => gate.resolve());
+  const app = harness(t, { manualReadiness: true, commandEffect: async (id, args) => {
+    if (!held && id === 'setContext' && args[0] === 'bitfroest.canOpen' && args[1] === false) {
+      held = true; started.resolve(); await gate.promise;
+    }
+  } });
+  await started.promise;
+  const opening = app.command('bitfroest.show'); await tick();
+  assert.equal(app.panels.length, 0);
+  assert.equal(app.status.command, undefined);
+  gate.resolve(); await opening;
+  assert.equal(app.panels.length, 1);
+  await app.panels[0].receive({ type: 'app-ready' }); app.panels[0].dispose();
+});
+test('deactivation while initialization is pending cannot create a delayed window', async t => {
+  const gate = deferred(), entered = deferred(); let held = false;
+  t.after(() => gate.resolve());
+  const app = harness(t, { manualReadiness: true, commandEffect: async (id, args) => {
+    if (!held && id === 'setContext' && args[0] === 'bitfroest.canOpen' && args[1] === false) {
+      held = true; entered.resolve(); await gate.promise;
+    }
+  } });
+  await entered.promise;
+  const opening = app.command('bitfroest.show');
+  for (const subscription of app.context.subscriptions) subscription.dispose();
+  gate.resolve(); await opening;
+  assert.equal(app.panels.length, 0);
+  assert.equal(app.calls.some(call => call.id === 'workbench.action.moveEditorToNewWindow'), false);
+});
+
+test('a failed initialization acknowledgement creates no panel and leaves startup diagnostics available', async t => {
+  const logs = []; let rejected = false;
+  const app = harness(t, { manualReadiness: true, onLog: (_name, _config, line) => logs.push(JSON.parse(line)), commandEffect: async (id, args) => {
+    if (!rejected && id === 'setContext' && args[0] === 'bitfroest.canOpen' && args[1] === false) {
+      rejected = true; throw new Error('Renderer acknowledgement failed');
+    }
+  } });
+  await assert.rejects(app.command('bitfroest.show'), /Renderer acknowledgement failed/);
+  assert.equal(app.panels.length, 0); assert.equal(app.status.command, undefined);
+  assert.ok(app.commands.has('bitfroest.copyStartupLog'));
+  assert.ok(logs.some(row => row.kind === 'error' && row.operation === 'initialization'));
+});
+
+test('reloading a panel document resets the readiness boundary before the next focus refresh', async t => {
+  let loads = 0; const state = clipboardFixture();
+  const app = harness(t, { manualReadiness: true, filesystemLoad: async () => { loads++; return state; } });
+  await app.command('bitfroest.show'); const panel = app.panels[0];
+  await panel.receive({ type: 'app-ready' });
+  await panel.receive({ type: 'language-reload', state });
+  assert.equal(app.status.command, undefined);
+  assert.equal(app.contexts.get('bitfroest.ready'), false);
+  const ready = panel.receive({ type: 'app-ready' });
+  const refresh = panel.receive({ type: 'filesystem-refresh', refreshRequestId: 'reloaded-ready-refresh', state });
+  await Promise.all([ready, refresh]);
+  assert.equal(loads, 2);
+  assert.equal(app.status.command, 'bitfroest.show');
+  assert.ok(panel.messages.some(message => message.type === 'filesystem-result' && message.refreshRequestId === 'reloaded-ready-refresh'));
   panel.dispose();
 });

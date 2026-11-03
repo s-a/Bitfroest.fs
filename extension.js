@@ -243,6 +243,8 @@ function activate(context) {
   };
   const configurationEditor = createConfigurationEditor(vscode, context, configurationOptions);
   const initialShortcutsReady = syncShortcuts();
+  const initializationReady = Promise.all([initialShortcutsReady, vscode.commands.executeCommand('setContext', 'bitfroest.canOpen', false)]);
+  let initialized = false;
   context.subscriptions.push({ dispose() { shortcutsDisposed = true; for (const entry of shortcutCatalog.filter(item => item.source === 'manifest' && item.editable)) vscode.commands.executeCommand('setContext', `bitfroest.shortcutOverride.${entry.id}`, false); } });
   let searchPresetQueue = Promise.resolve();
   let panelReady = false, panelFailed = false;
@@ -287,6 +289,7 @@ function activate(context) {
   }));
   function setReady(value) {
     panelReady = value;
+    updateStatus();
     vscode.commands.executeCommand('setContext', 'bitfroest.ready', value);
     if (!value) for (const key of ['tabFocus', 'textInput', 'listFocus', 'listerFocus', 'searchFocus', 'searchResultsFocus', 'searchResults', 'conflictDialog', 'transferNameInput', 'fileDialog', 'inlineRenameInput', 'canPasteFiles']) vscode.commands.executeCommand('setContext', `bitfroest.${key}`, false);
   }
@@ -430,23 +433,39 @@ function activate(context) {
   const title = () => activeDirectory || `Bitfroest.fs · ${t(scope === 'global' ? 'Global' : 'Arbeitsbereich')}`;
   const status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 101);
   status.text = `${productIcon('folder')} Bitfroest.fs`;
-  status.tooltip = t('Dateiverwaltung öffnen oder nach vorn holen');
-  status.command = 'bitfroest.show';
   status.name = 'Bitfroest.fs';
   status.show();
   context.subscriptions.push(status);
   function updateStatus() {
     status.text = `${productIcon(panel?.visible ? 'folder-opened' : 'folder')} Bitfroest.fs`;
+    const available = initialized && !opening && (!panel || panelReady || panelFailed);
+    status.command = available ? 'bitfroest.show' : undefined;
+    status.tooltip = t(available ? 'Dateiverwaltung öffnen oder nach vorn holen' : 'Dateiverwaltung wird initialisiert…');
+    void vscode.commands.executeCommand('setContext', 'bitfroest.canOpen', available);
   }
+  updateStatus();
+  void initializationReady.then(() => {
+    if (shortcutsDisposed) return;
+    initialized = true;
+    logStartup('initialization-ready');
+    updateStatus();
+  }, error => logStartup('error', { operation: 'initialization', message: error.message, stack: error.stack }));
   function open(restoredPanel, toggle = true) {
     if (opening) return restoredPanel ? pendingOpen.then(() => open(restoredPanel)) : undefined;
-    pendingOpen = openPanel(restoredPanel, toggle);
+    if (panel && !panelReady && !panelFailed && !restoredPanel) return pendingOpen;
+    pendingOpen = openPanel(restoredPanel, toggle).catch(error => { opening = false; updateStatus(); throw error; });
     return pendingOpen;
   }
   async function openPanel(restoredPanel, toggle = true) {
     if (panel?.visible && !restoredPanel && toggle) { panel.dispose(); return; }
     if (panel) { if (restoredPanel) restoredPanel.dispose(); else panel.reveal(); return; }
     opening = true;
+    updateStatus();
+    if (!restoredPanel) {
+      if (!initialized) logStartup('open-waiting-initialization');
+      await initializationReady;
+      if (shortcutsDisposed) { opening = false; return; }
+    }
     const startupOrigin = performance.now(), startupEvents = [], directoryEvents = new Map();
     const bundleFiles = ['extension.js', 'media/app.js', 'media/app.css', 'media/startup-diagnostics.js', 'native/binding.node'];
     const digests = Object.fromEntries(bundleFiles.map(name => {
@@ -632,7 +651,7 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
       })();
     } else logStartup('window-setup-deferred', { documentId, visible: loadingPanel.visible, active: loadingPanel.active, viewColumn: loadingPanel.viewColumn });
     startupStep(t('Tastaturkonfiguration wird übernommen'));
-    await initialShortcutsReady;
+    await initializationReady;
     startupStep(t('Tastaturkonfiguration übernommen'));
     try {
       startupStep(t('Warten auf vorherige Dateisystemaufträge'));
@@ -718,7 +737,8 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
     const renderHtml = () => {
       language = displayLanguage();
       if (!windowSetupPending) panel.title = title();
-      status.tooltip = t('Dateiverwaltung öffnen oder nach vorn holen');
+      updateStatus();
+      readinessPromise = undefined;
       startupStep(t('Warten auf die Initialisierung der Webview'));
       const elapsed = Math.max(0, performance.now() - startupOrigin);
       const escape = value => String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -746,7 +766,7 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
     panel.onDidChangeViewState(() => { logStartup('panel-state', { documentId, visible: panel?.visible, active: panel?.active, viewColumn: panel?.viewColumn }); updateStatus(); updateAuxiliaryTabs(); if (panel === messagePanel && messagePanel.visible) publishGit().catch(() => {}); }, null, context.subscriptions);
     updateStatus();
     const messagePanel = panel;
-    let restorationCheck;
+    let restorationCheck, readinessPromise;
     const restorationAbort = new AbortController();
     messagePanel.onDidDispose(() => restorationAbort.abort());
     const verifyRestoredWindow = () => {
@@ -994,14 +1014,16 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
         return;
       }
       if (message?.type === 'app-ready') {
-        if (!panelFailed) {
-          clearTimeout(startupWatchdog);
-          if (await verifyRestoredWindow() || restoredDisposed || panel !== messagePanel || panelFailed) return;
-          logStartup('ready', { startupId: currentStartup?.id, documentId, documentSequence, lastBrowserEvent, lastFrame, visible: panel?.visible, active: panel?.active, viewColumn: panel?.viewColumn });
-          setReady(true);
-          requestAuxiliaryReady();
-        }
-        return;
+        return readinessPromise ||= (async () => {
+          const readyDocument = documentId;
+          if (!panelFailed) {
+            clearTimeout(startupWatchdog);
+            if (await verifyRestoredWindow() || restoredDisposed || panel !== messagePanel || panelFailed || documentId !== readyDocument) return;
+            logStartup('ready', { startupId: currentStartup?.id, documentId, documentSequence, lastBrowserEvent, lastFrame, visible: panel?.visible, active: panel?.active, viewColumn: panel?.viewColumn });
+            setReady(true);
+            requestAuxiliaryReady();
+          }
+        })();
       }
       if (message?.type === 'auxiliary-compact-ready') {
         if (message.requestId !== auxiliaryCheckId || !auxiliaryCheckSent || panel !== messagePanel) return;
@@ -1009,7 +1031,7 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
         applyCompactWhenReady();
         return;
       }
-      if (!panelReady && restorationCheck) await restorationCheck;
+      if (!panelReady && readinessPromise) await readinessPromise;
       if (!panelReady || panel !== messagePanel) return;
       if (message?.type === 'git-status') {
         if (typeof message.requestId !== 'string' || message.requestId.length > 100 || typeof message.snapshotId !== 'string' || message.snapshotId.length > 100 || !Array.isArray(message.directories) || message.directories.length > 2 || message.directories.some(directory => typeof directory !== 'string' || directory.length > 4096 || directory.includes('\0'))) return;
@@ -1815,7 +1837,7 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
       logStartup('error', { message: error.message, stack: error.stack, operation: 'open-panel' });
       if (!restoredDisposed) loadingPanel.dispose();
       throw error;
-    } finally { startupSubscription?.dispose(); restoringSubscription?.dispose(); opening = false; }
+    } finally { startupSubscription?.dispose(); restoringSubscription?.dispose(); opening = false; updateStatus(); }
   }
   context.subscriptions.push(vscode.commands.registerCommand('bitfroest.openPrototype', () => open()));
   context.subscriptions.push(vscode.commands.registerCommand('bitfroest.show', () => opening ? pendingOpen : open(undefined, false)));
