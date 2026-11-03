@@ -131,8 +131,8 @@ test('generated host HTML separates immediate rectangle selection from held file
   const list = view.document.querySelector('[data-pane="0"] .list'), row = view.row('a.txt');
   list.getBoundingClientRect = () => ({ left: 0, top: 0, right: 600, bottom: 300 });
   row.getBoundingClientRect = () => ({ left: 0, top: 30, right: 600, bottom: 50 });
-  const pointer = (type, target, clientY) => {
-    const event = new view.window.MouseEvent(type, { bubbles: true, cancelable: true, button: 0, clientX: clientY, clientY });
+  const pointer = (type, target, clientY, button = 0) => {
+    const event = new view.window.MouseEvent(type, { bubbles: true, cancelable: true, button, buttons: type === 'pointerup' ? 0 : button === 2 ? 2 : 1, clientX: clientY, clientY });
     Object.defineProperty(event, 'pointerId', { value: 1 }); target.dispatchEvent(event);
   };
   pointer('pointerdown', row, 40);
@@ -154,6 +154,15 @@ test('generated host HTML separates immediate rectangle selection from held file
   assert.deepEqual(JSON.parse(data.get('application/x-bitfroest-files')).ids, ['a']);
   drag('drop', view.document.querySelector('[data-pane="1"] .list'));
   assert.equal(view.document.querySelector('#modal').open, true);
+  assert.equal(view.messages.some(message => message.type === 'filesystem-apply'), false);
+  view.document.querySelector('#modal-cancel').click();
+  const destination = view.document.querySelector('[data-pane="1"] .list');
+  pointer('pointerdown', view.row('a.txt'), 40, 2);
+  pointer('pointermove', destination, 200, 2);
+  assert.equal(view.document.querySelector('.file-drag-feedback').dataset.mode, 'move');
+  pointer('pointerup', destination, 200, 2);
+  assert.match(view.document.querySelector('#modal-title').textContent, /verschieben/i);
+  assert.equal(view.messages.some(message => message.type === 'choose-drop-action'), false);
   assert.equal(view.messages.some(message => message.type === 'filesystem-apply'), false);
 });
 

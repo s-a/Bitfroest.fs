@@ -873,12 +873,11 @@
   let focusRefreshRequested = false;
   let transferPending = false;
   let transferPlanning = false;
-  let rightDropChoice = null, rightDropSequence = 0;
   let shellMenuPending = null, shellMenuSequence = 0;
   let gitMenuSelection = null, pendingGitDiff = null;
   let conflictAction = null;
   function flushFocusRefresh() {
-    if (!startupReady || !focusRefreshRequested || filesystemPending || navigationRequests.size || transferPending || rightDropChoice || shellMenuPending || $('#modal').open || document.querySelector('.inline-rename')) return;
+    if (!startupReady || !focusRefreshRequested || filesystemPending || navigationRequests.size || transferPending || shellMenuPending || $('#modal').open || document.querySelector('.inline-rename')) return;
     focusRefreshRequested = false;
     if (lister.has(state.active)) return;
     requestFilesystem({ type: 'filesystem-refresh' });
@@ -2917,7 +2916,7 @@
   window.addEventListener('pagehide', () => clearTimeout(languageReloadTimer), { once: true });
   function requestLanguageReload() {
     clearTimeout(languageReloadTimer);
-    if (filesystemPending || navigationRequests.size || transferPending || transferJob || rightDropChoice || shellMenuPending || clipboardRequests.size || $('#modal').open || fileSearch.isOpen || document.querySelector('.inline-rename')) {
+    if (filesystemPending || navigationRequests.size || transferPending || transferJob || shellMenuPending || clipboardRequests.size || $('#modal').open || fileSearch.isOpen || document.querySelector('.inline-rename')) {
       languageReloadTimer = setTimeout(requestLanguageReload, 100);
       return;
     }
@@ -3220,30 +3219,15 @@
   });
   let dragged;
   let rightPointer = null, suppressRightContext = false;
-  function finishRightDrop(action, requestId) {
-    const choice = rightDropChoice;
-    if (!choice || choice.requestId !== requestId) return;
-    rightDropChoice = null;
-    if (action === 'copy' || action === 'move') runTransfer({ sourceSide: choice.source.side, sourcePath: choice.source.sourcePath, targetSide: choice.targetSide, ids: choice.source.ids, targetPath: choice.parent ? choice.path.replace(/\/$/, '') + '/' : choice.path, targetIsDirectory: choice.parent, mode: action, validateSelection: choice.validate });
-    reportFocus(); flushFocusRefresh();
-  }
-  function chooseRightDrop(source, destination) {
-    if (filesystemPending && !refreshingFilesystem || transferPending || rightDropChoice || $('#modal').open) return;
+  function moveRightDrop(source, destination) {
+    if (filesystemPending && !refreshingFilesystem || transferPending || $('#modal').open) return;
     if (!validFileDropTarget(source, destination)) return;
     const path = destination.path, parentRow = (state.folders[parent(path)] || []).find(file => file.type === 'folder' && file.name === base(path));
     const signature = parentRow && JSON.stringify(parentRow);
     const origin = currentPath(state.panes[destination.side]);
     const validate = () => validDraggedFiles(source) && (Object.hasOwn(state.folders, path) || destination.parent && currentPath(state.panes[destination.side]) === origin) && (!signature || JSON.stringify((state.folders[parent(path)] || []).find(file => file.type === 'folder' && file.name === base(path))) === signature);
     if (!validate()) { toast(t('Die gezogene Auswahl wurde geändert. Bitte erneut ziehen.')); return; }
-    const requestId = `right-drop-${++rightDropSequence}`;
-    const choice = { source, path, validate, requestId, targetSide: destination.side, parent: destination.parent };
-    rightDropChoice = choice;
-    if (host) { host.postMessage({ type: 'choose-drop-action', requestId }); return; }
-    modal(t('Aktion für die gezogene Auswahl'), `<div class="conflict-actions"><button type="button" data-right-drop="copy">${t('Hier kopieren')}</button><button type="button" data-right-drop="move">${t('Hier verschieben')}</button></div>`, null, null);
-    $('#modal-cancel').textContent = t('Abbrechen');
-    const dialog = $('#modal');
-    $('#modal-body').querySelectorAll('[data-right-drop]').forEach(button => { button.onclick = () => { const action = button.dataset.rightDrop; rightDropChoice = null; dialog.close(); rightDropChoice = choice; finishRightDrop(action, requestId); }; });
-    dialog.addEventListener('close', () => { if (rightDropChoice?.requestId === requestId) finishRightDrop('cancel', requestId); }, { once: true });
+    runTransfer({ sourceSide: source.side, sourcePath: source.sourcePath, targetSide: destination.side, ids: source.ids, targetPath: destination.parent ? path.replace(/\/$/, '') + '/' : path, targetIsDirectory: destination.parent, mode: 'move', validateSelection: validate });
   }
   function pointerDestination(event) {
     const target = typeof document.elementFromPoint === 'function' ? document.elementFromPoint(event.clientX, event.clientY) : event.target;
@@ -3253,7 +3237,7 @@
     if (event.button !== 2) return;
     suppressRightContext = false;
     const row = event.target.closest('#panes [data-file-row][data-id]');
-    if (!row || event.target.closest('input,textarea,select,[contenteditable="true"]') || filesystemPending && !refreshingFilesystem || transferPending || rightDropChoice || $('#modal').open) return;
+    if (!row || event.target.closest('input,textarea,select,[contenteditable="true"]') || filesystemPending && !refreshingFilesystem || transferPending || $('#modal').open) return;
     const side = Number(row.closest('[data-pane]').dataset.pane), p = state.panes[side], ids = p.selected.includes(row.dataset.id) ? [...p.selected] : [row.dataset.id];
     if (resultView(p)) return;
     const source = { kind: 'files', side, sourcePath: currentPath(p), ids, items: files(p).filter(file => ids.includes(file.id)).map(file => ({ id: file.id, signature: JSON.stringify(file) })) };
@@ -3271,7 +3255,7 @@
       refreshSelection(); gesture.list.setPointerCapture?.(gesture.id);
     }
     clearDropTarget(); const destination = pointerDestination(event);
-    if (validFileDropTarget(gesture.source, destination)) destination.element.classList.add('drop-target');
+    if (validFileDropTarget(gesture.source, destination)) { destination.element.classList.add('drop-target'); showFileDragFeedback(event, 'move'); }
   });
   document.addEventListener('pointerup', event => {
     const gesture = rightPointer;
@@ -3282,7 +3266,7 @@
     gesture.list.releasePointerCapture?.(gesture.id);
     if (window.CommanderTransfer.dropMode(event) === 'link') { toast(t('Verknüpfungen sind für diese Dateiaktion noch nicht verfügbar.')); return; }
     const destination = pointerDestination(event);
-    if (destination && !gesture.cancelled) chooseRightDrop(gesture.source, destination);
+    if (destination && !gesture.cancelled) moveRightDrop(gesture.source, destination);
   });
   document.addEventListener('pointercancel', event => { if (rightPointer?.id === event.pointerId) { suppressRightContext = rightPointer.active; rightPointer = null; clearDropTarget(); } });
   document.addEventListener('keydown', event => { if (rightPointer?.active && event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); rightPointer.cancelled = true; clearDropTarget(); } }, true);
@@ -3671,7 +3655,6 @@
       else if (!event.data.ok) { if (event.data.unsupported) toast(event.data.error, 'info'); else showOperationFailure(event.data.error || t('Das native Systemmenü konnte nicht geöffnet werden.'), { diagnostic: event.data.diagnostic }); }
       flushFocusRefresh(); return;
     }
-    if (host && event.data?.type === 'drop-action-result') { if (rightDropChoice?.requestId !== event.data.requestId) return; if (event.data.error) { rightDropChoice = null; showOperationFailure(event.data.error); } else finishRightDrop(event.data.action, event.data.requestId); return; }
     if (host && event.data?.type === 'clipboard-changed') {
       if (systemFileClipboardSupported && state.realFilesystem) { clipboardGeneration++; setClipboardSelection(null); refreshClipboardAvailability(); }
       return;

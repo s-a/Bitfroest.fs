@@ -24,9 +24,7 @@ test('column context remains available after a cancelled right drag without a fu
 function gesture(app, target, extra = {}) {
   pointer(app, 'pointerdown', app.row('a.txt')); pointer(app, 'pointermove', target, { clientX: 500, clientY: 200, ...extra });
   pointer(app, 'pointerup', target, { clientX: 500, clientY: 200, ...extra });
-  return app.messages.find(item => item.type === 'choose-drop-action');
 }
-const reply = (app, request, action) => app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'drop-action-result', requestId: request.requestId, action } }));
 const submit = app => app.document.querySelector('#modal-form').dispatchEvent(new app.window.Event('submit', { bubbles: true, cancelable: true }));
 
 test('right dragging onto the source list or a tab for the same path offers no action', t => {
@@ -41,47 +39,59 @@ test('right dragging onto the source list or a tab for the same path offers no a
     assert.equal(app.document.querySelector('#modal').open, false);
   }
 });
-test('right pointer drag offers a choice before the normal copy or move confirmation', async t => {
-  for (const mode of ['copy', 'move']) {
-    const app = createApp(t, fixture()), before = JSON.stringify(app.state().folders);
-    const request = gesture(app, app.document.querySelector('[data-pane="1"] .list')); assert.ok(request);
-    assert.equal(JSON.stringify(app.state().folders), before); assert.equal(app.document.querySelector('#modal').open, false);
-    reply(app, request, mode); assert.equal(app.document.querySelector('#value').value, '/right');
-    assert.equal(JSON.stringify(app.state().folders), before); submit(app); await new Promise(resolve => setImmediate(resolve));
-    assert.ok(app.state().folders['/right'].some(file => file.name === 'a.txt')); assert.equal(app.state().folders['/left'].length, mode === 'copy' ? 2 : 0);
-  }
+test('right pointer drag shows move feedback and opens move confirmation directly', async t => {
+  const app = createApp(t, fixture()), before = JSON.stringify(app.state().folders);
+  const target = app.document.querySelector('[data-pane="1"] .list');
+  pointer(app, 'pointerdown', app.row('a.txt'));
+  pointer(app, 'pointermove', target, { clientX: 500, clientY: 200 });
+  assert.equal(app.document.querySelector('.file-drag-feedback')?.dataset.mode, 'move');
+  pointer(app, 'pointerup', target, { clientX: 500, clientY: 200 });
+  assert.equal(app.messages.some(item => item.type === 'choose-drop-action'), false);
+  assert.match(app.document.querySelector('#modal-title').textContent, /verschieben/i);
+  assert.equal(app.document.querySelector('#value').value, '/right');
+  assert.equal(JSON.stringify(app.state().folders), before);
+  submit(app); await new Promise(resolve => setImmediate(resolve));
+  assert.ok(app.state().folders['/right'].some(file => file.name === 'a.txt'));
+  assert.equal(app.state().folders['/left'].length, 0);
 });
 test('right drag captures folder and inactive-tab destinations without navigating there', t => {
   for (const selector of ['[data-pane="1"] [data-file-row][data-id="folder"]', '[data-pane="1"] [data-tab="1"]']) {
-    const app = createApp(t, fixture()), request = gesture(app, app.document.querySelector(selector)); assert.ok(request);
-    reply(app, request, 'copy'); assert.equal(app.document.querySelector('#value').value, '/right/target'); assert.equal(app.state().panes[1].tab, 0);
+    const app = createApp(t, fixture()); gesture(app, app.document.querySelector(selector));
+    assert.equal(app.document.querySelector('#value').value, '/right/target'); assert.equal(app.state().panes[1].tab, 0);
+    assert.match(app.document.querySelector('#modal-title').textContent, /verschieben/i);
   }
 });
 test('right-drag cancellation, unsupported links and short right clicks cannot transfer files', t => {
   const app = createApp(t, fixture()), target = app.document.querySelector('[data-pane="1"] .list'), before = JSON.stringify(app.state().folders);
-  const request = gesture(app, target); assert.ok(request); reply(app, request, 'cancel'); assert.equal(app.document.querySelector('#modal').open, false);
-  assert.equal(gesture(app, target, { ctrlKey: true, shiftKey: true }), request); assert.equal(app.messages.filter(item => item.type === 'choose-drop-action').length, 1);
+  gesture(app, target); app.document.querySelector('#modal-cancel').click(); assert.equal(app.document.querySelector('#modal').open, false);
+  gesture(app, target, { ctrlKey: true, shiftKey: true }); assert.equal(app.messages.filter(item => item.type === 'choose-drop-action').length, 0);
+  assert.equal(app.document.querySelector('#modal').open, false);
+  pointer(app, 'pointerdown', app.row('a.txt')); pointer(app, 'pointermove', target, { clientX: 500, clientY: 200 });
+  app.key('Escape'); pointer(app, 'pointerup', target, { clientX: 500, clientY: 200 });
+  assert.equal(app.document.querySelector('#modal').open, false);
   pointer(app, 'pointerdown', app.row('a.txt')); pointer(app, 'pointerup', app.row('a.txt'));
   const context = new app.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }); app.row('a.txt').dispatchEvent(context);
   assert.equal(context.defaultPrevented, false); assert.equal(JSON.stringify(app.state().folders), before);
 });
-test('changed drag sources and removed targets are rejected after the native menu and before confirmation', t => {
-  for (const phase of ['menu', 'confirmation']) for (const change of ['source', 'target']) {
-    const app = createApp(t, fixture()), request = gesture(app, app.document.querySelector('[data-pane="1"] [data-file-row][data-id="folder"]')); assert.ok(request);
-    if (phase === 'confirmation') reply(app, request, 'copy');
+test('changed drag sources and removed targets are rejected before move confirmation completes', t => {
+  for (const change of ['source', 'target']) {
+    const saved = { ...fixture(), realFilesystem: true, snapshotId: 'before' };
+    const app = createApp(t, saved); gesture(app, app.document.querySelector('[data-pane="1"] [data-file-row][data-id="folder"]'));
     const changed = fixture();
     if (change === 'source') changed.folders['/left'][0].name = 'different.txt';
     else { changed.folders['/right'] = []; delete changed.folders['/right/target']; changed.panes[1].tabs = ['/right']; }
-    app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-result', ok: true, state: { ...changed, realFilesystem: true } } }));
-    if (phase === 'menu') reply(app, request, 'move'); else submit(app);
+    app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-result', ok: true, state: { ...changed, realFilesystem: true, snapshotId: 'after' } } }));
+    assert.equal(app.state().snapshotId, 'after');
+    submit(app);
     assert.equal(app.messages.some(item => item.type === 'filesystem-apply'), false); assert.equal(app.state().folders['/right'].length, change === 'source' ? 1 : 0);
   }
 });
-test('right drag suppresses its generated context menu and duplicate pointer releases cannot offer another choice', t => {
+test('right drag suppresses its generated context menu and duplicate pointer releases retain the move confirmation', t => {
   const app = createApp(t, fixture()), target = app.document.querySelector('[data-pane="1"] .list'); gesture(app, target);
   pointer(app, 'pointerup', target, { clientX: 500, clientY: 200 });
   const context = new app.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }); target.dispatchEvent(context);
-  assert.equal(context.defaultPrevented, true); assert.equal(app.messages.filter(item => item.type === 'choose-drop-action').length, 1);
+  assert.equal(context.defaultPrevented, true); assert.equal(app.messages.filter(item => item.type === 'choose-drop-action').length, 0);
+  assert.match(app.document.querySelector('#modal-title').textContent, /verschieben/i);
 });
 test('a dialog opened during a right gesture is not overlaid by a drop picker', t => {
   const app = createApp(t, fixture()), target = app.document.querySelector('[data-pane="1"] .list');
