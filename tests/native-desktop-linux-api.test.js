@@ -22,7 +22,13 @@ async function runDesktopFixture(t, scenario, registered = true) {
   const target = path.join(root, 'spaces ü & $report.txt'), log = path.join(root, 'launch.json');
   const app = path.join(root, 'activation.cjs');
   await fs.writeFile(target, 'UNCHANGED');
-  await fs.writeFile(app, "require('node:fs').writeFileSync(process.env.TEST_LAUNCH_LOG, JSON.stringify(process.argv.slice(2)));\n");
+  await fs.writeFile(app, [
+    "const fs = require('node:fs');",
+    'const log = process.env.TEST_LAUNCH_LOG;',
+    "fs.writeFileSync(log + '.pending', JSON.stringify(process.argv.slice(2)));",
+    "fs.renameSync(log + '.pending', log);",
+    ''
+  ].join('\n'));
   if (registered) {
     await fs.writeFile(path.join(root, 'data/applications/fixture.desktop'), `[Desktop Entry]\nType=Application\nName=Desktop fixture\nExec="${process.execPath}" "${app}" %u\nTerminal=false\nMimeType=text/plain;application/octet-stream;x-scheme-handler/trash;\n`);
     await fs.writeFile(path.join(root, 'config/mimeapps.list'), '[Default Applications]\ntext/plain=fixture.desktop\napplication/octet-stream=fixture.desktop\nx-scheme-handler/trash=fixture.desktop\n');
