@@ -432,15 +432,16 @@ function activate(context) {
   let activeDirectory;
   const title = () => activeDirectory || `Bitfroest.fs · ${t(scope === 'global' ? 'Global' : 'Arbeitsbereich')}`;
   const status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 101);
-  status.text = `${productIcon('folder')} Bitfroest.fs`;
+  status.text = productIcon('folder');
   status.name = 'Bitfroest.fs';
   status.show();
   context.subscriptions.push(status);
   function updateStatus() {
-    status.text = `${productIcon(panel?.visible ? 'folder-opened' : 'folder')} Bitfroest.fs`;
+    status.text = productIcon(panel?.visible ? 'folder-opened' : 'folder');
     const available = initialized && !opening && (!panel || panelReady || panelFailed);
     status.command = available ? 'bitfroest.show' : undefined;
     status.tooltip = t(available ? 'Dateiverwaltung öffnen oder nach vorn holen' : 'Dateiverwaltung wird initialisiert…');
+    status.accessibilityInformation = { label: status.tooltip, role: 'button' };
     void vscode.commands.executeCommand('setContext', 'bitfroest.canOpen', available);
   }
   updateStatus();

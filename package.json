@@ -937,6 +937,7 @@
       {
         "command": "bitfroest.show",
         "title": "%command.bitfroest.show.title%",
+        "icon": "$(folder)",
         "enablement": "bitfroest.canOpen",
         "category": "Bitfroest.fs"
       },
@@ -1315,6 +1316,11 @@
         }
       ],
       "editor/title": [
+        {
+          "command": "bitfroest.show",
+          "when": "isAuxiliaryWindow && activeWebviewPanelId != bitfroestPrototype",
+          "group": "navigation@0"
+        },
         {
           "command": "bitfroest.swap",
           "when": "activeWebviewPanelId == bitfroestPrototype",

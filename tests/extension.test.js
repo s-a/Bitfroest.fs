@@ -2927,10 +2927,12 @@ test('preview and comparison editors do not force compact mode over their additi
   }
 });
 
-test('the labelled status button opens or reveals the application without toggling it closed', async t => {
+test('the icon-only status button opens or reveals the application without a text editor', async t => {
   const app = harness(t);
   await tick();
-  assert.match(app.status.text, /Bitfroest\.fs/);
+  assert.equal(app.status.text, '$(folder)');
+  assert.equal(app.status.shown, true);
+  assert.equal(app.status.accessibilityInformation.label, app.status.tooltip);
   await app.command(app.status.command); const panel = app.panels[0];
   await app.command(app.status.command);
   assert.equal(panel.disposed, false); assert.equal(app.panels.length, 1); assert.equal(panel.reveals, 1);
@@ -3088,7 +3090,7 @@ test('a second toggle disposes the panel and clears focus contexts', async t => 
   assert.equal(app.panels[0].disposed, true);
   assert.equal(app.contexts.get('bitfroest.textInput'), false);
   assert.equal(app.contexts.get('bitfroest.listFocus'), false);
-  assert.equal(app.status.text, '$(folder) Bitfroest.fs');
+  assert.equal(app.status.text, '$(folder)');
 });
 
 test('a hidden existing panel is revealed without moving another editor into a new window', async t => {
@@ -3096,12 +3098,12 @@ test('a hidden existing panel is revealed without moving another editor into a n
   await app.command('bitfroest.openPrototype');
   const panel = app.panels[0];
   panel.changeVisibility(false);
-  assert.equal(app.status.text, '$(folder) Bitfroest.fs');
+  assert.equal(app.status.text, '$(folder)');
   await app.command('bitfroest.openPrototype');
   assert.equal(panel.reveals, 1);
   assert.equal(app.panels.length, 1);
   assert.equal(app.nativeCalls.length, 1);
-  assert.equal(app.status.text, '$(folder-opened) Bitfroest.fs');
+  assert.equal(app.status.text, '$(folder-opened)');
 });
 
 test('overlapping opens wait for the first theme load rather than creating duplicate windows', async t => {
@@ -3173,7 +3175,7 @@ test('disposing a panel during native setup does not revive its title or entry',
   app.panels[0].dispose();
   complete(null, '', '');
   await pending;
-  assert.equal(app.status.text, '$(folder) Bitfroest.fs');
+  assert.equal(app.status.text, '$(folder)');
   assert.equal(app.panels[0].disposed, true);
 });
 
