@@ -74,6 +74,7 @@ main { display: flex; flex-direction: column; flex: 1; min-height: 0; min-width:
 .path > span { color: var(--muted); }
 .location-context-icon { position: relative; display: inline-flex; flex: 0 0 var(--icon-size); width: var(--icon-size); height: var(--icon-size); align-items: center; justify-content: center; color: var(--location-color, var(--vscode-icon-foreground)); pointer-events: none; }
 .location-context-icon > .codicon-star-full { --icon-size: calc(var(--icon-base-size) * .875); }
+.location-context-icon > .directory-loading { position: absolute; inset: 0; z-index: 1; color: var(--vscode-progressBar-background, var(--accent)); pointer-events: none; }
 .location-context-icon:has([data-location-badge]) > :first-child { --recess: calc(var(--icon-base-size) * .5 - 1px); clip-path: polygon(0 0, 100% 0, 100% 100%, var(--recess) 100%, var(--recess) calc(100% - var(--recess)), 0 calc(100% - var(--recess))); }
 .location-favorite-badge { --icon-size: var(--icon-badge-size); position: absolute; left: -2px; bottom: -2px; display: inline-flex; align-items: center; justify-content: center; width: var(--icon-size); height: var(--icon-size); overflow: hidden; border-radius: 50%; color: var(--location-star-color); background: var(--location-badge-background); box-shadow: 0 0 0 1px var(--location-badge-background); }
 [data-favorites] { background: transparent; }
@@ -468,6 +469,7 @@ dialog button:disabled { color: var(--vscode-disabledForeground, var(--muted)); 
 [data-git-branch][aria-busy="true"] { animation: git-branch-pulse 1.2s ease-in-out infinite; }
 @keyframes git-branch-pulse { 50% { opacity: 0.55; } }
 @media (prefers-reduced-motion: reduce) {
+  .directory-loading.codicon-modifier-spin { animation: none; }
   [data-refresh][aria-busy="true"] [data-refresh-icon], [data-git-branch][aria-busy="true"] { animation: none; }
 }
 [data-git-branch]:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }

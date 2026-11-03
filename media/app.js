@@ -1156,7 +1156,15 @@
       section.querySelector('[data-refresh]')?.setAttribute('aria-busy', String(busy));
       const refreshIcon = section.querySelector('[data-refresh-icon]');
       if (refreshIcon) window.CommanderIcons.setFont(refreshIcon, busy ? 'loading' : 'refresh', busy);
-      section.querySelector('[data-location-icon]')?.setAttribute('aria-busy', String(gitPending.has(path)));
+      const locationIcon = section.querySelector('[data-location-icon]');
+      const overlay = locationIcon?.querySelector('[data-directory-loading]');
+      if (reading && locationIcon && !overlay) {
+        const spinner = window.CommanderIcons.element('loading', { class: 'directory-loading', 'data-directory-loading': '' });
+        window.CommanderIcons.setFont(spinner, 'loading', true);
+        locationIcon.append(spinner);
+      } else if (!reading) overlay?.remove();
+      section.querySelector('[data-favorites]')?.setAttribute('aria-busy', String(Boolean(reading)));
+      locationIcon?.setAttribute('aria-busy', String(Boolean(reading) || gitPending.has(path)));
       section.querySelector('[data-git-branch]')?.setAttribute('aria-busy', String(gitPending.has(path)));
     });
     for (const { paths, phase } of gitActivities.values()) {
