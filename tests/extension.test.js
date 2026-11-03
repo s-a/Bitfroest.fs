@@ -2879,6 +2879,33 @@ test('concurrent status button opens share the pending startup until the first p
   gate.resolve(); await Promise.all([first, second]); assert.equal(app.panels.length, 1);
 });
 
+test('active directory updates the editor title without changing VS Code settings', async t => {
+  const initial = clipboardFixture();
+  const app = harness(t, { filesystemLoad: async () => structuredClone(initial) });
+  await app.command('bitfroest.openPrototype');
+  const panel = app.panels[0];
+  await panel.receive({ type: 'active-directory', path: 'C:/tmp' });
+  assert.equal(panel.title, 'C:/tmp');
+  await panel.receive({ type: 'active-directory', path: 'C:/temp' });
+  assert.equal(panel.title, 'C:/temp');
+  assert.equal(app.updateCalls.some(call => call.store === 'configuration' && call.key === 'title'), false);
+});
+
+test('generated webview sends the active tab path to the host title', async t => {
+  const initial = clipboardFixture();
+  initial.panes.forEach(pane => { pane.filter = ''; pane.sort = 'name'; });
+  const app = harness(t, { filesystemLoad: async () => structuredClone(initial) });
+  await app.command('bitfroest.openPrototype');
+  const panel = app.panels[0];
+  const view = require('./support/webview.cjs').createApp(t, initial, { html: panel.webview.html });
+  const sendTitle = async () => panel.receive(view.messages.filter(message => message.type === 'active-directory').at(-1));
+  await sendTitle();
+  assert.equal(panel.title, 'C:\\tmp');
+  view.key('Tab');
+  await sendTitle();
+  assert.equal(panel.title, 'C:\\temp');
+});
+
 test('real provider deletes a streamed folder without preparation before the pending host listing completes', { timeout: 10000 }, async t => {
   const disk = require('node:fs/promises'), { createProvider } = require('../filesystem-provider');
   const root = (await disk.mkdtemp(path.join(os.tmpdir(), 'stream-delete-host-'))).replaceAll('\\', '/');

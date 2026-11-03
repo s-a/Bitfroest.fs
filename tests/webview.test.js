@@ -2,6 +2,20 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createApp } = require('./support/webview.cjs');
 
+test('active directory messages follow tab, panel and directory changes', t => {
+  const app = createApp(t);
+  const current = () => app.messages.filter(message => message.type === 'active-directory').at(-1)?.path;
+  assert.equal(current(), app.state().panes[0].tabs[0]);
+  app.click(app.document.querySelector('[data-pane="0"] [data-tab="1"]'));
+  assert.equal(current(), '/workspace/bitfroest/docs');
+  app.key('Tab');
+  const state = app.state();
+  assert.equal(current(), state.panes[state.active].tabs[state.panes[state.active].tab]);
+  app.click(app.document.querySelector('[data-pane="0"] [data-tab="0"]'));
+  app.row('docs').querySelector('[data-filename]').dispatchEvent(new app.window.MouseEvent('dblclick', { bubbles: true, detail: 2 }));
+  assert.equal(current(), '/workspace/bitfroest/docs');
+});
+
 test('folder tabs have no close icon and double click closes only that tab', t => {
   const app = createApp(t);
   assert.equal(app.document.querySelectorAll('[data-close-tab]').length, 0);

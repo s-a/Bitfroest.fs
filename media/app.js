@@ -891,6 +891,15 @@
   $('#modal').addEventListener('close', () => queueMicrotask(flushFocusRefresh));
   const pane = () => state.panes[state.active];
   const currentPath = p => p.tabs[p.tab];
+  let titleDirectory;
+  function updateTitleDirectory() {
+    if (backgroundNavigation) return;
+    const directory = currentPath(pane());
+    if (host && typeof directory === 'string' && directory !== titleDirectory) {
+      titleDirectory = directory;
+      host.postMessage({ type: 'active-directory', path: displayPath(directory) });
+    }
+  }
   const resultView = p => p.tabStates?.[p.tab]?.searchResult;
   const entryPath = (p, file) => resultView(p) ? file.fsSource : join(currentPath(p), file.name);
   const files = p => {
@@ -1812,6 +1821,7 @@
     });
   }
   function refreshSelection() {
+    updateTitleDirectory();
     document.querySelectorAll('.pane').forEach((section, index) => {
       const p = state.panes[index], active = state.active === index, selectedIds = new Set(p.selected), spaceIds = new Set(spaceMarks(p));
       section.classList.toggle('active', active);
@@ -1896,6 +1906,7 @@
   }
   function render(focusList = false, previousViews, git = true) {
     if (backgroundNavigation) focusList = false;
+    updateTitleDirectory();
     const container = $('#panes');
     const cachedSides = state.panes.flatMap((p, index) => {
       tabs.ensure(p);

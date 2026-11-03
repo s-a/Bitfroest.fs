@@ -426,7 +426,8 @@ function activate(context) {
     saveQueue = saveQueue.then(() => target.update('fileManagerState', persisted)).catch(error => { vscode.window.showErrorMessage(t('Ordner-Tabs konnten nicht gespeichert werden: {error}', { error: t(error.message) })); });
     return saveQueue;
   }
-  const title = () => `Bitfroest.fs · ${t(scope === 'global' ? 'Global' : 'Arbeitsbereich')}`;
+  let activeDirectory;
+  const title = () => activeDirectory || `Bitfroest.fs · ${t(scope === 'global' ? 'Global' : 'Arbeitsbereich')}`;
   const status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 101);
   status.text = `${productIcon('folder')} Bitfroest.fs`;
   status.tooltip = t('Dateiverwaltung öffnen oder nach vorn holen');
@@ -1664,6 +1665,13 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
         await vscode.commands.executeCommand('setContext', 'bitfroest.transferNameInput', Boolean(message.transferName && message.value));
         await vscode.commands.executeCommand('setContext', 'bitfroest.fileDialog', Boolean(message.dialog));
         await vscode.commands.executeCommand('setContext', 'bitfroest.inlineRenameInput', Boolean(message.inlineRename && message.value));
+        return;
+      }
+      if (message?.type === 'active-directory') {
+        if (typeof message.path === 'string' && message.path.length > 0 && message.path.length <= 4096) {
+          activeDirectory = message.path;
+          if (!windowSetupPending && panel === messagePanel) messagePanel.title = title();
+        }
         return;
       }
       if (message?.type === 'view-state') {
