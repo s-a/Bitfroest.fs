@@ -34,11 +34,11 @@
           init() {
             this.element = updateAddress(record);
             this.stopDrag = event => event.stopPropagation();
-            for (const type of ['mousedown', 'touchstart']) this.element.addEventListener(type, this.stopDrag);
+            for (const type of ['pointerdown', 'mousedown', 'touchstart']) this.element.addEventListener(type, this.stopDrag);
           }
           getGui() { return this.element; }
           refresh() { updateAddress(record); return true; }
-          destroy() { for (const type of ['mousedown', 'touchstart']) this.element.removeEventListener(type, this.stopDrag); }
+          destroy() { for (const type of ['pointerdown', 'mousedown', 'touchstart']) this.element.removeEventListener(type, this.stopDrag); }
         },
         children: definitions(record)
       }];

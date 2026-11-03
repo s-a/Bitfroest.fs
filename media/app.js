@@ -3347,6 +3347,7 @@
     return { side, path: destination, parent: Boolean(parentRow && !state.archiveLocations?.[currentPath(p)]), element: parentRow || (file?.type === 'folder' ? row : section.querySelector('.list')) };
   }
   $('#panes').addEventListener('dragstart', event => {
+    if (event.target.closest('.pathbar')) { event.preventDefault(); event.stopPropagation(); return; }
     if (event.target.closest('input,textarea,[contenteditable="true"]')) return;
     if (event.target.closest('[data-file-row]')?.querySelector('.inline-rename')) { event.preventDefault(); return; }
     if (rightPointer || filesystemPending && !refreshingFilesystem || event.target.closest('[data-history]')) { event.preventDefault(); return; }

@@ -74,6 +74,21 @@ test('cell renderers leave intrinsic width available for native content autosizi
   assert.equal(app.rule('[data-file-grid] .ag-cell-wrapper, [data-file-grid] .ag-cell-value')?.width || '', '');
 });
 
+test('the address containing block fills the group row instead of centering a zero-height wrapper', t => {
+  const app = styledApp(t);
+  for (const size of [12, 16, 28, 48]) {
+    app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'file-settings', settings: { iconSize: size } } }));
+    for (const pane of app.document.querySelectorAll('.pane')) {
+      const address = pane.querySelector('.location-header .pathbar');
+      const wrapper = address.parentElement;
+      assert.ok(wrapper.classList.contains('ag-header-cell-comp-wrapper'));
+      assert.equal(app.window.getComputedStyle(wrapper).height, '100%', 'the positioned address needs the full height of its containing block');
+      const rowHeight = parseFloat(address.closest('.ag-header-row').style.height);
+      assert.ok(rowHeight >= app.window.CommanderIcons.layout().control + 3, 'buttons, padding and border fit inside the group row');
+    }
+  }
+});
+
 test('content measurement adds no blank tail and uses the styled scrollbar width', async t => {
   const app = styledApp(t);
   await new Promise(resolve => setTimeout(resolve, 80));

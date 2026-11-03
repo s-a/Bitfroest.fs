@@ -86,6 +86,40 @@ test('address focus keeps file navigation keys out of the file selection', t => 
   assert.equal(app.messages.filter(message => message.type === 'inputFocus').at(-1).list, false);
 });
 
+test('address text selection cannot start native text dragging or column dragging', t => {
+  const app = createApp(t);
+  for (const pane of app.document.querySelectorAll('.pane')) {
+    const group = pane.querySelector('.location-header');
+    let headerStarts = 0, transfers = 0;
+    group.addEventListener('mousedown', () => headerStarts++);
+    group.addEventListener('touchstart', () => headerStarts++);
+    group.addEventListener('pointerdown', () => headerStarts++);
+    app.click(pane.querySelector('[data-path-edit]'));
+    const input = pane.querySelector('.path-input');
+    input.setSelectionRange(0, 3);
+    const columns = JSON.stringify(app.grid(Number(pane.dataset.pane)).getColumnState());
+    for (const target of [input, pane.querySelector('[data-breadcrumb]')]) {
+      for (const type of ['pointerdown', 'mousedown', 'touchstart']) {
+        const event = new app.window.Event(type, { bubbles: true, cancelable: true });
+        if (type === 'touchstart') {
+          Object.defineProperty(event, 'touches', { value: [{ identifier: 1, clientX: 10, clientY: 10 }] });
+          Object.defineProperty(event, 'changedTouches', { value: event.touches });
+        }
+        target.dispatchEvent(event);
+        assert.equal(event.defaultPrevented, false, 'text selection keeps its native default');
+      }
+      const drag = new app.window.Event('dragstart', { bubbles: true, cancelable: true });
+      Object.defineProperty(drag, 'dataTransfer', { value: { setData() { transfers++; } } });
+      target.dispatchEvent(drag);
+      assert.equal(drag.defaultPrevented, true, 'address text must not become a draggable payload');
+    }
+    assert.equal(headerStarts, 0);
+    assert.equal(transfers, 0);
+    assert.equal(input.selectionStart, 0); assert.equal(input.selectionEnd, 3);
+    assert.equal(JSON.stringify(app.grid(Number(pane.dataset.pane)).getColumnState()), columns);
+  }
+});
+
 test('hiding and restoring every column keeps one usable address in each panel', t => {
   const app = createApp(t);
   for (const visible of [false, true]) {
