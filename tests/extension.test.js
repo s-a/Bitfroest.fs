@@ -3414,13 +3414,18 @@ test('restart rehydrates the existing panel with fresh lists and working host ev
   const fresh = clipboardFixture(); fresh.folders['C:/tmp'][0].name = 'fresh.txt';
   const app = harness(t, { manualReadiness: true, workspaceState: { fileManagerState: saved }, filesystemLoad: async () => fresh });
   const panel = app.restoredPanel();
+  panel.active = true;
+  assert.equal(panel.visible, true);
+  assert.equal(panel.active, true);
   assert.ok(app.serializer, 'restart requires a registered serializer');
   await app.restore(panel, saved);
   assert.equal(app.panels.length, 1);
   assert.equal(panel.webview.options.enableScripts, true);
   assert.ok(panel.webview.options.localResourceRoots.length >= 1);
   assert.equal(app.calls.some(call => call.id === 'workbench.action.moveEditorToNewWindow'), false);
-  assert.equal(app.nativeCalls.length, 0);
+  assert.deepEqual(app.nativeCalls.map(call => call.operation), process.platform === 'win32' ? ['windows.maximize'] : []);
+  if (process.platform === 'win32') assert.match(app.nativeCalls[0].titleToken, /^[a-f0-9-]{36}$/);
+  assert.doesNotMatch(panel.title, /\[[a-f0-9-]{36}\]/);
   const view = require('./support/webview.cjs').createApp(t, saved, { html: panel.webview.html });
   assert.match(panel.webview.html, /Content-Security-Policy/);
   assert.ok([...view.document.scripts].every(script => script.nonce));
@@ -3428,6 +3433,8 @@ test('restart rehydrates the existing panel with fresh lists and working host ev
   assert.equal(view.document.querySelector('.pane.active').dataset.pane, '1');
   for (const message of view.messages) await panel.receive(message);
   assert.equal(app.contexts.get('bitfroest.ready'), true);
+  assert.equal(app.nativeCalls.length, process.platform === 'win32' ? 1 : 0, 'webview readiness does not repeat window setup');
+  assert.equal(app.calls.filter(call => call.id === 'workbench.action.moveEditorToNewWindow').length, 0, 'restoration keeps its existing window');
   await app.command('bitfroest.refresh');
   assert.equal(panel.messages.at(-1).type, 'action');
   assert.equal(panel.messages.at(-1).action, 'refresh');
