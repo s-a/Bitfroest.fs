@@ -1590,7 +1590,8 @@
     else if (changed) {
       refreshHighlight();
       document.querySelector('.pane.active .list').querySelectorAll('[data-cell]').forEach(cell => {
-        const target = cell.querySelector('[data-filename]') || cell;
+        const filename = cell.querySelector('[data-filename]');
+        const target = filename?.querySelector('.filename-text') || filename || cell;
         const text = target.textContent;
         const match = cell.dataset.cell === 'type' && query.startsWith('.') ? query.slice(1) : query;
         const html = highlight(text, match);
@@ -1601,13 +1602,22 @@
     if (found) activeRow(found.id)?.scrollIntoView({ block: 'nearest' });
   }
   let renameTimer;
+  let pendingRenameTarget = null;
   let filePointerGesture = null;
   let lastNameClick = null;
-  document.addEventListener('pointerdown', () => { clearTimeout(renameTimer); filePointerGesture?.cancel(); }, true);
+  function clearPendingRenameCue() {
+    clearTimeout(renameTimer); renameTimer = null;
+    if (pendingRenameTarget) {
+      pendingRenameTarget.classList.remove('rename-pending');
+      pendingRenameTarget = null;
+    }
+  }
+  document.addEventListener('pointerdown', () => { clearPendingRenameCue(); filePointerGesture?.cancel(); }, true);
   document.addEventListener('focusin', event => {
-    if (!event.target.closest('.pane.active .list')) { clearTimeout(renameTimer); lastNameClick = null; }
+    if (!event.target.closest('.pane.active .list')) { clearPendingRenameCue(); lastNameClick = null; }
   });
-  window.addEventListener('blur', () => { clearTimeout(renameTimer); lastNameClick = null; clearDropTarget(); });
+  window.addEventListener('blur', () => { clearPendingRenameCue(); lastNameClick = null; clearDropTarget(); });
+  window.addEventListener('pagehide', clearPendingRenameCue, { once: true });
   function moveResultReferences(before, after) {
     const moves = (Array.isArray(before) ? before : [[before, after]]).sort((a, b) => b[0].length - a[0].length);
     for (const p of state.panes) for (const tab of p.tabStates || []) {
@@ -1619,7 +1629,7 @@
   }
   function startRename(proposal, confirmed) {
     if (filesystemPending && !refreshingFilesystem) return;
-    clearTimeout(renameTimer);
+    clearPendingRenameCue();
     const p = pane(), file = files(p).find(item => item.id === p.cursor) || selected()[0];
     if (!file) return;
     const source = resultView(p) ? parent(file.fsSource) : currentPath(p);
@@ -1725,7 +1735,7 @@
       const unavailable = result?.unavailableFields;
       const text = unavailable?.length ? t('Nicht verfügbar: {field}', { field: unavailable.join(', ') }) : columns.displayValue(file, column.field === undefined ? column.key : column);
       const isName = isFilenameColumn(column);
-      const content = isName ? `<span class="filename">${icon(file, currentPath(p))}<span data-filename${file.type === 'link' ? ' class="is-link"' : ''}>${highlight(text, p.filter)}</span>${resultView(p) ? `<span data-result-source class="result-source" title="${escape(displayPath(file.fsSource))}">${escape(displayPath(parent(file.fsSource)))}</span>` : ''}</span>` : highlight(text, column.key === 'type' && p.filter.startsWith('.') ? p.filter.slice(1) : p.filter);
+      const content = isName ? `<span class="filename">${icon(file, currentPath(p))}<span data-filename${file.type === 'link' ? ' class="is-link"' : ''}><span class="filename-text">${highlight(text, p.filter)}</span></span>${resultView(p) ? `<span data-result-source class="result-source" title="${escape(displayPath(file.fsSource))}">${escape(displayPath(parent(file.fsSource)))}</span>` : ''}</span>` : highlight(text, column.key === 'type' && p.filter.startsWith('.') ? p.filter.slice(1) : p.filter);
       return content;
   }
   const fileGrid = window.CommanderGrid.create({
@@ -2299,7 +2309,7 @@
     mountOperationFailure();
   }
   function modal(title, body, label, callback, eyebrow = t('DATEIAKTION')) {
-    clearTimeout(renameTimer);
+    clearPendingRenameCue();
     document.querySelectorAll('.modal-actions [data-dialog-secondary]').forEach(button => button.remove());
     operationErrorDialog = false; operationFailureInline = false;
     $('#modal-title').textContent = title; $('#modal-eyebrow').textContent = eyebrow; $('#modal-body').innerHTML = body;
@@ -3083,7 +3093,7 @@
     };
   }
   function run(command, reverseDirectories = false, contextSelection) {
-    clearTimeout(renameTimer); lastNameClick = null;
+    clearPendingRenameCue(); lastNameClick = null;
     if (['git-diff', 'git-history', 'git-untrack', 'git-ignore'].includes(command)) { requestGitDiff(contextSelection, command); return; }
     if (typeof command !== 'string') return;
     if (command === 'open-terminal') {
@@ -3194,7 +3204,7 @@
   document.addEventListener('click', event => {
     const target = event.target;
     if (target.closest('[data-resize]') || target.closest('.inline-rename')) return;
-    clearTimeout(renameTimer);
+    clearPendingRenameCue();
     const previousNameClick = lastNameClick; lastNameClick = null;
     const section = target.closest('[data-pane]');
     if (section) {
@@ -3234,10 +3244,15 @@
         if (renameClick) {
           const file = files(p).find(item => item.id === id);
           const originalName = file.name, originalPath = entryPath(p, file);
+          if ((!filesystemPending || refreshingFilesystem) && (!file.archive || state.archiveLocations?.[source])) {
+            pendingRenameTarget = target.closest('[data-filename]');
+            pendingRenameTarget.classList.add('rename-pending');
+          }
           renameTimer = setTimeout(() => {
-            if (pane() !== p || p.tabStates[p.tab].id !== tabId || currentPath(p) !== source || p.cursor !== id || p.selected.length !== 1 || p.selected[0] !== id || $('#modal').open) return;
+            if (pane() !== p || p.tabStates[p.tab].id !== tabId || currentPath(p) !== source || p.cursor !== id || p.selected.length !== 1 || p.selected[0] !== id || $('#modal').open) { clearPendingRenameCue(); return; }
             const current = files(p).find(item => item.id === id);
-            if (current?.name !== originalName || entryPath(p, current) !== originalPath) return;
+            if (current?.name !== originalName || entryPath(p, current) !== originalPath) { clearPendingRenameCue(); return; }
+            clearPendingRenameCue();
             startRename();
           }, 800);
         }
@@ -3260,7 +3275,7 @@
   }, true);
   $('#panes').addEventListener('dblclick', event => {
     if (event.target.closest('input,textarea,select,[contenteditable="true"]')) return;
-    clearTimeout(renameTimer); clearTimeout(run.tabTimer);
+    clearPendingRenameCue(); clearTimeout(run.tabTimer);
     const section = event.target.closest('[data-pane]'); if (!section) return;
     state.active = Number(section.dataset.pane);
     const tab = event.target.closest('[data-tab]');
@@ -3305,7 +3320,7 @@
     if (!gesture || gesture.cancelled || gesture.id !== event.pointerId || !(event.buttons & 2)) return;
     if (!gesture.active && Math.hypot(event.clientX - gesture.x, event.clientY - gesture.y) < 5) return;
     if (!validDraggedFiles(gesture.source)) { rightPointer = null; clearDropTarget(); return; }
-    event.preventDefault(); clearTimeout(renameTimer);
+    event.preventDefault(); clearPendingRenameCue();
     if (!gesture.active) {
       gesture.active = true; state.active = gesture.source.side;
       const p = pane(); p.selected = [...gesture.source.ids]; if (!p.selected.includes(p.cursor)) p.cursor = gesture.rowId;
@@ -3410,7 +3425,7 @@
     if (rightPointer || filesystemPending && !refreshingFilesystem || event.target.closest('[data-history]')) { event.preventDefault(); return; }
     const tab = event.target.closest('[data-tab-drag]'), row = event.target.closest('[data-file-row][data-id]');
     if (!tab && !row) return;
-    clearTimeout(renameTimer);
+    clearPendingRenameCue();
     if (row) {
       if (filePointerGesture && !filePointerGesture.armed) { event.preventDefault(); return; }
       filePointerGesture?.finish();
@@ -3496,7 +3511,7 @@
       const row = event.target.closest('[data-file-row][data-id]');
       if (row?.querySelector('.inline-rename') || $('#modal').open || filesystemPending && !refreshingFilesystem) return;
       if (!row) event.preventDefault();
-      clearTimeout(renameTimer);
+      clearPendingRenameCue();
       const section = list.closest('[data-pane]'), side = Number(section.dataset.pane), p = state.panes[side];
       const initial = [...p.selected], initialCursor = p.cursor, additive = event.ctrlKey || event.metaKey || event.shiftKey;
       const startX = event.clientX, startY = event.clientY;
@@ -3581,7 +3596,7 @@
       if (['F5', 'F6'].includes(event.key) && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) event.preventDefault();
       return;
     }
-    clearTimeout(renameTimer);
+    clearPendingRenameCue();
     if (event.target.matches('input,textarea,select')) {
       if ((event.target.matches('.inline-rename') || event.target.closest('.operation-error')) && ['F5', 'F6'].includes(event.key) && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) event.preventDefault();
       if (event.key === 'Enter' && event.target.classList.contains('path-input')) { event.preventDefault(); go(event.target.value || '/'); }
