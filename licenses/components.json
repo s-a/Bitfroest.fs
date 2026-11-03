@@ -234,5 +234,19 @@
       "de": "Tabellenkomponente für die Dateilisten.",
       "en": "Data grid for the file lists."
     }
+  },
+  {
+    "name": "Material Symbols",
+    "author": "Google LLC",
+    "license": "Apache-2.0",
+    "licenseUrl": "https://github.com/google/material-design-icons/blob/master/LICENSE",
+    "source": "https://github.com/google/material-design-icons",
+    "files": [
+      "LICENSE"
+    ],
+    "description": {
+      "de": "Lokal eingebundene Kreisformen des SVG-Symbols drag_click, sharp, FILL 1, Gewicht 400, optische Größe 48. Eingebetteter Pfeil entfernt; Kreisformen mit weißer Füllung und schwarzer Kontrastkontur. Der Systemcursor bleibt unverändert.",
+      "en": "Locally bundled circle paths from the drag_click SVG symbol, sharp, FILL 1, weight 400, optical size 48. Embedded arrow omitted; circles use a white fill and black contrast outline. The system cursor remains unchanged."
+    }
   }
 ]

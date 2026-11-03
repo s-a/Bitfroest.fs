@@ -176,3 +176,77 @@ for (const count of [3, 8]) for (const route of ['pointer', 'native']) test(`sel
   else native(app, 'dragend', target);
   assert.equal(app.document.querySelector('.file-drag-feedback'), null);
 });
+
+test('drag rings follow the unchanged system pointer without a second arrow or a shifting preview', t => {
+  const app = setup(t), row = app.rows[1], target = app.document.querySelector('[data-pane="1"] .list');
+  const style = app.document.createElement('style');
+  style.textContent = resolveThemeCss(fs.readFileSync(path.join(__dirname, '../media/app.css'), 'utf8')); app.document.head.append(style);
+  pointer(app, 'pointerdown', row, { button: 2, buttons: 2 });
+  pointer(app, 'pointermove', row, { button: 2, buttons: 2, clientX: 132, clientY: 231 });
+  app.tick(399); assert.equal(app.document.body.dataset.fileDragCursor, undefined);
+  app.tick(1);
+  assert.equal(app.window.getComputedStyle(row).cursor, 'default');
+  assert.equal(app.document.body.style.getPropertyValue('--file-drag-cursor-x'), '128px');
+  assert.equal(app.document.body.style.getPropertyValue('--file-drag-cursor-y'), '227px');
+  assert.equal(app.document.querySelector('.file-drag-feedback'), null);
+  pointer(app, 'pointermove', row, { button: 2, buttons: 2, clientX: 133, clientY: 231 });
+  assert.equal(app.document.body.style.getPropertyValue('--file-drag-cursor-x'), '129px');
+  pointer(app, 'pointermove', target, { button: 2, buttons: 2, clientX: 800 });
+  assert.equal(app.window.getComputedStyle(row).cursor, 'default');
+  const preview = app.document.querySelector('.file-drag-feedback .file-drag-preview');
+  assert.equal(app.document.querySelector('.file-drag-feedback').children.length, 1);
+  app.key('Escape'); pointer(app, 'pointerup', target, { button: 2, clientX: 800 });
+  assert.equal(app.document.body.dataset.fileDragCursor, undefined); assert.equal(preview.isConnected, false);
+  assert.equal(app.document.body.style.getPropertyValue('--file-drag-cursor-x'), '');
+  pointer(app, 'pointerdown', row); pointer(app, 'pointermove', target, { clientX: 810 });
+  const feedback = app.document.querySelector('.file-drag-feedback'), ghost = feedback.firstElementChild;
+  const left = feedback.style.left, top = feedback.style.top;
+  pointer(app, 'pointermove', target, { clientX: 810, shiftKey: true });
+  assert.equal(app.window.getComputedStyle(row).cursor, 'default');
+  assert.equal(feedback.firstElementChild, ghost); assert.equal(feedback.style.left, left); assert.equal(feedback.style.top, top);
+  assert.equal(app.document.body.style.getPropertyValue('--file-drag-cursor-x'), '806px');
+  pointer(app, 'pointermove', row, { clientX: 140 });
+  assert.equal(app.window.getComputedStyle(row).cursor, 'no-drop');
+  pointer(app, 'pointercancel', row);
+  assert.equal(app.document.body.dataset.fileDragCursor, undefined);
+  assert.equal(app.document.body.style.getPropertyValue('--file-drag-cursor-x'), '');
+  const ring = [...style.sheet.cssRules].find(rule => rule.selectorText?.includes('body[data-file-drag-cursor]::after'));
+  assert.ok(ring); assert.match(ring.style.backgroundImage || ring.style.getPropertyValue('background-image'), /drag-click-rings\.svg/);
+  assert.equal(ring.style.getPropertyValue('pointer-events'), 'none');
+  assert.equal(ring.style.width, '48px'); assert.equal(ring.style.height, '48px');
+});
+
+test('the bundled rings retain their geometry without the embedded arrow and have contrast and offline credits', () => {
+  const { JSDOM } = require('jsdom');
+  const resource = path.join(__dirname, '../media/icons/drag-click-rings.svg'); assert.ok(fs.existsSync(resource));
+  const dom = new JSDOM(fs.readFileSync(resource, 'utf8'), { contentType: 'image/svg+xml' });
+  try {
+    const svg = dom.window.document.documentElement, glyph = svg.querySelector('path'), geometry = glyph.getAttribute('d');
+    assert.equal(svg.getAttribute('width'), '48'); assert.equal(svg.getAttribute('height'), '48');
+    assert.equal(svg.getAttribute('viewBox'), '0 -960 960 960');
+    assert.match(geometry, /^M480-240/); assert.match(geometry, /M324-111\.5/);
+    assert.doesNotMatch(geometry, /M421-460|L80-880/);
+    assert.equal(glyph.getAttribute('fill'), '#fff'); assert.equal(glyph.getAttribute('stroke'), '#000');
+    assert.equal(glyph.getAttribute('paint-order'), 'stroke'); assert.equal(glyph.getAttribute('stroke-width'), '32');
+    assert.equal(svg.querySelector('script,image,use,foreignObject'), null);
+  } finally { dom.window.close(); }
+  const components = JSON.parse(fs.readFileSync(path.join(__dirname, '../licenses/components.json'), 'utf8'));
+  const credits = components.find(component => component.name === 'Material Symbols'); assert.ok(credits);
+  assert.equal(credits.license, 'Apache-2.0'); assert.ok(credits.files.includes('LICENSE'));
+});
+
+for (const end of ['pointerup', 'pointercancel', 'blur', 'pagehide', 'escape', 'chord', 'navigation', 'dialog']) test(`ready drag rings are cleared on ${end}`, t => {
+  const app = setup(t), row = app.rows[1];
+  pointer(app, 'pointerdown', row, { button: 2, buttons: 2 }); app.tick(400);
+  assert.equal(app.document.body.dataset.fileDragCursor, 'ready');
+  assert.notEqual(app.document.body.style.getPropertyValue('--file-drag-cursor-x'), '');
+  if (end === 'blur' || end === 'pagehide') app.window.dispatchEvent(new app.window.Event(end));
+  else if (end === 'escape') app.key('Escape');
+  else if (end === 'navigation') app.action('new-tab');
+  else if (end === 'dialog') app.action('mkdir');
+  else if (end === 'chord') pointer(app, 'pointermove', row, { button: 0, buttons: 3 });
+  else pointer(app, end, row, { button: 2 });
+  assert.equal(app.document.body.dataset.fileDragCursor, undefined);
+  assert.equal(app.document.body.style.getPropertyValue('--file-drag-cursor-x'), '');
+  assert.equal(app.document.body.style.getPropertyValue('--file-drag-cursor-y'), '');
+});

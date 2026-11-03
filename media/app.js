@@ -3367,6 +3367,7 @@
   document.addEventListener('pointermove', event => {
     const gesture = fileDragPointer;
     if (!gesture || gesture.cancelled || gesture.id !== event.pointerId || !(event.buttons & (gesture.button === 2 ? 2 : 1))) return;
+    if (document.body.dataset.fileDragCursor) positionDragCursor(event);
     if (!gesture.active && Math.hypot(event.clientX - gesture.x, event.clientY - gesture.y) < 5) return;
     if (!validPointerDrag(gesture)) { cancelPointerDrag(); return; }
     event.preventDefault(); clearPendingRenameCue();
@@ -3412,10 +3413,18 @@
   }
   window.addEventListener('blur', cancelPointerDrag);
   window.addEventListener('pagehide', cancelPointerDrag);
+  function positionDragCursor(event) {
+    document.body.style.setProperty('--file-drag-cursor-x', `${event.clientX - 4}px`);
+    document.body.style.setProperty('--file-drag-cursor-y', `${event.clientY - 4}px`);
+  }
   function clearDropTarget(keepFeedback = false) {
     document.querySelectorAll('.drop-target').forEach(element => element.classList.remove('drop-target'));
     delete $('#panes').dataset.dropMode;
-    if (!keepFeedback) document.querySelector('.file-drag-feedback')?.remove();
+    if (!keepFeedback) {
+      document.querySelector('.file-drag-feedback')?.remove();
+      document.body.style.removeProperty('--file-drag-cursor-x');
+      document.body.style.removeProperty('--file-drag-cursor-y');
+    }
     document.querySelector('.native-file-drag-preview')?.remove();
     delete document.body.dataset.fileDragCursor;
   }
@@ -3476,6 +3485,7 @@
       feedback.setAttribute('aria-label', t(mode === 'link' ? 'Verknüpfungen sind für diese Dateiaktion noch nicht verfügbar.' : mode === 'copy' ? 'Kopieren' : 'Verschieben'));
     }
     feedback.dataset.allowed = String(allowed);
+    positionDragCursor(event);
     document.body.dataset.fileDragCursor = allowed ? mode : 'none';
     if (!feedback.querySelector('.file-drag-preview') && source) { feedback.dataset.count = String(source.ids.length); feedback.append(fileDragPreview(source)); }
     feedback.style.left = `${event.clientX - (source?.anchor?.x || 0)}px`;
@@ -3605,7 +3615,7 @@
       state.active = side; list.focus({ preventScroll: true });
       const marquee = document.createElement('div'); marquee.className = 'selection-marquee';
       marquee.setAttribute('aria-hidden', 'true');
-      let selecting = false, holdTimer;
+      let selecting = false, holdTimer, lastPointer = event;
       const marked = new Set(row && p.selected.includes(row.dataset.id) ? p.selected : [row?.dataset.id]);
       const holdTargets = row ? [...list.querySelectorAll('[data-file-row][data-id]')].filter(row => marked.has(row.dataset.id)).map(row => row.querySelector('[data-filename]')).filter(Boolean) : [];
       const events = new AbortController();
@@ -3629,11 +3639,12 @@
         holdTargets.forEach(target => target.classList.add('drag-pending'));
         holdTimer = setTimeout(() => {
           if (!valid()) { cancel(); return; }
-          finish(); startPointerDrag(row, event); document.body.dataset.fileDragCursor = 'ready';
+          finish(); startPointerDrag(row, event); positionDragCursor(lastPointer); document.body.dataset.fileDragCursor = 'ready';
         }, 400);
       }
       const move = current => {
         if (current.pointerId !== event.pointerId) return;
+        lastPointer = current;
         if (!valid()) { cancel(); return; }
         if (!(current.buttons & 2)) { cancel(); return; }
         if (!selecting && Math.hypot(current.clientX - startX, current.clientY - startY) < 4) return;

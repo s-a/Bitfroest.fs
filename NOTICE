@@ -5,3 +5,8 @@ Original project author: Stephan Ahlf.
 Third-party components retain their respective copyrights and licenses.
 Component attribution and full license texts are available through
 Help > Licenses and acknowledgements and in the licenses directory.
+
+Material Symbols: drag_click (sharp, filled, weight 400, optical size 48)
+Copyright Google LLC. Licensed under the Apache License, Version 2.0.
+The embedded arrow is omitted. The original circle paths use a white fill
+and black contrast outline. The full license text is included in LICENSE.

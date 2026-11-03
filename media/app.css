@@ -714,6 +714,7 @@ body .statusbar { height: var(--icon-row-size); min-height: var(--icon-row-size)
 .list > .grid-empty { position: absolute; top: calc(var(--icon-row-size) * 2); left: 0; right: 0; pointer-events: none; }
 
 body[data-file-drag-cursor="ready"] #panes *, body[data-file-drag-cursor="copy"] *, body[data-file-drag-cursor="move"] * { cursor: default !important; }
+body[data-file-drag-cursor]::after { content: ""; position: fixed; z-index: 10001; left: var(--file-drag-cursor-x); top: var(--file-drag-cursor-y); width: 48px; height: 48px; background-image: url("icons/drag-click-rings.svg"); background-size: 48px 48px; background-repeat: no-repeat; pointer-events: none; }
 body[data-file-drag-cursor="none"] * { cursor: no-drop !important; }
 .file-drag-preview { position: relative; padding: 0; border: 0; color: var(--vscode-list-activeSelectionForeground, var(--text)); opacity: .6; overflow: hidden; pointer-events: none; }
 .file-drag-row { position: relative; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-height: var(--icon-row-size); background: var(--vscode-list-activeSelectionBackground, var(--surface)); color: var(--vscode-list-activeSelectionForeground, var(--text)); mask-image: linear-gradient(to right, transparent, #000 14px, #000 calc(100% - 14px), transparent); }

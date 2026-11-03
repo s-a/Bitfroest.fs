@@ -2345,6 +2345,10 @@ test('fresh and restored views authorize existing stylesheets inside their resou
     }
     assert.match(fs.readFileSync(path.join(mediaRoot, 'codicons.css'), 'utf8'), /@import url\('\.\/icon-metrics\.css'\)/);
     assert.ok(fs.statSync(path.join(mediaRoot, 'icon-metrics.css')).size > 0);
+    const imagePolicy = /(?:^|;)\s*img-src ([^;]+)/.exec(policy)?.[1];
+    assert.ok(imagePolicy?.split(/\s+/).includes(panel.webview.cspSource));
+    assert.match(fs.readFileSync(path.join(mediaRoot, 'app.css'), 'utf8'), /url\("icons\/drag-click-rings\.svg"\)/);
+    assert.ok(fs.statSync(path.join(mediaRoot, 'icons', 'drag-click-rings.svg')).size > 0);
     assert.match(policy, new RegExp(`font-src ${panel.webview.cspSource}`));
     panel.dispose();
   }
