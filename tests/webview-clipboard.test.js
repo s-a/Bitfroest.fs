@@ -73,7 +73,7 @@ for (const interruption of ['restore', 'dialog', 'path focus', 'context menu']) 
   app.key('Tab'); app.action('clipboard-paste'); const read = app.messages.find(message => message.type === 'clipboard-read');
   if (interruption === 'restore') app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'restore', resetViews: true, state: app.state() } }));
   else if (interruption === 'dialog') app.action('mkdir');
-  else if (interruption === 'path focus') app.action('path');
+  else if (interruption === 'path focus') { app.action('path'); assert.ok(app.document.activeElement.matches('.path-input')); }
   else app.document.querySelector('.pane.active .list').dispatchEvent(new app.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }));
   respond(app, read, { selection: { paths: ['C:/tmp/a.txt'], mode: 'copy', token: 'original', source: 'system' } });
   await tick();

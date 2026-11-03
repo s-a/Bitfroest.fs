@@ -416,7 +416,7 @@
     if (clipboardPasteGeneration !== null) return;
     const targetPath = currentPath(pane()), targetSide = state.active;
     const targetPane = pane(), targetTab = targetPane.tabStates[targetPane.tab].id, snapshotId = state.snapshotId;
-    const validRead = () => !contextPopup && !shellMenuPending && document.activeElement?.closest('.list') === document.querySelectorAll('[data-pane]')[targetSide]?.querySelector('.list') && !document.activeElement?.closest('[data-lister],.lister') && !$('#modal').open && !transferJob && !transferPending && (!filesystemPending || refreshingFilesystem) && state.active === targetSide && state.panes[targetSide] === targetPane && currentPath(targetPane) === targetPath && targetPane.tabStates[targetPane.tab].id === targetTab && state.snapshotId === snapshotId;
+    const validRead = () => !contextPopup && !shellMenuPending && document.activeElement?.closest('.list') === document.querySelectorAll('[data-pane]')[targetSide]?.querySelector('.list') && !document.activeElement?.closest('.pathbar,input,textarea,select,[contenteditable="true"],[data-lister],.lister') && !$('#modal').open && !transferJob && !transferPending && (!filesystemPending || refreshingFilesystem) && state.active === targetSide && state.panes[targetSide] === targetPane && currentPath(targetPane) === targetPath && targetPane.tabStates[targetPane.tab].id === targetTab && state.snapshotId === snapshotId;
     const start = selection => {
       setClipboardSelection(selection);
       if (!selection) { toast(t('Die Zwischenablage enthält keine Dateien.')); return; }
