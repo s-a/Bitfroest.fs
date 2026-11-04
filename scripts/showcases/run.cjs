@@ -10,6 +10,26 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 const normalize = value => value.replace(/\\/g, '/').replace(/\/$/, '').toLowerCase();
 const filename = (scene, capture) => `windows-en-dark-${scene.id}${capture ? `-${capture.id}` : ''}.png`;
 
+function parseOptions(args, defaultCode, root = repository) {
+  const options = { code: defaultCode, demo: path.join(root, 'TMP/demo'), selected: undefined };
+  const names = { '--code': 'code', '--demo': 'demo', '--scene': 'selected' };
+  for (let i = 0; i < args.length; i += 2) {
+    if (!Object.hasOwn(names, args[i])) throw new Error(`Unknown option: ${args[i]}`);
+    if (!args[i + 1] || args[i + 1].startsWith('--')) throw new Error(`Missing value for ${args[i]}`);
+    options[names[args[i]]] = args[i + 1];
+  }
+  return options;
+}
+
+function findCode() {
+  const located = spawnSync('where.exe', ['code.cmd'], { encoding: 'utf8', windowsHide: true });
+  const commands = located.stdout?.trim().split(/\r?\n/).filter(Boolean) || [];
+  const candidates = commands.map(command => path.resolve(path.dirname(command), '..', 'Code.exe'));
+  if (process.env.LOCALAPPDATA) candidates.push(path.join(process.env.LOCALAPPDATA, 'Programs/Microsoft VS Code/Code.exe'));
+  if (process.env.ProgramFiles) candidates.push(path.join(process.env.ProgramFiles, 'Microsoft VS Code/Code.exe'));
+  return candidates.find(candidate => fs.existsSync(candidate));
+}
+
 function validateCatalog(catalog) {
   if (!Array.isArray(catalog) || !catalog.length) throw new Error('The showcase catalog is empty.');
   const ids = new Set();
@@ -90,11 +110,9 @@ async function connect(url) {
 
 async function main() {
   if (process.platform !== 'win32') throw new Error('Showcase rendering requires Windows.');
-  const args = process.argv.slice(2), option = name => args.includes(name) ? args[args.indexOf(name) + 1] : undefined;
-  const code = option('--code'), demo = option('--demo');
+  const { code, demo, selected } = parseOptions(process.argv.slice(2), findCode());
   if (!code || !fs.existsSync(code) || !demo) throw new Error('Specify --code and --demo.');
   const catalog = validateCatalog(JSON.parse(fs.readFileSync(path.join(__dirname, 'catalog.json'), 'utf8').replaceAll('${demo}', demo.replace(/\\/g, '/'))));
-  const selected = option('--scene');
   const included = new Set();
   for (let scene = catalog.find(item => item.id === selected); scene; scene = catalog.find(item => item.id === scene.parentId)) included.add(scene.id);
   const scenes = selected ? catalog.filter(scene => included.has(scene.id)) : catalog;
@@ -202,5 +220,5 @@ async function main() {
   console.log(`Showcase manifest: ${path.join(output, 'showcases.json')}`);
 }
 
-module.exports = { validateCatalog, filename, assertProductState, waitFor, buildManifest };
+module.exports = { validateCatalog, filename, assertProductState, waitFor, buildManifest, parseOptions };
 if (require.main === module) main().catch(error => { console.error(error.message); process.exitCode = 1; });

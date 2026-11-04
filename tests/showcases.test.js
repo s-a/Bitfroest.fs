@@ -1,8 +1,20 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { validateCatalog, filename, assertProductState, waitFor, buildManifest } = require('../scripts/showcases/run.cjs');
+const { validateCatalog, filename, assertProductState, waitFor, buildManifest, parseOptions } = require('../scripts/showcases/run.cjs');
 
 const scene = () => ({ id: 'new-folder', title: 'Create a folder', description: 'Open the folder dialog.', paths: ['C:/demo/left', 'C:/demo/right'], captures: [{ id: 'dialog', action: 'mkdir', expect: 'dialog[open]', text: 'New folder' }] });
+test('the npm entry uses the repository demo and accepts explicit overrides', () => {
+  const path = require('node:path');
+  assert.equal(require('../package.json').scripts.showcase, 'node scripts/showcases/run.cjs');
+  assert.deepEqual(parseOptions([], 'C:/Code/Code.exe', 'C:/project'), {
+    code: 'C:/Code/Code.exe', demo: path.join('C:/project', 'TMP/demo'), selected: undefined
+  });
+  assert.deepEqual(parseOptions(['--code', 'D:/Code.exe', '--demo', 'D:/demo', '--scene', 'main'], 'C:/Code.exe', 'C:/project'), {
+    code: 'D:/Code.exe', demo: 'D:/demo', selected: 'main'
+  });
+  assert.throws(() => parseOptions(['--scene'], 'C:/Code.exe', 'C:/project'), /Missing value/);
+  assert.throws(() => parseOptions(['--unknown', 'value'], 'C:/Code.exe', 'C:/project'), /Unknown option/);
+});
 test('showcase names remain stable and reject duplicate or unsafe output paths', () => {
   assert.equal(filename(scene()), 'windows-en-dark-new-folder.png');
   assert.equal(validateCatalog([scene()]).length, 1);
