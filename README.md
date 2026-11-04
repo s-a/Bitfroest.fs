@@ -8,7 +8,7 @@
 
 **A two-panel file manager inside Visual Studio Code.** Keep two folders in view, organize project files, and check local Git status without leaving the editor.
 
-![Bitfroest.fs showing two file panels, file colors and Git status indicators](media/marketplace/product-overview.png)
+![Bitfroest.fs with two folders, native Windows icons and file colors](media/marketplace/showcases/0001-windows-en-dark-main-overview.png)
 
 Bitfroest.fs is for developers managing source and build folders, administrators working with configuration files, and anyone who wants a keyboard-driven way to handle files from Visual Studio Code.
 
@@ -41,11 +41,310 @@ The default shortcut is `Ctrl+Alt+Shift+F12` on Windows and Linux. The file mana
 | F5 / F6 | Copy / move the selection |
 | F7 | Create a folder |
 | F8 | Delete using the configured deletion mode |
+| Ctrl+L | Edit the active folder path |
 | Ctrl+T / Ctrl+W | Open / close a folder tab |
 | Alt+Left / Alt+Right | Navigate backward / forward |
 | Alt+F7 | Search for files |
 
 Shortcuts apply in the file manager view. Text fields and ordinary code editors keep their own key bindings. Open **Settings → Keyboard shortcuts** in the file manager to change bindings. Local conflicts must be resolved before saving; external bindings and operating system shortcuts are not checked, and chords are not supported.
+
+<!-- showcase-gallery:start -->
+## Feature walkthrough
+
+Windows examples with sample project files. Animations include a pointer highlight and keystroke hints. Drag-and-drop demonstrations stop at the confirmation dialog.
+
+<details>
+<summary>0002 · Copy a folder path</summary>
+
+Right-click the address bar and observe the actual clipboard confirmation.
+
+![Copy a folder path](media/marketplace/showcases/0002-windows-en-dark-path-copy-gesture.gif)
+
+</details>
+
+<details>
+<summary>0003 · Select files with the right mouse button</summary>
+
+Draw a selection with the right mouse button held down.
+
+![Select files with the right mouse button](media/marketplace/showcases/0003-windows-en-dark-right-selection-gesture.gif)
+
+</details>
+
+<details>
+<summary>0004 · Drag a selection with the right button held</summary>
+
+Hold the right mouse button and drag selected files to a destination folder; review the move confirmation.
+
+![Drag a selection with the right button held](media/marketplace/showcases/0004-windows-en-dark-right-drag-gesture.gif)
+
+</details>
+
+<details>
+<summary>0005 · Focus the address bar with Ctrl+L</summary>
+
+Press Ctrl+L and edit the selected path in the active address bar.
+
+![Focus the address bar with Ctrl+L](media/marketplace/showcases/0005-windows-en-dark-shortcut-ctrl-l-gesture.gif)
+
+</details>
+
+<details>
+<summary>0006 · Commands organized by task</summary>
+
+Discover file actions, selection tools, navigation, view options, configuration and help.
+
+![Commands organized by task](media/marketplace/showcases/0006-windows-en-dark-main-menus-files.png)
+
+![Commands organized by task](media/marketplace/showcases/0007-windows-en-dark-main-menus-selection.png)
+
+![Commands organized by task](media/marketplace/showcases/0008-windows-en-dark-main-menus-commands.png)
+
+![Commands organized by task](media/marketplace/showcases/0009-windows-en-dark-main-menus-view.png)
+
+![Commands organized by task](media/marketplace/showcases/0010-windows-en-dark-main-menus-configuration.png)
+
+![Commands organized by task](media/marketplace/showcases/0011-windows-en-dark-main-menus-help.png)
+
+</details>
+
+<details>
+<summary>0012 · Select files by pattern</summary>
+
+Enter file masks or regular expressions without applying a selection.
+
+![Select files by pattern](media/marketplace/showcases/0012-windows-en-dark-select-group-dialog.png)
+
+</details>
+
+<details>
+<summary>0013 · Remove a group from the selection</summary>
+
+Specify the file pattern to remove from the current selection.
+
+![Remove a group from the selection](media/marketplace/showcases/0013-windows-en-dark-unselect-group-dialog.png)
+
+</details>
+
+<details>
+<summary>0014 · Create a folder</summary>
+
+Inspect the folder name and destination before creating anything.
+
+![Create a folder](media/marketplace/showcases/0014-windows-en-dark-new-folder-dialog.png)
+
+</details>
+
+<details>
+<summary>0015 · Create a text file</summary>
+
+Inspect the new text-file dialog without creating a file.
+
+![Create a text file](media/marketplace/showcases/0015-windows-en-dark-new-file-dialog.png)
+
+</details>
+
+<details>
+<summary>0016 · Copy files</summary>
+
+Review the destination, overwrite policy and verification options before copying.
+
+![Copy files](media/marketplace/showcases/0016-windows-en-dark-copy-dialog.png)
+
+</details>
+
+<details>
+<summary>0017 · Move files</summary>
+
+Review the destination and transfer options before moving files.
+
+![Move files](media/marketplace/showcases/0017-windows-en-dark-move-dialog.png)
+
+</details>
+
+<details>
+<summary>0018 · Rename a single entry</summary>
+
+Edit the filename in the file list without committing the rename.
+
+![Rename a single entry](media/marketplace/showcases/0018-windows-en-dark-rename-inline-editor.png)
+
+</details>
+
+<details>
+<summary>0019 · Preview multiple filenames</summary>
+
+Inspect naming masks, counters and replacement rules before applying changes.
+
+![Preview multiple filenames](media/marketplace/showcases/0019-windows-en-dark-rename-multiple-dialog.png)
+
+</details>
+
+<details>
+<summary>0020 · Review a recycle-bin deletion</summary>
+
+Inspect the confirmation for moving selected entries to the recycle bin.
+
+![Review a recycle-bin deletion](media/marketplace/showcases/0020-windows-en-dark-delete-trash-confirmation.png)
+
+</details>
+
+<details>
+<summary>0021 · Review permanent deletion</summary>
+
+Inspect the permanent-deletion warning without confirming it.
+
+![Review permanent deletion](media/marketplace/showcases/0021-windows-en-dark-delete-permanently-confirmation.png)
+
+</details>
+
+<details>
+<summary>0022 · Find files</summary>
+
+Inspect basic criteria, advanced filters and saved searches before starting a search.
+
+![Find files](media/marketplace/showcases/0022-windows-en-dark-file-search-general.png)
+
+![Find files](media/marketplace/showcases/0023-windows-en-dark-file-search-advanced.png)
+
+![Find files](media/marketplace/showcases/0024-windows-en-dark-file-search-presets.png)
+
+</details>
+
+<details>
+<summary>0025 · Keep a search window open</summary>
+
+Open the nonmodal search variant alongside the file manager.
+
+![Keep a search window open](media/marketplace/showcases/0025-windows-en-dark-file-search-separate-dialog.png)
+
+</details>
+
+<details>
+<summary>0026 · Inspect file contents</summary>
+
+View a real file in text, binary, hexadecimal, HTML-text, Unicode and UTF-8 modes.
+
+![Inspect file contents](media/marketplace/showcases/0026-windows-en-dark-file-viewer-text.png)
+
+![Inspect file contents](media/marketplace/showcases/0027-windows-en-dark-file-viewer-binary.png)
+
+![Inspect file contents](media/marketplace/showcases/0028-windows-en-dark-file-viewer-hex.png)
+
+![Inspect file contents](media/marketplace/showcases/0029-windows-en-dark-file-viewer-html.png)
+
+![Inspect file contents](media/marketplace/showcases/0030-windows-en-dark-file-viewer-unicode.png)
+
+![Inspect file contents](media/marketplace/showcases/0031-windows-en-dark-file-viewer-utf8.png)
+
+![Inspect file contents](media/marketplace/showcases/0032-windows-en-dark-file-viewer-edit-menu.png)
+
+![Inspect file contents](media/marketplace/showcases/0033-windows-en-dark-file-viewer-options-menu.png)
+
+![Inspect file contents](media/marketplace/showcases/0034-windows-en-dark-file-viewer-encoding-menu.png)
+
+</details>
+
+<details>
+<summary>0035 · Search inside the viewer</summary>
+
+Inspect text-search, direction and matching options.
+
+![Search inside the viewer](media/marketplace/showcases/0035-windows-en-dark-viewer-search-dialog.png)
+
+</details>
+
+<details>
+<summary>0036 · Choose another codepage</summary>
+
+Inspect the codepage input without saving an encoding preference.
+
+![Choose another codepage](media/marketplace/showcases/0036-windows-en-dark-viewer-codepage-dialog.png)
+
+</details>
+
+<details>
+<summary>0037 · Prepare a ZIP archive</summary>
+
+Inspect compression, encryption and recursive packing options without creating an archive.
+
+![Prepare a ZIP archive](media/marketplace/showcases/0037-windows-en-dark-archive-pack-dialog.png)
+
+</details>
+
+<details>
+<summary>0038 · Prepare ZIP extraction</summary>
+
+Inspect destination and extraction options without writing files.
+
+![Prepare ZIP extraction](media/marketplace/showcases/0038-windows-en-dark-archive-unpack-dialog.png)
+
+</details>
+
+<details>
+<summary>0039 · Inspect local Git changes</summary>
+
+Show modified, staged and untracked entries in the demonstration repository.
+
+![Inspect local Git changes](media/marketplace/showcases/0039-windows-en-dark-git-status-overview.png)
+
+</details>
+
+<details>
+<summary>0040 · Browse commit history</summary>
+
+Inspect the commit graph, commit message and changed files.
+
+![Browse commit history](media/marketplace/showcases/0040-windows-en-dark-git-history-log.png)
+
+</details>
+
+<details>
+<summary>0041 · Compare committed or working versions</summary>
+
+Open the actual VS Code diff editor for a selected Git file.
+
+![Compare committed or working versions](media/marketplace/showcases/0041-windows-en-dark-git-diff-working-tree.png)
+
+</details>
+
+<details>
+<summary>0042 · Configure the file manager</summary>
+
+Inspect the native integration entry and extension configuration categories.
+
+![Configure the file manager](media/marketplace/showcases/0042-windows-en-dark-settings-editor.png)
+
+</details>
+
+<details>
+<summary>0043 · Configure favorite locations</summary>
+
+Manage favorite locations and groups.
+
+![Configure favorite locations](media/marketplace/showcases/0043-windows-en-dark-settings-favorites-editor.png)
+
+</details>
+
+<details>
+<summary>0044 · Configure file-list columns</summary>
+
+Inspect column sets, field choices and column visibility.
+
+![Configure file-list columns](media/marketplace/showcases/0044-windows-en-dark-settings-columns-editor.png)
+
+</details>
+
+<details>
+<summary>0045 · Configure keyboard shortcuts</summary>
+
+Inspect commands, editable bindings and conflict information.
+
+![Configure keyboard shortcuts](media/marketplace/showcases/0045-windows-en-dark-settings-shortcuts-editor.png)
+
+</details>
+
+<!-- showcase-gallery:end -->
 
 ## Configuration
 
