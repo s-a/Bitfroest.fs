@@ -7,7 +7,7 @@ const files = Object.freeze([
   'folder-locks-posix.test.js', 'folder-locks-posix-native.test.js',
   'open-file.test.js', 'open-trash.test.js', 'open-terminal.test.js',
   'native-copy-linux.test.js', 'native-copy-linux-api.test.js', 'native-copy.test.js',
-  'native-clipboard-linux-api.test.js', 'commander-clipboard.test.js', 'commander-i18n.test.js',
+  'native-clipboard-linux-api.test.js', 'x11-readiness.test.js', 'commander-clipboard.test.js', 'commander-i18n.test.js',
   'git-index-linux.test.js', 'git-file-actions.test.js', 'git-status-native.test.js',
   'clipboard-provider.test.js', 'webview-platform-support.test.js', 'webview-clipboard.test.js',
   'filesystem-copy-verification.test.js', 'filesystem-cancellation.test.js',

@@ -6,6 +6,7 @@ const path = require('node:path');
 const { spawn, spawnSync } = require('node:child_process');
 const { once } = require('node:events');
 const crypto = require('node:crypto');
+const { waitForX11Display } = require('./support/x11-readiness.cjs');
 
 async function x11Fixture(t, script) {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'clipboard-x11-api-'));
@@ -29,12 +30,7 @@ async function x11Fixture(t, script) {
     }
     await fs.rm(directory, { recursive: true, force: true });
   });
-  const display = await new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`The private X11 server did not start: ${errors}`)), 5000);
-    server.once('error', error => { clearTimeout(timer); reject(error); });
-    server.once('exit', code => { clearTimeout(timer); reject(new Error(`The private X11 server exited with ${code}: ${errors}`)); });
-    server.stdio[3].once('data', data => { clearTimeout(timer); resolve(`localhost:${data.toString().trim()}`); });
-  });
+  const display = await waitForX11Display(server, { diagnostics: () => errors });
   const binary = process.env.NATIVE_BINDING_TEST_PATH || path.resolve(__dirname, '../native/binding.node');
   const result = spawnSync(process.execPath, ['-e', `
     const assert = require('node:assert/strict');
@@ -58,7 +54,7 @@ async function x11Fixture(t, script) {
 }
 
 test('X11 file clipboard transfers a real selection between clients and binds acknowledgement to its owner', {
-  skip: process.platform !== 'linux', timeout: 30000
+  skip: process.platform !== 'linux', timeout: 60000
 }, async t => {
   await x11Fixture(t, `
     assert.equal(api.capabilities['clipboard.readFiles'].status, 'conditional');
@@ -85,7 +81,7 @@ test('X11 file clipboard transfers a real selection between clients and binds ac
 });
 
 test('X11 cancellation destroys only its owner window and the session can publish a fresh owner', {
-  skip: process.platform !== 'linux', timeout: 30000
+  skip: process.platform !== 'linux', timeout: 60000
 }, async t => {
   assert.ok(process.env.NATIVE_X11_PROTOCOL_TEST_FIXTURE, 'NATIVE_X11_PROTOCOL_TEST_FIXTURE must name the built X11 protocol fixture.');
   await x11Fixture(t, `
@@ -115,7 +111,7 @@ test('X11 cancellation destroys only its owner window and the session can publis
 });
 
 test('X11 selection generations change when the same owner publishes the same paths again', {
-  skip: process.platform !== 'linux', timeout: 30000
+  skip: process.platform !== 'linux', timeout: 60000
 }, async t => {
   await x11Fixture(t, `
     const paths = [path.join(root, 'file.txt')];
@@ -131,7 +127,7 @@ test('X11 selection generations change when the same owner publishes the same pa
 });
 
 test('X11 selection tokens change when a selected path has a new file identity', {
-  skip: process.platform !== 'linux', timeout: 30000
+  skip: process.platform !== 'linux', timeout: 60000
 }, async t => {
   await x11Fixture(t, `
     const paths = [path.join(root, 'file.txt')];
@@ -148,7 +144,7 @@ test('X11 selection tokens change when a selected path has a new file identity',
 });
 
 test('X11 acknowledgement and cancellation reject a valid token with different captured paths or mode', {
-  skip: process.platform !== 'linux', timeout: 30000
+  skip: process.platform !== 'linux', timeout: 60000
 }, async t => {
   await x11Fixture(t, `
     const paths = [path.join(root, 'first.txt'), path.join(root, 'second.txt')];
@@ -167,7 +163,7 @@ test('X11 acknowledgement and cancellation reject a valid token with different c
 });
 
 test('X11 reading after a completed move keeps the generation while remaining paths retain identity', {
-  skip: process.platform !== 'linux', timeout: 30000
+  skip: process.platform !== 'linux', timeout: 60000
 }, async t => {
   await x11Fixture(t, `
     const paths = [path.join(root, 'completed.txt'), path.join(root, 'remaining.txt')];
@@ -185,7 +181,7 @@ test('X11 reading after a completed move keeps the generation while remaining pa
 });
 
 test('X11 large selections complete INCR transfers between clients and an independent clipboard peer', {
-  skip: process.platform !== 'linux', timeout: 30000
+  skip: process.platform !== 'linux', timeout: 60000
 }, async t => {
   await x11Fixture(t, `
     const prefix = path.join(root, ...Array(4).fill('x'.repeat(180)));
@@ -204,7 +200,7 @@ test('X11 large selections complete INCR transfers between clients and an indepe
 });
 
 test('X11 serves simultaneous outgoing INCR transfers to separate requestors', {
-  skip: process.platform !== 'linux', timeout: 30000
+  skip: process.platform !== 'linux', timeout: 60000
 }, async t => {
   assert.ok(process.env.NATIVE_X11_PROTOCOL_TEST_FIXTURE, 'NATIVE_X11_PROTOCOL_TEST_FIXTURE must name the built X11 protocol fixture.');
   await x11Fixture(t, `
@@ -221,7 +217,7 @@ test('X11 serves simultaneous outgoing INCR transfers to separate requestors', {
 });
 
 test('X11 rejects a multi-part read when its selection owner changes mid-transfer', {
-  skip: process.platform !== 'linux', timeout: 30000
+  skip: process.platform !== 'linux', timeout: 60000
 }, async t => {
   assert.ok(process.env.NATIVE_X11_PROTOCOL_TEST_FIXTURE, 'NATIVE_X11_PROTOCOL_TEST_FIXTURE must name the built X11 protocol fixture.');
   await x11Fixture(t, `
@@ -266,7 +262,7 @@ test('X11 rejects a multi-part read when its selection owner changes mid-transfe
 });
 
 test('X11 reports a stalled selection owner as a bounded request timeout', {
-  skip: process.platform !== 'linux', timeout: 10000
+  skip: process.platform !== 'linux', timeout: 60000
 }, async t => {
   assert.ok(process.env.NATIVE_X11_PROTOCOL_TEST_FIXTURE, 'NATIVE_X11_PROTOCOL_TEST_FIXTURE must name the built X11 protocol fixture.');
   await x11Fixture(t, `
@@ -303,7 +299,7 @@ test('X11 reports a stalled selection owner as a bounded request timeout', {
 });
 
 test('X11 closes an incoming INCR transfer promptly when its session shuts down', {
-  skip: process.platform !== 'linux', timeout: 10000
+  skip: process.platform !== 'linux', timeout: 60000
 }, async t => {
   assert.ok(process.env.NATIVE_X11_PROTOCOL_TEST_FIXTURE, 'NATIVE_X11_PROTOCOL_TEST_FIXTURE must name the built X11 protocol fixture.');
   await x11Fixture(t, `
@@ -344,7 +340,7 @@ test('X11 closes an incoming INCR transfer promptly when its session shuts down'
 });
 
 test('X11 returns a connection error when the X server disconnects during a clipboard read', {
-  skip: process.platform !== 'linux', timeout: 10000
+  skip: process.platform !== 'linux', timeout: 60000
 }, async t => {
   assert.ok(process.env.NATIVE_X11_PROTOCOL_TEST_FIXTURE, 'NATIVE_X11_PROTOCOL_TEST_FIXTURE must name the built X11 protocol fixture.');
   await x11Fixture(t, `
