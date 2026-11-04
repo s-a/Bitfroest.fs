@@ -90,7 +90,7 @@
           refresh(params) {
             if (this.element.querySelector('.inline-rename')) return true;
             const parent = params.data.id === parentId;
-            const content = parent ? column === filename ? '<span class="filename"><span>…</span></span>' : '' : options.cell(params.data, column, record.p);
+            const content = parent ? column === filename ? '<span class="filename"><span>..</span></span>' : '' : options.cell(params.data, column, record.p);
             if (!parent) this.element.title = params.data.name;
             if (this.content !== content) {
               const next = this.element.cloneNode(false);
@@ -231,7 +231,7 @@
         defaultColDef: { cellDataType: false },
         onFirstDataRendered: () => { record.rendered = true; measureWhenReady(record); },
         getRowClass: params => {
-          if (params.data.id === parentId) return ['parent-row'];
+          if (params.data.id === parentId) return ['parent-row', record.selected.has(parentId) ? 'selected' : '', record.p.cursor === parentId ? 'focused' : ''];
           const groups = options.results(record.p)?.groups, previous = params.api.getDisplayedRowAtIndex(params.rowIndex - 1)?.data;
           return [record.selected.has(params.data.id) ? 'selected' : '', record.p.cursor === params.data.id ? 'focused' : '', record.spaces.has(params.data.id) ? 'space-marked' : '', groups && previous?.id !== parentId && groups[previous?.fsSource] !== groups[params.data.fsSource] ? 'search-group-start' : ''].filter(Boolean);
         },
@@ -250,7 +250,7 @@
         suppressMovableColumns: false,
         suppressDragLeaveHidesColumns: true,
         suppressColumnVirtualisation: true,
-        rowSelection: { mode: 'multiRow', checkboxes: false, headerCheckbox: false, enableClickSelection: false, isRowSelectable: node => node.id !== parentId },
+        rowSelection: { mode: 'multiRow', checkboxes: false, headerCheckbox: false, enableClickSelection: false },
         processRowPostCreate: params => rowCreated(record, params),
         onColumnMoved: event => rememberColumns(record, event),
         onSortChanged: () => { if (!record.updating && record.p.filter && record.p.cursor) ensure(record.section, record.p.cursor); },
@@ -322,5 +322,5 @@
     root.addEventListener('pagehide', dispose, { once: true });
     return { mount, sync, ensure, prepareAutosize, remeasure, prune, dispose, api };
   }
-  root.CommanderGrid = { create };
+  root.CommanderGrid = { create, parentId };
 })(typeof globalThis === 'object' ? globalThis : this);

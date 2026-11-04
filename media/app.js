@@ -154,6 +154,7 @@
   window.CommanderIcons.configure(fileSettings.iconSize);
   const activeRow = id => {
     fileGrid.ensure(document.querySelector('.pane.active'), id);
+    if (id === parentId) return document.querySelector('.pane.active [data-parent]');
     return [...document.querySelectorAll('.pane.active [data-file-row][data-id]')].find(row => row.dataset.id === id);
   };
   const tabs = window.CommanderTabs;
@@ -1064,7 +1065,7 @@
       const byName = new Map(rows.map(row => [row.name, row]));
       for (const row of data.rows || []) byName.set(row.name, row);
       directoryListings.set(request.path, [...byName.values()]);
-      const valid = new Set([...byName.values()].map(row => row.id));
+      const valid = new Set([parentId, ...[...byName.values()].map(row => row.id)]);
       for (const p of state.panes) if (currentPath(p) === request.path) { p.selected = p.selected.filter(id => valid.has(id)); if (!valid.has(p.cursor)) p.cursor = null; }
       render(false, previousViews, false); return true;
     }
@@ -1080,7 +1081,7 @@
       if (success) directoryListings.delete(request.path);
       else { const cached = directoryCache.get(request.path); if (cached) directoryListings.set(request.path, cached); }
       if (displayed && origin.tabStates[origin.tab].id === request.tabId) {
-        const valid = new Set(files(state.panes[request.side]).map(row => row.id)), p = state.panes[request.side];
+        const valid = new Set([parentId, ...files(state.panes[request.side]).map(row => row.id)]), p = state.panes[request.side];
         p.selected = p.selected.filter(id => valid.has(id)); if (!valid.has(p.cursor)) p.cursor = null;
         gitBindings.delete(request.path);
       }
@@ -1146,12 +1147,14 @@
     }
     else { try { sessionStorage.setItem('bitfroest-demo', JSON.stringify(state)); } catch { /* Storage may be unavailable. */ } }
   }
+  const parentId = window.CommanderGrid.parentId;
+  const navigationRows = p => [{ id: parentId }, ...visible(p)];
   const selectionRanges = new WeakMap();
   function rememberSelectionAnchor(p) {
     selectionRanges.set(p, { tab: p.tabStates?.[p.tab]?.id, anchor: p.cursor, base: [...p.selected] });
   }
   function extendSelection(p, id, additive) {
-    const list = visible(p), tab = p.tabStates?.[p.tab]?.id;
+    const list = navigationRows(p), tab = p.tabStates?.[p.tab]?.id;
     let range = selectionRanges.get(p);
     if (!range || range.tab !== tab || !list.some(file => file.id === range.anchor)) {
       range = { tab, anchor: p.cursor || id, base: [...p.selected] }; selectionRanges.set(p, range);
@@ -1862,12 +1865,13 @@
       const rowContext = workbenchContext ? JSON.stringify({ webviewSection: 'files', preventDefaultContextMenuItems: true, fileMenu: true, gitFile: false, gitHistory: false, ...frozenContext }) : null;
       if (workbenchContext) section.querySelector('.list').dataset.vscodeContext = context;
       fileGrid.sync(section, p);
-      section.querySelectorAll('[data-id]').forEach(row => {
-        if (workbenchContext) row.dataset.vscodeContext = row.dataset.id === effective[0] ? context : rowContext;
-        row.classList.toggle('selected', selectedIds.has(row.dataset.id));
-        row.classList.toggle('space-marked', spaceIds.has(row.dataset.id));
-        row.classList.toggle('focused', p.cursor === row.dataset.id);
-        row.setAttribute('aria-selected', String(selectedIds.has(row.dataset.id)));
+      section.querySelectorAll('[data-id],[data-parent]').forEach(row => {
+        const id = row.hasAttribute('data-parent') ? parentId : row.dataset.id;
+        if (workbenchContext) row.dataset.vscodeContext = id === effective[0] ? context : rowContext;
+        row.classList.toggle('selected', selectedIds.has(id));
+        row.classList.toggle('space-marked', spaceIds.has(id));
+        row.classList.toggle('focused', p.cursor === id);
+        row.setAttribute('aria-selected', String(selectedIds.has(id)));
       });
       const marked = selectedFor(p);
       section.querySelector('.pane-status').innerHTML = ui`<span><strong>${marked.length ? ui`${marked.length} markiert` : count('file', files(p).filter(f => f.type !== 'folder').length)}</strong>${searchSummary(p)} · ${count('folder', files(p).filter(f => f.type === 'folder').length)}</span><span>${size((marked.length ? marked : files(p)).reduce((sum, f) => sum + displayBytes(f, p), 0))}</span>`;
@@ -2145,12 +2149,14 @@
       return true;
     }
     if (['copy-names', 'copy-full-names', 'copy-full-names-slash', 'copy-details', 'copy-full-details'].includes(command)) {
-      const marked = rows.filter(row => p.selected.includes(row.id)), picked = marked.length ? marked : rows.filter(row => row.id === p.cursor);
+      const current = { id: parentId, name: base(currentPath(p)) || currentPath(p), type: 'folder', fsSource: currentPath(p) };
+      const candidates = [current, ...rows];
+      const marked = candidates.filter(row => p.selected.includes(row.id)), picked = marked.length ? marked : candidates.filter(row => row.id === p.cursor);
       const full = command.includes('full'), details = command.includes('details'), slash = command === 'copy-full-names-slash';
       const pathRanges = [];
       let offset = 0;
       const text = picked.map(row => {
-        const name = full ? displayPath(entryPath(p, row)) : row.name;
+        const name = full ? displayPath(row.id === parentId ? currentPath(p) : entryPath(p, row)) : row.name;
         if (!details) { if (full) pathRanges.push({ start: offset, length: name.length }); offset += name.length + 2; return name; }
         const nameField = column => column.field === undefined ? column.key === 'name' : /^\[=(?:file|tc)\.(?:name|fullname)\]$/i.test(column.field);
         const extensionField = column => column.field === undefined ? column.key === 'type' : /^\[=(?:file|tc)\.ext\]$/i.test(column.field);
@@ -2166,6 +2172,7 @@
       return true;
     }
     if (['select-all', 'clear', 'invert'].includes(command)) {
+      p.selected = p.selected.filter(id => id !== parentId);
       const eligible = rows.filter(row => row.type !== 'folder' || (command === 'clear' ? !reverseDirectories : includeDirectories));
       if (command === 'clear') merge(eligible, true);
       else if (command === 'select-all') merge(eligible, false);
@@ -3291,6 +3298,14 @@
       if (breadcrumb) { openBreadcrumb(breadcrumb.dataset.breadcrumb, event.ctrlKey); return; }
       if (target.closest('[data-path-edit]') || target.classList.contains('path-breadcrumbs')) { focusPath(); return; }
       const row = target.closest('[data-file-row][data-id]');
+      if (target.closest('[data-parent]')) {
+        if (event.shiftKey && p.cursor) extendSelection(p, parentId, event.ctrlKey || event.metaKey);
+        else if (event.ctrlKey || event.metaKey) p.selected = p.selected.includes(parentId) ? p.selected.filter(id => id !== parentId) : [...p.selected, parentId];
+        else { p.selected = [parentId]; p.spaceMarked = []; }
+        p.cursor = parentId; p.cursorSelection = null;
+        if (!event.shiftKey) rememberSelectionAnchor(p);
+        refreshSelection(); section.querySelector('.list').focus({ preventScroll: true }); return;
+      }
       if (row) {
         const id = row.dataset.id;
         const nameClick = event.detail === 1 && !event.shiftKey && !event.ctrlKey && !event.metaKey && target.closest('[data-filename]');
@@ -3371,7 +3386,7 @@
     return gesture.button === 0 && destination?.action === 'delete' && !event.ctrlKey && !event.metaKey && !event.altKey;
   }
   function startPointerDrag(row, event) {
-    const side = Number(row.closest('[data-pane]').dataset.pane), p = state.panes[side], ids = p.selected.includes(row.dataset.id) ? [...p.selected] : [row.dataset.id];
+    const side = Number(row.closest('[data-pane]').dataset.pane), p = state.panes[side], ids = p.selected.includes(row.dataset.id) ? p.selected.filter(id => id !== parentId) : [row.dataset.id];
     if (resultView(p)) return;
     const source = { kind: 'files', side, sourcePath: currentPath(p), context: { tabId: p.tabStates[p.tab].id }, ids, items: files(p).filter(file => ids.includes(file.id)).map(file => ({ id: file.id, signature: JSON.stringify(file) })) };
     const bounds = row.getBoundingClientRect(), index = source.items.findIndex(item => item.id === row.dataset.id);
@@ -3548,7 +3563,7 @@
     if (event.target.closest('.pathbar')) { event.preventDefault(); event.stopPropagation(); return; }
     if (event.target.closest('input,textarea,[contenteditable="true"]')) return;
     if (event.target.closest('[data-file-row]')?.querySelector('.inline-rename')) { event.preventDefault(); return; }
-    if (fileDragPointer || filesystemPending && !refreshingFilesystem || event.target.closest('[data-history]')) { event.preventDefault(); return; }
+    if (fileDragPointer || filesystemPending && !refreshingFilesystem || event.target.closest('[data-history],[data-parent]')) { event.preventDefault(); return; }
     const tab = event.target.closest('[data-tab-drag]'), row = event.target.closest('[data-file-row][data-id]');
     if (!tab && !row) return;
     clearPendingRenameCue();
@@ -3558,7 +3573,7 @@
       if (resultView(p)) { event.preventDefault(); return; }
       state.active = side;
       if (!p.selected.includes(row.dataset.id)) { p.selected = [row.dataset.id]; p.cursor = row.dataset.id; refreshSelection(); }
-      dragged = { kind: 'files', side, ids: [...p.selected], sourcePath: currentPath(p), items: files(p).filter(file => p.selected.includes(file.id)).map(file => ({ id: file.id, signature: JSON.stringify(file) })) };
+      dragged = { kind: 'files', side, ids: p.selected.filter(id => id !== parentId), sourcePath: currentPath(p), items: files(p).filter(file => p.selected.includes(file.id)).map(file => ({ id: file.id, signature: JSON.stringify(file) })) };
       if (event.dataTransfer) {
         event.dataTransfer.effectAllowed = 'copyMove'; event.dataTransfer.setData('application/x-bitfroest-files', JSON.stringify(dragged));
         document.querySelector('.native-file-drag-preview')?.remove();
@@ -3797,7 +3812,7 @@
     }
     if (event.key === 'Tab' && event.target.closest('.list')) { event.preventDefault(); state.active = 1 - state.active; focusSelection(); return; }
     if (event.key === 'Backspace' && event.target.closest('.list')) { event.preventDefault(); goUp(); return; }
-    if (event.key === 'Enter' && event.target.closest('.list')) { event.preventDefault(); openFile(files(pane()).find(file => file.id === pane().cursor) || selected()[0]); return; }
+    if (event.key === 'Enter' && event.target.closest('.list')) { event.preventDefault(); if (pane().cursor === parentId) goUp(); else openFile(files(pane()).find(file => file.id === pane().cursor) || selected()[0]); return; }
     if (event.key === ' ' && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey && event.target.closest('.list')) {
       event.preventDefault();
       if (filesystemPending && !refreshingFilesystem || transferPending || event.repeat) return;
@@ -3813,8 +3828,8 @@
       focusSelection(); return;
     }
     if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key) && event.target.closest('.list')) {
-      event.preventDefault(); const p = pane(), list = visible(p); if (!list.length) return;
-      const old = list.findIndex(file => file.id === p.cursor);
+      event.preventDefault(); const p = pane(), list = navigationRows(p);
+      const old = p.cursor === null ? 0 : list.findIndex(file => file.id === p.cursor);
       const index = event.key === 'Home' ? 0 : event.key === 'End' ? list.length - 1 : Math.max(0, Math.min(list.length - 1, old + (event.key === 'ArrowDown' ? 1 : -1)));
       if (event.shiftKey) extendSelection(p, list[index].id, event.ctrlKey || event.metaKey);
       p.cursor = list[index].id;
