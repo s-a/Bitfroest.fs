@@ -42,7 +42,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends libglib2.0-dev libgdk-pixbuf-2.0-0 librsvg2-common shared-mime-info libxcb1-dev libxcb-xfixes0-dev libwayland-dev libwayland-bin gvfs gvfs-daemons dbus-daemon xvfb xclip
+          sudo apt-get install --yes --no-install-recommends libglib2.0-dev libgdk-pixbuf-2.0-0 librsvg2-common shared-mime-info libxcb1-dev libxcb-xfixes0-dev libwayland-dev libwayland-bin gvfs gvfs-daemons dbus-daemon xvfb xclip mutter xwayland kwin-wayland wl-clipboard python3-gi dosfstools
       - name: Build the native module from pinned sources
         run: node scripts/ci-native-build.cjs
       - name: Check syntax and lint
@@ -53,6 +53,14 @@ jobs:
         run: |
           npm run test:architecture
           node --test tests/repository-privacy.test.js tests/beta-release.test.js tests/release-policy.test.js tests/marketplace-release.test.js tests/release-notes.test.js
+      - name: Prepare a private filesystem without hardlink support
+        if: runner.os == 'Linux'
+        run: |
+          truncate -s 32M "$RUNNER_TEMP/native-fat.img"
+          mkfs.vfat -F 16 "$RUNNER_TEMP/native-fat.img"
+          mkdir "$RUNNER_TEMP/native-fat"
+          sudo mount -t vfat -o "loop,uid=$(id -u),gid=$(id -g),umask=077" "$RUNNER_TEMP/native-fat.img" "$RUNNER_TEMP/native-fat"
+          echo "NATIVE_HARDLINK_FREE_ROOT=$RUNNER_TEMP/native-fat" >> "$GITHUB_ENV"
       - name: Run platform tests
         run: |
           case "$BUILD_TARGET" in
@@ -61,6 +69,19 @@ jobs:
             darwin-arm64) node --test tests/native-api.test.js tests/git-status-native.test.js ;;
             *) exit 1 ;;
           esac
+      - name: Verify KWin Wayland interoperability
+        if: runner.os == 'Linux'
+        env:
+          NATIVE_TEST_COMPOSITOR: kwin
+          BITFROEST_REQUIRE_LINUX_DESKTOP_TESTS: '1'
+        run: node --test tests/native-clipboard-wayland-compositor.test.js
+      - name: Verify metadata failures in an unprivileged host
+        if: runner.os == 'Linux'
+        run: sudo --preserve-env=PATH,NATIVE_BINDING_TEST_PATH node --test --test-name-pattern="unprivileged host" tests/native-copy-linux-api.test.js
+      - name: Release the private test filesystem
+        if: always() && runner.os == 'Linux'
+        run: |
+          if mountpoint --quiet "$RUNNER_TEMP/native-fat"; then sudo umount "$RUNNER_TEMP/native-fat"; fi
       - name: Verify the native module in the Electron runtime
         env:
           ELECTRON_RUN_AS_NODE: '1'

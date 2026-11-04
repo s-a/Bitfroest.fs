@@ -16,6 +16,9 @@ test('Linux validation requires desktop fixtures even when the inherited environ
   assert.equal(status, 0);
   assert.equal(invocation[2].env.BITFROEST_REQUIRE_LINUX_DESKTOP_TESTS, '1');
   assert.equal(invocation[2].env.TEST_MARKER, 'retained');
+  for (const name of ['filesystem-linux-links.test.js', 'filesystem-linux-metadata.test.js', 'filesystem-linux-no-hardlinks.test.js', 'native-clipboard-wayland-compositor.test.js']) {
+    assert.ok(invocation[1].some(argument => argument.endsWith(name)), `Linux validation must include ${name}`);
+  }
 });
 
 test('Linux validation preserves a failed test process and reports a launch failure', () => {

@@ -11,7 +11,9 @@ const files = Object.freeze([
   'git-index-linux.test.js', 'git-file-actions.test.js', 'git-status-native.test.js',
   'clipboard-provider.test.js', 'webview-platform-support.test.js', 'webview-clipboard.test.js',
   'filesystem-copy-verification.test.js', 'filesystem-cancellation.test.js',
-  'filesystem-write-races.test.js', 'filesystem-delete.test.js', 'linux-test-runner.test.js'
+  'filesystem-write-races.test.js', 'filesystem-delete.test.js', 'linux-test-runner.test.js',
+  'filesystem-linux-links.test.js', 'filesystem-linux-metadata.test.js',
+  'filesystem-linux-no-hardlinks.test.js', 'native-clipboard-wayland-compositor.test.js'
 ]);
 
 function missingDesktopFixture(result, env = process.env) {
