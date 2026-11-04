@@ -269,6 +269,7 @@
     'Archiveinträge übernehmen': 'Copy existing archive entries', 'ZIP abschließen': 'Finalize ZIP',
     'ZIP speichern': 'Save ZIP', 'Quellen entfernen': 'Remove sources',
     'Hostbestätigung': 'Host acknowledgment',
+    'Gesamtmenge der weiteren Arbeitsschritte unbekannt': 'Total work for subsequent steps unknown',
     'Bestätigte Aufträge': 'Acknowledged requests', 'Gesamtmenge wird ermittelt': 'Determining total work',
     'Einträge': 'entries', 'Programmschritte': 'Program steps',
     'Verzeichniskommentare lesen': 'Read directory comments', 'Verzeichnisbestand prüfen': 'Validate directory contents', 'Dateiliste bereitstellen': 'Publish directory view',

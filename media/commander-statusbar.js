@@ -122,7 +122,7 @@
     const activity = bar.querySelector('#status-activity');
     function measurementText(measurement) {
       const units = { bytes: 'Bytes', items: 'Einträge', requests: 'Bestätigte Aufträge', steps: 'Programmschritte' };
-      const reasons = { enumerating: 'Gesamtmenge wird ermittelt', 'stream-size-unknown': 'Streamgröße unbekannt', 'native-operation': 'Betriebssystemvorgang ohne Mengenangabe', 'awaiting-confirmation': 'Hostbestätigung' };
+      const reasons = { enumerating: 'Gesamtmenge wird ermittelt', 'stream-size-unknown': 'Streamgröße unbekannt', 'native-operation': 'Betriebssystemvorgang ohne Mengenangabe', 'awaiting-confirmation': 'Hostbestätigung', 'remaining-work-unknown': 'Gesamtmenge der weiteren Arbeitsschritte unbekannt' };
       const known = measurement.kind === 'determinate';
       return `${measurement.completed}${known ? ` / ${measurement.total}` : ''} ${t(units[measurement.unit])}${known ? '' : ` · ${t(reasons[measurement.reason])}`}`;
     }

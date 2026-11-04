@@ -1483,7 +1483,7 @@ test('ZIP host bounds intermediate progress, forwards phase changes and flushes 
   let report;
   zipFilesystem.createZipFilesystem = base => ({ ...original(base), writeArchive: async (_state, _request, settings) => {
     report = settings.onProgress;
-    for (const phase of ['packing', 'verifying']) for (let n = 0; n < 1000; n++) report(progressSample({ phase, currentPath: `${n}.txt`, completedBytes: n, totalBytes: 2000 }));
+    for (const phase of ['packing', 'verifying']) for (let n = 0; n < 1000; n++) report(progressSample({ phase, overallScope: 'phase', currentPath: `${n}.txt`, completedBytes: n, totalBytes: 2000 }));
   } });
   t.after(() => { zipFilesystem.createZipFilesystem = original; });
   const initial = clipboardFixture();
@@ -1495,6 +1495,7 @@ test('ZIP host bounds intermediate progress, forwards phase changes and flushes 
   view.document.querySelector('#modal-form').dispatchEvent(new view.window.Event('submit', { bubbles: true, cancelable: true }));
   const request = view.messages.find(message => message.type === 'zip-write'); assert.ok(request);
   await panel.receive(request);
+  assert.match(panel.webview.html, /Content-Security-Policy/);
   const messages = panel.messages.filter(message => message.type === 'filesystem-progress');
   assert.ok(messages.length <= 6, `unbounded ZIP progress messages: ${messages.length}`);
   assert.equal(messages[0].progress.phase, 'packing');
@@ -1503,7 +1504,12 @@ test('ZIP host bounds intermediate progress, forwards phase changes and flushes 
   const refreshed = panel.messages.find(message => message.type === 'filesystem-result').refreshGitDirectories;
   assert.equal(refreshed?.length, 1);
   assert.ok(request.archive.startsWith(refreshed[0] + '/'));
-  for (const message of messages) view.window.dispatchEvent(new view.window.MessageEvent('message', { data: message }));
+  for (const message of messages) {
+    assert.equal(message.progress.overallScope, 'phase');
+    view.window.dispatchEvent(new view.window.MessageEvent('message', { data: message }));
+    assert.equal(view.document.querySelector('#status-progress-overall').style.width, '0%');
+    assert.equal(view.document.querySelector('#status-progress-overall').hasAttribute('aria-valuenow'), false);
+  }
   assert.equal(view.document.querySelector('#status-message').textContent, 'Archiv prüfen · 999.txt');
   const lastProgress = panel.messages.lastIndexOf(messages.at(-1));
   assert.ok(panel.messages.findIndex((message, index) => index > lastProgress && message.type === 'filesystem-result' && message.ok) > lastProgress, JSON.stringify(panel.messages.at(-1)));

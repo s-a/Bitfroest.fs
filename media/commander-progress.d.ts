@@ -1,5 +1,5 @@
 export type ProgressUnit = 'bytes' | 'items' | 'requests' | 'steps';
-export type UnknownReason = 'enumerating' | 'stream-size-unknown' | 'native-operation' | 'awaiting-confirmation';
+export type UnknownReason = 'enumerating' | 'stream-size-unknown' | 'native-operation' | 'awaiting-confirmation' | 'remaining-work-unknown';
 export type Measurement =
   | { readonly kind: 'determinate'; readonly unit: ProgressUnit; readonly completed: number; readonly total: number }
   | { readonly kind: 'indeterminate'; readonly unit: ProgressUnit; readonly completed: number; readonly reason: UnknownReason };
@@ -7,6 +7,7 @@ export type DeterminateMeasurement = Extract<Measurement, { kind: 'determinate' 
 export type IndeterminateMeasurement = Extract<Measurement, { kind: 'indeterminate' }>;
 export interface ProgressInput {
   readonly phase: string;
+  readonly overallScope?: 'operation' | 'phase';
   readonly overall: Measurement;
   readonly current: Measurement;
   readonly [field: string]: unknown;

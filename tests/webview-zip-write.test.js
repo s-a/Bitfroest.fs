@@ -11,6 +11,39 @@ function state(inside = false) {
 }
 const submit = app => app.document.querySelector('#modal-form').dispatchEvent(new app.window.Event('submit', { bubbles: true, cancelable: true }));
 
+test('real directory packing keeps phase totals out of the overall track until the matching result', async t => {
+  const fs = require('node:fs/promises'), path = require('node:path'), os = require('node:os');
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'zip-progress-'));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const source = path.join(root, 'source'); await fs.mkdir(source);
+  await fs.writeFile(path.join(source, 'first.bin'), Buffer.alloc(1024 * 1024, 41));
+  await fs.writeFile(path.join(source, 'second.txt'), 'second');
+  const { createZipOperations } = require('../zip-operations');
+  const operations = createZipOperations({ contains: value => path.resolve(value).startsWith(root + path.sep) });
+  t.after(() => operations.dispose());
+  const saved = state(), app = createApp(t, saved); app.click(app.row('file.txt')); app.action('pack'); submit(app);
+  const request = app.messages.find(message => message.type === 'zip-write');
+  const send = data => app.window.dispatchEvent(new app.window.MessageEvent('message', { data }));
+  const phases = new Set(); let measuredFile = false;
+  await operations.write({ archive: path.join(root, 'result.zip'), sources: [source] }, { onProgress: progress => {
+    phases.add(progress.phase);
+    send({ type: 'filesystem-progress', operationId: request.operationId, progress });
+    const meter = app.document.querySelector('#status-progress-overall');
+    assert.equal(meter.style.width, '0%', progress.phase);
+    assert.equal(meter.hasAttribute('aria-valuenow'), false, progress.phase);
+    assert.match(app.document.querySelector('#status-percent').textContent, /^—\//);
+    measuredFile ||= Number(app.document.querySelector('#status-progress-file').getAttribute('aria-valuenow')) > 0;
+    assert.equal(app.document.querySelectorAll('[data-job-row]').length, 1);
+  } });
+  assert.deepEqual([...phases], ['preparing', 'packing', 'finalizing', 'publishing', 'verifying']);
+  assert.equal(measuredFile, true);
+  send({ type: 'filesystem-result', operationId: 'foreign', ok: true, state: saved });
+  assert.equal(app.document.querySelectorAll('[data-job-row]').length, 1);
+  send({ type: 'filesystem-result', operationId: request.operationId, ok: true, state: saved });
+  assert.equal(app.document.querySelectorAll('[data-job-row]').length, 0);
+  assert.equal(app.document.querySelector('#status-message').dataset.outcome, 'success');
+});
+
 test('empty ZIP verification waits for the matching host result and preserves success, error and cancellation', t => {
   for (const language of ['de', 'en']) for (const outcome of ['success', 'error', 'cancelled']) {
     const saved = state(); saved.folders['C:/tmp'][0] = { id: 'source', name: 'empty.txt', type: 'text', fsSource: 'C:/tmp/empty.txt', size: 0 };

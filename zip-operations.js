@@ -44,10 +44,10 @@ function createZipOperations(options = {}) {
     const inside = request.inside ? normalize(request.inside) : '';
     const add = item => { const key = normalize(item.name); if (names.has(key)) throw new Error('Doppelte Namen im ZIP-Auftrag.'); names.add(key); files.push(item); };
     async function visit(source, relative, root) {
-      stop(signal); allowed(source); settings.onProgress?.(Progress.event({ phase: 'preparing', currentPath: source, filesScanned, overall: Progress.unknown('items', filesScanned, 'enumerating'), current: Progress.unknown('items', 0, 'enumerating') })); stop(signal);
+      stop(signal); allowed(source); settings.onProgress?.(Progress.event({ phase: 'preparing', overallScope: 'phase', currentPath: source, filesScanned, overall: Progress.unknown('items', filesScanned, 'enumerating'), current: Progress.unknown('items', 0, 'enumerating') })); stop(signal);
       await noLinks(source);
       const stat = await fs.lstat(source, { bigint: true });
-      settings.onProgress?.(Progress.event({ phase: 'preparing', currentPath: source, filesScanned: ++filesScanned, overall: Progress.unknown('items', filesScanned, 'enumerating'), current: Progress.known('items', 1, 1) })); stop(signal);
+      settings.onProgress?.(Progress.event({ phase: 'preparing', overallScope: 'phase', currentPath: source, filesScanned: ++filesScanned, overall: Progress.unknown('items', filesScanned, 'enumerating'), current: Progress.known('items', 1, 1) })); stop(signal);
       if (path.resolve(source) === archive || stat.isFile() && (await exists(archive))?.ino === stat.ino && (await exists(archive))?.dev === stat.dev) throw new Error('Das Quellarchiv kann nicht in sich selbst gepackt werden.');
       if (!stat.isDirectory() && !stat.isFile()) throw new Error('Nur gewöhnliche Dateien und Verzeichnisse können gepackt werden.');
       const name = [inside, request.paths === false ? path.basename(relative) : relative].filter(Boolean).join('/');
@@ -113,7 +113,7 @@ function createZipOperations(options = {}) {
       const size = item.directory ? 0 : item.stat ? Number(item.stat.size) : typeof item.data === 'string' ? Buffer.byteLength(item.data) : Buffer.isBuffer(item.data) || item.data instanceof Uint8Array ? item.data.byteLength : undefined;
       return Number.isSafeInteger(size) && size >= 0 ? size : undefined;
     };
-    const progress = (phase, currentPath, transferred = 0, total) => settings.onProgress?.(Progress.event({ phase, currentPath, completed, transferred, total,
+    const progress = (phase, currentPath, transferred = 0, total) => settings.onProgress?.(Progress.event({ phase, overallScope: 'phase', currentPath, completed, transferred, total,
       overall: phase === 'packing' && packingTotal !== undefined ? Progress.known('bytes', Math.min(packingTotal, packedBytes + transferred), packingTotal) : ['packing', 'retaining'].includes(phase) ? Progress.known('items', processedEntries, plannedEntries) : Progress.unknown('requests', 0, 'native-operation'),
       current: Number.isSafeInteger(total) && total >= transferred ? Progress.known('bytes', transferred, total) : Progress.unknown('bytes', transferred, phase === 'packing' ? 'stream-size-unknown' : 'native-operation'),
       ...(phase === 'packing' && packingTotal !== undefined ? { completedBytes: Math.min(packingTotal, packedBytes + transferred), totalBytes: packingTotal } : {}) }));
@@ -233,7 +233,7 @@ function createZipOperations(options = {}) {
       if (!['dev', 'ino', 'size', 'mtimeNs'].every(key => afterStageCleanup[key] === publishedStat[key])) throw new Error('Das gespeicherte ZIP-Archiv fehlt oder wurde geändert.');
       publishedStat = afterStageCleanup; committedResult.revision = revision(publishedStat);
       stop(signal);
-      if (request.verify !== false) await testArchive(archive, { ...settings, password: request.password });
+      if (request.verify !== false) await testArchive(archive, { ...settings, password: request.password }, 'phase');
       await verifyPublication();
       if (backup) {
         await noLinks(backup);
@@ -264,18 +264,19 @@ function createZipOperations(options = {}) {
       throw error;
     } finally { await cleanup(); }
   }
-  async function testArchive(value, settings = {}) {
+  /** @param {'operation' | 'phase'} overallScope */
+  async function testArchive(value, settings = {}, overallScope = 'operation') {
     const archive = allowed(value); await noLinks(archive); stop(settings.signal);
     const handle = await fs.open(archive, 'r'), original = await handle.stat({ bigint: true });
     const reader = new zip.ZipReader(readFile(handle, Number(original.size), settings.signal), { checkCrc32: true, checkAuthenticationCode: true, useWebWorkers: false });
     let files = 0, bytes = 0;
     try {
       const entries = await reader.getEntries(), totalBytes = entries.reduce((sum, entry) => sum + (entry.directory ? 0 : entry.uncompressedSize), 0);
-      settings.onProgress?.(Progress.event({ phase: 'verifying', currentPath: archive, completedBytes: 0, totalBytes, overall: Progress.known('bytes', 0, totalBytes), current: Progress.unknown('bytes', 0, 'enumerating') }));
+      settings.onProgress?.(Progress.event({ phase: 'verifying', overallScope, currentPath: archive, completedBytes: 0, totalBytes, overall: Progress.known('bytes', 0, totalBytes), current: Progress.unknown('bytes', 0, 'enumerating') }));
       for (const entry of entries) {
         stop(settings.signal); if (entry.directory) continue;
         let transferred = 0;
-        const report = () => settings.onProgress?.(Progress.event({ phase: 'verifying', currentPath: entry.filename, transferred, total: entry.uncompressedSize, completedBytes: bytes, totalBytes, overall: Progress.known('bytes', bytes, totalBytes), current: Progress.known('bytes', transferred, entry.uncompressedSize) }));
+        const report = () => settings.onProgress?.(Progress.event({ phase: 'verifying', overallScope, currentPath: entry.filename, transferred, total: entry.uncompressedSize, completedBytes: bytes, totalBytes, overall: Progress.known('bytes', bytes, totalBytes), current: Progress.known('bytes', transferred, entry.uncompressedSize) }));
         report(); stop(settings.signal);
         const password = await resolvePassword(entry, settings);
         await entry.getData(new WritableStream({ write(chunk) { stop(settings.signal); bytes += chunk.length; transferred += chunk.length; report(); } }), { password, signal: settings.signal }); files++;

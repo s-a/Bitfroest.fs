@@ -6,7 +6,7 @@
   'use strict';
   const units = new Set(['bytes', 'items', 'requests', 'steps']);
   const statusSnapshots = new WeakMap();
-  const reasons = new Set(['enumerating', 'stream-size-unknown', 'native-operation', 'awaiting-confirmation']);
+  const reasons = new Set(['enumerating', 'stream-size-unknown', 'native-operation', 'awaiting-confirmation', 'remaining-work-unknown']);
   function validate(value) {
     if (!value || !units.has(value.unit) || !Number.isSafeInteger(value.completed) || value.completed < 0) throw new TypeError('Invalid progress measurement');
     if (value.kind === 'determinate') {
@@ -18,6 +18,7 @@
   function unknown(unit, completed, reason) { return validate({ kind: 'indeterminate', unit, completed, reason }); }
   function event(input) {
     if (!input || typeof input.phase !== 'string' || !input.phase) throw new TypeError('A progress phase is required');
+    if (input.overallScope !== undefined && !['operation', 'phase'].includes(input.overallScope)) throw new TypeError('Invalid progress scope');
     return Object.freeze({ ...input, version: 1, overall: validate(input.overall), current: validate(input.current) });
   }
   function read(input) {
@@ -55,7 +56,7 @@
     const analyze = () => Object.freeze({ ...summary(), openPlanning: Object.freeze([...planning]), steps: Object.freeze([...nodes.values()].map(node => Object.freeze({ id: node.id, parent: node.parent, state: node.state, error: node.error, startedAt: node.startedAt, finishedAt: node.finishedAt, children: Object.freeze([...node.children]), measurement: node.measurement, range: node.range && Object.freeze({ ...node.range }) }))) });
     const report = () => {
       const analysis = analyze();
-      const steps = Object.freeze(analysis.steps.map(node => Object.freeze({ ...node, measurement: node.measurement ? event({ phase: node.measurement.phase, path: node.measurement.path, overall: node.measurement.overall, current: node.measurement.current }) : null })));
+      const steps = Object.freeze(analysis.steps.map(node => Object.freeze({ ...node, measurement: node.measurement ? event({ phase: node.measurement.phase, path: node.measurement.path, overallScope: node.measurement.overallScope, overall: node.measurement.overall, current: node.measurement.current }) : null })));
       return Object.freeze({ plan: Object.freeze({ ...analysis, steps }), omittedEvents: Math.max(0, sequence - history.length), events: Object.freeze(Array.from({ length: Math.min(sequence, history.length) }, (_, index) => history[(Math.max(0, sequence - history.length) + index) % history.length])) });
     };
     return Object.freeze({
@@ -113,6 +114,7 @@
       snapshot() {
         const analysis = summary(), node = active && get(active);
         let overall = mode === 'work' && latest ? latest.overall : known('steps', analysis.completedSteps, analysis.totalSteps);
+        if (mode === 'work' && latest?.overallScope === 'phase' && overall.kind === 'determinate' && !analysis.done) overall = unknown(overall.unit, overall.completed, 'remaining-work-unknown');
         if (mode === 'steps' && planning.size) overall = unknown('steps', analysis.completedSteps, 'enumerating');
         if (overall.kind === 'determinate' && overall.completed === overall.total && !analysis.done) overall = unknown(overall.unit, overall.completed, 'awaiting-confirmation');
         let current = node?.measurement?.current || unknown('steps', 0, 'awaiting-confirmation');

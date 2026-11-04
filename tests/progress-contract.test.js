@@ -6,6 +6,26 @@ const path = require('node:path');
 const Progress = require('../media/commander-progress');
 const { check } = require('../scripts/check-progress.cjs');
 
+test('phase byte totals never become the overall total of an unfinished operation', () => {
+  const plan = Progress.statusPlan({ id: 'pack', startedAt: 123, steps: ['archive'], mode: 'work' });
+  plan.start('archive');
+  for (const [phase, completed, total] of [['packing', 999, 1000], ['packing', 1000, 1000], ['publishing', 5, 10], ['verifying', 9, 10], ['verifying', 10, 10]]) {
+    plan.update('archive', Progress.event({ phase, overallScope: 'phase', overall: Progress.known('bytes', completed, total), current: Progress.known('bytes', completed, total) }));
+    const snapshot = plan.snapshot();
+    assert.equal(snapshot.display.overallPercent, null);
+    assert.deepEqual(snapshot.overall, Progress.unknown('bytes', completed, 'remaining-work-unknown'));
+    assert.equal(snapshot.display.currentPercent, completed / total * 100);
+    const measurement = Progress.statusReport(snapshot).plan.steps[0].measurement;
+    assert.equal(measurement.overallScope, 'phase');
+    assert.equal(measurement.overall.total, total);
+    assert.equal(snapshot.id, 'pack'); assert.equal(snapshot.startedAt, 123);
+  }
+  plan.complete('archive');
+  assert.equal(plan.finishedSnapshot().plan.state, 'complete');
+  assert.equal(plan.finishedSnapshot().display.overallPercent, 100);
+  assert.throws(() => Progress.event({ phase: 'packing', overallScope: 'file', overall: Progress.known('bytes', 0, 1), current: Progress.known('bytes', 0, 1) }), /scope/);
+});
+
 test('planner diagnostics retain actual execution, open planning, counters and termination', () => {
   const plan = Progress.statusPlan({ id: 'read', startedAt: 5, steps: ['directory', 'git'] });
   plan.openPlanning('git'); plan.start('directory'); plan.reserve('directory', 10); plan.confirmRange('directory', 3);
