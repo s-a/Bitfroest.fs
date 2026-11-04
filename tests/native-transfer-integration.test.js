@@ -95,7 +95,10 @@ test('native final witness identifies the committed inode and changes after same
   const before = await fs.stat(target, { bigint: true });
   assert.deepEqual(outcome.ownedDestination, expected(before));
   const file = await fs.open(target, 'r+');
-  try { await file.write(Buffer.from([0x78]), 0, 1, 0); } finally { await file.close(); }
+  try {
+    await file.write(Buffer.from([0x78]), 0, 1, 0);
+    await file.utimes(Number(before.atimeNs) / 1e9, Number(before.mtimeNs) / 1e9 + 5);
+  } finally { await file.close(); }
   const after = await fs.stat(target, { bigint: true });
   assert.equal(after.dev, before.dev);
   assert.equal(after.ino, before.ino);
