@@ -4,6 +4,8 @@
 #include <array>
 #include <atomic>
 #include <cctype>
+#include <chrono>
+#include <condition_variable>
 #include <cstring>
 #include <cstdint>
 #include <filesystem>
@@ -85,8 +87,24 @@ struct GitStatusJob {
 struct GitStatusProgressState {
   std::atomic<bool> callbackFailed{false};
   std::atomic<bool> allocationFailed{false};
+  std::atomic<bool> suppressed{false};
+  std::mutex mutex;
+  std::condition_variable changed;
+  size_t pending = 0;
 };
 struct GitStatusProgress { std::string path; std::shared_ptr<GitStatusProgressState> state; };
+
+struct GitStatusProgressAcknowledgement {
+  std::shared_ptr<GitStatusProgressState> state;
+  ~GitStatusProgressAcknowledgement() {
+    if (!state) return;
+    {
+      std::lock_guard<std::mutex> lock(state->mutex);
+      --state->pending;
+    }
+    state->changed.notify_all();
+  }
+};
 
 struct GitStatusRuntime {
   std::mutex mutex;
@@ -227,7 +245,8 @@ void SetError(GitStatusJob* job, int result, const char* fallback) {
 
 void CallStatusProgress(napi_env env, napi_value callback, void*, void* data) {
   std::unique_ptr<GitStatusProgress> progress(static_cast<GitStatusProgress*>(data));
-  if (!env || !callback || !progress) return;
+  GitStatusProgressAcknowledgement acknowledgement{progress ? progress->state : nullptr};
+  if (!env || !callback || !progress || (progress->state && progress->state->suppressed.load())) return;
   napi_value global, event, file;
   if (napi_get_global(env, &global) != napi_ok || napi_create_object(env, &event) != napi_ok ||
       napi_create_string_utf8(env, progress->path.c_str(), progress->path.size(), &file) != napi_ok ||
@@ -264,7 +283,14 @@ int CancelOnProgress(const git_diff*, const char* old_path, const char* new_path
           if (job->progressState) job->progressState->allocationFailed.store(true);
           return GIT_EUSER;
         }
-        if (napi_call_threadsafe_function(job->progress, event, napi_tsfn_nonblocking) != napi_ok) delete event;
+        {
+          std::lock_guard<std::mutex> lock(job->progressState->mutex);
+          ++job->progressState->pending;
+        }
+        if (napi_call_threadsafe_function(job->progress, event, napi_tsfn_nonblocking) != napi_ok) {
+          GitStatusProgressAcknowledgement acknowledgement{event->state};
+          delete event;
+        }
       }
     }
     return 0;
@@ -819,6 +845,13 @@ void ExecuteGitStatus(napi_env env, void* data) {
   try { ExecuteGitStatusImpl(env, data); }
   catch (const std::bad_alloc&) { job->result = GIT_ERROR; job->code = "ResourceExhausted"; job->message = "Git status resources could not be allocated."; }
   catch (const std::exception&) { job->result = GIT_ERROR; job->code = "GitFailure"; job->message = "Git status could not be completed."; }
+  if (job->progressState) {
+    std::unique_lock<std::mutex> lock(job->progressState->mutex);
+    while (job->progressState->pending && !job->cancelled.load() && !job->state->closed.load()) {
+      job->progressState->changed.wait_for(lock, std::chrono::milliseconds(10));
+    }
+    if (job->cancelled.load() || job->state->closed.load()) job->progressState->suppressed.store(true);
+  }
 }
 
 napi_value GitStatusResult(napi_env env, GitStatusJob* job) {

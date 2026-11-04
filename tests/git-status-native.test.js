@@ -272,8 +272,29 @@ test('native Git status clears progress callback exceptions and rejects cleanly'
   for (let index = 0; index < 200; index++) await fs.writeFile(path.join(directory, `progress-${index}.txt`), 'new\n');
   const session = require(binary).openSession();
   try {
-    await assert.rejects(session.invoke('git.status', { directory, scope: '.', recursive: true }, () => { throw new Error('callback failed'); }), error => error.code === 'ProgressCallbackFailed');
-  } finally { session.close(); }
+    let callbacks = 0;
+    await assert.rejects(session.invoke('git.status', { directory, scope: '.', recursive: true }, () => {
+      callbacks++;
+      throw new Error('callback failed');
+    }), error => error.code === 'ProgressCallbackFailed');
+    assert.ok(callbacks > 0);
+    assert.equal((await session.invoke('git.status', { directory, scope: '.', recursive: true })).repository, true);
+  } finally { session.close(); await session.whenClosed(); }
+});
+
+test('native Git status finishes only after delivering its queued progress callbacks', async t => {
+  const directory = await fixture(t);
+  for (let index = 0; index < 200; index++) await fs.writeFile(path.join(directory, `delivery-${index}.txt`), 'new\n');
+  const session = require(binary).openSession();
+  let callbacks = 0;
+  try {
+    const result = await session.invoke('git.status', { directory, scope: '.', recursive: true }, () => { callbacks++; });
+    assert.equal(result.repository, true);
+    assert.ok(callbacks > 0);
+    const completedCount = callbacks;
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(callbacks, completedCount);
+  } finally { session.close(); await session.whenClosed(); }
 });
 
 test('native Git metadata lists local and configured remote refs without fetching', async t => {
