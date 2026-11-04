@@ -190,5 +190,7 @@
   "shortcuts.bindings": "Local keyboard shortcuts by stable binding identifier. Separate alternatives with |; an empty string disables a binding. Missing identifiers use the inherited binding or the default. Use Configure Keyboard Shortcuts for key capture and conflict detection.",
   "files.useSystemContextMenu.description": "Use system context menu. When enabled, Windows file lists use the system menu. Otherwise, use the file manager menu with Copy, Cut, Paste and folder lock inspection.",
   "files.xrayMaxFileSizeMiB.description": "Maximum file size in MiB for the complete, read-only X-Ray preview with syntax highlighting and minimap.",
-  "command.bitfroest.xray.title": "Cycle X-Ray preview mode"
+  "command.bitfroest.xray.title": "Cycle X-Ray preview mode",
+  "files.quickDiffMaxFileSizeMiB.description": "Maximum size in MiB of each text version in the read-only Quick Diff preview.",
+  "command.quick-diff": "Quick Diff"
 }

@@ -38,6 +38,7 @@ const { openTerminal } = require('./open-terminal');
 const { openAssociatedFile } = require('./open-file');
 const { maximizeWindow, inspectWindows } = require('./native-window');
 const { createListerProvider } = require('./lister-provider');
+const { createQuickDiffHost } = require('./quick-diff-host');
 const { createSearchProvider } = require('./search-provider');
 const { validateSettings: validateSearchSettings } = require('./file-search');
 const { createConfigurationEditor } = require('./configuration-editor');
@@ -782,7 +783,7 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
       const startupRows = startupEvents.splice(0).map(event => `<li>[${(event.elapsed / 1000).toFixed(3)} s] ${escape(event.message)}</li>`).join('');
       panel.webview.html = template
         .replace('<html lang="de">', () => `<html lang="de" data-startup-id="${currentStartup.id}" data-document-id="${documentId}">`)
-        .replace('<!--POLICY-->', `<meta name="webview-nonce" content="${nonce}"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${panel.webview.cspSource} 'nonce-${nonce}'; style-src-attr 'unsafe-inline'; script-src 'nonce-${nonce}'; img-src ${panel.webview.cspSource} data:; font-src ${panel.webview.cspSource};"><style nonce="${nonce}">${icons.css(panel.webview)}</style>`)
+        .replace('<!--POLICY-->', `<meta name="webview-nonce" content="${nonce}"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${panel.webview.cspSource} 'nonce-${nonce}'; style-src-attr 'unsafe-inline'; script-src 'nonce-${nonce}'; worker-src blob:; connect-src ${panel.webview.cspSource}; img-src ${panel.webview.cspSource} data:; font-src ${panel.webview.cspSource};"><style nonce="${nonce}">${icons.css(panel.webview)}</style>`)
         .replace('<body>', `<body data-vscode-context='{"preventDefaultContextMenuItems":true}' data-shortcut-settings="${encodeURIComponent(JSON.stringify(shortcutState()))}" data-favorite-settings="${encodeURIComponent(JSON.stringify(favoriteSettings()))}" data-startup-error="${encodeURIComponent(t('Die Dateiverwaltung konnte nicht gestartet werden. Diesen Tab schließen und erneut öffnen.'))}" data-language="${encodeURIComponent(language)}" data-file-settings="${encodeURIComponent(JSON.stringify(fileSettings()))}" data-column-settings="${encodeURIComponent(JSON.stringify(columnSettings()))}" data-icon-theme="${encodeURIComponent(JSON.stringify(icons.associations))}">`)
         .replace('<body ', `<body data-platform="${process.platform}" data-extension-version="${encodeURIComponent(require('./package.json').version)}" data-initial-state="${JSON.stringify(savedState || null).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;')}" `)
         .replace('<body ', `<body data-startup-elapsed="${elapsed}" data-startup-log-labels="${encodeURIComponent(JSON.stringify({ webviewStarted: t('Webview-Initialisierung läuft'), waitingStyle: t('Warten auf Stylesheet: {resource}'), requestedScript: t('Skript angefordert: {resource}'), loadedScript: t('Skript geladen: {resource}'), loadedStyle: t('Stylesheet geladen: {resource}'), failedScript: t('Skript konnte nicht geladen werden: {resource}'), failedStyle: t('Stylesheet konnte nicht geladen werden: {resource}'), initializing: t('Dateiverwaltung wird initialisiert'), settings: t('Einstellungen und Dateisymbole werden eingerichtet'), restore: t('Ordner und Einträge werden wiederhergestellt'), controls: t('Tastaturbedienung wird registriert'), rendering: t('Dateilisten werden aufgebaut') }))}" data-startup-resource="${encodeURIComponent(t('Ressource geladen: {resource}'))}" data-startup-labels="${encodeURIComponent(JSON.stringify({ close: t('Schließen'), details: t('Details'), select: t('Details auswählen'), copy: t('Fehlerdetails kopieren') }))}" `)
@@ -982,6 +983,8 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
     }
     const lister = createListerProvider({ validate: target => provider.contains(target) || extractedSearchFiles.has(target) });
     const listerSides = new Map(), listerJobs = new Map(), listerVersions = [0, 0];
+    const quickDiffHost = createQuickDiffHost({ vscode, panel: messagePanel, validateDirectory: directory => typeof directory === "string" && provider.contains(directory), t });
+    context.subscriptions.push(quickDiffHost); messagePanel.onDidDispose(() => quickDiffHost.dispose());
     let xrayJob = null, xraySession = null;
     async function closeLister(id) {
       let target; try { target = lister.path(id); } catch { /* The session may already be closed. */ }
@@ -990,7 +993,7 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
         await fs.promises.rm(target, { force: true }); extractedSearchFiles.delete(target); searchCatalog.delete(target);
       }
     }
-    resetListerViews = async () => { xraySession = null; xrayJob?.controller.abort(); xrayJob = null; listerVersions[0]++; listerVersions[1]++; for (const job of listerJobs.values()) job.abort(); listerJobs.clear(); const ids = [...listerSides.values()]; listerSides.clear(); await Promise.all(ids.map(closeLister)); };
+    resetListerViews = async () => { quickDiffHost.reset(); xraySession = null; xrayJob?.controller.abort(); xrayJob = null; listerVersions[0]++; listerVersions[1]++; for (const job of listerJobs.values()) job.abort(); listerJobs.clear(); const ids = [...listerSides.values()]; listerSides.clear(); await Promise.all(ids.map(closeLister)); };
     let listerDisposed = false;
     const closeListers = () => { xraySession = null; xrayJob?.controller.abort(); xrayJob = null; listerDisposed = true; listerVersions[0]++; listerVersions[1]++; for (const job of listerJobs.values()) job.abort(); listerJobs.clear(); listerSides.clear(); return lister.dispose().catch(() => {}); };
     context.subscriptions.push({ dispose: closeListers });
@@ -1240,6 +1243,7 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
         } catch (error) { vscode.window.showErrorMessage(t(error.message)); }
         return;
       }
+      if (message?.type?.startsWith('quick-diff-')) { await quickDiffHost.handle(message); return; }
       if (message?.type === 'xray-cancel') {
         if (xrayJob?.id === message.requestId) { xrayJob.controller.abort(); xrayJob = null; }
         if (xraySession?.id === message.requestId) xraySession = null;
@@ -2007,7 +2011,7 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
     context.subscriptions.push(vscode.commands.registerCommand(`bitfroest.${action}`, options => { if (panel && panelReady) panel.webview.postMessage({ type: 'action', action, reverseDirectories: options?.reverseDirectories === true }); }));
   }
   context.subscriptions.push(vscode.commands.registerCommand('bitfroest.lister-action', action => { if (panel && panelReady && typeof action === 'string') panel.webview.postMessage({ type: 'action', action: `lister:${action}` }); }));
-  for (const action of ['open-terminal', 'shell-context-menu', 'xray', 'view', 'edit', 'clipboard-copy', 'clipboard-cut', 'clipboard-paste', 'copy', 'copy-same', 'move', 'mkdir', 'mkdir-other', 'new-file', 'delete', 'delete-alternate', 'delete-permanently', 'pack', 'pack-move', 'test-archives', 'unpack', 'rename', 'select-all', 'invert', 'clear', 'toggle-selection-next', 'open-trash', 'swap', 'reset', 'help', 'new-tab', 'close-tab', 'next-tab', 'previous-tab', 'refresh', 'filter', 'path', 'path-clipboard', 'background-tab', 'open-dir-tab', 'open-dir-other-tab', 'rename-one', 'back', 'forward', 'swap-paths']) {
+  for (const action of ['open-terminal', 'shell-context-menu', 'quick-diff', 'xray', 'view', 'edit', 'clipboard-copy', 'clipboard-cut', 'clipboard-paste', 'copy', 'copy-same', 'move', 'mkdir', 'mkdir-other', 'new-file', 'delete', 'delete-alternate', 'delete-permanently', 'pack', 'pack-move', 'test-archives', 'unpack', 'rename', 'select-all', 'invert', 'clear', 'toggle-selection-next', 'open-trash', 'swap', 'reset', 'help', 'new-tab', 'close-tab', 'next-tab', 'previous-tab', 'refresh', 'filter', 'path', 'path-clipboard', 'background-tab', 'open-dir-tab', 'open-dir-other-tab', 'rename-one', 'back', 'forward', 'swap-paths']) {
     context.subscriptions.push(vscode.commands.registerCommand(`bitfroest.${action}`, options => {
       if (panel && panelReady) panel.webview.postMessage({ type: 'action', action, ...(options?.reverseDirectories === true ? { reverseDirectories: true } : {}), ...(['clipboard-copy', 'clipboard-cut', 'clipboard-paste'].includes(action) && ['files', 'folder', 'fileBackground'].includes(options?.webviewSection) ? { contextSelection: { directory: options.directory, ids: options.ids, snapshotId: options.snapshotId } } : {}) });
     }));

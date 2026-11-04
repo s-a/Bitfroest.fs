@@ -1,4 +1,4 @@
-import { create, createModel, setTheme } from 'monaco-editor/esm/vs/editor/standalone/browser/standaloneEditor.js';
+import { create, createDiffEditor, createModel, setTheme } from 'monaco-editor/esm/vs/editor/standalone/browser/standaloneEditor.js';
 import { register, setMonarchTokensProvider, setLanguageConfiguration } from 'monaco-editor/esm/vs/editor/standalone/browser/standaloneLanguages.js';
 import { createMonacoBaseAPI } from 'monaco-editor/esm/vs/editor/common/services/editorBaseApi.js';
 import 'monaco-editor/esm/vs/editor/browser/coreCommands.js';
@@ -22,4 +22,4 @@ register({ id: 'yaml' }); setMonarchTokensProvider('yaml', yaml); setLanguageCon
 register({ id: 'shell' }); setMonarchTokensProvider('shell', shell); setLanguageConfiguration('shell', shellConfiguration);
 register({ id: 'markdown' }); setMonarchTokensProvider('markdown', markdown); setLanguageConfiguration('markdown', markdownConfiguration);
 register({ id: 'sql' }); setMonarchTokensProvider('sql', sql); setLanguageConfiguration('sql', sqlConfiguration);
-window.CommanderMonaco = { ...createMonacoBaseAPI(), editor: { create, createModel, setTheme }, languages: { register, setMonarchTokensProvider } };
+window.CommanderMonaco = { ...createMonacoBaseAPI(), editor: { create, createDiffEditor, createModel, setTheme }, languages: { register, setMonarchTokensProvider } };

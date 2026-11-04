@@ -182,6 +182,7 @@ async function main() {
   const catalog = numberCatalog(validateCatalog(JSON.parse(fs.readFileSync(path.join(__dirname, 'catalog.json'), 'utf8').replaceAll('${demo}', demo.replace(/\\/g, '/')))));
   const scenes = selected ? catalog.filter(scene => selected.split(',').includes(scene.id)) : catalog;
   if (!scenes.length) throw new Error(`Unknown showcase: ${selected}`);
+  if (scenes.some(scene => scene.id.startsWith('quick-diff-'))) require('./quick-diff-fixture.cjs').prepareQuickDiff(demo);
   if (scenes.some(scene => scene.id === 'xray-click')) {
     const sample = path.join(demo, 'left', 'X-Ray-Sample.sql');
     const content = "-- Active demonstration projects\nSELECT project_name, owner_name, updated_at\nFROM projects\nWHERE active = 1\n  AND area = 'Demo'\nORDER BY updated_at DESC;\n";
@@ -249,6 +250,8 @@ async function main() {
         await view.call('Input.dispatchMouseEvent', event); pointerInputs.push({ ...event, selector, name });
       }
       fs.writeFileSync(path.join(run, 'xray-pointer-inputs.json'), JSON.stringify(pointerInputs, null, 2));
+      const observed = await evaluate(() => window.__showcasePointerEvents || []);
+      fs.writeFileSync(path.join(run, 'pointer-events.json'), JSON.stringify(observed, null, 2));
     }
     diagnostic = async () => {
       const state = await evaluate(() => ({ saved: window.CommanderHost?.getState?.(), contexts: [...document.querySelectorAll('.pane .list')].map(item => item.dataset.vscodeContext), names: [...document.querySelectorAll('[data-file-row][data-id]')].map(item => item.title || item.querySelector('[data-cell]')?.title) }));
@@ -273,10 +276,12 @@ async function main() {
       if (lockFixture) await invoke('showcase.close-locks');
       await invoke('showcase.focus-main');
       if (scene.captures.some(capture => ['bitfroest.gitHistory', 'bitfroest.gitDiff', 'bitfroest.showLocalBranches'].includes(capture.command))) await invoke('showcase.prepare-repository', [scene.paths[0]]);
+      if (scene.captures.some(capture => capture.quickDiffMode)) await invoke('showcase.prepare-repository', [path.join(demo, 'quick-diff-compact')]);
       await evaluate(() => {
         document.querySelector('dialog[open] #modal-cancel')?.click();
         for (const button of document.querySelectorAll('[data-search-close], [data-lister-close]')) button.click();
         document.querySelector('[data-xray]')?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+        document.querySelector('[data-quick-diff]')?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
         document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
       });
       for (const [side, directory] of scene.paths.entries()) {
@@ -309,6 +314,23 @@ async function main() {
             await xrayPointer('[data-pane="0"] [data-xray-toggle]');
           }
           await xrayPointer('[data-pane="0"]', capture.xrayFile, capture.xrayMode === 'click');
+        }
+        if (capture.quickDiffMode) {
+          stage = `${scene.id}/${capture.id}: first Quick Diff activation`;
+          await evaluate(() => {
+            window.__showcaseQuickDiffError = null;
+            window.__showcasePointerEvents = [];
+            for (const type of ['mousedown', 'mouseup', 'click']) document.addEventListener(type, event => { window.__showcasePointerEvents.push({ type, tag: event.target.tagName, button: Boolean(event.target.closest('[data-quick-diff-toggle]')), target: event.target.className?.baseVal || event.target.className }); }, true);
+            window.addEventListener('message', event => { if (event.data?.type === 'quick-diff-result' && !event.data.ok) window.__showcaseQuickDiffError = event.data.error; });
+          });
+          await xrayPointer('[data-pane="0"] [data-quick-diff-toggle]');
+          const opened = await waitFor(() => evaluate(() => window.__showcaseQuickDiffError || Boolean(document.querySelector('[data-quick-diff-list] [role="grid"]'))));
+          if (typeof opened === 'string') throw new Error(opened);
+          if (capture.quickDiffMode === 'repository') {
+            await xrayPointer('[data-pane="0"] [data-quick-diff-toggle]');
+            await waitFor(() => evaluate(() => Boolean(document.querySelector('[data-quick-diff-list] .quick-diff-name[title="src/Orders.sql"]'))));
+          }
+          await xrayPointer(`[data-quick-diff-list] .quick-diff-name[title="${capture.quickDiffMode === 'repository' ? 'src/' : ''}Orders.sql"]`);
         }
         if (capture.action) await invoke(`bitfroest.${capture.action}`);
         if (capture.command) {
@@ -349,6 +371,17 @@ async function main() {
           }, capture.expect);
           assertProductState(state, scene, capture); return true;
         });
+        if (capture.quickDiffMode) await waitFor(() => evaluate(mode => {
+          const source = document.querySelector('.quick-diff-source'), preview = document.querySelector('[data-quick-diff]');
+          const panes = [...document.querySelectorAll('#panes > .pane')], width = panes.reduce((sum, pane) => sum + pane.getBoundingClientRect().width, 0);
+          const tokens = new Set([...preview.querySelectorAll('.view-line span')].flatMap(span => [...span.classList].filter(name => /^mtk\d+$/.test(name))));
+          return source.getBoundingClientRect().width / width > .39 && source.getBoundingClientRect().width / width < .41 &&
+            source.querySelector('[data-quick-diff-toggle]').dataset.mode === mode && source.querySelector('.quick-diff-header').textContent.includes('Status') &&
+            preview.querySelector('[data-diff-summary]')?.textContent.includes('(+3 · ~2 · −0)') &&
+            preview.querySelector('.line-insert,.char-insert') && preview.querySelector('.line-delete,.char-delete') && tokens.size > 1 &&
+            ![...preview.querySelectorAll('.minimap')].some(node => node.getBoundingClientRect().width > 0) && Boolean(preview.querySelector('.diff-hidden-lines')) &&
+            [...source.querySelectorAll('.quick-diff-row .native-icon')].length === source.querySelectorAll('.quick-diff-row').length;
+        }, capture.quickDiffMode));
         if (capture.xrayMode) await waitFor(() => evaluate(() => {
           const panes = document.querySelector('#panes'), side = panes.dataset.xraySource;
           const source = panes.querySelector(`[data-pane="${side}"]`), preview = panes.querySelector('[data-xray]');

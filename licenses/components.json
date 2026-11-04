@@ -202,8 +202,8 @@
       "licenses/BOOTSTRAP-ICONS-MIT.txt"
     ],
     "description": {
-      "de": "Zwölf lokal eingebundene SVG-Symbole: check-circle-fill, exclamation-circle-fill, plus-circle-fill, dash-circle-fill, question-circle-fill, slash-circle-fill, exclamation-triangle-fill, folder-fill, git, eye, eye-fill und eye-slash-fill. SVG-Hüllen sind für Zugänglichkeit angepasst; Pfadgeometrien und currentColor-Füllung bleiben unverändert.",
-      "en": "Twelve locally embedded SVG icons: check-circle-fill, exclamation-circle-fill, plus-circle-fill, dash-circle-fill, question-circle-fill, slash-circle-fill, exclamation-triangle-fill, folder-fill, git, eye, eye-fill and eye-slash-fill. SVG wrappers are adapted for accessibility; path geometries and currentColor fill remain unchanged."
+      "de": "Vierzehn lokal eingebundene SVG-Symbole: check-circle-fill, exclamation-circle-fill, plus-circle-fill, dash-circle-fill, question-circle-fill, slash-circle-fill, exclamation-triangle-fill, folder-fill, git, eye, eye-fill eye-slash-fill, file-diff und file-diff-fill. SVG-Hüllen sind für Zugänglichkeit angepasst; Pfadgeometrien und currentColor-Füllung bleiben unverändert.",
+      "en": "Fourteen locally embedded SVG icons: check-circle-fill, exclamation-circle-fill, plus-circle-fill, dash-circle-fill, question-circle-fill, slash-circle-fill, exclamation-triangle-fill, folder-fill, git, eye, eye-fill eye-slash-fill, file-diff and file-diff-fill. SVG wrappers are adapted for accessibility; path geometries and currentColor fill remain unchanged."
     }
   },
   {
@@ -291,8 +291,8 @@
       "media/xray-editor.js.LEGAL.txt"
     ],
     "description": {
-      "de": "Schreibgeschützte X-Ray-Codeansicht mit Syntaxhervorhebung und Minimap. Gebündelte Stylesheets übernehmen die Nonce der Webview; Grammatikimporte lassen ungenutzte Editorintegrationen aus.",
-      "en": "Read-only X-Ray code view with syntax highlighting and minimap. Bundled stylesheets use the webview nonce; grammar imports omit unused editor integrations."
+      "de": "Schreibgeschützte X-Ray-Codevorschau und Inline-Diffeditor mit lokal mitgeliefertem Berechnungsworker. Gebündelte Stylesheets übernehmen die Nonce der Webview; Grammatikimporte lassen ungenutzte Editorintegrationen aus.",
+      "en": "Read-only X-Ray code preview and inline Quick Diff editor with a locally bundled computation worker. Bundled stylesheets use the webview nonce; grammar imports omit unused editor integrations."
     }
   }
 ]

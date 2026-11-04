@@ -1528,5 +1528,57 @@
         "xrayFile": "X-Ray-Sample.ps1"
       }
     ]
+  },
+  {
+    "id": "quick-diff-folder",
+    "parentId": "main",
+    "title": "Quick Diff: current folder",
+    "description": "Select a changed file to compare its saved content with HEAD in a read-only inline diff. Unchanged sections are collapsed with three context lines and can be expanded. The title shows separate added, changed and deleted line counts. The file list occupies 40% of the width and includes a status column. Double-click the preview to open the full VS Code diff editor.",
+    "paths": [
+      "${demo}/quick-diff-compact/src",
+      "${demo}/right"
+    ],
+    "sources": [
+      "media/commander-quick-diff.js",
+      "quick-diff.js"
+    ],
+    "captures": [
+      {
+        "id": "preview",
+        "quickDiffMode": "folder",
+        "expect": "[data-quick-diff]",
+        "text": "Orders.sql",
+        "select": {
+          "side": 1,
+          "name": "Checklist.txt"
+        }
+      }
+    ]
+  },
+  {
+    "id": "quick-diff-repository",
+    "parentId": "main",
+    "title": "Quick Diff: entire repository",
+    "description": "Cycle the footer button to include the entire repository, including new and ignored files. Selecting a file without a version in HEAD shows a notice instead of a diff.",
+    "paths": [
+      "${demo}/quick-diff-compact/src",
+      "${demo}/right"
+    ],
+    "sources": [
+      "media/commander-quick-diff.js",
+      "quick-diff.js"
+    ],
+    "captures": [
+      {
+        "id": "preview",
+        "quickDiffMode": "repository",
+        "expect": "[data-quick-diff]",
+        "text": "Orders.sql",
+        "select": {
+          "side": 1,
+          "name": "Checklist.txt"
+        }
+      }
+    ]
   }
 ]

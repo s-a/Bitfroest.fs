@@ -1470,6 +1470,7 @@ function harness(t, options = {}) {
   let status, serializer;
   const tabGroups = [], tabListeners = new Set(), groupListeners = new Set();
   const vscode = {
+    RelativePattern: class { constructor(base, pattern) { this.base = base; this.pattern = pattern; } },
     Range: class { constructor(startLine, startCharacter, endLine, endCharacter) { this.start = { line: startLine, character: startCharacter }; this.end = { line: endLine, character: endCharacter }; } },
     version: options.vscodeVersion || '1.144.1',
     extensions: { getExtension: id => id === 'vscode.git' && options.gitExtension ? { activate: async () => options.gitExtension } : undefined },
@@ -1491,6 +1492,7 @@ function harness(t, options = {}) {
     workspace: {
       onDidSaveTextDocument(listener) { saveDocumentListener = listener; return disposable(); },
       onDidCloseTextDocument(listener) { closeDocumentListener = listener; return disposable(); },
+      createFileSystemWatcher() { return { onDidCreate: disposable, onDidChange: disposable, onDidDelete: disposable, dispose() {} }; },
       registerTextDocumentContentProvider(scheme, provider) { documentProviders.set(scheme, provider); return { dispose() { documentProviders.delete(scheme); } }; },
       fs: { delete: async (uri, deleteOptions) => { deleteCalls.push({ uri, options: deleteOptions }); if (options.deleteError) throw new Error(options.deleteError); } },
       getConfiguration: () => ({ get: key => {
@@ -2193,6 +2195,40 @@ test('favorite writes preserve configuration scopes and removal uses the owning 
   assert.deepEqual(removed.value, []);
 });
 
+test('Quick Diff generated host compares HEAD, copies and opens the same native comparison', async t => {
+  const fixture = await require('./support/git-fixture.cjs').repository(t);
+  const filename = path.join(fixture.dir, 'modified.txt'), original = fs.readFileSync(filename);
+  await fixture.write('modified.txt', 'SELECT 2;');
+  const commit = await fixture.git.resolveRef({ ref: 'HEAD' });
+  const repository = { rootUri: { fsPath: fixture.dir }, state: { HEAD: { commit }, onDidChange: () => ({ dispose() {} }) },
+    diffWith: async ref => { assert.equal(ref, commit); return [{ uri: { fsPath: filename } }]; },
+    getObjectDetails: async ref => { assert.equal(ref, commit); return { size: original.length }; }, buffer: async () => original };
+  const initial = clipboardFixture();
+  const app = harness(t, { filesystemLoad: async () => initial, containsPath: candidate => candidate === fixture.dir || candidate.startsWith(fixture.dir + path.sep),
+    gitExtension: { getAPI: () => ({ getRepository: () => repository, toGitUri: (uri, ref) => ({ ...uri, scheme: 'git', ref }) }) } });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  assert.match(panel.webview.html, /commander-quick-diff\.js/); assert.match(panel.webview.html, /editor-worker-loader\.js/);
+  assert.match(panel.webview.html, /worker-src blob:/); assert.match(panel.webview.html, /script-src 'nonce-/);
+  const requestId = 'quick-diff-0123456789abcdef-1';
+  await panel.receive({ type: 'quick-diff-list', requestId, generation: 1, directory: fixture.dir, mode: 'folder' });
+  const listing = panel.messages.find(m => m.type === 'quick-diff-result' && m.requestId === requestId);
+  assert.equal(listing.ok, true, listing.error);
+  const readId = 'quick-diff-0123456789abcdef-2';
+  const reading = panel.receive({ type: 'quick-diff-read', requestId: readId, generation: 1, listId: listing.result.id, path: 'modified.txt' });
+  for (let i = 0; i < 100 && !panel.messages.some(m => m.type === 'quick-diff-result' && m.requestId === readId); i++) await new Promise(resolve => setTimeout(resolve, 5));
+  const result = panel.messages.find(m => m.type === 'quick-diff-result' && m.requestId === readId);
+  assert.equal(result.ok, true, result.error); assert.equal(result.result.modified, 'SELECT 2;');
+  assert.equal(panel.messages.some(m => m.type === 'quick-diff-finished' && m.requestId === readId), false);
+  await panel.receive({ type: 'quick-diff-rendered', requestId: readId, ok: true }); await reading;
+  await panel.receive({ type: 'quick-diff-copy', requestId: readId, text: 'SELECT' });
+  assert.equal(app.clipboardCalls.at(-1).text, 'SELECT');
+  await panel.receive({ type: 'quick-diff-open', requestId: readId });
+  const opened = app.calls.find(c => c.id === 'vscode.diff'); assert.ok(opened); assert.equal(opened.args[0].ref, commit);
+  await panel.receive({ type: 'quick-diff-cancel', requestId: readId });
+  await panel.receive({ type: 'quick-diff-open', requestId: readId });
+  assert.equal(app.calls.filter(c => c.id === 'vscode.diff').length, 1);
+});
+
 test('X-Ray host opens known text, copies selections and opens the requested source line', async t => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'xray-host-'));
   t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
@@ -2514,6 +2550,7 @@ test('the generated HTML executes its complete startup sequence with the log ena
   window.HTMLElement.prototype.scrollIntoView = function () {};
   window.HTMLCanvasElement.prototype.getContext = () => ({ measureText: text => ({ width: String(text).length * 8 }) });
   window.TextEncoder = TextEncoder;
+  window.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
   window.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
   window.document.fonts = { forEach() {} };
   t.after(() => window.dispatchEvent(new window.Event('pagehide')));
@@ -2573,8 +2610,8 @@ test('fresh and restored views authorize existing stylesheets inside their resou
     const mediaRoot = path.join(root, 'media');
     assert.ok(options.localResourceRoots.some(uri => uri.fsPath === mediaRoot));
     const links = [...dom.window.document.querySelectorAll('link[rel="stylesheet"]')];
-    assert.equal(links.length, 4);
-    for (const name of ['workbench-vendor.css', 'codicons.css', 'app.css', 'file-search.css']) {
+    assert.equal(links.length, 5);
+    for (const name of ['workbench-vendor.css', 'codicons.css', 'app.css', 'file-search.css', 'xray-editor.css']) {
       assert.ok(links.some(link => link.getAttribute('href') === `webview-resource:${path.join(mediaRoot, name)}`));
       assert.ok(fs.statSync(path.join(mediaRoot, name)).size > 0);
     }

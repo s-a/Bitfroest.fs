@@ -1,0 +1,52 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const { createApp } = require('./support/webview.cjs');
+test('Quick Diff footer survives pointer focus and cycles folder, repository and off', t => {
+  const app = createApp(t), opposite = JSON.stringify(app.state().panes[1]);
+  const button = app.document.querySelector('[data-pane="0"] [data-quick-diff-toggle]');
+  assert.ok(button);
+  button.dispatchEvent(new app.window.MouseEvent('mousedown', { bubbles: true })); button.focus();
+  assert.ok(button.isConnected); app.click(button);
+  assert.equal(button.dataset.mode, 'folder');
+  assert.ok(app.document.querySelector('[data-quick-diff]'));
+  assert.equal(app.document.querySelector('#panes').style.gridTemplateColumns, 'minmax(0, 2fr) minmax(0, 3fr)');
+  app.click(button); assert.equal(button.dataset.mode, 'repository');
+  app.click(button); assert.equal(button.dataset.mode, 'off');
+  assert.equal(app.document.querySelector('[data-quick-diff]'), null);
+  assert.equal(JSON.stringify(app.state().panes[1]), opposite);
+  assert.equal(app.document.querySelector('[data-pane="0"] .pane-metrics').hidden, false);
+});
+
+test('Quick Diff ignores stale reads, follows keyboard selection and restores Escape focus', t => {
+  const shown = [], app = createApp(t, undefined, { beforeApp: ({ window }) => { window.CommanderXrayEditor = { createDiff(_node, a, b) { shown.push([a, b]); return { dispose() {} }; } }; } });
+  app.click(app.document.querySelector('[data-quick-diff-toggle]'));
+  const list = app.messages.find(m => m.type === 'quick-diff-list');
+  const receive = data => app.window.dispatchEvent(new app.window.MessageEvent('message', { data }));
+  receive({ type: 'quick-diff-result', requestId: list.requestId, generation: list.generation, ok: true, result: { id: 'list', entries: [{ path: 'a.sql', name: 'a.sql', status: 'Modified' }, { path: 'b.sql', name: 'b.sql', status: 'Modified' }] } });
+  const first = app.messages.find(m => m.type === 'quick-diff-read');
+  const name = app.document.querySelector('.quick-diff-name');
+  receive({ type: 'quick-diff-icons-result', listId: 'list', generation: list.generation, icons: {} });
+  assert.equal(name.isConnected, true, 'icon replies must preserve row click targets');
+  app.key('ArrowDown');
+  const second = app.messages.filter(m => m.type === 'quick-diff-read').at(-1);
+  assert.equal(second.path, 'b.sql');
+  const result = { commit: 'a'.repeat(40), name: 'a.sql', original: 'old', modified: 'new' };
+  receive({ type: 'quick-diff-result', requestId: first.requestId, generation: first.generation, ok: true, result });
+  assert.equal(shown.length, 0);
+  receive({ type: 'quick-diff-result', requestId: second.requestId, generation: second.generation, ok: true, result });
+  assert.equal(shown.length, 1);
+  const preview = app.document.querySelector('[data-quick-diff]'); preview.focus(); app.key('Escape');
+  assert.equal(app.document.querySelector('[data-quick-diff]'), null);
+  assert.ok(app.document.activeElement.closest('[data-pane="0"] .list'));
+});
+test('Quick Diff and X-Ray exclude each other and right click exits', t => {
+  const app = createApp(t), quick = app.document.querySelector('[data-quick-diff-toggle]');
+  app.click(app.document.querySelector('[data-xray-toggle]')); app.click(quick);
+  assert.equal(app.document.querySelector('[data-xray]'), null);
+  app.click(app.document.querySelector('[data-pane="1"] [data-xray-toggle]'));
+  assert.equal(app.document.querySelector('[data-quick-diff]'), null);
+  app.click(quick);
+  const event = new app.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 });
+  quick.dispatchEvent(event); assert.equal(event.defaultPrevented, true);
+  assert.equal(app.document.querySelector('[data-quick-diff]'), null);
+});

@@ -1841,7 +1841,7 @@
       <div class="pane-status">${footerMarkup(p)}</div></section>`;
   }
   function footerMarkup(p) {
-    return `<div class="pane-controls" data-vscode-context='{"preventDefaultContextMenuItems":true}'><button type="button" data-xray-toggle data-mode="off" aria-label="X-Ray" title="X-Ray">${window.CommanderIcons.svg('xray', 'eye-slash-fill')}</button></div><div class="pane-metrics">${footerMetrics(p)}</div>`;
+    return `<div class="pane-controls" data-vscode-context='{"preventDefaultContextMenuItems":true}'><button type="button" data-xray-toggle data-mode="off" aria-label="X-Ray" title="X-Ray">${window.CommanderIcons.svg('xray', 'eye-slash-fill')}</button><button type="button" data-quick-diff-toggle data-mode="off" aria-label="Quick Diff" title="Quick Diff">${window.CommanderIcons.svg('xray', 'file-diff')}</button></div><div class="pane-metrics">${footerMetrics(p)}</div>`;
   }
   function footerMetrics(p) {
     const marked = selectedFor(p);
@@ -1898,12 +1898,14 @@
       section.querySelector('.pane-metrics').innerHTML = footerMetrics(p);
     });
     lister.updateMenu();
-    xray.sync();
+    xray.sync(); quickDiff.sync();
     persist();
   }
   const actions = [['F2', t('Umbenennen'), 'rename-one'], ['F3', t('Anzeigen'), 'view'], ['F4', t('Bearbeiten'), 'edit'], ['F5', t('Kopieren'), 'copy'], ['F6', t('Verschieben'), 'move'], ['F7', t('Neuer Ordner'), 'mkdir'], ['F8', t('Löschen'), 'delete']];
   const lister = window.CommanderListerView.create({ host, state: () => state, t, escape, modal, restore: render, edit: file => preview(file, true), notify: toast, report: reportStatus, remember: rememberScroll, task: statusTask });
-  const xray = window.CommanderXray.create({ host, t, state: () => state, currentPath, files, isArchive: isArchiveLocation, settings: () => fileSettings, task: xrayTask, notify: toast, beforeStart: () => { document.querySelectorAll("[data-lister-close]").forEach(button => button.click()); }, compact: (side, enabled) => fileGrid.compact(document.querySelector(`[data-pane="${side}"]`), enabled), restoreFocus: side => { state.active = side; document.querySelector(`[data-pane="${side}"] .list`)?.focus({ preventScroll: true }); } });
+  const previewManager = window.CommanderPreview.create();
+  const quickDiff = window.CommanderQuickDiff.create({ host, t, state: () => state, currentPath, isArchive: isArchiveLocation, notify: toast, task: xrayTask, preview: previewManager, beforeStart: () => { document.querySelectorAll("[data-lister-close]").forEach(button => button.click()); }, icon: entry => entry.icon ? window.CommanderIcons.native(entry.icon) : baseIcon({ name: entry.name.split("/").pop(), type: "file", iconKey: entry.fsSource }, ""), });
+  const xray = window.CommanderXray.create({ host, t, state: () => state, currentPath, files, isArchive: isArchiveLocation, settings: () => fileSettings, task: xrayTask, notify: toast, preview: previewManager, beforeStart: () => { previewManager.activate("xray", () => xray.stop()); document.querySelectorAll("[data-lister-close]").forEach(button => button.click()); }, compact: (side, enabled) => fileGrid.compact(document.querySelector(`[data-pane="${side}"]`), enabled), restoreFocus: side => { state.active = side; document.querySelector(`[data-pane="${side}"] .list`)?.focus({ preventScroll: true }); } });
   const fileSearch = window.CommanderFileSearch.create({ host, t, escape, report: reportStatus, task: statusTask,
     context: () => ({ path: currentPath(pane()), selected: selected().map(row => row.fsSource || join(currentPath(pane()), row.name)), side: state.active, state }),
     apply: (fresh, rows, source, id, name) => {
@@ -2008,7 +2010,7 @@
       fileGrid.mount(section, p, visible(p));
     });
     lister.mount();
-    xray.mount();
+    xray.mount(); quickDiff.sync();
     if (focusList) { if (lister.has(state.active)) lister.focus(); else document.querySelector('.pane.active .list')?.focus({ preventScroll: true }); }
     if (focusList && pane().filter && !lister.has(state.active)) {
       const current = files(pane()).find(file => file.id === pane().cursor);
@@ -2444,7 +2446,7 @@
   function removeTree(path, archive = false) { Object.keys(state.folders).filter(key => inTree(key, path, archive)).forEach(key => delete state.folders[key]); }
   function preview(file, edit) {
     if (file.type === 'folder' || edit && file.type === 'archive' && !state.realFilesystem) { openFile(file); return; }
-    if (!edit) { xray.stop(); lister.open(state.active, file); return; }
+    if (!edit) { previewManager.stop(); lister.open(state.active, file); return; }
     if (host) {
       hostAction(edit ? 'edit' : 'preview', { content: file.content || '', language: file.type === 'markdown' ? 'markdown' : 'plaintext', ...(state.realFilesystem ? { path: file.fsSource } : {}) });
       return;
@@ -3198,6 +3200,7 @@
     };
   }
   function run(command, reverseDirectories = false, contextSelection) {
+    if (command === "quick-diff") { document.querySelector(`[data-pane="${state.active}"] [data-quick-diff-toggle]`)?.click(); return; }
     if (command === "xray") { document.querySelector(`[data-pane="${state.active}"] [data-xray-toggle]`)?.click(); return; }
     clearPendingRenameCue(); lastNameClick = null;
     if (['git-diff', 'git-history', 'git-untrack', 'git-ignore'].includes(command)) { requestGitDiff(contextSelection, command); return; }
@@ -3291,6 +3294,7 @@
         .replace('{0}', t(labels[sort])).replace('{1}', t(p.descending ? 'absteigend' : 'aufsteigend'));
       render(true); toast(message, 'success'); return;
     }
+    if (command === 'refresh' && quickDiff.refresh()) return;
     if (command === 'refresh' && operationQueue?.active) { requestFilesystem({ type: 'filesystem-navigate', path: currentPath(pane()), side: state.active }); return; }
     if (command === 'refresh') { if (state.realFilesystem && host) startPanelRefresh(state.active); else render(true); return; }
     if (command === 'path' || command === 'path-clipboard') { focusPath(command === 'path-clipboard'); return; }
@@ -3309,7 +3313,7 @@
   }
   document.addEventListener('click', event => {
     const target = event.target;
-    if (target.closest('[data-xray]')) return;
+    if (target.closest('[data-xray],[data-quick-diff]')) return;
     if (target.closest('[data-resize]') || target.closest('.inline-rename')) return;
     clearPendingRenameCue();
     const previousNameClick = lastNameClick; lastNameClick = null;
@@ -3758,10 +3762,10 @@
       return;
     }
   });
-  $('#panes').addEventListener('focusin', event => { if (event.target.closest('[data-xray]')) return; const section = event.target.closest('[data-pane]'); if (section) { state.active = Number(section.dataset.pane); refreshSelection(); lister.updateMenu(); } });
+  $('#panes').addEventListener('focusin', event => { if (event.target.closest('[data-xray],[data-quick-diff]')) return; const section = event.target.closest('[data-pane]'); if (section) { state.active = Number(section.dataset.pane); refreshSelection(); lister.updateMenu(); } });
   document.addEventListener('keydown', event => {
     if (event.target.closest('.ag-header') && !event.target.closest('[data-history],.pathbar')) return;
-    if (event.target.closest('[data-lister],[data-xray]') && !$('#modal').open) return;
+    if (event.target.closest('[data-lister],[data-xray],[data-quick-diff],[data-quick-diff-list]') && !$('#modal').open) return;
     if (event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'd' && event.target.closest('.list') && !$('#modal').open) {
       event.preventDefault(); showFavorites(document.querySelectorAll('[data-favorites]')[state.active]); return;
     }
@@ -4185,7 +4189,7 @@
       if (!retained) { gitBindings.clear(); gitDirectories.clear(); }
       gitMenuSelection = null; pendingGitDiff = null;
       fileSearch.dispose();
-      if (event.data.resetViews) { lister.dispose(); xray.stop(); }
+      if (event.data.resetViews) { lister.dispose(); previewManager.stop(); }
       refreshingFilesystem = false; refreshRequestId = null; refreshStages.clear(); refreshPlan = null;
       if (!retained) { cancelFolderSizes(); folderSizes.clear(); }
       transferCheckpoint?.cancel(); transferCheckpoint = null;
@@ -4311,7 +4315,7 @@
   $('#panes').addEventListener('contextmenu', event => {
     if (event.target.closest('input,textarea,[contenteditable="true"]')) return;
     if (event.target.closest('.pane-status')) { event.preventDefault(); event.stopPropagation(); return; }
-    if (event.target.closest('[data-lister],[data-xray]')) return;
+    if (event.target.closest('[data-lister],[data-xray],[data-quick-diff],[data-quick-diff-list]')) return;
     const section = event.target.closest('[data-pane]');
     if (!section) return;
     state.active = Number(section.dataset.pane);
@@ -4354,7 +4358,7 @@
     const focused = document.activeElement;
     const viewing = Boolean(focused?.closest('.lister')) && !$('#modal').open;
     const searching = Boolean(focused?.closest('[data-file-search]'));
-    const editing = Boolean(focused?.closest('[data-xray]')) || searching || $('#modal').open || !viewing && Boolean(focused?.matches('input,textarea,select,[contenteditable="true"]'));
+    const editing = Boolean(focused?.closest('[data-xray],[data-quick-diff]')) || searching || $('#modal').open || !viewing && Boolean(focused?.matches('input,textarea,select,[contenteditable="true"]'));
     return { tabFocus: !editing && !viewing && !focused?.closest('.operation-error') && Boolean(focused?.closest('[data-pane]')), searchFocus: searching, searchResultsFocus: Boolean(searching && focused?.matches('[data-search-results]')), searchResults: Boolean(resultView(pane())), listerFocus: Boolean(viewing && focused?.matches('textarea')), textInput: editing, listFocus: !editing && !focused?.closest('.pathbar') && Boolean(focused?.closest('.list')), conflictDialog: Boolean(conflictAction && $('#modal').open), inlineRenameInput: Boolean(focused?.matches('.inline-rename')), fileDialog: Boolean(searching || $('#modal').open || focused?.matches('.inline-rename') || focused?.closest('.operation-error')), transferNameInput: Boolean($('#modal').open && focused?.matches('#value[data-transfer-name]')) };
   }
   function reportFocus() {

@@ -15,8 +15,10 @@ const options = {
   } }]
 };
 async function main() {
+  const workerOptions = { ...options, entryPoints: [path.join(__dirname, 'xray-editor-worker.mjs')], outfile: path.join(__dirname, '../media/xray-editor-worker.js') };
+  const workerPreview = await esbuild.build({ ...workerOptions, write: false, metafile: true });
   const preview = await esbuild.build({ ...options, write: false, metafile: true });
-  const sources = Object.keys(preview.metafile.inputs).filter(file => /\.[cm]?js$/.test(file));
+  const sources = [...new Set([...Object.keys(preview.metafile.inputs), ...Object.keys(workerPreview.metafile.inputs)])].filter(file => /\.[cm]?js$/.test(file));
   const references = (await Promise.all(sources.map(async file => {
     let source = await fs.readFile(file, 'utf8');
     const tree = espree.parse(source, { ecmaVersion: 'latest', sourceType: 'module', comment: true, range: true });
@@ -25,7 +27,7 @@ async function main() {
     if (file.endsWith('/base/common/network.js')) return source.split('\n').filter(line => !/^\s+Schemas\.\w+ =/.test(line)).join('\n');
     return source;
   }))).join('\n');
-  await esbuild.build({ ...options, plugins: [...options.plugins, { name: 'referenced-editor-glyphs', setup(build) {
+  const plugins = [...options.plugins, { name: 'referenced-editor-glyphs', setup(build) {
     build.onLoad({ filter: /base[\\/]common[\\/]network\.js$/ }, async args => ({
       contents: (await fs.readFile(args.path, 'utf8')).split('\n').filter(line => {
         const entry = /^\s+Schemas\.(\w+) = '([^']+)'/.exec(line);
@@ -38,6 +40,8 @@ async function main() {
         return !entry || new RegExp('\\b' + entry[1] + '\\b').test(references) || references.includes(entry[2]);
       }).join('\n'), loader: 'js'
     }));
-  } }] });
+  } }];
+  await esbuild.build({ ...options, plugins });
+  await esbuild.build({ ...workerOptions, plugins });
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });

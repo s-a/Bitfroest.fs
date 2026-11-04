@@ -1,7 +1,7 @@
 (function (root) {
   'use strict';
   root.CommanderXray = { create };
-  function create({ host, t, state, currentPath, files, settings, task, restoreFocus, compact, notify, beforeStart, isArchive }) {
+  function create({ host, t, state, currentPath, files, settings, task, restoreFocus, compact, notify, beforeStart, isArchive, preview }) {
     const container = document.querySelector('#panes'), Progress = root.CommanderProgress;
     let source = null, mode = 'off', timer = null, request = null, loadedId = null, sequence = 0, identity = null, sourceContext = null, editor = null, element = null, previousColumns = '';
     const instance = [...crypto.getRandomValues(new Uint8Array(8))].map(v => v.toString(16).padStart(2, '0')).join('');
@@ -42,7 +42,7 @@
       cancel(); identity = null; sourceContext = null; source = null; mode = 'off';
       element?.remove(); element = null;
       container.querySelectorAll('.has-xray').forEach(section => section.classList.remove('has-xray'));
-      delete container.dataset.xraySource; container.style.gridTemplateColumns = previousColumns;
+      delete container.dataset.xraySource; container.style.gridTemplateColumns = previousColumns; preview?.release('xray');
       mount(); if (focus && oldSource !== null) restoreFocus(oldSource);
     }
     function show(file) {

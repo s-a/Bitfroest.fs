@@ -120,7 +120,15 @@ function createListerProvider(options = {}) {
       onStep('read', 'complete');
       await step('final-check', () => check(session)); cancelled();
       onStep('encoding', 'start');
-      const bytes = Buffer.concat(chunks), sample = bytes.subarray(0, 512);
+      const bytes = Buffer.concat(chunks);
+      const encoding = textEncoding(bytes);
+      onStep('encoding', 'complete');
+      const text = await step('decode', () => decodeBytes(bytes, encoding));
+      cancelled(); return { text, encoding, bytes: completed, identity: session.signature };
+    } finally { session.closed = true; await step('close', () => handle.close()); }
+  }
+  function textEncoding(bytes) {
+      const sample = bytes.subarray(0, 512);
       let encoding = 'utf-8';
       if (bytes[0] === 255 && bytes[1] === 254) encoding = 'utf-16le';
       else if (bytes[0] === 254 && bytes[1] === 255) encoding = 'utf-16be';
@@ -133,10 +141,14 @@ function createListerProvider(options = {}) {
         try { new TextDecoder('utf-8', { fatal: true }).decode(bytes); }
         catch { encoding = '0'; }
       }
-      onStep('encoding', 'complete');
-      const text = await step('decode', () => encoding === '0' ? decoder.text(bytes, encoding) : new TextDecoder(encoding).decode(bytes));
-      cancelled(); return { text, encoding, bytes: completed, identity: session.signature };
-    } finally { session.closed = true; await step('close', () => handle.close()); }
+      return encoding;
+  }
+  async function decodeBytes(bytes, encoding) {
+    return encoding === '0' ? decoder.text(bytes, encoding) : new TextDecoder(encoding).decode(bytes);
+  }
+  async function decodeText(bytes) {
+    const encoding = textEncoding(bytes);
+    return { text: await decodeBytes(bytes, encoding), encoding };
   }
   async function close(id) {
     const session = sessions.get(id);
@@ -244,6 +256,6 @@ function createListerProvider(options = {}) {
     }
     return settings.hex ? parts.join(' ') : (await decoder.text(Buffer.concat(parts), encoding)).replace(/\0/g, ' ');
   }
-  return { open, fullText, view, search, copy, close, path: id => get(id).path, validate: id => check(get(id)), async validateEncoding(encoding) { await decoder.decode(Buffer.from([128]), String(encoding)); }, async dispose() { disposed = true; await Promise.all([...sessions.keys()].map(close)); decoder.dispose(); } };
+  return { open, fullText, decodeText, view, search, copy, close, path: id => get(id).path, validate: id => check(get(id)), async validateEncoding(encoding) { await decoder.decode(Buffer.from([128]), String(encoding)); }, async dispose() { disposed = true; await Promise.all([...sessions.keys()].map(close)); decoder.dispose(); } };
 }
 module.exports = { createListerProvider };
