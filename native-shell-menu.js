@@ -18,8 +18,9 @@ function createShellMenuProvider(options = {}) {
     if (resolved.slice(path.win32.parse(resolved).root.length).includes(':')) throw failure('EINVAL', 'Benannte Datenströme unterstützen kein Systemmenü.');
     return resolved;
   };
-  async function selection(paths) {
+  async function selection(paths, currentDirectory = false) {
     if (!Array.isArray(paths) || !paths.length || paths.length > 256) throw failure('EINVAL', 'Ungültige Dateiauswahl für das Systemmenü.');
+    if (currentDirectory && paths.length !== 1) throw failure('EINVAL', 'Ungültige Dateiauswahl für das Systemmenü.');
     const normalized = paths.map(clean), identities = normalized.map(value => value.toLowerCase());
     const roots = await Promise.all((options.roots || []).map(async root => clean(await fs.realpath(clean(root)))));
     if (!roots.length) throw failure('EINVAL', 'Erlaubte Verzeichnisse für das Systemmenü fehlen.');
@@ -28,8 +29,12 @@ function createShellMenuProvider(options = {}) {
     if (normalized.some(value => path.win32.dirname(value).toLowerCase() !== parent)) throw failure('EINVAL', 'Das Systemmenü benötigt Einträge aus demselben Ordner.');
     for (const value of normalized) {
       const actual = clean(await fs.realpath(value));
-      const allowed = roots.some(root => actual.toLowerCase().startsWith((root.endsWith('\\') ? root : root + '\\').toLowerCase()));
+      const allowed = roots.some(root => currentDirectory && actual.toLowerCase() === root.toLowerCase() || actual.toLowerCase().startsWith((root.endsWith('\\') ? root : root + '\\').toLowerCase()));
       if (!allowed || actual.toLowerCase() !== value.toLowerCase() || (await fs.lstat(value)).isSymbolicLink()) throw failure('EACCESS', 'Die Dateiauswahl liegt außerhalb der erlaubten Verzeichnisse oder enthält Verknüpfungen.');
+    }
+    if (currentDirectory) {
+      if (normalized[0] === path.win32.parse(normalized[0]).root || !(await fs.lstat(normalized[0])).isDirectory()) throw failure('EINVAL', 'Ungültige Dateiauswahl für das Systemmenü.');
+      roots.push(path.win32.dirname(normalized[0]));
     }
     return { paths: normalized, roots };
   }
@@ -42,7 +47,7 @@ function createShellMenuProvider(options = {}) {
     busy = true;
     let session;
     try {
-      const chosen = await selection(paths);
+      const chosen = await selection(paths, settings.currentDirectory === true);
       if (disposed) throw failure('EDISPOSED', 'Der Anbieter für das Systemmenü wurde geschlossen.');
       const request = { ...chosen, mode, ...anchor };
       if (settings.gitDiff === true) request.gitDiff = true;

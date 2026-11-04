@@ -5,6 +5,22 @@ const os = require('node:os');
 const path = require('node:path');
 const { createProvider } = require('../filesystem-provider');
 const slash = value => value.replace(/\\/g, '/');
+
+test('explicit current-folder deletion permits a visible scan boundary while preserving configured roots', async t => {
+  const calls = [], { provider, left, right } = await fixture(t, async target => { calls.push(target); await fs.rm(target, { recursive: true }); });
+  const child = `${left}/child`;
+  const rootView = await provider.load({ left, right, visibleOnly: true, directories: [left, right] });
+  await assert.rejects(provider.remove(rootView, { paths: [left], useTrash: true, currentDirectory: left }));
+  const before = await provider.load({ left: child, right, visibleOnly: true, directories: [child, right], visibleDirectories: [child, right] });
+  await assert.rejects(provider.remove(before, { paths: [child], useTrash: true }));
+  await assert.rejects(provider.remove(before, { paths: [left], useTrash: true, currentDirectory: left }));
+  await assert.rejects(provider.remove(before, { paths: [child], useTrash: true, currentDirectory: right }));
+  assert.deepEqual(calls, []);
+  await provider.remove(before, { paths: [child], useTrash: true, currentDirectory: child });
+  assert.deepEqual(calls, [child]);
+  await assert.rejects(fs.stat(child), { code: 'ENOENT' });
+  assert.equal(await fs.readFile(`${left}/a.txt`, 'utf8'), 'a');
+});
 async function fixture(t, deletePath) {
   const directory = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'bitfroest-delete-')));
   t.after(() => fs.rm(directory, { recursive: true, force: true }));

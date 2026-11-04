@@ -185,10 +185,10 @@
           if (holdWidths) record.api.applyColumnState({ state: record.api.getColumnState().map(({ colId, width }) => ({ colId, width, flex: null })) });
           updateAddress(record, false);
           if (changed) { record.manual.clear(); record.api.setGridOption('columnDefs', groupedDefinitions(record)); }
-          record.api.setGridOption('rowData', [{ id: parentId }, ...rows]);
+          record.api.setGridOption('rowData', [...(options.hasParent(p) ? [{ id: parentId }] : []), ...rows]);
           record.api.refreshCells({ force: true });
           record.api.applyColumnState({ state: p.columns.map(column => ({ colId: column.key, sort: column.key === p.sort ? p.descending ? 'desc' : 'asc' : null })) });
-          if (navigated) { record.api.refreshHeader(); record.api.ensureIndexVisible(0, 'top'); }
+          if (navigated) { record.api.refreshHeader(); if (rows.length || options.hasParent(p)) record.api.ensureIndexVisible(0, 'top'); }
           if (focused?.isConnected) {
             focused.focus({ preventScroll: true });
             if (selection) focused.setSelectionRange(...selection);
@@ -237,7 +237,7 @@
         },
         styleNonce: nonce,
         columnDefs: groupedDefinitions(record),
-        rowData: [{ id: parentId }, ...rows],
+        rowData: [...(options.hasParent(p) ? [{ id: parentId }] : []), ...rows],
         getRowId: params => String(params.data.id),
         rowHeight: options.rowHeight(),
         headerHeight: options.rowHeight(),

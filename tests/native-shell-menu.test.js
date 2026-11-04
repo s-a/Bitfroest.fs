@@ -5,6 +5,18 @@ const path = require('node:path');
 const os = require('node:os');
 const { createShellMenuProvider } = require('../native-shell-menu');
 
+test('explicit current-directory menus accept the configured folder itself without enabling sibling targets', { skip: process.platform !== 'win32' }, async t => {
+  const files = await fixture(t); let request;
+  const provider = createShellMenuProvider({ roots: [files.root], invokeNative: async input => { request = input; return { ok: true, displayed: true, invoked: false, cancelled: true }; } });
+  t.after(() => provider.dispose());
+  await assert.rejects(provider.show([files.root]));
+  await provider.show([files.root], { currentDirectory: true });
+  assert.deepEqual(request.paths, [path.win32.resolve(files.root)]);
+  assert.ok(request.roots.includes(path.win32.dirname(path.win32.resolve(files.root))));
+  await assert.rejects(provider.show([files.other], { currentDirectory: true }));
+  await assert.rejects(provider.show([files.root, files.a], { currentDirectory: true }));
+});
+
 test('Git Diff is an explicitly enabled file action returned separately from shell verbs', { skip: process.platform !== 'win32' }, async t => {
   const files = await fixture(t); let request;
   const provider = createShellMenuProvider({ roots: [files.root], invokeNative: async input => { request = input; return { ok: true, displayed: true, invoked: true, cancelled: false, action: 'git-diff' }; } });

@@ -330,6 +330,7 @@ function activate(context) {
   async function writeClipboardText(text) { await vscode.env.clipboard.writeText(text); notifyClipboardChanged(); }
   const clipboardIdentity = value => /^[a-z]:\//i.test(value) ? value.toLowerCase() : value;
   function clipboardSourceExists(value) {
+    if (typeof value === 'string' && provider.contains(value) && savedState?.panes?.some(p => clipboardIdentity(p.tabs[p.tab]) === clipboardIdentity(value)) && Object.hasOwn(filesystemState?.folders || {}, value) && !filesystemState.unloadedFolders?.includes(value) && !value.startsWith('zip:')) return true;
     return Object.entries(filesystemState?.folders || {}).some(([directory, rows]) => rows.some(row => clipboardIdentity(`${directory}/${row.name}`) === clipboardIdentity(value)));
   }
   let filesystemState;
@@ -1340,7 +1341,9 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
           }
           if (!filesystemState?.realFilesystem || message.snapshotId !== filesystemState.snapshotId || typeof directory !== 'string' || directory.length > 4096 || !provider.contains(directory) || !Object.hasOwn(filesystemState.folders, directory) || !savedState?.panes?.some(pane => pane.tabs[pane.tab] === directory) || !Array.isArray(message.ids) || !message.ids.length || message.ids.length > 256 || message.ids.some(id => typeof id !== 'string' || id.length > 1024) || new Set(message.ids).size !== message.ids.length) throw new Error(t('Ungültige Dateiauswahl für das Systemmenü.'));
           const rows = new Map(filesystemState.folders[directory].map(row => [row.id, row]));
+          const currentDirectory = message.ids.length === 1 && message.ids[0] === '\u0000parent' && !/^(?:[a-z]:\/?|\/|\/\/[^/]+\/[^/]+\/?)$/i.test(directory.replaceAll('\\', '/'));
           const paths = Object.freeze(message.ids.map(id => {
+            if (currentDirectory) return directory;
             const row = rows.get(id), target = row?.fsSource;
             if (!row || typeof target !== 'string' || !provider.contains(target) || clipboardIdentity(target) !== clipboardIdentity(`${directory.replace(/\/$/, '')}/${row.name}`)) throw new Error(t('Ungültige Dateiauswahl für das Systemmenü.'));
             return target;
@@ -1353,19 +1356,19 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
             attempted = true;
             const query = gitDirectoryQueries.get(directory);
             const gitHistory = paths.length === 1 && query && currentGitDirectory(query, directory) && query.repositories?.has(directory) === true && gitSettings().enabled;
-            const gitDiff = paths.length === 1 && rows.get(message.ids[0])?.type !== 'folder' && query && currentGitDirectory(query, directory) && query.repositories?.has(directory) === true && gitSettings().enabled;
-            const result = message.inspectLocks === true ? { action: 'inspect-locks' } : await shellMenu.show(paths, { keyboard, ownerTitle: messagePanel.title, lockInspectionLabel: t('Ordnersperren untersuchen'), gitDiff: Boolean(gitDiff), gitHistory: Boolean(gitHistory), gitFileActions: Boolean(gitDiff) });
+            const gitDiff = !currentDirectory && paths.length === 1 && rows.get(message.ids[0])?.type !== 'folder' && query && currentGitDirectory(query, directory) && query.repositories?.has(directory) === true && gitSettings().enabled;
+            const result = message.inspectLocks === true ? { action: 'inspect-locks' } : await shellMenu.show(paths, { keyboard, ...(currentDirectory ? { currentDirectory: true } : {}), ownerTitle: messagePanel.title, lockInspectionLabel: t('Ordnersperren untersuchen'), gitDiff: Boolean(gitDiff), gitHistory: Boolean(gitHistory), gitFileActions: Boolean(gitDiff) });
             if (panel !== messagePanel) return;
             if (['git-history', 'git-diff', 'git-untrack', 'git-ignore'].includes(result.action)) {
               try {
                 if (!(result.action === 'git-history' ? gitHistory : gitDiff)) throw new Error(t('Ungültige Git-Dateiauswahl.'));
-                const outcome = await openGitDiff({ ...message, type: result.action });
+                const outcome = await openGitDiff({ ...message, type: currentDirectory && result.action === 'git-history' ? 'git-history-directory' : result.action });
                 await reply({ ok: true, action: result.action, invoked: false, cancelled: false, refreshed: false, ...outcome });
               } catch (error) { await reply({ ok: false, action: result.action, error: t(error.message), gitChanged: error.untracked === true, refreshed: false }); }
               return;
             }
             if (result.action === 'inspect-locks') {
-              if (paths.length !== 1 || rows.get(message.ids[0])?.type !== 'folder') throw new Error(t('Die Sperrenuntersuchung benötigt genau einen Ordner.'));
+              if (paths.length !== 1 || !currentDirectory && rows.get(message.ids[0])?.type !== 'folder') throw new Error(t('Die Sperrenuntersuchung benötigt genau einen Ordner.'));
               lockInspector.open(paths[0]);
               await reply({ ok: true, invoked: false, cancelled: false, refreshed: false }); return;
             }
@@ -1670,7 +1673,7 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
             if (!filesystemState) throw new Error(t('Kein Dateisystem geladen.'));
             let fresh;
             if (message.type === 'filesystem-apply') fresh = await provider.apply(filesystemState, message.state, { verifyAfterCopy: typeof message.transfer?.verifyAfterCopy === 'boolean' ? message.transfer.verifyAfterCopy : fileSettings().verifyAfterCopy, ...(job ? { signal: job.controller.signal, transfer: message.transfer, onProgress } : {}) });
-            else if (message.type === 'filesystem-delete') fresh = await provider.remove(filesystemState, { paths: message.paths, useTrash: message.useTrash, ...(Array.isArray(message.confirmedNetworkPaths) ? { confirmedNetworkPaths: message.confirmedNetworkPaths } : {}) }, { ...(job ? { signal: job.controller.signal } : {}), onProgress: progress => { if (panel === current) current.webview.postMessage({ type: 'filesystem-task-progress', operationId, taskRequestId: message.taskRequestId, progress: Progress.read(progress) }); } });
+            else if (message.type === 'filesystem-delete') fresh = await provider.remove(filesystemState, { paths: message.paths, useTrash: message.useTrash, ...(typeof message.currentDirectory === 'string' ? { currentDirectory: message.currentDirectory } : {}), ...(Array.isArray(message.confirmedNetworkPaths) ? { confirmedNetworkPaths: message.confirmedNetworkPaths } : {}) }, { ...(job ? { signal: job.controller.signal } : {}), onProgress: progress => { if (panel === current) current.webview.postMessage({ type: 'filesystem-task-progress', operationId, taskRequestId: message.taskRequestId, progress: Progress.read(progress) }); } });
             else if (message.type === 'filesystem-navigate' || message.type === 'filesystem-prepare') {
               const directories = message.type === 'filesystem-navigate' ? [message.path] : message.paths;
               if (!Array.isArray(directories) || directories.length > 128 || directories.some(target => typeof target !== 'string' || target.length > 4096 || !provider.canNavigate(target))) throw new Error(t('Ungültiger Datei- oder Ordnername.'));

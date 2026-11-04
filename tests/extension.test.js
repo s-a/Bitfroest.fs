@@ -11,6 +11,52 @@ const manifest = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'ut
 const tick = () => new Promise(resolve => setImmediate(resolve));
 const Progress = require('../media/commander-progress');
 
+test('symbolic folder context reaches native menus and clipboard as the current directory', async t => {
+  const initial = clipboardFixture();
+  const app = harness(t, { filesystemLoad: async () => initial });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  const view = require('./support/webview.cjs').createApp(t, initial, { html: panel.webview.html, platform: 'win32', fileSettings: { useSystemContextMenu: true } });
+  const row = view.document.querySelector('.pane.active [data-parent]');
+  row.dispatchEvent(new view.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }));
+  const request = view.messages.find(message => message.type === 'shell-context-menu'); assert.ok(request);
+  await panel.receive({ ...request, paths: ['C:/private/unrelated'] });
+  assert.deepEqual(Array.from(app.shellCalls.at(-1)?.paths || []), ['C:/tmp']);
+  assert.equal(app.shellCalls.at(-1)?.settings.currentDirectory, true);
+  await panel.receive({ ...request, requestId: 'shell-menu-2', ids: ['\u0000parent', 'a'] });
+  assert.equal(app.shellCalls.length, 1);
+  view.action('clipboard-copy');
+  const copy = view.messages.findLast(message => message.type === 'clipboard-write'); assert.ok(copy);
+  await panel.receive(copy);
+  assert.ok(panel.messages.findLast(message => message.type === 'clipboard-result')?.ok);
+  panel.dispose();
+});
+
+test('symbolic current-directory lock inspection validates its snapshot and opens the current path', async t => {
+  const opened = [], app = harness(t, { filesystemLoad: async () => clipboardFixture(), lockInspectorOpen: folder => opened.push(folder) });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  const request = { type: 'shell-context-menu', requestId: 'shell-menu-1', directory: 'C:/tmp', ids: ['\u0000parent'], snapshotId: 'clipboard', inspectLocks: true };
+  await panel.receive(request);
+  assert.deepEqual(opened, ['C:/tmp']);
+  assert.equal(panel.messages.findLast(message => message.type === 'shell-context-menu-result')?.ok, true);
+  await panel.receive({ ...request, requestId: 'shell-menu-2', snapshotId: 'old' });
+  await panel.receive({ ...request, requestId: 'shell-menu-3', directory: 'C:/not-visible' });
+  assert.deepEqual(opened, ['C:/tmp']);
+  panel.dispose();
+});
+
+test('native current-folder Git History uses the directory history path', async t => {
+  const app = harness(t, { filesystemLoad: async () => clipboardFixture(),
+    gitInspect: async directories => Object.fromEntries(directories.map(directory => [directory, { ok: true, repository: true, statuses: {} }])),
+    gitExtension: { enabled: true, getAPI: () => ({ getRepository: () => ({ rootUri: { fsPath: 'C:/tmp' }, state: {} }) }) },
+    shellMenuShow: async (_paths, settings) => { assert.equal(settings.gitHistory, true); assert.equal(settings.gitDiff, false); return { ok: true, displayed: true, invoked: true, cancelled: false, action: 'git-history' }; } });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0]; await panel.receive({ type: 'app-ready' });
+  await panel.receive({ type: 'git-status', requestId: 'git-1', snapshotId: 'clipboard', directories: ['C:/tmp'] });
+  await panel.receive({ type: 'shell-context-menu', requestId: 'shell-menu-1', directory: 'C:/tmp', ids: ['\u0000parent'], snapshotId: 'clipboard' });
+  assert.ok(app.panels.find(p => p.viewType === 'bitfroestGitHistory'));
+  assert.equal(panel.messages.at(-1).ok, true);
+  assert.equal(panel.messages.at(-1).refreshed, false);
+});
+
 test('generated host HTML keeps the double-clicked folder visible while loading and preserves opposite focus', async t => {
   const initial = clipboardFixture(), reading = deferred(), started = deferred();
   t.after(() => reading.resolve());

@@ -95,8 +95,32 @@ test('symbol selection remains local to its pane and survives tab restoration', 
   assert.equal(copies(app).at(-1)?.text.replaceAll('\\', '/'), 'C:/other');
 });
 
-test('root paths and text-input focus retain their exact path and shortcut boundary', t => {
-  for (const directory of ['C:/', '/']) {
+test('filesystem roots omit the symbolic entry and keep real files keyboard-accessible', t => {
+  for (const directory of ['C:/', '/', '//server/share']) for (const results of [false, true]) {
+    const saved = fixture(directory);
+    if (results) {
+      saved.folders[directory][0].fsSource = `${directory.replace(/\/$/, '')}/note.txt`;
+      saved.panes[0].tabStates = [{ path: directory, searchResult: { id: 'root-search', source: directory, paths: [saved.folders[directory][0].fsSource] } }];
+    }
+    const app = createApp(t, saved);
+    assert.equal(Boolean(parentRow(app)), false);
+    app.document.querySelector('.pane.active .list').focus(); app.key('Home');
+    assert.ok(app.row('note.txt').classList.contains('focused'));
+  }
+});
+
+test('restoring a root clears obsolete symbol selections from older views', t => {
+  const saved = fixture('C:/', true);
+  saved.panes[0].selected = ['\u0000parent']; saved.panes[0].cursor = '\u0000parent';
+  const app = createApp(t, saved);
+  assert.deepEqual(app.state().panes[0].selected, []);
+  assert.equal(app.state().panes[0].cursor, null);
+  app.action('copy-names');
+  assert.equal(copies(app).length, 0);
+});
+
+test('text-input focus preserves the shortcut boundary after symbol selection', t => {
+  for (const directory of ['C:/base/current', '/current']) {
     const app = createApp(t, fixture(directory, true));
     app.click(parentRow(app)); app.action('copy-full-names-slash');
     assert.equal(copies(app).at(-1)?.text.replaceAll('\\', '/'), directory);
@@ -104,6 +128,109 @@ test('root paths and text-input focus retain their exact path and shortcut bound
     app.document.querySelector('.pane.active .path-input').focus();
     app.key('y', { ctrlKey: true }); app.key('Y', { ctrlKey: true, shiftKey: true });
     assert.equal(copies(app).length, count);
+  }
+});
+
+const openContext = (app, target) => target.dispatchEvent(new app.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }));
+const menuAction = (app, action) => app.document.querySelector(`[data-context-menu] [data-context-action="${action}"]`);
+
+test('current-directory context replaces file marks and copies or cuts the current folder', t => {
+  for (const mode of ['copy', 'cut']) {
+    const saved = fixture(); saved.realFilesystem = true;
+    const app = createApp(t, saved, { platform: 'win32' });
+    app.click(app.row('note.txt')); openContext(app, parentRow(app));
+    assert.equal(parentRow(app).getAttribute('aria-selected'), 'true');
+    assert.equal(JSON.parse(parentRow(app).dataset.vscodeContext).webviewSection, 'folder');
+    assert.ok(menuAction(app, 'inspect-folder-locks'));
+    app.click(menuAction(app, `clipboard-${mode}`));
+    assert.deepEqual(Array.from(app.messages.findLast(message => message.type === 'clipboard-write')?.paths || []), ['C:/base/current']);
+  }
+});
+
+test('native current-directory menu and lock inspection receive the symbolic folder identity', t => {
+  for (const system of [false, true]) {
+    const saved = fixture(); saved.realFilesystem = true;
+    const app = createApp(t, saved, { platform: 'win32', fileSettings: { useSystemContextMenu: system } });
+    openContext(app, parentRow(app));
+    if (!system) app.click(menuAction(app, 'inspect-folder-locks'));
+    const request = app.messages.findLast(message => message.type === 'shell-context-menu');
+    assert.ok(request);
+    assert.equal(request.directory, 'C:/base/current');
+    assert.deepEqual(Array.from(request.ids), [app.window.CommanderGrid.parentId]);
+    assert.equal(Boolean(request.inspectLocks), !system);
+  }
+});
+
+test('keyboard context on the symbol opens the folder menu and stale actions cannot copy', t => {
+  const saved = fixture(); saved.realFilesystem = true;
+  const app = createApp(t, saved, { platform: 'win32' });
+  app.click(parentRow(app)); app.key('F10', { shiftKey: true });
+  const copy = menuAction(app, 'clipboard-copy'); assert.ok(copy);
+  assert.ok(menuAction(app, 'inspect-folder-locks'));
+  app.action('new-tab'); app.click(copy);
+  assert.equal(app.messages.some(message => message.type === 'clipboard-write'), false);
+});
+
+test('the symbol context in a search-results tab refers to its current folder', t => {
+  const saved = fixture(); saved.realFilesystem = true;
+  saved.folders['C:/base/current'][0].fsSource = 'C:/base/current/note.txt';
+  saved.panes[0].tabStates = [{ path: 'C:/base/current', searchResult: { id: 'search', source: 'C:/base/current', paths: ['C:/base/current/note.txt'] } }];
+  const app = createApp(t, saved, { platform: 'win32' });
+  openContext(app, parentRow(app));
+  assert.equal(JSON.parse(parentRow(app).dataset.vscodeContext).webviewSection, 'folder');
+  app.click(menuAction(app, 'clipboard-copy'));
+  assert.deepEqual(Array.from(app.messages.findLast(message => message.type === 'clipboard-write')?.paths || []), ['C:/base/current']);
+});
+
+test('a search-result symbol retains the available Git history action for its current folder', t => {
+  const saved = fixture(); saved.realFilesystem = true; saved.panes[1].tabs = ['C:/base/current'];
+  saved.folders['C:/base/current'][0].fsSource = 'C:/base/current/note.txt';
+  saved.panes[0].tabStates = [{ path: 'C:/base/current', searchResult: { id: 'search', source: 'C:/base/current', paths: ['C:/base/current/note.txt'] } }];
+  const app = createApp(t, saved, { platform: 'win32' });
+  const query = app.messages.find(message => message.type === 'git-status'); assert.ok(query);
+  app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'git-status-result', requestId: query.requestId, snapshotId: query.snapshotId, directories: { 'C:/base/current': { ok: true, repository: true, statuses: {} } } } }));
+  openContext(app, parentRow(app));
+  const group = menuAction(app, 'git'); assert.ok(group);
+  group.dispatchEvent(new app.window.MouseEvent('mouseenter'));
+  app.click(menuAction(app, 'git-history'));
+  assert.equal(app.messages.findLast(message => message.type === 'git-history-directory')?.directory, 'C:/base/current');
+});
+
+test('navigation into an empty drive root removes the symbol and navigation back restores it', t => {
+  const saved = fixture(); saved.folders['C:/'] = [];
+  const warnings = [];
+  const app = createApp(t, saved, { beforeApp: ({ window }) => { window.console.warn = message => warnings.push(String(message)); } });
+  for (const [directory, expected] of [['C:/', false], ['C:/base/current', true]]) {
+    app.action('path'); const input = app.document.querySelector('.pane.active .path-input');
+    input.value = directory; app.key('Enter', {}, input);
+    assert.equal(Boolean(parentRow(app)), expected);
+    app.document.querySelector('.pane.active .list').focus(); app.key('Home');
+  }
+  assert.equal(warnings.some(message => message.includes('#88')), false);
+});
+
+test('the current network directory retains the permanent-delete warning and choice', t => {
+  const saved = fixture(); saved.realFilesystem = true; saved.networkDirectories = ['C:/base/current'];
+  const app = createApp(t, saved, { platform: 'win32' });
+  openContext(app, parentRow(app)); app.click(menuAction(app, 'delete'));
+  assert.match(app.document.querySelector('#modal-body').textContent, /Netzwerkpfade/);
+  app.document.querySelector('#modal-form').dispatchEvent(new app.window.Event('submit', { bubbles: true, cancelable: true }));
+  assert.equal(app.messages.findLast(message => message.type === 'filesystem-delete')?.useTrash, false);
+});
+
+test('current-folder context deletion confirms the folder itself and rejects tab changes', t => {
+  for (const stale of [false, true]) {
+    const saved = fixture(); saved.realFilesystem = true;
+    const app = createApp(t, saved, { platform: 'win32' });
+    openContext(app, parentRow(app)); const remove = menuAction(app, 'delete'); assert.ok(remove);
+    if (stale) app.action('new-tab');
+    app.click(remove);
+    if (stale) { assert.equal(app.document.querySelector('#modal').open, false); continue; }
+    assert.equal(app.document.querySelector('#modal').open, true);
+    assert.match(app.document.querySelector('#modal-body').textContent, /current/);
+    assert.doesNotMatch(app.document.querySelector('#modal-body').textContent, /note\.txt/);
+    app.document.querySelector('#modal-form').dispatchEvent(new app.window.Event('submit', { bubbles: true, cancelable: true }));
+    assert.deepEqual(Array.from(app.messages.findLast(message => message.type === 'filesystem-delete')?.paths || []), ['C:/base/current']);
   }
 });
 

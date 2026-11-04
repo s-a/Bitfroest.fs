@@ -20,7 +20,7 @@
     const selected = p.selected.length ? p.selected : p.cursor ? [p.cursor] : [];
     const result = p.tabStates?.[p.tab]?.searchResult;
     const entries = result ? Object.values(state.folders).flat().filter(row => result.paths.includes(row.fsSource)) : state.folders[directory] || [];
-    const paths = entries.filter(file => selected.includes(file.id)).map(file => result ? file.fsSource : `${directory}/${file.name}`);
+    const paths = [...(!state.archiveLocations?.[directory] && selected.includes('\u0000parent') ? [directory] : []), ...entries.filter(file => selected.includes(file.id)).map(file => result ? file.fsSource : `${directory}/${file.name}`)];
     return paths.length ? { paths: validate({ paths, mode }, platform), mode } : null;
   }
   function inspectPaste(state, selection, targetPath, platform = 'win32') {

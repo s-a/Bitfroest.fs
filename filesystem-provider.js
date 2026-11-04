@@ -958,7 +958,9 @@ function createProvider(options = {}) {
     const selected = [...new Set(request.paths.map(value => identity(allowed(value))))].map(key => {
       const published = publishedEntries.get(key);
       const item = baseline.entries.get(key) || (published?.snapshot === baseline ? published.entry : undefined);
-      if (!item || item.root) throw new Error('Root-Ordner oder unbekannte Einträge dürfen nicht entfernt werden.');
+      const currentDirectory = typeof request.currentDirectory === 'string' && identity(allowed(request.currentDirectory)) === key && request.paths.length === 1 && activeDirectories(before).some(directory => identity(directory) === key);
+      const protectedRoot = roots.some(root => identity(root) === key) || identity(slash(path.parse(item?.path || '').root)) === key;
+      if (!item || item.root && (!currentDirectory || protectedRoot) || request.currentDirectory !== undefined && !currentDirectory) throw new Error('Root-Ordner oder unbekannte Einträge dürfen nicht entfernt werden.');
       return item;
     });
     const targets = selected.filter(item => !selected.some(other => other !== item && other.type === 'folder' && below(item.path, other.path)));

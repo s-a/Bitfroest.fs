@@ -1148,7 +1148,10 @@
     else { try { sessionStorage.setItem('bitfroest-demo', JSON.stringify(state)); } catch { /* Storage may be unavailable. */ } }
   }
   const parentId = window.CommanderGrid.parentId;
-  const navigationRows = p => [{ id: parentId }, ...visible(p)];
+  const hasParent = p => Boolean(state.archiveLocations?.[currentPath(p)] || parent(currentPath(p)) !== currentPath(p));
+  const currentFolder = p => ({ id: parentId, name: base(currentPath(p)), type: 'folder', fsSource: currentPath(p) });
+  const selectionFile = (p, id) => id === parentId && hasParent(p) && !state.archiveLocations?.[currentPath(p)] ? currentFolder(p) : files(p).find(file => file.id === id);
+  const navigationRows = p => [...(hasParent(p) ? [{ id: parentId }] : []), ...visible(p)];
   const selectionRanges = new WeakMap();
   function rememberSelectionAnchor(p) {
     selectionRanges.set(p, { tab: p.tabStates?.[p.tab]?.id, anchor: p.cursor, base: [...p.selected] });
@@ -1803,7 +1806,7 @@
     controlHeight: () => window.CommanderIcons.layout().control,
     ready: p => !directoryListings.has(currentPath(p)) && !state.unloadedFolders?.includes(currentPath(p)),
     address: p => pathbarMarkup(p, state.panes.indexOf(p)),
-    path: currentPath, view: p => p.tabStates[p.tab].id,
+    path: currentPath, hasParent, view: p => p.tabStates[p.tab].id,
     decorate: () => { refreshSelection(); refreshClipboardMarkers(); refreshFileColors(); },
     spaceMarks,
     sorted: (p, key, descending) => { p.sort = key; p.descending = descending; persist(); },
@@ -1814,6 +1817,7 @@
   }
   function renderPane(p, index) {
     tabs.ensure(p);
+    if (!hasParent(p)) { p.selected = p.selected.filter(id => id !== parentId); if (p.cursor === parentId) p.cursor = null; }
     prepareColumns(p);
     const marked = selectedFor(p);
     const empty = !p.columns.some(column => column.visible !== false) ? t('Keine sichtbaren Spalten') : !(p.searchFilter && p.filter ? search.matches(files(p), p.filter) : files(p)).length ? t('Keine Einträge') : '';
@@ -1855,11 +1859,11 @@
       section.querySelector('.pane-label span:last-child').innerHTML = active ? ui(['<i></i> AKTIV']) : t('GEGENSEITE');
       if (lister.has(index)) return;
       const workbenchContext = fileSettings.useSystemContextMenu !== true || ['linux', 'darwin'].includes(document.body.dataset.platform);
-      const entriesById = workbenchContext ? new Map(files(p).map(file => [file.id, file])) : null;
+      const entriesById = workbenchContext ? new Map([...(hasParent(p) ? [currentFolder(p)] : []), ...files(p)].map(file => [file.id, file])) : null;
       const effective = p.selected.length ? p.selected : p.cursor ? [p.cursor] : [];
-      const folderContext = workbenchContext && state.realFilesystem && !resultView(p) && !state.archiveLocations?.[currentPath(p)] && effective.length === 1 && entriesById.get(effective[0])?.type === 'folder';
+      const folderContext = workbenchContext && state.realFilesystem && (!resultView(p) || effective[0] === parentId) && !state.archiveLocations?.[currentPath(p)] && effective.length === 1 && entriesById.get(effective[0])?.type === 'folder';
       const frozenContext = { directory: currentPath(p), ids: effective, snapshotId: state.snapshotId };
-      const gitHistory = Boolean(workbenchContext && state.realFilesystem && !resultView(p) && !state.archiveLocations?.[currentPath(p)] && effective.length === 1 && entriesById.get(effective[0]) && gitInfo(currentPath(p))?.ok && gitInfo(currentPath(p))?.repository);
+      const gitHistory = Boolean(workbenchContext && state.realFilesystem && (!resultView(p) || effective[0] === parentId) && !state.archiveLocations?.[currentPath(p)] && effective.length === 1 && entriesById.get(effective[0]) && gitInfo(currentPath(p))?.ok && gitInfo(currentPath(p))?.repository);
       const gitFile = Boolean(workbenchContext && state.realFilesystem && !resultView(p) && !state.archiveLocations?.[currentPath(p)] && effective.length === 1 && entriesById.get(effective[0]) && entriesById.get(effective[0]).type !== 'folder' && gitInfo(currentPath(p))?.ok && gitInfo(currentPath(p))?.repository);
       const context = workbenchContext ? JSON.stringify({ webviewSection: folderContext ? 'folder' : 'files', preventDefaultContextMenuItems: true, fileMenu: true, gitFile, gitHistory, ...frozenContext }) : null;
       const rowContext = workbenchContext ? JSON.stringify({ webviewSection: 'files', preventDefaultContextMenuItems: true, fileMenu: true, gitFile: false, gitHistory: false, ...frozenContext }) : null;
@@ -2023,6 +2027,10 @@
     return { directory: selection.directory, ids: [...selection.ids], snapshotId: selection.snapshotId, path: file.fsSource || join(selection.directory, file.name) };
   }
   function requestGitDiff(selection, action = 'git-diff') {
+    if (action === 'git-history' && selection?.ids?.length === 1 && selection.ids[0] === parentId) {
+      if (selection.snapshotId !== state.snapshotId || !state.panes.some(p => currentPath(p) === selection.directory && selectionFile(p, parentId))) return;
+      hostAction('git-history-directory', { directory: selection.directory, snapshotId: selection.snapshotId }); return;
+    }
     const invalid = action === 'git-history' ? 'Ungültige Auswahl für Git History.' : 'Ungültige Dateiauswahl für Git Diff.';
     const matches = gitMenuSelection && selection?.directory === gitMenuSelection.directory && selection.snapshotId === gitMenuSelection.snapshotId && selection.ids?.length === 1 && selection.ids[0] === gitMenuSelection.ids[0];
     const captured = matches ? gitMenuSelection : captureGitDiff(selection, action);
@@ -2879,9 +2887,10 @@
     input.setSelectionRange(start, start);
   }
   function validDraggedFiles(source) {
-    if (source?.kind !== 'files' || currentPath(state.panes[source.side]) !== source.sourcePath || !source.items.length) return false;
+    if (source?.kind !== 'files' || currentPath(state.panes[source.side]) !== source.sourcePath || !source.items.length && !source.currentDirectory) return false;
     const p = state.panes[source.side];
     if (source.context && source.context.tabId !== p.tabStates[p.tab].id) return false;
+    if (source.currentDirectory) return source.snapshotId === state.snapshotId && currentPath(p) === source.sourcePath && Boolean(selectionFile(p, parentId));
     const byId = new Map((source.context ? files(p) : state.folders[source.sourcePath] || []).map(file => [file.id, file]));
     return source.items.every(item => JSON.stringify(byId.get(item.id)) === item.signature);
   }
@@ -2894,7 +2903,7 @@
     if ((filesystemPending && !refreshingFilesystem && !(operationQueue?.active && (command?.supportsBackgroundOperation.enabled || ['parent', 'up', 'open'].includes(kind)))) || transferPending) return;
     if (frozen && !validDraggedFiles(frozen)) return toast(t('Die gezogene Auswahl wurde geändert. Bitte erneut ziehen.'));
     if (state.realFilesystem && kind === 'reset') return toast(t('Diese Aktion ist für das reale Dateisystem noch nicht verfügbar.'));
-    const p = frozen ? state.panes[frozen.side] : pane(), source = currentPath(p), marked = selected(), picked = frozen ? files(p).filter(file => frozen.ids.includes(file.id)) : marked.length ? marked : files(p).filter(file => file.id === p.cursor);
+    const p = frozen ? state.panes[frozen.side] : pane(), source = currentPath(p), marked = selected(), picked = frozen?.currentDirectory ? [currentFolder(p)] : frozen ? files(p).filter(file => frozen.ids.includes(file.id)) : marked.length ? marked : files(p).filter(file => file.id === p.cursor);
     if (['copy', 'copy-same', 'move', 'delete', 'delete-alternate', 'delete-permanently', 'rename', 'pack', 'pack-move', 'unpack', 'mkdir', 'mkdir-other', 'new-file'].includes(kind)) rememberSelection(p);
     if (state.realFilesystem && ['pack', 'pack-move'].includes(kind)) return zipPack(picked, source, currentPath(state.panes[1 - state.active]), kind === 'pack-move');
     if (state.realFilesystem && kind === 'test-archives' && !picked.length && !state.archiveLocations?.[source]) return toast(t('Zuerst eine Datei oder einen Ordner auswählen.'));
@@ -2955,9 +2964,9 @@
     if (picked.some(row => row.archive) && !['view', 'edit'].includes(kind)) return toast(t('Dateioperationen innerhalb von Archiven sind nicht verfügbar. F3 zeigt den Inhalt schreibgeschützt an.'));
     if (kind === 'view' || kind === 'edit') return preview(picked[0], kind === 'edit');
     if (['delete', 'delete-alternate', 'delete-permanently'].includes(kind)) {
-      const selectedPaths = picked.map(file => resultView(p) ? file.fsSource : join(source, file.name));
+      const selectedPaths = picked.map(file => frozen?.currentDirectory || resultView(p) ? file.fsSource : join(source, file.name));
       const pathKey = value => paths.isWindowsPath(value) ? value.replaceAll('\\', '/').toLowerCase() : value;
-      const networkPaths = selectedPaths.filter(target => (state.networkDirectories || []).some(directory => pathKey(target).startsWith(pathKey(directory).replace(/\/$/, '') + '/')));
+      const networkPaths = selectedPaths.filter(target => (state.networkDirectories || []).some(directory => pathKey(target) === pathKey(directory).replace(/\/$/, '') || pathKey(target).startsWith(pathKey(directory).replace(/\/$/, '') + '/')));
       const useTrash = kind === 'delete' && networkPaths.length < picked.length;
       const mixed = useTrash && networkPaths.length > 0;
       const warningText = networkPaths.length ? t('Netzwerkpfade werden endgültig gelöscht und nicht in den Papierkorb verschoben.') : t('Die ausgewählten Einträge werden nicht in den Papierkorb verschoben, sondern endgültig gelöscht.');
@@ -2968,7 +2977,7 @@
           const paths = selectedPaths;
           $('#modal').close();
           transferJob = { id: `delete-${Date.now()}-${++transferSequence}`, phase: 'deleting', hostActive: true, context: { mode: 'delete', sources: paths, target: source } };
-          transferProgress(); requestFilesystem({ type: 'filesystem-delete', operationId: transferJob.id, paths, useTrash, ...(mixed ? { confirmedNetworkPaths: networkPaths } : {}) });
+          transferProgress(); requestFilesystem({ type: 'filesystem-delete', operationId: transferJob.id, paths, useTrash, ...(frozen?.currentDirectory ? { currentDirectory: source } : {}), ...(mixed ? { confirmedNetworkPaths: networkPaths } : {}) });
           return false;
         }
         picked.forEach(file => removeTree(join(source, file.name), file.type === 'archive'));
@@ -3829,7 +3838,8 @@
     }
     if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key) && event.target.closest('.list')) {
       event.preventDefault(); const p = pane(), list = navigationRows(p);
-      const old = p.cursor === null ? 0 : list.findIndex(file => file.id === p.cursor);
+      if (!list.length) return;
+      const old = p.cursor === null ? hasParent(p) ? 0 : -1 : list.findIndex(file => file.id === p.cursor);
       const index = event.key === 'Home' ? 0 : event.key === 'End' ? list.length - 1 : Math.max(0, Math.min(list.length - 1, old + (event.key === 'ArrowDown' ? 1 : -1)));
       if (event.shiftKey) extendSelection(p, list[index].id, event.ctrlKey || event.metaKey);
       p.cursor = list[index].id;
@@ -4179,7 +4189,7 @@
       const contextSelection = event.data.contextSelection;
       if (contextSelection && ['clipboard-copy', 'clipboard-cut', 'clipboard-paste'].includes(event.data.action)) {
         const side = state.panes.findIndex(p => currentPath(p) === contextSelection.directory);
-        if (contextSelection.snapshotId !== state.snapshotId || side < 0 || !Array.isArray(contextSelection.ids) || contextSelection.ids.some(id => !files(state.panes[side]).some(file => file.id === id))) return;
+        if (contextSelection.snapshotId !== state.snapshotId || side < 0 || !Array.isArray(contextSelection.ids) || contextSelection.ids.some(id => !selectionFile(state.panes[side], id))) return;
         state.active = side; closeContextMenu();
         document.querySelectorAll('[data-pane]')[side]?.querySelector('.list')?.focus({ preventScroll: true });
       }
@@ -4206,12 +4216,12 @@
     const definitions = kind === 'tabs' ? [['copy-path', 'Pfad kopieren', []], ['close-tab', 'Ordner-Tab schließen', ['ctrl+w']]]
       : kind === 'columns' ? [['configure-columns', 'Spalten konfigurieren', []]]
         : kind === 'history' ? [] : [...(selection.ids.length ? [['clipboard-copy', 'Kopieren', ['ctrl+c']], ['clipboard-cut', 'Ausschneiden', ['ctrl+x']], ['delete', 'Löschen', ['delete']]] : []), ['clipboard-paste', 'Einfügen', ['ctrl+v']]];
-    const deleteSelection = kind === 'files' && selection.ids.length ? { kind: 'files', side, sourcePath: directory, ids: [...selection.ids],
+    const deleteSelection = kind === 'files' && selection.ids.length ? { kind: 'files', side, sourcePath: directory, ids: [...selection.ids], snapshotId, currentDirectory: selection.ids.length === 1 && selection.ids[0] === parentId,
       context: { tabId },
       items: files(p).filter(file => selection.ids.includes(file.id)).map(file => ({ id: file.id, signature: JSON.stringify(file) })) } : null;
     const actionDelete = () => action('delete', deleteSelection);
     if (kind === 'files' && selection.ids.length === 1) {
-      const file = files(p).find(file => file.id === selection.ids[0]);
+      const file = selectionFile(p, selection.ids[0]);
       if (file?.type === 'folder' && nativeDesktopSupported && !directory.startsWith('zip:')) definitions.push(['inspect-folder-locks', 'Ordnersperren untersuchen', []]);
       if (selection.gitHistory) definitions.push(['git', 'Git', [], [...(selection.gitFile ? [['git-diff', 'Git-Diff', []]] : []), ['git-history', 'Show Log', []], ...(selection.gitFile ? [['git-untrack', 'Delete (Keep Local)', []], ['git-ignore', 'Delete and Add to Ignore List', []]] : [])]]);
     }
@@ -4230,7 +4240,7 @@
         const action = entry.id;
         closeContextMenu(true);
         if ($('#modal').open || state.panes[side] !== p || state.snapshotId !== snapshotId || currentPath(p) !== directory || p.tabStates[p.tab].id !== tabId) return;
-        if (selection && selection.ids.some(id => !files(p).some(file => file.id === id))) return;
+        if (selection && selection.ids.some(id => !selectionFile(p, id))) return;
         if (!p.tabStates.some(tab => tab.id === clickedTabId)) return;
         state.active = side;
         if (history) {
@@ -4284,8 +4294,10 @@
     }
     if (event.target.closest('[data-history]')) { showContextMenu(event, section, 'history'); return; }
     if (event.target.closest('.ag-header')) { showContextMenu(event, section, 'columns'); return; }
-    const row = event.target.closest('[data-file-row][data-id]');
-    if (row && !pane().selected.includes(row.dataset.id)) { pane().selected = [row.dataset.id]; pane().cursor = row.dataset.id; }
+    const symbol = event.target.closest('[data-parent]');
+    const row = symbol || event.target.closest('[data-file-row][data-id]');
+    if (symbol) { pane().selected = [parentId]; pane().cursor = parentId; pane().spaceMarked = []; }
+    if (row && !symbol && !pane().selected.includes(row.dataset.id)) { pane().selected = [row.dataset.id]; pane().cursor = row.dataset.id; }
     refreshSelection();
     if (host && state.realFilesystem) {
       if (fileSettings.useSystemContextMenu !== true || ['linux', 'darwin'].includes(document.body.dataset.platform) && row) {

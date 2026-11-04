@@ -135,15 +135,19 @@ test('native execution invalidates clipboard markers without accepting a late wr
   }
 });
 
-test('empty list space and the parent entry cannot open an older selected file context', t => {
+test('empty list space keeps its background action while the symbol targets the current folder', t => {
   for (const selector of ['.pane.active .list', '.pane.active [data-parent]']) {
     const app = createApp(t, fixture(), { fileSettings: { useSystemContextMenu: true } });
     const event = context(app, app.document.querySelector(selector));
     assert.equal(event.defaultPrevented, true);
-    assert.equal(requests(app).length, 0);
-    assert.deepEqual(Array.from(app.state().panes[0].selected), ['a', 'b']);
+    const symbolic = selector.includes('data-parent');
+    assert.equal(requests(app).length, symbolic ? 1 : 0);
+    assert.deepEqual(Array.from(app.state().panes[0].selected), symbolic ? [app.window.CommanderGrid.parentId] : ['a', 'b']);
     assert.equal(app.document.querySelector('#modal').open, false);
-    assert.match(app.document.querySelector('#status-message').textContent, /Ordnerhintergrund/);
+    if (symbolic) {
+      assert.equal(requests(app)[0].directory, 'C:/tmp');
+      assert.deepEqual(Array.from(requests(app)[0].ids), [app.window.CommanderGrid.parentId]);
+    } else assert.match(app.document.querySelector('#status-message').textContent, /Ordnerhintergrund/);
   }
 });
 

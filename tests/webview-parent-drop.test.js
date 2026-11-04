@@ -148,8 +148,11 @@ test('parent drop cancellation, failed target reading and root self-drops preser
   send(app, { type: 'filesystem-result', ok: false, error: 'Parent denied', state: fixture() }); await tick();
   assert.ok(app.row('film.mp4')); assert.equal(app.messages.some(message => message.type === 'filesystem-apply'), false);
   const root = fixture(); root.panes[0].tabs = ['C:/']; root.folders['C:/'] = root.folders['C:/base/temp']; delete root.folders['C:/base/temp'];
-  const rootApp = createApp(t, root), result = start(rootApp);
-  assert.equal(result.event.defaultPrevented, false); assert.equal(result.row.classList.contains('drop-target'), false);
+  const rootApp = createApp(t, root), list = rootApp.document.querySelector('.pane.active .list');
+  assert.equal(Boolean(list.querySelector('[data-parent]')), false);
+  drag(rootApp, 'dragstart', rootApp.row('film.mp4'));
+  const result = drag(rootApp, 'dragover', list);
+  assert.equal(result.event.defaultPrevented, false); assert.equal(list.classList.contains('drop-target'), false);
 });
 
 test('right dragging onto an unloaded parent opens move confirmation for that directory', async t => {
