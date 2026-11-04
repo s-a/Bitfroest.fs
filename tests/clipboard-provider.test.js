@@ -60,6 +60,32 @@ test('Linux clipboard maps unavailable runtime protocols to the status-bar capab
   app.provider.dispose();
 });
 
+test('Linux clipboard opens a new session on the next request after connection loss', async () => {
+  for (const code of ['X11ConnectionLost', 'ClipboardConnectionLost']) {
+    const sessions = [], calls = [];
+    const provider = createClipboardProvider({ platform: 'linux', contains: () => true, nativeApiFactory: () => ({
+      capabilities: {},
+      openSession() {
+        const index = sessions.length;
+        const session = { closed: false, close() { this.closed = true; }, async invoke() {
+          calls.push(index);
+          if (index === 0) throw Object.assign(new Error('The desktop connection was lost.'), { code });
+          return { paths: ['/tmp/reconnected'], mode: 'copy', token: 'new-connection' };
+        } };
+        sessions.push(session);
+        return session;
+      }
+    }) });
+    try {
+      await assert.rejects(provider.read(), { code });
+      assert.deepEqual(calls, [0]);
+      assert.equal((await provider.read()).token, 'new-connection');
+      assert.deepEqual(calls, [0, 1]);
+      assert.equal(sessions[0].closed, true);
+    } finally { provider.dispose(); }
+  }
+});
+
 function nativeHarness(options = {}, platform = 'win32') {
   const calls = [], sessions = [];
   const api = {

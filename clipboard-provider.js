@@ -51,6 +51,10 @@ function createClipboardProvider(options = {}) {
             }, options.timeout || 10000); })
           ]);
         } catch (error) {
+          if (platform === 'linux' && ['X11ConnectionLost', 'ClipboardConnectionLost'].includes(error?.code) && nativeSession === session) {
+            nativeSession = null;
+            try { session.close(); } catch { /* Preserve the connection failure. */ }
+          }
           if (platform === 'linux' && error?.code === 'UnsupportedOperation') {
             throw unavailable('Native Datei-Zwischenablage ist in dieser Desktopsitzung nicht verfügbar.', error);
           }
