@@ -384,6 +384,8 @@ When an operating system function is unavailable, the file manager reports it in
 
 Licensed under the [Apache License 2.0](LICENSE). Project attribution is recorded in [NOTICE](NOTICE); third-party component licenses are included under `licenses`. Use the [GitHub issue tracker](https://github.com/s-a/Bitfroest.fs/issues) for project support and bug reports.
 
+Community testing, contributions and feedback are welcome and appreciated. Linux bug reports are most useful with the distribution and version, desktop environment, X11 or Wayland session type, and steps to reproduce. The remaining platform limits are described above.
+
 The **Licenses and acknowledgements** command opens the bundled notices inside Visual Studio Code.
 
 ## Contributing
