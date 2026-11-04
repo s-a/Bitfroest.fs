@@ -9,6 +9,15 @@ const { releaseContext, targetFor, validatePackageEntries, validateMarketplaceIc
 const manifest = { version: '0.0.28', preview: true };
 const lock = { version: '0.0.28', packages: { '': { version: '0.0.28' } } };
 
+test('feature branch pushes run validation while publication remains restricted to version tags', () => {
+  const workflow = fs.readFileSync(path.join(__dirname, '../.github/workflows/release.yml'), 'utf8');
+  const push = workflow.match(/^ {2}push:\r?\n([\s\S]*?)(?=^ {2}\S)/m)?.[1];
+  assert.match(push, /^ {4}branches: \[main, 'sa\/\*\*'\]$/m);
+  const release = workflow.match(/^ {2}release:\r?\n([\s\S]*?)(?=^ {2}marketplace:)/m)?.[1];
+  assert.match(release, /^ {4}if: github\.event_name == 'push' && startsWith\(github\.ref, 'refs\/tags\/v'\)$/m);
+  assert.ok(workflow.includes("needs.release.result == 'success'"));
+});
+
 function pngHeader(width, height, length = 33) {
   const bytes = Buffer.alloc(length);
   Buffer.from('89504e470d0a1a0a', 'hex').copy(bytes);

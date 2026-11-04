@@ -2,7 +2,7 @@ name: Native builds and versioned releases
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'sa/**']
     tags: ['v*']
   pull_request:
     branches: [main]
