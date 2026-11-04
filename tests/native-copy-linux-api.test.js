@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
+const { execFileSync, spawnSync } = require('node:child_process');
 const { createNativeApi } = require('../native-api');
 
 const bindingPath = process.env.NATIVE_BINDING_TEST_PATH || path.join(__dirname, '../native/binding.node');
@@ -90,6 +91,31 @@ test('Linux native files.copy rejects stale source identity and symlinked path c
   await assert.rejects(session.invoke('files.copy', linked), error => error.outcome.status === 'unchanged');
   await assert.rejects(fs.stat(linked.target), { code: 'ENOENT' });
   session.close();
+});
+
+test('Linux native files.copy rejects a source replaced by a FIFO without blocking the worker', { skip: process.platform !== 'linux' }, async t => {
+  const f = await fixture(t, 4096);
+  await fs.unlink(f.source);
+  execFileSync('mkfifo', ['-m', '600', f.source]);
+  const probe = [
+    "const binding = require(process.env.NATIVE_BINDING_TEST_PATH);",
+    "const request = JSON.parse(process.env.NATIVE_COPY_REQUEST);",
+    "const session = binding.openSession();",
+    "(async () => {",
+    "  let result;",
+    "  try { const value = await session.invoke('files.copy', request); result = { status: value.status }; }",
+    "  catch (error) { result = { code: error.code, outcome: error.outcome?.status }; }",
+    "  session.close(); await session.whenClosed(); process.stdout.write(JSON.stringify(result));",
+    "})().catch(error => { console.error(error); process.exitCode = 1; });"
+  ].join('\n');
+  const child = spawnSync(process.execPath, ['-e', probe], {
+    env: { ...process.env, NATIVE_BINDING_TEST_PATH: bindingPath, NATIVE_COPY_REQUEST: JSON.stringify(f.request) },
+    encoding: 'utf8', timeout: 5000, killSignal: 'SIGKILL'
+  });
+  assert.equal(child.error, undefined, `native copy child did not settle: ${child.error?.code || child.error}`);
+  assert.equal(child.signal, null, child.stderr);
+  assert.equal(child.status, 0, child.stderr);
+  assert.deepEqual(JSON.parse(child.stdout), { code: 'NativeFailure', outcome: 'unchanged' });
 });
 
 test('Linux native files.copy round-trips astral Unicode and literal backslashes and preserves pre-epoch mtime', { skip: process.platform !== 'linux' }, async t => {

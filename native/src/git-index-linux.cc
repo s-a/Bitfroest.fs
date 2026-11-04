@@ -97,7 +97,7 @@ int OpenDirectoryTree(const std::filesystem::path& path) {
 }
 
 int OpenRegularAt(int directory, const char* name, int flags) {
-  const int fd = openat(directory, name, flags | O_CLOEXEC | O_NOFOLLOW);
+  const int fd = openat(directory, name, flags | O_NONBLOCK | O_CLOEXEC | O_NOFOLLOW);
   Require(fd >= 0, errno == ELOOP ? "UnsafePath" : "FileAccessDenied", "A regular Git file could not be opened.");
   Fd opened(fd);
   struct stat info{};

@@ -4,7 +4,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
 const crypto = require('node:crypto');
-const { execFileSync } = require('node:child_process');
+const { execFileSync, spawnSync } = require('node:child_process');
 const { createNativeApi } = require('../native-api');
 const { createGitIndexProvider } = require('../git-index');
 const { createGitFileActions } = require('../git-file-actions');
@@ -257,6 +257,40 @@ test('Linux native untrack closes a non-regular index descriptor when rejecting 
     await assert.rejects(fs.stat(path.join(app.root, '.git', 'index.lock')), { code: 'ENOENT' });
   } finally {
     await fs.rm(indexPath, { recursive: true, force: true });
+    await fs.rename(retainedPath, indexPath);
+  }
+});
+
+test('Linux native untrack rejects a FIFO index without blocking its worker', { skip: process.platform !== 'linux' }, async t => {
+  const app = await fixture(t);
+  const request = await app.prepare();
+  const indexPath = path.join(app.root, '.git', 'index');
+  const retainedPath = path.join(app.root, '.git', 'index.original');
+  await fs.rename(indexPath, retainedPath);
+  execFileSync('mkfifo', ['-m', '600', indexPath]);
+  const probe = [
+    "const binding = require(process.env.NATIVE_BINDING_TEST_PATH);",
+    "const request = JSON.parse(process.env.NATIVE_GIT_REQUEST);",
+    "const session = binding.openSession();",
+    "(async () => {",
+    "  let result;",
+    "  try { const value = await session.invoke('git.untrack', request); result = { status: value.status }; }",
+    "  catch (error) { result = { code: error.code, outcome: error.outcome?.status }; }",
+    "  session.close(); await session.whenClosed(); process.stdout.write(JSON.stringify(result));",
+    "})().catch(error => { console.error(error); process.exitCode = 1; });"
+  ].join('\n');
+  const child = spawnSync(process.execPath, ['-e', probe], {
+    env: { ...process.env, NATIVE_BINDING_TEST_PATH: binary, NATIVE_GIT_REQUEST: JSON.stringify(request) },
+    encoding: 'utf8', timeout: 5000, killSignal: 'SIGKILL'
+  });
+  try {
+    assert.equal(child.error, undefined, `native Git child did not settle: ${child.error?.code || child.error}`);
+    assert.equal(child.signal, null, child.stderr);
+    assert.equal(child.status, 0, child.stderr);
+    assert.deepEqual(JSON.parse(child.stdout), { code: 'UnsafePath', outcome: 'unchanged' });
+    await assert.rejects(fs.stat(path.join(app.root, '.git', 'index.lock')), { code: 'ENOENT' });
+  } finally {
+    await fs.unlink(indexPath).catch(() => {});
     await fs.rename(retainedPath, indexPath);
   }
 });

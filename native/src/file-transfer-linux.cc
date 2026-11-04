@@ -145,7 +145,7 @@ void Copy(const FileTransferRequest& request, const std::function<bool()>& shoul
   if (fstat(target_parent.get(), &parent_before) != 0) {
     const int error = errno; SetUnchanged(result, "NativeFailure", "The destination directory could not be identified.", error); return;
   }
-  Descriptor source(openat(source_parent.get(), source_name.c_str(), O_RDONLY | O_NOFOLLOW | O_CLOEXEC));
+  Descriptor source(openat(source_parent.get(), source_name.c_str(), O_RDONLY | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC));
   struct stat source_info{};
   if (!source || fstat(source.get(), &source_info) != 0 || !S_ISREG(source_info.st_mode)) {
     const int error = source ? (errno ? errno : EINVAL) : errno;
