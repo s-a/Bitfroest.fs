@@ -6,17 +6,19 @@ const { loadNativeApi } = require('./native-api');
 
 function abortError() { const error = new Error('Dateiübertragung abgebrochen.'); error.name = 'AbortError'; error.code = 'ABORT_ERR'; return error; }
 function throwIfAborted(signal) { if (signal?.aborted) throw abortError(); }
-function validate(input) {
+function validate(input, platform = 'win32') {
   if (!input || typeof input.source !== 'string' || typeof input.target !== 'string' || !Array.isArray(input.roots) || !input.roots.length) throw new Error('Ungültige Kopieranfrage.');
+  const paths = platform === 'win32' ? path.win32 : path.posix;
   const clean = value => {
-    if (typeof value !== 'string' || !path.win32.isAbsolute(value) || value.includes('\0') || value.split(/[\\/]/).includes('..')) throw new Error('Ein gültiger absoluter Pfad ohne Traversal ist erforderlich.');
-    const resolved = path.win32.resolve(value);
-    if (resolved.slice(path.win32.parse(resolved).root.length).includes(':')) throw new Error('Benannte Datenströme sind keine Kopierziele.');
+    if (typeof value !== 'string' || !paths.isAbsolute(value) || value.includes('\0') || value.split(platform === 'win32' ? /[\\/]/ : /\//).includes('..')) throw new Error('Ein gültiger absoluter Pfad ohne Traversal ist erforderlich.');
+    const resolved = paths.resolve(value);
+    if (platform === 'win32' && resolved.slice(paths.parse(resolved).root.length).includes(':')) throw new Error('Benannte Datenströme sind keine Kopierziele.');
     return resolved;
   };
   const roots = input.roots.map(clean), source = clean(input.source), target = clean(input.target);
-  const allowed = value => roots.some(root => value.toLowerCase().startsWith((root.endsWith('\\') ? root : root + '\\').toLowerCase()));
-  if (!allowed(source) || !allowed(target) || source.toLowerCase() === target.toLowerCase()) throw new Error('Der Kopierpfad liegt außerhalb der erlaubten Wurzeln oder Quelle und Ziel sind identisch.');
+  const fold = value => platform === 'win32' ? value.toLowerCase() : value;
+  const allowed = value => roots.some(root => fold(value).startsWith(fold(root.endsWith(paths.sep) ? root : root + paths.sep)));
+  if (!allowed(source) || !allowed(target) || fold(source) === fold(target)) throw new Error('Der Kopierpfad liegt außerhalb der erlaubten Wurzeln oder Quelle und Ziel sind identisch.');
   if (!input.expected || !['dev', 'ino', 'size', 'mtimeNs', 'ctimeNs'].every(key => /^-?\d+$/.test(String(input.expected[key])))) throw new Error('Eine vollständige erwartete Dateiidentität ist erforderlich.');
   return { roots, source, target, expected: input.expected };
 }
@@ -69,7 +71,7 @@ function createCopySession(options = {}) {
         if (failure.name === 'AbortError') broken = true;
         throw failure;
       }
-      return { copied: true, granular: true };
+      return { copied: true, granular: true, ...(outcome?.ownedDestination ? { ownedDestination: outcome.ownedDestination } : {}) };
     } finally {
       perCopy.signal?.removeEventListener('abort', cancel);
       if (activeNative === current) activeNative = null;
@@ -81,6 +83,14 @@ function createCopySession(options = {}) {
       throwIfAborted(perCopy.signal);
       if (disposed || broken) throw new Error('Die Kopiersitzung wurde beendet.');
       if ((options.platform || process.platform) !== 'win32') {
+        const platform = options.platform || process.platform;
+        if (platform === 'linux' && (options.nativeApi || process.platform === 'linux')) {
+          try { nativeApi ||= loadNativeApi(); }
+          catch { /* Preserve existing portable operations without a loadable binding. */ }
+          if (['supported', 'conditional'].includes(nativeApi?.capabilities?.['files.copy']?.status)) {
+            return copyNative(validate(input, platform), perCopy);
+          }
+        }
         if (!input || typeof input.source !== 'string' || typeof input.target !== 'string' || !Array.isArray(input.roots) || !input.roots.length) throw new Error('Ungültige Kopieranfrage.');
         const size = Number(input.expected?.size), known = Number.isSafeInteger(size) && size >= 0;
         const measurement = known ? Progress.known('bytes', 0, size) : Progress.unknown('bytes', 0, 'native-operation');
@@ -88,7 +98,7 @@ function createCopySession(options = {}) {
         await (options.copyFile || fs.copyFile)(input.source, input.target, nativeFs.constants.COPYFILE_EXCL);
         return { copied: true, granular: false };
       }
-      return copyNative(validate(input), perCopy);
+      return copyNative(validate(input, 'win32'), perCopy);
     },
     dispose() {
       if (disposePromise) return disposePromise;

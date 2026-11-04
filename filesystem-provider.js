@@ -32,6 +32,12 @@ function statSignature(stat) {
 function contentSignature(stat) {
   return [stat.dev, stat.ino, stat.mode, stat.size, stat.mtimeNs].map(String).join(':');
 }
+function matchesOwnedFile(stat, identity) {
+  return !stat.isSymbolicLink() && String(stat.dev) === String(identity.dev) && String(stat.ino) === String(identity.ino);
+}
+function matchesOwnedSnapshot(stat, identity) {
+  return matchesOwnedFile(stat, identity) && ['size', 'mtimeNs', 'ctimeNs'].every(key => String(stat[key]) === String(identity[key]));
+}
 
 function displayDate(value) {
   const date = new Date(Number(value));
@@ -700,13 +706,28 @@ function createProvider(options = {}) {
             : statSignature(sourceStat) !== file.source.signature) throw new Error('Datei vor dem Kopieren extern geändert.');
           const copyOptions = { signal: operation.signal, onProgress: event => report(file, { ...event, phase: 'copying' }), expectedSource: Object.fromEntries(['dev', 'ino', 'size', 'mtimeNs', 'ctimeNs'].map(key => [key, String(sourceStat[key])])) };
           if (options.copyFile) await options.copyFile(sourcePath, stage.path, copyOptions);
-          else if (operation.signal && !options.fs) await operation.copySession().copy({ roots: permittedRoots(), source: sourcePath, target: stage.path, expected: copyOptions.expectedSource }, copyOptions);
+          else if (operation.signal && !options.fs) {
+            const copied = await operation.copySession().copy({ roots: permittedRoots(), source: sourcePath, target: stage.path, expected: copyOptions.expectedSource }, copyOptions);
+            if (copied?.ownedDestination) {
+              const owned = copied.ownedDestination;
+              const fields = ['dev', 'ino', 'size', 'mtimeNs', 'ctimeNs'];
+              if (fields.some(key => !/^-?\d+$/.test(String(owned[key])))) throw new Error('Die native Zielidentität ist unvollständig.');
+              const observed = await fs.lstat(stage.path, { bigint: true });
+              if (!matchesOwnedSnapshot(observed, owned)) throw new Error('Die native Zielidentität hat sich geändert.');
+              stage.nativeOwnedDestination = owned;
+            }
+          }
           else await fs.copyFile(sourcePath, stage.path, nativeFs.constants.COPYFILE_EXCL);
-          stage.signature = statSignature(await fs.lstat(stage.path, { bigint: true }));
+          const copiedStage = await fs.lstat(stage.path, { bigint: true });
+          if (stage.nativeOwnedDestination && !matchesOwnedSnapshot(copiedStage, stage.nativeOwnedDestination)) throw new Error('Die native Zielidentität hat sich geändert.');
+          stage.signature = statSignature(copiedStage);
           for (const source of file.appendSources || []) await appendToStage(source, stage, file);
           const input = await fs.open(stage.path, 'r');
           try {
             const stat = await input.stat({ bigint: true });
+            if (stage.nativeOwnedDestination && !(file.appendSources?.length
+              ? matchesOwnedFile(stat, stage.nativeOwnedDestination)
+              : matchesOwnedSnapshot(stat, stage.nativeOwnedDestination))) throw new Error('Die native Zielidentität hat sich geändert.');
             stage.signature = statSignature(stat);
             if (file.hash) stage.hash = hash(await input.readFile());
             throwIfAborted(operation.signal);
@@ -715,8 +736,11 @@ function createProvider(options = {}) {
             if (contentSignature(await fs.lstat(sourcePath, { bigint: true })) !== file.source.contentSignature) throw new Error('Datei während des Kopierens extern geändert.');
             for (const source of file.appendSources || []) { await assertComponents(source.path); if (contentSignature(await fs.lstat(source.path, { bigint: true })) !== source.contentSignature) throw new Error('Datei während des Kopierens extern geändert.'); }
             await assertComponents(file.path, true);
-            if (statSignature(await fs.lstat(stage.path, { bigint: true })) !== stage.signature) throw new Error('Sicherungsdatei extern verändert.');
+            const stageStat = await fs.lstat(stage.path, { bigint: true });
+            if (statSignature(stageStat) !== stage.signature || stage.nativeOwnedDestination && !matchesOwnedFile(stageStat, stage.nativeOwnedDestination)) throw new Error('Sicherungsdatei extern verändert.');
             await fs.link(stage.path, file.path);
+            const publishedStat = await fs.lstat(file.path, { bigint: true });
+            if (stage.nativeOwnedDestination && !matchesOwnedFile(publishedStat, stage.nativeOwnedDestination)) throw new Error('Die native Zielidentität hat sich bei der Veröffentlichung geändert.');
             file.createdIdentity = `${stat.dev}:${stat.ino}`;
             file.createdContentSignature = contentSignature(stat);
             file.createdHash = stage.hash;

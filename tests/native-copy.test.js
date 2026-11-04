@@ -4,7 +4,7 @@ const nativeFs = require('node:fs');
 const { copyFileCancellable, createCopySession } = require('../native-copy');
 
 test('portable copying without a known source size cannot report an empty determinate transfer', async () => {
-  const session = createCopySession({ platform: 'linux', copyFile: async () => {} }), events = [];
+  const session = createCopySession({ platform: 'darwin', copyFile: async () => {} }), events = [];
   await session.copy({ source: '/source', target: '/target', roots: ['/'] }, { onProgress: event => events.push(event) });
   assert.equal(events[0].overall.kind, 'indeterminate');
   assert.equal(events[0].current.kind, 'indeterminate');
@@ -18,9 +18,9 @@ test('already aborted jobs do not open a native session or copy any byte', async
   await assert.rejects(copyFileCancellable(input, { platform: 'win32', nativeApi, signal: controller.signal }), { name: 'AbortError' });
 });
 
-test('non-Windows copy retains exclusive creation and between-file cancellation capability', async () => {
+test('portable non-Windows fallback retains exclusive creation when no native Linux binding is selected', async () => {
   const events = [], calls = [];
-  await copyFileCancellable(input, { platform: 'linux', copyFile: async (...args) => { calls.push(args); }, onProgress: event => events.push(event) });
+  await copyFileCancellable(input, { platform: 'darwin', copyFile: async (...args) => { calls.push(args); }, onProgress: event => events.push(event) });
   assert.deepEqual(calls, [[input.source, input.target, nativeFs.constants.COPYFILE_EXCL]]);
   assert.equal(events[0].granular, false);
 });
