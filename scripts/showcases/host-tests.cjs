@@ -1,18 +1,24 @@
 const vscode = require('vscode');
 const fs = require('node:fs');
 const path = require('node:path');
-const { safeActions, safeListerActions } = require('./run.cjs');
+const { safeActions, safeListerActions, profileSettings } = require('./run.cjs');
 
 exports.run = async function () {
   const run = process.env.BFS_SHOWCASE_RUN;
   if (!run) throw new Error('Missing showcase run directory.');
+  const launch = JSON.parse(fs.readFileSync(path.join(run, 'launch.json'), 'utf8'));
+  const favorites = vscode.workspace.getConfiguration('bitfroest').inspect('favorites.items');
+  if (vscode.workspace.workspaceFolders?.length || favorites.workspaceValue !== undefined ||
+      JSON.stringify(favorites.globalValue) !== JSON.stringify(profileSettings(launch.demo)['bitfroest.favorites.items'])) {
+    throw new Error('The showcase requires isolated demo favorites without workspace overrides.');
+  }
   const extension = vscode.extensions.getExtension('bitfroest.bitfroest-fs-prototype');
   if (!extension) throw new Error('The product extension was not loaded.');
   await extension.activate();
   await vscode.commands.executeCommand('bitfroest.show');
   fs.writeFileSync(path.join(run, 'ready.json'), JSON.stringify({
     hostVersion: vscode.version, platform: process.platform,
-    extension: extension.id, source: extension.extensionPath
+    extension: extension.id, source: extension.extensionPath, isolatedDemoFavorites: true
   }));
   let sequence = 1;
   while (!fs.existsSync(path.join(run, 'stop'))) {

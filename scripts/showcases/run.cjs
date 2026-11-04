@@ -14,9 +14,35 @@ function numberCatalog(catalog) {
   for (const scene of catalog) for (const capture of scene.captures) capture.sequence = ++sequence;
   return catalog;
 }
+function profileSettings(demo) {
+  return {
+    'workbench.startupEditor': 'none', 'workbench.colorTheme': 'Default Dark Modern', 'window.restoreWindows': 'none',
+    'security.workspace.trust.enabled': false, 'telemetry.telemetryLevel': 'off', 'update.mode': 'none', 'bitfroest.language': 'en',
+    'bitfroest.files.useSystemContextMenu': false, 'git.openRepositoryInParentFolders': 'never',
+    'workbench.statusBar.visible': false, 'workbench.activityBar.location': 'hidden',
+    'workbench.secondarySideBar.defaultVisibility': 'hidden',
+    'bitfroest.favorites.items': [
+      ['sources', 'Project sources', 'left/bitfroest.fs'], ['documents', 'Documents', 'left/documents'], ['delivery', 'Delivery inbox', 'right/inbox']
+    ].map(([id, name, folder]) => ({ id, name, type: 'favorite', parent: null, path: path.join(demo, folder) }))
+  };
+}
+function renumberManifest(catalog, previous) {
+  return { ...previous, sections: previous.sections.map(section => {
+    const scene = catalog.find(scene => scene.id === section.id);
+    return { ...section, images: section.images.map(image => {
+      const capture = scene?.captures.find(capture => image.file.endsWith(`-${scene.id}-${capture.id}.${capture.format === 'gif' ? 'gif' : 'png'}`));
+      return capture ? { ...image, file: filename(scene, capture) } : image;
+    }) };
+  }) };
+}
+function clickControl(selector, root = document) {
+  const button = root.querySelector(selector);
+  if (!button || !button.getBoundingClientRect().width || button.disabled || button.type === 'submit' && button.form) throw new Error(`Showcase control unavailable: ${selector}`);
+  button.click();
+}
 function assertSurfaceState(state, capture) {
   if (!state.visible || !state.ready || !state.text?.includes(capture.text)) throw new Error('The requested surface is not ready.');
-  if (capture.surface === 'editor' ? state.kind !== 'editor' || !state.diff : state.owner !== 'bitfroest.bitfroest-fs-prototype') throw new Error('The requested product surface was not observed.');
+  if (capture.surface === 'editor' ? state.kind !== 'editor' || !state.diff : capture.surface === 'quickpick' ? state.kind !== 'quickpick' : state.owner !== 'bitfroest.bitfroest-fs-prototype') throw new Error('The requested product surface was not observed.');
 }
 const safeActions = ['mkdir', 'copy', 'move', 'rename-one', 'search', 'view', 'new-file', 'rename', 'pack', 'unpack', 'delete', 'delete-permanently', 'select-group', 'unselect-group', 'search-separate', 'clear', 'refresh'];
 const safeListerActions = ['mode:text', 'mode:binary', 'mode:hex', 'mode:html', 'mode:unicode', 'mode:utf8', 'find', 'manual'];
@@ -152,15 +178,12 @@ async function main() {
   for (const scene of scenes.filter(item => !item.status)) for (const folder of scene.paths) if (!fs.statSync(folder).isDirectory()) throw new Error(`Missing demo directory: ${folder}`);
   const run = path.join(output, 'runs', `${Date.now()}-${process.pid}`);
   fs.mkdirSync(path.join(run, 'profile/User'), { recursive: true });
-  fs.writeFileSync(path.join(run, 'profile/User/settings.json'), JSON.stringify({
-    'workbench.startupEditor': 'none', 'workbench.colorTheme': 'Default Dark Modern', 'window.restoreWindows': 'none',
-    'security.workspace.trust.enabled': false, 'telemetry.telemetryLevel': 'off', 'update.mode': 'none', 'bitfroest.language': 'en',
-    'bitfroest.files.useSystemContextMenu': false, 'git.openRepositoryInParentFolders': 'never',
-    'workbench.statusBar.visible': false, 'workbench.activityBar.location': 'hidden',
-    'workbench.secondarySideBar.defaultVisibility': 'hidden'
-  }));
+  fs.writeFileSync(path.join(run, 'profile/User/settings.json'), JSON.stringify(profileSettings(demo)));
+  const previousFile = path.join(output, 'showcases.json');
+  const original = selected && fs.existsSync(previousFile) ? JSON.parse(fs.readFileSync(previousFile, 'utf8')) : undefined;
+  const previous = original && renumberManifest(catalog, original);
   const port = await new Promise(resolve => { const server = net.createServer(); server.listen(0, '127.0.0.1', () => { const address = server.address(); server.close(() => resolve(address.port)); }); });
-  fs.writeFileSync(path.join(run, 'launch.json'), JSON.stringify({ code, repository, tests: path.join(__dirname, 'host-tests.cjs'), port }));
+  fs.writeFileSync(path.join(run, 'launch.json'), JSON.stringify({ code, repository, demo, tests: path.join(__dirname, 'host-tests.cjs'), port }));
   const log = fs.openSync(path.join(run, 'host.log'), 'w');
   const child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-File', path.join(__dirname, 'desktop.ps1'), '-RunDirectory', run],
     { windowsHide: true, env: { ...process.env, BFS_SHOWCASE_RUN: run }, stdio: ['ignore', log, log] });
@@ -208,7 +231,7 @@ async function main() {
       if (scene.status) continue;
       stage = `${scene.id}: navigation`;
       await invoke('showcase.focus-main');
-      if (scene.captures.some(capture => ['bitfroest.gitHistory', 'bitfroest.gitDiff'].includes(capture.command))) await invoke('showcase.prepare-repository', [scene.paths[0]]);
+      if (scene.captures.some(capture => ['bitfroest.gitHistory', 'bitfroest.gitDiff', 'bitfroest.showLocalBranches'].includes(capture.command))) await invoke('showcase.prepare-repository', [scene.paths[0]]);
       await evaluate(() => {
         document.querySelector('dialog[open] #modal-cancel')?.click();
         for (const button of document.querySelectorAll('[data-search-close], [data-lister-close]')) button.click();
@@ -241,6 +264,10 @@ async function main() {
         if (capture.action) await invoke(`bitfroest.${capture.action}`);
         if (capture.command) {
           stage = `${scene.id}/${capture.id}: command ${capture.command}`;
+          if (capture.surface === 'quickpick') {
+            await invoke('showcase.prepare-editor');
+            await waitFor(() => evaluate(() => Boolean(document.querySelector('.pane.active [data-git-branch][aria-busy="false"]'))));
+          }
           const args = capture.command === 'bitfroest.gitHistory' || capture.command === 'bitfroest.gitDiff'
             ? [await waitFor(() => evaluate(() => {
               const value = document.querySelector('.pane.active .list')?.dataset.vscodeContext;
@@ -249,11 +276,7 @@ async function main() {
           await invoke(capture.command, args);
         }
         if (capture.listerAction) await invoke('bitfroest.lister-action', [capture.listerAction]);
-        for (const selector of capture.click || []) await evaluate(selector => {
-          const button = document.querySelector(selector);
-          if (!button || !button.getBoundingClientRect().width || button.disabled || button.type === 'submit') throw new Error(`Showcase control unavailable: ${selector}`);
-          button.click();
-        }, selector);
+        for (const selector of capture.click || []) await evaluate(clickControl, selector);
         if (capture.surface) {
           stage = `${scene.id}/${capture.id}: surface ${capture.surface}`;
           const { captureSurface } = require('./surfaces.cjs');
@@ -297,8 +320,6 @@ async function main() {
     }
     const revision = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: repository, encoding: 'utf8' });
     const status = spawnSync('git', ['status', '--porcelain', '--untracked-files=normal'], { cwd: repository, encoding: 'utf8' });
-    const previousFile = path.join(output, 'showcases.json');
-    const previous = selected && fs.existsSync(previousFile) ? JSON.parse(fs.readFileSync(previousFile, 'utf8')) : undefined;
     manifest = buildManifest(catalog, images, { ...host, productVersion: require('../../package.json').version,
       commit: revision.stdout?.trim(), workingTreeDirty: Boolean(status.stdout?.trim()) }, previous);
     manifest.interactions = require('./inventory.cjs').interactionInventory(manifest);
@@ -316,12 +337,20 @@ async function main() {
     if (exitCode !== 0) failure = new Error(`Showcase desktop cleanup failed (${exitCode}); inspect ${run}`, { cause: failure });
   }
   if (failure) throw failure;
+  if (original) for (const [index, section] of original.sections.entries()) for (const [imageIndex, image] of section.images.entries()) {
+    const renamed = previous.sections[index].images[imageIndex].file;
+    if (renamed !== image.file) fs.copyFileSync(path.join(output, image.file), path.join(output, renamed));
+  }
   for (const section of manifest.sections) for (const image of section.images) {
     const fresh = path.join(run, image.file); if (fs.existsSync(fresh)) fs.copyFileSync(fresh, path.join(output, image.file));
   }
   fs.copyFileSync(path.join(run, 'showcases.json'), path.join(output, 'showcases.json'));
+  if (original) {
+    const retained = new Set(manifest.sections.flatMap(section => section.images.map(image => image.file)));
+    for (const section of original.sections) for (const image of section.images) if (!retained.has(image.file)) fs.unlinkSync(path.join(output, image.file));
+  }
   console.log(`Showcase manifest: ${path.join(output, 'showcases.json')}`);
 }
 
-module.exports = { validateCatalog, filename, numberCatalog, assertSurfaceState, assertProductState, waitFor, buildManifest, parseOptions, safeActions, safeListerActions };
+module.exports = { validateCatalog, filename, numberCatalog, assertSurfaceState, assertProductState, waitFor, buildManifest, parseOptions, safeActions, safeListerActions, profileSettings, renumberManifest, clickControl };
 if (require.main === module) main().catch(error => { console.error(error.message); process.exitCode = 1; });

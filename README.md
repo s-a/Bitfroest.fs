@@ -109,238 +109,256 @@ Discover file actions, selection tools, navigation, view options, configuration 
 </details>
 
 <details>
-<summary>0012 · Select files by pattern</summary>
+<summary>0012 · Choose a favorite location</summary>
+
+Browse favorite project folders from the location menu.
+
+![Favorite locations containing only sample project folders](media/marketplace/showcases/0012-windows-en-dark-location-menu-favorites.png)
+
+</details>
+
+<details>
+<summary>0013 · Select files by pattern</summary>
 
 Enter file masks or regular expressions without applying a selection.
 
-![Select files by pattern](media/marketplace/showcases/0012-windows-en-dark-select-group-dialog.png)
+![Select files by pattern](media/marketplace/showcases/0013-windows-en-dark-select-group-dialog.png)
 
 </details>
 
 <details>
-<summary>0013 · Remove a group from the selection</summary>
+<summary>0014 · Remove a group from the selection</summary>
 
 Specify the file pattern to remove from the current selection.
 
-![Remove a group from the selection](media/marketplace/showcases/0013-windows-en-dark-unselect-group-dialog.png)
+![Remove a group from the selection](media/marketplace/showcases/0014-windows-en-dark-unselect-group-dialog.png)
 
 </details>
 
 <details>
-<summary>0014 · Create a folder</summary>
+<summary>0015 · Create a folder</summary>
 
 Inspect the folder name and destination before creating anything.
 
-![Create a folder](media/marketplace/showcases/0014-windows-en-dark-new-folder-dialog.png)
+![Create a folder](media/marketplace/showcases/0015-windows-en-dark-new-folder-dialog.png)
 
 </details>
 
 <details>
-<summary>0015 · Create a text file</summary>
+<summary>0016 · Create a text file</summary>
 
 Inspect the new text-file dialog without creating a file.
 
-![Create a text file](media/marketplace/showcases/0015-windows-en-dark-new-file-dialog.png)
+![Create a text file](media/marketplace/showcases/0016-windows-en-dark-new-file-dialog.png)
 
 </details>
 
 <details>
-<summary>0016 · Copy files</summary>
+<summary>0017 · Copy files</summary>
 
 Review the destination, overwrite policy and verification options before copying.
 
-![Copy files](media/marketplace/showcases/0016-windows-en-dark-copy-dialog.png)
+![Copy files](media/marketplace/showcases/0017-windows-en-dark-copy-dialog.png)
 
 </details>
 
 <details>
-<summary>0017 · Move files</summary>
+<summary>0018 · Move files</summary>
 
 Review the destination and transfer options before moving files.
 
-![Move files](media/marketplace/showcases/0017-windows-en-dark-move-dialog.png)
+![Move files](media/marketplace/showcases/0018-windows-en-dark-move-dialog.png)
 
 </details>
 
 <details>
-<summary>0018 · Rename a single entry</summary>
+<summary>0019 · Rename a single entry</summary>
 
 Edit the filename in the file list without committing the rename.
 
-![Rename a single entry](media/marketplace/showcases/0018-windows-en-dark-rename-inline-editor.png)
+![Rename a single entry](media/marketplace/showcases/0019-windows-en-dark-rename-inline-editor.png)
 
 </details>
 
 <details>
-<summary>0019 · Preview multiple filenames</summary>
+<summary>0020 · Preview multiple filenames</summary>
 
 Inspect naming masks, counters and replacement rules before applying changes.
 
-![Preview multiple filenames](media/marketplace/showcases/0019-windows-en-dark-rename-multiple-dialog.png)
+![Preview multiple filenames](media/marketplace/showcases/0020-windows-en-dark-rename-multiple-dialog.png)
 
 </details>
 
 <details>
-<summary>0020 · Review a recycle-bin deletion</summary>
+<summary>0021 · Review a recycle-bin deletion</summary>
 
 Inspect the confirmation for moving selected entries to the recycle bin.
 
-![Review a recycle-bin deletion](media/marketplace/showcases/0020-windows-en-dark-delete-trash-confirmation.png)
+![Review a recycle-bin deletion](media/marketplace/showcases/0021-windows-en-dark-delete-trash-confirmation.png)
 
 </details>
 
 <details>
-<summary>0021 · Review permanent deletion</summary>
+<summary>0022 · Review permanent deletion</summary>
 
 Inspect the permanent-deletion warning without confirming it.
 
-![Review permanent deletion](media/marketplace/showcases/0021-windows-en-dark-delete-permanently-confirmation.png)
+![Review permanent deletion](media/marketplace/showcases/0022-windows-en-dark-delete-permanently-confirmation.png)
 
 </details>
 
 <details>
-<summary>0022 · Find files</summary>
+<summary>0023 · Find files</summary>
 
 Inspect basic criteria, advanced filters and saved searches before starting a search.
 
-![Find files](media/marketplace/showcases/0022-windows-en-dark-file-search-general.png)
+![Find files](media/marketplace/showcases/0023-windows-en-dark-file-search-general.png)
 
-![Find files](media/marketplace/showcases/0023-windows-en-dark-file-search-advanced.png)
+![Find files](media/marketplace/showcases/0024-windows-en-dark-file-search-advanced.png)
 
-![Find files](media/marketplace/showcases/0024-windows-en-dark-file-search-presets.png)
+![Find files](media/marketplace/showcases/0025-windows-en-dark-file-search-presets.png)
 
 </details>
 
 <details>
-<summary>0025 · Keep a search window open</summary>
+<summary>0026 · Keep a search window open</summary>
 
 Open the nonmodal search variant alongside the file manager.
 
-![Keep a search window open](media/marketplace/showcases/0025-windows-en-dark-file-search-separate-dialog.png)
+![Keep a search window open](media/marketplace/showcases/0026-windows-en-dark-file-search-separate-dialog.png)
 
 </details>
 
 <details>
-<summary>0026 · Inspect file contents</summary>
+<summary>0027 · Inspect file contents</summary>
 
 View a real file in text, binary, hexadecimal, HTML-text, Unicode and UTF-8 modes.
 
-![Inspect file contents](media/marketplace/showcases/0026-windows-en-dark-file-viewer-text.png)
+![Inspect file contents](media/marketplace/showcases/0027-windows-en-dark-file-viewer-text.png)
 
-![Inspect file contents](media/marketplace/showcases/0027-windows-en-dark-file-viewer-binary.png)
+![Inspect file contents](media/marketplace/showcases/0028-windows-en-dark-file-viewer-binary.png)
 
-![Inspect file contents](media/marketplace/showcases/0028-windows-en-dark-file-viewer-hex.png)
+![Inspect file contents](media/marketplace/showcases/0029-windows-en-dark-file-viewer-hex.png)
 
-![Inspect file contents](media/marketplace/showcases/0029-windows-en-dark-file-viewer-html.png)
+![Inspect file contents](media/marketplace/showcases/0030-windows-en-dark-file-viewer-html.png)
 
-![Inspect file contents](media/marketplace/showcases/0030-windows-en-dark-file-viewer-unicode.png)
+![Inspect file contents](media/marketplace/showcases/0031-windows-en-dark-file-viewer-unicode.png)
 
-![Inspect file contents](media/marketplace/showcases/0031-windows-en-dark-file-viewer-utf8.png)
+![Inspect file contents](media/marketplace/showcases/0032-windows-en-dark-file-viewer-utf8.png)
 
-![Inspect file contents](media/marketplace/showcases/0032-windows-en-dark-file-viewer-edit-menu.png)
+![Inspect file contents](media/marketplace/showcases/0033-windows-en-dark-file-viewer-edit-menu.png)
 
-![Inspect file contents](media/marketplace/showcases/0033-windows-en-dark-file-viewer-options-menu.png)
+![Inspect file contents](media/marketplace/showcases/0034-windows-en-dark-file-viewer-options-menu.png)
 
-![Inspect file contents](media/marketplace/showcases/0034-windows-en-dark-file-viewer-encoding-menu.png)
+![Inspect file contents](media/marketplace/showcases/0035-windows-en-dark-file-viewer-encoding-menu.png)
 
 </details>
 
 <details>
-<summary>0035 · Search inside the viewer</summary>
+<summary>0036 · Search inside the viewer</summary>
 
 Inspect text-search, direction and matching options.
 
-![Search inside the viewer](media/marketplace/showcases/0035-windows-en-dark-viewer-search-dialog.png)
+![Search inside the viewer](media/marketplace/showcases/0036-windows-en-dark-viewer-search-dialog.png)
 
 </details>
 
 <details>
-<summary>0036 · Choose another codepage</summary>
+<summary>0037 · Choose another codepage</summary>
 
 Inspect the codepage input without saving an encoding preference.
 
-![Choose another codepage](media/marketplace/showcases/0036-windows-en-dark-viewer-codepage-dialog.png)
+![Choose another codepage](media/marketplace/showcases/0037-windows-en-dark-viewer-codepage-dialog.png)
 
 </details>
 
 <details>
-<summary>0037 · Prepare a ZIP archive</summary>
+<summary>0038 · Prepare a ZIP archive</summary>
 
 Inspect compression, encryption and recursive packing options without creating an archive.
 
-![Prepare a ZIP archive](media/marketplace/showcases/0037-windows-en-dark-archive-pack-dialog.png)
+![Prepare a ZIP archive](media/marketplace/showcases/0038-windows-en-dark-archive-pack-dialog.png)
 
 </details>
 
 <details>
-<summary>0038 · Prepare ZIP extraction</summary>
+<summary>0039 · Prepare ZIP extraction</summary>
 
 Inspect destination and extraction options without writing files.
 
-![Prepare ZIP extraction](media/marketplace/showcases/0038-windows-en-dark-archive-unpack-dialog.png)
+![Prepare ZIP extraction](media/marketplace/showcases/0039-windows-en-dark-archive-unpack-dialog.png)
 
 </details>
 
 <details>
-<summary>0039 · Inspect local Git changes</summary>
+<summary>0040 · Inspect local Git changes</summary>
 
 Show modified, staged and untracked entries in the demonstration repository.
 
-![Inspect local Git changes](media/marketplace/showcases/0039-windows-en-dark-git-status-overview.png)
+![Inspect local Git changes](media/marketplace/showcases/0040-windows-en-dark-git-status-overview.png)
 
 </details>
 
 <details>
-<summary>0040 · Browse commit history</summary>
+<summary>0041 · Browse commit history</summary>
 
 Inspect the commit graph, commit message and changed files.
 
-![Browse commit history](media/marketplace/showcases/0040-windows-en-dark-git-history-log.png)
+![Browse commit history](media/marketplace/showcases/0041-windows-en-dark-git-history-log.png)
 
 </details>
 
 <details>
-<summary>0041 · Compare committed or working versions</summary>
+<summary>0042 · Compare committed or working versions</summary>
 
 Open the actual VS Code diff editor for a selected Git file.
 
-![Compare committed or working versions](media/marketplace/showcases/0041-windows-en-dark-git-diff-working-tree.png)
+![Compare committed or working versions](media/marketplace/showcases/0042-windows-en-dark-git-diff-working-tree.png)
 
 </details>
 
 <details>
-<summary>0042 · Configure the file manager</summary>
+<summary>0043 · Inspect available local branches</summary>
+
+Open the read-only branch list for the active repository.
+
+![Native Visual Studio Code list of branches from the sample repository](media/marketplace/showcases/0043-windows-en-dark-git-branches-quickpick.png)
+
+</details>
+
+<details>
+<summary>0044 · Configure the file manager</summary>
 
 Inspect the native integration entry and extension configuration categories.
 
-![Configure the file manager](media/marketplace/showcases/0042-windows-en-dark-settings-editor.png)
+![Configure the file manager](media/marketplace/showcases/0044-windows-en-dark-settings-editor.png)
 
 </details>
 
 <details>
-<summary>0043 · Configure favorite locations</summary>
+<summary>0045 · Configure favorite locations</summary>
 
 Manage favorite locations and groups.
 
-![Configure favorite locations](media/marketplace/showcases/0043-windows-en-dark-settings-favorites-editor.png)
+![Configure favorite locations](media/marketplace/showcases/0045-windows-en-dark-settings-favorites-editor.png)
 
 </details>
 
 <details>
-<summary>0044 · Configure file-list columns</summary>
+<summary>0046 · Configure file-list columns</summary>
 
 Inspect column sets, field choices and column visibility.
 
-![Configure file-list columns](media/marketplace/showcases/0044-windows-en-dark-settings-columns-editor.png)
+![Configure file-list columns](media/marketplace/showcases/0046-windows-en-dark-settings-columns-editor.png)
 
 </details>
 
 <details>
-<summary>0045 · Configure keyboard shortcuts</summary>
+<summary>0047 · Configure keyboard shortcuts</summary>
 
 Inspect commands, editable bindings and conflict information.
 
-![Configure keyboard shortcuts](media/marketplace/showcases/0045-windows-en-dark-settings-shortcuts-editor.png)
+![Configure keyboard shortcuts](media/marketplace/showcases/0047-windows-en-dark-settings-shortcuts-editor.png)
 
 </details>
 

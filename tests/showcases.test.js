@@ -34,6 +34,8 @@ test('native editor and separate product surfaces require their own real readine
   assert.throws(() => assertSurfaceState({ ...state, owner: 'other.extension' }, { surface: 'git-history', text: 'Git History' }));
   assert.throws(() => assertSurfaceState({ ...state, kind: 'editor', diff: false }, { surface: 'editor', text: 'Git History' }));
   assertSurfaceState({ ...state, kind: 'editor', diff: true }, { surface: 'editor', text: 'Git History' });
+  assertSurfaceState({ ...state, owner: '', kind: 'quickpick' }, { surface: 'quickpick', text: 'Git History' });
+  assert.throws(() => assertSurfaceState(state, { surface: 'quickpick', text: 'Git History' }));
 });
 test('captures require the actual Windows filesystem state and expected visible mask', () => {
   const state = { platform: 'win32', realFilesystem: true, visible: true, iconsReady: true, text: 'New folder', paths: ['C:\\demo\\left', 'C:\\demo\\right'], pending: false };
@@ -160,5 +162,66 @@ test('recording timing retains the final reading pause and a consistent image ti
   assert.ok(Math.abs(duration - 1.6) < .000001);
   for (const [index, line] of lines.entries()) {
     if (line.startsWith('file ')) assert.equal(lines[index + 1], 'option framerate 1000');
+  }
+});
+
+test('showcase favorites contain only known demo folders and never inherit settings', () => {
+  const { profileSettings } = require('../scripts/showcases/run.cjs');
+  const path = require('node:path');
+  const demo = path.resolve('C:/safe-demo');
+  const settings = profileSettings(demo);
+  const favorites = settings['bitfroest.favorites.items'];
+  assert.deepEqual(favorites.map(item => item.name), ['Project sources', 'Documents', 'Delivery inbox']);
+  assert.deepEqual(favorites.map(item => item.path), ['left/bitfroest.fs', 'left/documents', 'right/inbox'].map(folder => path.join(demo, folder)));
+  assert.ok(favorites.every(item => item.type === 'favorite' && item.parent === null));
+  favorites[0].path = 'C:/private';
+  assert.notEqual(profileSettings(demo)['bitfroest.favorites.items'][0].path, 'C:/private');
+});
+
+test('catalog additions renumber existing media without changing recorded provenance', () => {
+  const { renumberManifest } = require('../scripts/showcases/run.cjs');
+  const catalog = numberCatalog([scene(), { ...scene(), id: 'next' }]);
+  const previous = { sections: [{ id: 'next', recordedAt: 'original', host: { commit: 'original' }, images: [{ file: '0001-windows-en-dark-next-dialog.png', alt: 'Existing' }] }] };
+  const result = renumberManifest(catalog, previous);
+  assert.equal(result.sections[0].images[0].file, '0002-windows-en-dark-next-dialog.png');
+  assert.deepEqual(result.sections[0].host, previous.sections[0].host);
+  assert.equal(result.sections[0].recordedAt, 'original');
+  assert.equal(previous.sections[0].images[0].file, '0001-windows-en-dark-next-dialog.png');
+});
+
+test('capture clicks allow standalone buttons but reject submitting a real form', () => {
+  const { clickControl } = require('../scripts/showcases/run.cjs');
+  let clicked = 0;
+  const button = { getBoundingClientRect: () => ({ width: 24 }), disabled: false, type: 'submit', form: null, click: () => clicked++ };
+  const root = { querySelector: () => button };
+  clickControl('button', root);
+  assert.equal(clicked, 1);
+  button.form = {};
+  assert.throws(() => clickControl('button', root), /unavailable/);
+  assert.equal(clicked, 1);
+});
+
+test('publishing renumbered media removes previous gallery references and preserves unrelated files', () => {
+  const fs = require('node:fs'), path = require('node:path'), os = require('node:os');
+  const { publish, updateReadme } = require('../scripts/showcases/publish.cjs');
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'showcase-publish-'));
+  const old = '0001-windows-en-dark-next-dialog.png', current = '0002-windows-en-dark-next-dialog.png';
+  try {
+    fs.mkdirSync(path.join(root, '.tmp/showcases'), { recursive: true });
+    fs.mkdirSync(path.join(root, 'media/marketplace/showcases'), { recursive: true });
+    const manifest = { sections: [{ id: 'next', title: 'Next', description: 'Next view.', status: 'rendered', images: [{ file: current, alt: 'Next' }] }] };
+    const earlier = { sections: [{ ...manifest.sections[0], images: [{ file: old, alt: 'Old' }] }] };
+    fs.writeFileSync(path.join(root, 'README.md'), updateReadme('# Product\n\n## Configuration\n', earlier));
+    fs.writeFileSync(path.join(root, '.tmp/showcases/showcases.json'), JSON.stringify(manifest));
+    fs.writeFileSync(path.join(root, '.tmp/showcases', current), Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+    fs.writeFileSync(path.join(root, 'media/marketplace/showcases', old), 'old');
+    fs.writeFileSync(path.join(root, 'media/marketplace/showcases/keep.png'), 'unrelated');
+    publish(root);
+    assert.equal(fs.existsSync(path.join(root, 'media/marketplace/showcases', old)), false);
+    assert.equal(fs.existsSync(path.join(root, 'media/marketplace/showcases', current)), true);
+    assert.equal(fs.readFileSync(path.join(root, 'media/marketplace/showcases/keep.png'), 'utf8'), 'unrelated');
+  } finally {
+    assert.ok(path.resolve(root).startsWith(path.resolve(os.tmpdir()) + path.sep));
+    fs.rmSync(root, { recursive: true, force: true });
   }
 });

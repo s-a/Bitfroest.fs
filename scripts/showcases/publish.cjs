@@ -44,10 +44,16 @@ function publish(root = path.resolve(__dirname, '../..')) {
     if (image.file.endsWith('.gif') ? bytes.toString('ascii', 0, 3) !== 'GIF' : bytes.toString('ascii', 1, 4) !== 'PNG') throw new Error(`Invalid media: ${image.file}`);
   }
   const readmePath = path.join(root, 'README.md');
-  const readme = updateReadme(fs.readFileSync(readmePath, 'utf8'), manifest);
+  const before = fs.readFileSync(readmePath, 'utf8'), readme = updateReadme(before, manifest);
+  const references = text => [...text.matchAll(/media\/marketplace\/showcases\/(\d{4}-windows-en-dark-[a-z0-9-]+\.(?:png|gif))/g)].map(match => mediaName(match[1]));
+  const retained = new Set([...images.map(image => image.file), ...references(readme)]);
   fs.mkdirSync(output, { recursive: true });
   for (const image of images) fs.copyFileSync(path.join(input, image.file), path.join(output, image.file));
   fs.writeFileSync(readmePath, readme);
+  for (const file of new Set(references(before))) {
+    const obsolete = path.join(output, file);
+    if (!retained.has(file) && fs.existsSync(obsolete)) fs.unlinkSync(obsolete);
+  }
   console.log(`Updated README with ${images.length} recorded images and animations in ${mediaDirectory}.`);
 }
 

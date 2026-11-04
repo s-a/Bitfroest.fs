@@ -35,12 +35,13 @@ async function captureSurface({ capture, targets, connect, connections, invoke, 
   const initial = await waitFor(inspect);
   const initialPage = initial.target.type === 'page' ? initial.target : (await targets()).find(item => item.id === initial.target.parentId);
   await (await connection(initialPage)).call('Page.bringToFront');
-  await invoke('showcase.prepare-editor');
+  if (capture.surface !== 'quickpick') await invoke('showcase.prepare-editor');
   const found = await waitFor(inspect);
   if (capture.surface === 'editor') {
     const tab = await invoke('showcase.inspect-editor');
     assertSurfaceState({ ...found.state, kind: 'editor', diff: tab.diff }, capture);
-  } else if (!['markdown', 'quickpick'].includes(capture.surface)) assertSurfaceState({ ...found.state, kind: 'webview' }, capture);
+  } else if (capture.surface === 'quickpick') assertSurfaceState({ ...found.state, kind: 'quickpick' }, capture);
+  else if (capture.surface !== 'markdown') assertSurfaceState({ ...found.state, kind: 'webview' }, capture);
   const pageTarget = found.target.type === 'page' ? found.target : (await targets()).find(item => item.id === found.target.parentId);
   const page = await connection(pageTarget);
   const shot = await page.call('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });

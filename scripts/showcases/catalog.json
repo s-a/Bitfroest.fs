@@ -215,8 +215,8 @@
   {
     "id": "location-menu",
     "parentId": "main",
-    "title": "Locations and favorites",
-    "description": "Choose favorite locations and context-specific Git or archive actions.",
+    "title": "Choose a favorite location",
+    "description": "Browse favorite project folders from the location menu.",
     "paths": [
       "${demo}/left",
       "${demo}/right"
@@ -224,9 +224,18 @@
     "sources": [
       "media/app.js"
     ],
-    "status": "pending",
-    "reason": "The location popup needs a capture-specific navigation setup.",
-    "captures": []
+    "captures": [
+      {
+        "id": "favorites",
+        "click": [
+          "[data-pane=\"0\"] [data-favorites]",
+          "[data-location-section=\"favorites\"]"
+        ],
+        "expect": "[data-favorite-menu]",
+        "text": "Project sources",
+        "alt": "Favorite locations containing only sample project folders"
+      }
+    ]
   },
   {
     "id": "history-menu",
@@ -1122,15 +1131,27 @@
     "title": "Inspect available local branches",
     "description": "Open the read-only branch list for the active repository.",
     "paths": [
-      "${demo}/left",
+      "${demo}/left/bitfroest.fs",
       "${demo}/right"
     ],
     "sources": [
       "extension.js"
     ],
-    "status": "pending",
-    "reason": "Uses a native Quick Pick requiring another capture target.",
-    "captures": []
+    "captures": [
+      {
+        "id": "quickpick",
+        "command": "bitfroest.showLocalBranches",
+        "surface": "quickpick",
+        "expect": ".quick-input-widget",
+        "ready": ".quick-input-list .monaco-list-row",
+        "text": "Available branches",
+        "alt": "Native Visual Studio Code list of branches from the sample repository",
+        "select": {
+          "side": 0,
+          "name": "README.md"
+        }
+      }
+    ]
   },
   {
     "id": "settings",
