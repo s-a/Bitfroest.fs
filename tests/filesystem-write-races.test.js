@@ -33,6 +33,7 @@ test('cancelled move does not delete a source whose published target was replace
   await fs.writeFile(`${left}/z.txt`, 'SECOND');
   adapter.copyFile = async (source, target, flags) => {
     if (source.endsWith('/z.txt')) {
+      await fs.rename(`${right}/lower.txt`, `${right}/held-publication.txt`);
       await fs.writeFile(`${right}/lower.txt`, 'EXTERNAL'); controller.abort();
       throw Object.assign(new Error('Cancelled'), { name: 'AbortError' });
     }
@@ -44,6 +45,7 @@ test('cancelled move does not delete a source whose published target was replace
   assert.equal(await fs.readFile(`${left}/lower.txt`, 'utf8'), 'ORIGINAL');
   assert.equal(await fs.readFile(`${left}/z.txt`, 'utf8'), 'SECOND');
   assert.equal(await fs.readFile(`${right}/lower.txt`, 'utf8'), 'EXTERNAL');
+  assert.equal(await fs.readFile(`${right}/held-publication.txt`, 'utf8'), 'ORIGINAL');
 });
 
 test('POSIX filesystem moves preserve distinct case-sensitive source names', { skip: process.platform === 'win32' }, async t => {
