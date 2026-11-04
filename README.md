@@ -6,31 +6,17 @@
 [![Build: main](https://github.com/s-a/Bitfroest.fs/actions/workflows/release.yml/badge.svg?branch=main)](https://github.com/s-a/Bitfroest.fs/actions/workflows/release.yml?query=branch%3Amain)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
-**A two-panel file manager inside Visual Studio Code.** Keep two folders in view, organize project files, and check local Git status without leaving the editor.
+**A two-panel file manager for Visual Studio Code.** File operations, folder tabs and Git views share a compact editor window.
 
 ![Bitfroest.fs with two folders, native Windows icons and file colors](media/marketplace/showcases/0001-windows-en-dark-main-overview.png)
 
-Bitfroest.fs is for developers managing source and build folders, administrators working with configuration files, and anyone who wants a keyboard-driven way to handle files from Visual Studio Code.
-
 **Beta version** — This extension is under development and may contain bugs or incomplete features.
-
-## What you can do
-
-- Browse two folders side by side, each with its own folder tabs and navigation history.
-- Copy, move, rename and delete files, and create folders, with conflict choices and operation progress.
-- Search for files and duplicates, and inspect text, binary and hexadecimal content.
-- Browse ZIP archives and use supported archive operations.
-- View local Git status, configure columns and file colors, and save favorite locations.
-- Open a file or folder's Git log with a commit graph, compact commit message and a larger list of changed files. Double-click a changed file to compare its committed versions in the VS Code diff editor.
-- Customize shortcuts and settings, with interface text in English or German.
-
-On Windows, the Git file menu also offers **Delete (Keep Local)** and **Delete and Add to Ignore List**. Both keep the local file and stage its removal from Git; the second action adds an exact rule to the `.gitignore` beside the file. Neither action creates a commit. Index changes that would discard staged-only content are refused.
 
 ## Get started
 
-Requires Visual Studio Code 1.100.0 or later within the declared compatible version range. Install the pre-release package for your supported operating system and processor. In Visual Studio Code, run **Bitfroest.fs: Show/hide file manager** from the Command Palette, or select its folder button in the Status Bar. Open a source folder in one panel and a destination folder in the other.
+Requires Visual Studio Code 1.100.0 or later within the declared compatible version range. Install the pre-release package for a supported operating system and processor. The Command Palette entry **Bitfroest.fs: Show/hide file manager** or its folder button in the Status Bar opens the file manager.
 
-The default shortcut is `Ctrl+Alt+Shift+F12` on Windows and Linux. The file manager opens in a separate compact editor window. Run the command again to close it. Existing startup folders are used when available; otherwise, both panels open the existing user home folder. No folders are created when the file manager opens.
+The default shortcut is `Ctrl+Alt+Shift+F12` on Windows and Linux. Repeating the command closes the window. Each panel has its own folder tabs and navigation history.
 
 ## Common shortcuts
 
@@ -46,7 +32,7 @@ The default shortcut is `Ctrl+Alt+Shift+F12` on Windows and Linux. The file mana
 | Alt+Left / Alt+Right | Navigate backward / forward |
 | Alt+F7 | Search for files |
 
-Shortcuts apply in the file manager view. Text fields and ordinary code editors keep their own key bindings. Open **Settings → Keyboard shortcuts** in the file manager to change bindings. Local conflicts must be resolved before saving; external bindings and operating system shortcuts are not checked, and chords are not supported.
+Shortcuts apply while the file manager has focus. Text fields and code editors keep their own bindings. **Configuration → Keyboard shortcuts** opens the binding editor. Local conflicts must be resolved before saving. External bindings and operating system shortcuts are not checked; chords are not supported.
 
 <!-- showcase-gallery:start -->
 ## Feature walkthrough
@@ -366,11 +352,7 @@ Inspect commands, editable bindings and conflict information.
 
 ## Configuration
 
-Search for `Bitfroest` in the Visual Studio Code Settings editor. Options include file operations, columns, favorites, colors, Git status, archive behavior and interface language. Tab layouts can be stored per workspace or shared across workspaces.
-
-File-list columns support dragging, resizing and content-based autosizing. The standard view hides the attributes column; it can be enabled in the column settings. Directory size cells stay empty until a calculated size is available. The standard date column displays time to the minute. The lists use the editor font and existing icon and row sizes.
-
-The copy and move dialog includes **Compare file contents after copying**, disabled by default. The choice is saved as `bitfroest.files.verifyAfterCopy` for subsequent operations. File identity, size and safety checks remain enabled.
+The **Configuration** menu opens settings for file operations, favorites, columns and shortcuts. Additional options are available by searching for `Bitfroest` in VS Code Settings. Tab layouts can be stored per workspace or shared across workspaces.
 
 ## Platform support
 
