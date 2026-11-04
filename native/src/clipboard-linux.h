@@ -48,5 +48,6 @@ class Session {
 };
 
 bool Probe(std::string* reason);
+bool IsXwaylandDisplay();
 
 }  // namespace native_linux_clipboard

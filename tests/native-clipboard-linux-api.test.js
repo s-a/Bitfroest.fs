@@ -84,6 +84,36 @@ test('X11 file clipboard transfers a real selection between clients and binds ac
   `);
 });
 
+test('X11 cancellation destroys only its owner window and the session can publish a fresh owner', {
+  skip: process.platform !== 'linux', timeout: 30000
+}, async t => {
+  assert.ok(process.env.NATIVE_X11_PROTOCOL_TEST_FIXTURE, 'NATIVE_X11_PROTOCOL_TEST_FIXTURE must name the built X11 protocol fixture.');
+  await x11Fixture(t, `
+    const helper = process.env.NATIVE_X11_PROTOCOL_TEST_FIXTURE;
+    const run = (...args) => {
+      const result = require('node:child_process').spawnSync(helper, args, { encoding: 'utf8', env: process.env });
+      assert.ifError(result.error);
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+      return result.stdout.trim();
+    };
+    const paths = [path.join(root, 'owned.txt')];
+    await fs.writeFile(paths[0], 'owner lifecycle');
+    const writer = api.openSession();
+    const written = await writer.invoke('clipboard.writeFiles', { paths, mode: 'move' });
+    const firstOwner = run('owner-window');
+    assert.notEqual(firstOwner, '0');
+    assert.equal(run('window-exists', firstOwner), 'exists');
+    assert.equal((await writer.invoke('clipboard.cancelFiles', written)).matched, true);
+    assert.equal(run('window-exists', firstOwner), 'missing');
+
+    const replacement = await writer.invoke('clipboard.writeFiles', { paths, mode: 'move' });
+    const secondOwner = run('owner-window');
+    assert.notEqual(secondOwner, firstOwner);
+    assert.equal(run('window-exists', secondOwner), 'exists');
+    assert.equal((await writer.invoke('clipboard.cancelFiles', replacement)).matched, true);
+  `);
+});
+
 test('X11 selection generations change when the same owner publishes the same paths again', {
   skip: process.platform !== 'linux', timeout: 30000
 }, async t => {

@@ -24,6 +24,7 @@ struct Job {
   std::shared_ptr<Wayland::Session> wayland;
   Clipboard::Request request;
   Clipboard::Result result;
+  std::string transport;
 };
 struct Closing {
   std::shared_ptr<Clipboard::Session> clipboard;
@@ -122,6 +123,7 @@ LinuxWorkResult Complete(napi_env env, napi_status status, void* data) {
   }
   napi_value result = nullptr;
   if (napi_create_object(env, &result) != napi_ok) return {};
+  if (napi_set_named_property(env, result, "transport", Text(env, job->transport)) != napi_ok) return {};
   if (job->request.operation == Clipboard::Operation::Read || job->request.operation == Clipboard::Operation::Write) {
     napi_value paths = Array(env, job->result.paths);
     napi_value mode = Text(env, job->result.mode == Clipboard::Mode::Move ? "move" : "copy");
@@ -161,7 +163,9 @@ bool IsLinuxClipboardOperation(const char* operation) {
       std::strcmp(operation, "clipboard.acknowledge") == 0 || std::strcmp(operation, "clipboard.cancelFiles") == 0;
 }
 bool ProbeLinuxClipboard(std::string* reason) {
-  return WaylandContext() ? Wayland::Probe(reason) : Clipboard::Probe(reason);
+  if (!WaylandContext()) return Clipboard::Probe(reason);
+  if (Wayland::Probe(reason)) return true;
+  return Clipboard::IsXwaylandDisplay() && Clipboard::Probe(reason);
 }
 napi_value StartLinuxClipboardQuery(napi_env env, const std::shared_ptr<SessionState>& state,
                                     const char* operation, napi_value request) {
@@ -184,12 +188,21 @@ napi_value StartLinuxClipboardQuery(napi_env env, const std::shared_ptr<SessionS
       for (const auto& path : input.remaining_paths) if (std::find(input.paths.begin(), input.paths.end(), path) == input.paths.end()) return Fail(env, "InvalidRequest", "The remaining selection is not part of the captured selection.");
     }
   }
-  if (WaylandContext()) {
+  const bool existing_wayland_session = static_cast<bool>(state->linux_wayland_clipboard_session);
+  if (existing_wayland_session || (WaylandContext() && !state->linux_clipboard_session)) {
     if (!state->linux_wayland_clipboard_session) state->linux_wayland_clipboard_session = std::make_shared<Wayland::Session>();
-    job->wayland = state->linux_wayland_clipboard_session;
-  } else {
+    if (existing_wayland_session || state->linux_wayland_clipboard_session->Available() || !Clipboard::IsXwaylandDisplay()) job->wayland = state->linux_wayland_clipboard_session;
+    else {
+      state->linux_wayland_clipboard_session->Shutdown();
+      state->linux_wayland_clipboard_session->AwaitStopped();
+      state->linux_wayland_clipboard_session.reset();
+    }
+  }
+  if (job->wayland) job->transport = "wayland-data-control";
+  else {
     if (!state->linux_clipboard_session) state->linux_clipboard_session = std::make_shared<Clipboard::Session>();
     job->clipboard = state->linux_clipboard_session;
+    job->transport = WaylandContext() ? "xwayland" : "x11";
   }
   return QueueLinuxWork(env, state, operation, job.release(), Execute, Complete, Destroy);
 }

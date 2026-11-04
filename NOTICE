@@ -15,3 +15,8 @@ Wayland ext-data-control-v1 protocol definitions
 Copyright 2018 Simon Ser, 2019 Ivan Molodetskikh, 2024 Neal Gompa.
 Native protocol metadata is adapted from the version 1 definitions.
 The permission and warranty notice is included in licenses/WAYLAND-DATA-CONTROL.txt.
+
+Wayland wlr-data-control-unstable-v1 protocol definitions, interface versions 1 and 2
+Copyright 2018 Simon Ser, 2019 Ivan Molodetskikh.
+Native protocol metadata is adapted from these definitions.
+The permission and warranty notice is included in licenses/WAYLAND-DATA-CONTROL.txt.

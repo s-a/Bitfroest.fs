@@ -265,12 +265,48 @@ int SelectionOwner(bool stall, const std::string& payload_path) {
   xcb_disconnect(connection);
   return 0;
 }
+
+int CurrentOwnerWindow() {
+  int screen_index = 0;
+  xcb_connection_t* connection = xcb_connect(nullptr, &screen_index);
+  if (!connection || xcb_connection_has_error(connection)) return 2;
+  Atoms atoms;
+  if (!LoadAtoms(connection, &atoms)) { xcb_disconnect(connection); return 2; }
+  const auto cookie = xcb_get_selection_owner(connection, atoms.clipboard);
+  auto* reply = xcb_get_selection_owner_reply(connection, cookie, nullptr);
+  if (!reply) { xcb_disconnect(connection); return 2; }
+  std::cout << reply->owner << '\n';
+  std::free(reply);
+  xcb_disconnect(connection);
+  return 0;
+}
+
+int WindowExists(const char* value) {
+  if (!value || !*value) return 2;
+  char* end = nullptr;
+  const unsigned long parsed = std::strtoul(value, &end, 0);
+  if (end == value || *end || parsed > UINT32_MAX) return 2;
+  int screen_index = 0;
+  xcb_connection_t* connection = xcb_connect(nullptr, &screen_index);
+  if (!connection || xcb_connection_has_error(connection)) return 2;
+  xcb_generic_error_t* error = nullptr;
+  auto* reply = xcb_get_window_attributes_reply(connection,
+      xcb_get_window_attributes(connection, static_cast<xcb_window_t>(parsed)), &error);
+  const bool exists = reply != nullptr && error == nullptr;
+  std::free(reply);
+  std::free(error);
+  xcb_disconnect(connection);
+  std::cout << (exists ? "exists" : "missing") << '\n';
+  return 0;
+}
 }  // namespace
 
 int main(int argc, char** argv) {
   if (argc == 2 && std::strcmp(argv[1], "parallel") == 0) return ParallelRequestors();
   if (argc == 2 && std::strcmp(argv[1], "stall") == 0) return SelectionOwner(true, {});
   if (argc == 3 && std::strcmp(argv[1], "serve-incr") == 0) return SelectionOwner(false, argv[2]);
-  std::cerr << "Expected parallel, stall, or serve-incr <payload-path>.\n";
+  if (argc == 2 && std::strcmp(argv[1], "owner-window") == 0) return CurrentOwnerWindow();
+  if (argc == 3 && std::strcmp(argv[1], "window-exists") == 0) return WindowExists(argv[2]);
+  std::cerr << "Expected parallel, stall, serve-incr <payload-path>, owner-window, or window-exists <id>.\n";
   return 2;
 }

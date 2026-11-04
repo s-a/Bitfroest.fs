@@ -50,6 +50,8 @@ struct XcbApi {
   decltype(&xcb_create_window) create_window = nullptr;
   decltype(&xcb_change_window_attributes) change_attributes = nullptr;
   decltype(&xcb_destroy_window) destroy_window = nullptr;
+  decltype(&xcb_get_window_attributes) get_window_attributes = nullptr;
+  decltype(&xcb_get_window_attributes_reply) get_window_attributes_reply = nullptr;
   decltype(&xcb_flush) flush = nullptr;
   decltype(&xcb_get_file_descriptor) file_descriptor = nullptr;
   decltype(&xcb_poll_for_event) poll_event = nullptr;
@@ -83,6 +85,8 @@ struct XcbApi {
     LOAD_XCB(generate_id, "xcb_generate_id"); LOAD_XCB(create_window, "xcb_create_window");
     LOAD_XCB(change_attributes, "xcb_change_window_attributes");
     LOAD_XCB(destroy_window, "xcb_destroy_window"); LOAD_XCB(flush, "xcb_flush");
+    LOAD_XCB(get_window_attributes, "xcb_get_window_attributes");
+    LOAD_XCB(get_window_attributes_reply, "xcb_get_window_attributes_reply");
     LOAD_XCB(file_descriptor, "xcb_get_file_descriptor"); LOAD_XCB(poll_event, "xcb_poll_for_event");
     LOAD_XCB(intern_atom, "xcb_intern_atom"); LOAD_XCB(intern_atom_reply, "xcb_intern_atom_reply");
     LOAD_XCB(get_owner, "xcb_get_selection_owner"); LOAD_XCB(get_owner_reply, "xcb_get_selection_owner_reply");
@@ -172,6 +176,52 @@ class Session::Impl {
     unavailable_reason_ = reason;
     available_.store(false);
   }
+  bool CreateSelectionWindow() {
+    const xcb_window_t created = api_.generate_id(connection_);
+    if (created == XCB_WINDOW_NONE) return false;
+    api_.create_window(connection_, XCB_COPY_FROM_PARENT, created, root_, 0, 0, 1, 1, 0,
+                       XCB_WINDOW_CLASS_INPUT_ONLY, XCB_COPY_FROM_PARENT, 0, nullptr);
+    const uint32_t event_mask = XCB_EVENT_MASK_PROPERTY_CHANGE;
+    api_.change_attributes(connection_, created, XCB_CW_EVENT_MASK, &event_mask);
+    window_ = created;
+    api_.flush(connection_);
+    auto cookie = api_.get_window_attributes(connection_, window_);
+    auto* attributes = reinterpret_cast<xcb_get_window_attributes_reply_t*>(WaitReply(cookie));
+    if (!attributes) {
+      api_.destroy_window(connection_, window_);
+      api_.flush(connection_);
+      window_ = XCB_WINDOW_NONE;
+      return false;
+    }
+    std::free(attributes);
+    if (fixes_ready_) SubscribeSelectionWindow();
+    return true;
+  }
+  void SubscribeSelectionWindow() {
+    if (!fixes_ready_ || window_ == XCB_WINDOW_NONE || atoms_.clipboard == XCB_ATOM_NONE) return;
+    api_.fixes_select(connection_, window_, atoms_.clipboard,
+        XCB_XFIXES_SELECTION_EVENT_MASK_SET_SELECTION_OWNER |
+        XCB_XFIXES_SELECTION_EVENT_MASK_SELECTION_WINDOW_DESTROY |
+        XCB_XFIXES_SELECTION_EVENT_MASK_SELECTION_CLIENT_CLOSE);
+    api_.flush(connection_);
+  }
+  bool ReleaseOwnedWindow() {
+    const xcb_window_t previous = window_;
+    window_ = XCB_WINDOW_NONE;
+    if (previous != XCB_WINDOW_NONE) api_.destroy_window(connection_, previous);
+    api_.flush(connection_);
+    own_paths_.clear();
+    own_payload_.clear();
+    own_uri_.clear();
+    own_path_identities_.clear();
+    own_token_.clear();
+    ++owner_generation_;
+    if (!CreateSelectionWindow()) {
+      SetUnavailable("X11SelectionWindowRecreateFailed");
+      return false;
+    }
+    return true;
+  }
   xcb_atom_t Atom(const char* name) {
     auto cookie = api_.intern_atom(connection_, 0, static_cast<uint16_t>(std::strlen(name)), name);
     auto* reply = reinterpret_cast<xcb_intern_atom_reply_t*>(WaitReply(cookie));
@@ -179,7 +229,7 @@ class Session::Impl {
     const auto value = reply->atom; std::free(reply); return value;
   }
   bool Initialize() {
-    if (IsWayland()) { SetUnavailable("UnsupportedWayland"); return false; }
+    if (IsWayland() && !IsXwaylandDisplay()) { SetUnavailable("UnsupportedWayland"); return false; }
     const char* display = std::getenv("DISPLAY");
     if (!display || !*display) { SetUnavailable("X11DisplayUnavailable"); return false; }
     if (!api_.Load()) { SetUnavailable("UnsupportedX11Libraries"); return false; }
@@ -190,12 +240,8 @@ class Session::Impl {
     auto iterator = api_.roots(setup);
     for (int index = 0; index < screen_index; ++index) api_.screen_next(&iterator);
     if (!iterator.data) { SetUnavailable("X11ScreenUnavailable"); return false; }
-    const xcb_window_t root = iterator.data->root;
-    window_ = api_.generate_id(connection_);
-    api_.create_window(connection_, XCB_COPY_FROM_PARENT, window_, root, 0, 0, 1, 1, 0,
-                       XCB_WINDOW_CLASS_INPUT_ONLY, XCB_COPY_FROM_PARENT, 0, nullptr);
-    const uint32_t event_mask = XCB_EVENT_MASK_PROPERTY_CHANGE;
-    api_.change_attributes(connection_, window_, XCB_CW_EVENT_MASK, &event_mask);
+    root_ = iterator.data->root;
+    if (!CreateSelectionWindow()) { SetUnavailable("X11SelectionWindowCreateFailed"); return false; }
     atoms_.clipboard = Atom("CLIPBOARD"); atoms_.targets = Atom("TARGETS");
     atoms_.timestamp = Atom("TIMESTAMP"); atoms_.atom = Atom("ATOM");
     atoms_.integer = Atom("INTEGER"); atoms_.incr = Atom("INCR");
@@ -214,11 +260,8 @@ class Session::Impl {
     const auto* extension_info = extension ? api_.extension_data(connection_, extension) : nullptr;
     if (!extension_info || !extension_info->present) { SetUnavailable("UnsupportedXFixes"); return false; }
     fixes_event_base_ = extension_info->first_event;
-    api_.fixes_select(connection_, window_, atoms_.clipboard,
-        XCB_XFIXES_SELECTION_EVENT_MASK_SET_SELECTION_OWNER |
-        XCB_XFIXES_SELECTION_EVENT_MASK_SELECTION_WINDOW_DESTROY |
-        XCB_XFIXES_SELECTION_EVENT_MASK_SELECTION_CLIENT_CLOSE);
-    api_.flush(connection_);
+    fixes_ready_ = true;
+    SubscribeSelectionWindow();
     available_.store(true);
     return true;
   }
@@ -608,16 +651,22 @@ class Session::Impl {
     if (request.operation == Operation::Cancel && matched && own) {
       auto cookie = api_.get_owner(connection_, atoms_.clipboard);
       auto* owner = reinterpret_cast<xcb_get_selection_owner_reply_t*>(WaitReply(cookie));
-      if (owner && owner->owner == window_) api_.set_owner(connection_, XCB_WINDOW_NONE, atoms_.clipboard, XCB_CURRENT_TIME);
+      const bool still_owned = owner && owner->owner == window_;
       if (owner) std::free(owner);
-      own_paths_.clear(); own_payload_.clear(); own_uri_.clear(); api_.flush(connection_);
+      result.matched = still_owned;
+      if (still_owned && !ReleaseOwnedWindow())
+        return Failure("X11SelectionWindowRecreateFailed", "The X11 clipboard owner window could not be replaced safely.");
     } else if (request.operation == Operation::Acknowledge && matched && own && request.mode == Mode::Move) {
       auto cookie = api_.get_owner(connection_, atoms_.clipboard);
       auto* owner = reinterpret_cast<xcb_get_selection_owner_reply_t*>(WaitReply(cookie));
       if (owner && owner->owner == window_ && request.token == own_token_ && RemainingIdentitiesMatch(request.remaining_paths)) {
-        own_paths_ = request.remaining_paths;
-        if (own_paths_.empty()) { api_.set_owner(connection_, XCB_WINDOW_NONE, atoms_.clipboard, XCB_CURRENT_TIME); own_payload_.clear(); own_uri_.clear(); }
-        else {
+        if (request.remaining_paths.empty()) {
+          if (!ReleaseOwnedWindow()) {
+            if (owner) std::free(owner);
+            return Failure("X11SelectionWindowRecreateFailed", "The X11 clipboard owner window could not be replaced safely.");
+          }
+        } else {
+          own_paths_ = request.remaining_paths;
           FileSelection updated{own_paths_, own_mode_ == Mode::Move ? FileMode::Move : FileMode::Copy};
           if (!EncodeGnomeCopiedFiles(updated, &own_payload_) || !EncodeUriList(own_paths_, &own_uri_)) {
             result.notification_errors.push_back("Remaining selection could not be encoded.");
@@ -668,8 +717,10 @@ class Session::Impl {
 
   XcbApi api_;
   xcb_connection_t* connection_ = nullptr;
+  xcb_window_t root_ = XCB_WINDOW_NONE;
   xcb_window_t window_ = XCB_WINDOW_NONE;
   Atoms atoms_;
+  bool fixes_ready_ = false;
   std::thread worker_;
   mutable std::mutex mutex_, status_mutex_, join_mutex_;
   std::condition_variable condition_;
@@ -698,10 +749,27 @@ void Session::AwaitStopped() { impl_->AwaitStopped(); }
 bool Session::Available() const { return impl_->Available(); }
 std::string Session::UnavailableReason() const { return impl_->UnavailableReason(); }
 
+bool IsXwaylandDisplay() {
+  const char* display = std::getenv("DISPLAY");
+  if (!display || !*display) return false;
+  XcbApi api;
+  if (!api.Load()) return false;
+  xcb_connection_t* connection = api.connect(display, nullptr);
+  if (!connection) return false;
+  bool present = false;
+  if (!api.has_error(connection)) {
+    xcb_extension_t extension{"XWAYLAND", 0};
+    const auto* reply = api.extension_data(connection, &extension);
+    present = reply && reply->present;
+  }
+  api.disconnect(connection);
+  return present;
+}
+
 bool Probe(std::string* reason) {
   if (reason) reason->clear();
   const char* wayland = std::getenv("WAYLAND_DISPLAY");
-  if (wayland && *wayland) { if (reason) *reason = "UnsupportedWayland"; return false; }
+  if (wayland && *wayland && !IsXwaylandDisplay()) { if (reason) *reason = "UnsupportedWayland"; return false; }
   void* xcb = dlopen("libxcb.so.1", RTLD_NOW | RTLD_LOCAL);
   void* fixes = dlopen("libxcb-xfixes.so.0", RTLD_NOW | RTLD_LOCAL);
   if (!xcb || !fixes || !dlsym(xcb, "xcb_connect") || !dlsym(fixes, "xcb_xfixes_query_version")) {

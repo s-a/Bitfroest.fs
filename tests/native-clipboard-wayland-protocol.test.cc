@@ -4,6 +4,7 @@
 #include <wayland-server-core.h>
 #include <wayland-server-protocol.h>
 #include <ext-data-control-v1-server-protocol.h>
+#include <wlr-data-control-unstable-v1-server-protocol.h>
 
 #include <fcntl.h>
 #include <dirent.h>
@@ -65,8 +66,10 @@ class EnvironmentValue {
 class PrivateWaylandServer {
  public:
   explicit PrivateWaylandServer(bool offer_data_control, std::string payload = {}, bool hold_receive = false,
-                                bool empty_wayland_socket = false, bool close_source_fd = false)
-      : payload_(std::move(payload)), hold_receive_(hold_receive), close_source_fd_(close_source_fd) {
+                                bool empty_wayland_socket = false, bool close_source_fd = false, bool offer_wlr = false,
+                                uint32_t wlr_version = 2)
+      : payload_(std::move(payload)), hold_receive_(hold_receive), close_source_fd_(close_source_fd),
+        offer_wlr_(offer_wlr), wlr_version_(wlr_version) {
     char pattern[] = "/tmp/wayland-protocol-test-XXXXXX";
     char* directory = mkdtemp(pattern);
     Require(directory != nullptr);
@@ -86,6 +89,10 @@ class PrivateWaylandServer {
     if (offer_data_control) {
       manager_global_ = wl_global_create(display_, &ext_data_control_manager_v1_interface, 1, this, BindManager);
       Require(manager_global_ != nullptr);
+    }
+    if (offer_wlr_) {
+      wlr_manager_global_ = wl_global_create(display_, &zwlr_data_control_manager_v1_interface, wlr_version_, this, BindWlrManager);
+      Require(wlr_manager_global_ != nullptr);
     }
     loop_ = wl_display_get_event_loop(display_);
     Require(loop_ != nullptr && pipe2(wake_pipe_, O_CLOEXEC | O_NONBLOCK) == 0);
@@ -126,20 +133,45 @@ class PrivateWaylandServer {
   }
   bool WaitForClear() {
     std::unique_lock<std::mutex> lock(selection_mutex_);
-    return selection_changed_.wait_for(lock, std::chrono::seconds(5), [&] { return clear_count_ > 0; });
+    return selection_changed_.wait_for(lock, std::chrono::seconds(5), [&] { return source_release_count_ > 0; });
   }
   unsigned ClearCount() {
     std::lock_guard<std::mutex> lock(selection_mutex_);
     return clear_count_;
   }
+  unsigned SelectionSetCount() const { return selection_set_count_.load(); }
+  void RequestCurrentSourceData() {
+    Post([this] {
+      if (current_source_) BeginSourceTransfer(current_source_);
+      current_source_data_requested_.store(true);
+    });
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (!current_source_data_requested_.load() && std::chrono::steady_clock::now() < deadline) usleep(1000);
+    Require(current_source_data_requested_.load());
+  }
+  void RaceForeignOwnerBeforeNextRelease() {
+    race_foreign_owner_before_release_.store(true);
+  }
+  bool ForeignOwnerActive() const { return foreign_owner_active_.load(); }
+  bool WaitForForeignOwner() const {
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (!foreign_owner_active_.load() && std::chrono::steady_clock::now() < deadline) usleep(1000);
+    return foreign_owner_active_.load();
+  }
+  void SendSelection(wl_resource* device, wl_resource* offer) {
+    if (offer_wlr_) zwlr_data_control_device_v1_send_selection(device, offer);
+    else ext_data_control_device_v1_send_selection(device, offer);
+  }
   void ChangeOwnerToForeign() {
     Post([this] {
       if (current_source_) {
-        ext_data_control_source_v1_send_cancelled(current_source_->resource);
+        if (offer_wlr_) zwlr_data_control_source_v1_send_cancelled(current_source_->resource);
+        else ext_data_control_source_v1_send_cancelled(current_source_->resource);
         current_source_ = nullptr;
       }
+      foreign_owner_active_.store(true);
       if (device_resource_ && initial_offer_resource_)
-        ext_data_control_device_v1_send_selection(device_resource_, initial_offer_resource_);
+        SendSelection(device_resource_, initial_offer_resource_);
       wl_display_flush_clients(display_);
       foreign_selection_sent_.store(true);
     });
@@ -160,7 +192,7 @@ class PrivateWaylandServer {
   }
   void ChangeSelectionToEmpty() {
     Post([this] {
-      if (device_resource_) ext_data_control_device_v1_send_selection(device_resource_, nullptr);
+      if (device_resource_) SendSelection(device_resource_, nullptr);
       selection_change_sent_.store(true);
     });
   }
@@ -272,12 +304,20 @@ class PrivateWaylandServer {
     const bool offered = source && std::find(source->mime_types.begin(), source->mime_types.end(), mime) != source->mime_types.end();
     offered_gnome_files_.store(offered);
     offered_uri_list_.store(source && std::find(source->mime_types.begin(), source->mime_types.end(), "text/uri-list") != source->mime_types.end());
-    if (!offered || transfer_thread_.joinable()) return;
+    if (!offered) return;
+    if (transfer_thread_.joinable()) transfer_thread_.join();
+    {
+      std::lock_guard<std::mutex> lock(transfer_mutex_);
+      transferred_payload_.clear();
+      transfer_done_ = false;
+      transfer_ok_ = false;
+    }
     int descriptors[2];
     Require(pipe2(descriptors, O_CLOEXEC | O_NONBLOCK) == 0);
     if (close_source_fd_) {
       close(descriptors[0]);
-      ext_data_control_source_v1_send_send(source->resource, mime.c_str(), descriptors[1]);
+      if (offer_wlr_) zwlr_data_control_source_v1_send_send(source->resource, mime.c_str(), descriptors[1]);
+      else ext_data_control_source_v1_send_send(source->resource, mime.c_str(), descriptors[1]);
       wl_display_flush_clients(display_);
       close(descriptors[1]);
       source_request_sent_.store(true);
@@ -308,7 +348,8 @@ class PrivateWaylandServer {
       }
       transfer_changed_.notify_all();
     });
-    ext_data_control_source_v1_send_send(source->resource, mime.c_str(), descriptors[1]);
+    if (offer_wlr_) zwlr_data_control_source_v1_send_send(source->resource, mime.c_str(), descriptors[1]);
+    else ext_data_control_source_v1_send_send(source->resource, mime.c_str(), descriptors[1]);
     wl_display_flush_clients(display_);
     close(descriptors[1]);
     source_request_sent_.store(true);
@@ -335,6 +376,13 @@ class PrivateWaylandServer {
     static const struct ext_data_control_manager_v1_interface implementation = {CreateSource, GetDataDevice, DestroyManager};
     wl_resource_set_implementation(resource, &implementation, self, nullptr);
   }
+  static void BindWlrManager(wl_client* client, void* data, uint32_t version, uint32_t id) {
+    auto* self = static_cast<PrivateWaylandServer*>(data);
+    wl_resource* resource = wl_resource_create(client, &zwlr_data_control_manager_v1_interface, std::min(version, 2u), id);
+    if (!resource) { wl_client_post_no_memory(client); return; }
+    static const struct zwlr_data_control_manager_v1_interface implementation = {CreateWlrSource, GetWlrDataDevice, DestroyManager};
+    wl_resource_set_implementation(resource, &implementation, self, nullptr);
+  }
 
   static void CreateSource(wl_client* client, wl_resource* manager, uint32_t id) {
     auto* self = static_cast<PrivateWaylandServer*>(wl_resource_get_user_data(manager));
@@ -343,6 +391,15 @@ class PrivateWaylandServer {
     auto* source = new (std::nothrow) SourceState{self, resource, {}};
     if (!source) { wl_resource_destroy(resource); wl_client_post_no_memory(client); return; }
     static const struct ext_data_control_source_v1_interface implementation = {OfferSource, DestroySource};
+    wl_resource_set_implementation(resource, &implementation, source, DestroySourceResource);
+  }
+  static void CreateWlrSource(wl_client* client, wl_resource* manager, uint32_t id) {
+    auto* self = static_cast<PrivateWaylandServer*>(wl_resource_get_user_data(manager));
+    wl_resource* resource = wl_resource_create(client, &zwlr_data_control_source_v1_interface, 1, id);
+    if (!resource) { wl_client_post_no_memory(client); return; }
+    auto* source = new (std::nothrow) SourceState{self, resource, {}};
+    if (!source) { wl_resource_destroy(resource); wl_client_post_no_memory(client); return; }
+    static const struct zwlr_data_control_source_v1_interface implementation = {OfferSource, DestroySource};
     wl_resource_set_implementation(resource, &implementation, source, DestroySourceResource);
   }
   static void GetDataDevice(wl_client* client, wl_resource* manager, uint32_t id, wl_resource* seat) {
@@ -363,6 +420,24 @@ class PrivateWaylandServer {
     ext_data_control_offer_v1_send_offer(offer, "x-special/gnome-copied-files");
     ext_data_control_device_v1_send_selection(device, offer);
   }
+  static void GetWlrDataDevice(wl_client* client, wl_resource* manager, uint32_t id, wl_resource* seat) {
+    auto* self = static_cast<PrivateWaylandServer*>(wl_resource_get_user_data(manager));
+    Require(seat != nullptr && self != nullptr);
+    const uint32_t version = wl_resource_get_version(manager);
+    wl_resource* device = wl_resource_create(client, &zwlr_data_control_device_v1_interface, version, id);
+    if (!device) { wl_client_post_no_memory(client); return; }
+    static const struct zwlr_data_control_device_v1_interface implementation = {SetSelection, DestroyDevice, SetPrimarySelection};
+    wl_resource_set_implementation(device, &implementation, self, nullptr);
+    self->device_resource_ = device;
+    wl_resource* offer = wl_resource_create(client, &zwlr_data_control_offer_v1_interface, 1, 0);
+    if (!offer) { wl_client_post_no_memory(client); return; }
+    self->initial_offer_resource_ = offer;
+    static const struct zwlr_data_control_offer_v1_interface offer_implementation = {Receive, DestroyOffer};
+    wl_resource_set_implementation(offer, &offer_implementation, self, nullptr);
+    zwlr_data_control_device_v1_send_data_offer(device, offer);
+    zwlr_data_control_offer_v1_send_offer(offer, "x-special/gnome-copied-files");
+    zwlr_data_control_device_v1_send_selection(device, offer);
+  }
 
   static void DestroyManager(wl_client*, wl_resource* resource) { wl_resource_destroy(resource); }
   static void SetSelection(wl_client*, wl_resource* device, wl_resource* source_resource) {
@@ -374,12 +449,16 @@ class PrivateWaylandServer {
         ++self->clear_count_;
       }
       self->current_source_ = nullptr;
+      self->foreign_owner_active_.store(false);
       self->selection_changed_.notify_all();
       return;
     }
     auto* source = static_cast<SourceState*>(wl_resource_get_user_data(source_resource));
-    if (self->current_source_ && self->current_source_ != source)
-      ext_data_control_source_v1_send_cancelled(self->current_source_->resource);
+    self->selection_set_count_.fetch_add(1);
+    if (self->current_source_ && self->current_source_ != source) {
+      if (self->offer_wlr_) zwlr_data_control_source_v1_send_cancelled(self->current_source_->resource);
+      else ext_data_control_source_v1_send_cancelled(self->current_source_->resource);
+    }
     self->current_source_ = source;
     self->BeginSourceTransfer(source);
   }
@@ -395,7 +474,29 @@ class PrivateWaylandServer {
 
   static void DestroySource(wl_client*, wl_resource* resource) { wl_resource_destroy(resource); }
   static void DestroySourceResource(wl_resource* resource) {
-    delete static_cast<SourceState*>(wl_resource_get_user_data(resource));
+    auto* source = static_cast<SourceState*>(wl_resource_get_user_data(resource));
+    if (!source) return;
+    auto* self = source->server;
+    if (self && self->race_foreign_owner_before_release_.exchange(false)) {
+      if (self->current_source_) {
+        if (self->offer_wlr_) zwlr_data_control_source_v1_send_cancelled(self->current_source_->resource);
+        else ext_data_control_source_v1_send_cancelled(self->current_source_->resource);
+      }
+      self->current_source_ = nullptr;
+      self->foreign_owner_active_.store(true);
+      if (self->device_resource_ && self->initial_offer_resource_)
+        self->SendSelection(self->device_resource_, self->initial_offer_resource_);
+    }
+    if (self && self->current_source_ == source) {
+      self->current_source_ = nullptr;
+      self->foreign_owner_active_.store(false);
+      {
+        std::lock_guard<std::mutex> lock(self->selection_mutex_);
+        ++self->source_release_count_;
+      }
+      self->selection_changed_.notify_all();
+    }
+    delete source;
   }
 
   static void Receive(wl_client*, wl_resource* resource, const char* mime_type, int fd) {
@@ -421,6 +522,8 @@ class PrivateWaylandServer {
   std::string payload_;
   bool hold_receive_ = false;
   bool close_source_fd_ = false;
+  bool offer_wlr_ = false;
+  uint32_t wlr_version_ = 2;
   std::string runtime_directory_;
   std::string socket_name_;
   EnvironmentValue runtime_{"XDG_RUNTIME_DIR"};
@@ -429,8 +532,11 @@ class PrivateWaylandServer {
   wl_display* display_ = nullptr;
   wl_global* seat_global_ = nullptr;
   wl_global* manager_global_ = nullptr;
+  wl_global* wlr_manager_global_ = nullptr;
   std::thread server_thread_;
   std::atomic<unsigned> receive_count_{0};
+  std::atomic<unsigned> selection_set_count_{0};
+  std::atomic<bool> current_source_data_requested_{false};
   std::atomic<bool> expected_mime_{false};
   std::atomic<bool> offered_uri_list_{false};
   std::atomic<bool> offered_gnome_files_{false};
@@ -444,6 +550,7 @@ class PrivateWaylandServer {
   std::mutex selection_mutex_;
   std::condition_variable selection_changed_;
   unsigned clear_count_ = 0;
+  unsigned source_release_count_ = 0;
   wl_event_loop* loop_ = nullptr;
   int wake_pipe_[2] = {-1, -1};
   std::thread transfer_thread_;
@@ -452,6 +559,8 @@ class PrivateWaylandServer {
   std::deque<std::function<void()>> tasks_;
   std::atomic<bool> selection_change_sent_{false};
   std::atomic<bool> foreign_selection_sent_{false};
+  std::atomic<bool> race_foreign_owner_before_release_{false};
+  std::atomic<bool> foreign_owner_active_{false};
   std::atomic<bool> pause_dispatch_{false};
   std::atomic<bool> clients_dropped_{false};
   std::mutex pause_mutex_;
@@ -657,6 +766,49 @@ void PartialMoveDoesNotRetainAReplacedRemainingPath() {
   std::error_code ignored; std::filesystem::remove_all(directory, ignored);
 }
 
+void PartialMoveAcknowledgementUpdatesTheCurrentSourceWithoutReplacingSelection() {
+  char pattern[] = "/tmp/wayland-partial-source-XXXXXX";
+  char* directory = mkdtemp(pattern);
+  Require(directory != nullptr);
+  const std::filesystem::path first_path = std::filesystem::path(directory) / "first.txt";
+  const std::filesystem::path remaining_path = std::filesystem::path(directory) / "remaining.txt";
+  { std::ofstream output(first_path); output << "first"; }
+  { std::ofstream output(remaining_path); output << "remaining"; }
+  PrivateWaylandServer server(true, "copy\nfile:///tmp/foreign-current-selection.txt\r\n");
+  native_linux_wayland_clipboard::Session session;
+  native_linux_clipboard::Request write;
+  write.operation = native_linux_clipboard::Operation::Write;
+  write.paths = {first_path.string(), remaining_path.string()};
+  write.mode = native_linux_clipboard::Mode::Move;
+  const auto original = session.Invoke(write);
+  Require(original.ok && !original.token.empty());
+  std::string initial_payload;
+  Require(server.WaitForSourceData(&initial_payload));
+  Require(server.SelectionSetCount() == 1);
+
+  native_linux_clipboard::Request acknowledge;
+  acknowledge.operation = native_linux_clipboard::Operation::Acknowledge;
+  acknowledge.paths = write.paths;
+  acknowledge.remaining_paths = {remaining_path.string()};
+  acknowledge.mode = write.mode;
+  acknowledge.token = original.token;
+  const auto result = session.Invoke(acknowledge);
+  Require(result.ok && result.matched && result.paths == acknowledge.remaining_paths);
+
+  native_linux_clipboard::Request read;
+  read.operation = native_linux_clipboard::Operation::Read;
+  const auto barrier = session.Invoke(read);
+  Require(barrier.ok);
+  Require(server.SelectionSetCount() == 1);
+  server.RequestCurrentSourceData();
+  std::string remaining_payload;
+  Require(server.WaitForSourceData(&remaining_payload));
+  Require(remaining_payload == "cut\nfile://" + remaining_path.string() + "\r\n");
+
+  session.Shutdown(); session.AwaitStopped(); server.Stop();
+  std::error_code ignored; std::filesystem::remove_all(directory, ignored);
+}
+
 void CompositorLossDuringHeldOfferReadSettlesBeforeTheTransferDeadline() {
   PrivateWaylandServer server(true, {}, true);
   native_linux_wayland_clipboard::Session session;
@@ -777,6 +929,63 @@ void APreObservedForeignOwnerChangePreventsTheBackendFromSendingClear() {
   Require(server.ClearCount() == 0);
   session.Shutdown(); session.AwaitStopped(); server.Stop();
 }
+
+void ReleasingAnOwnedSourceCannotClearACompetingOwnerThatWinsTheRace() {
+  PrivateWaylandServer server(true);
+  native_linux_wayland_clipboard::Session session;
+  native_linux_clipboard::Request write;
+  write.operation = native_linux_clipboard::Operation::Write;
+  write.paths = {"/tmp/foreign-owner-release-race.txt"};
+  write.mode = native_linux_clipboard::Mode::Move;
+  const auto written = session.Invoke(write);
+  Require(written.ok && !written.token.empty());
+  Require(server.WaitForSourceRequest());
+  std::string ignored;
+  Require(server.WaitForSourceData(&ignored));
+  server.RaceForeignOwnerBeforeNextRelease();
+  native_linux_clipboard::Request acknowledge;
+  acknowledge.operation = native_linux_clipboard::Operation::Acknowledge;
+  acknowledge.paths = write.paths;
+  acknowledge.mode = write.mode;
+  acknowledge.token = written.token;
+  const auto result = session.Invoke(acknowledge);
+  Require(result.ok && result.matched);
+  Require(server.WaitForForeignOwner());
+  Require(server.ClearCount() == 0);
+  session.Shutdown(); session.AwaitStopped(); server.Stop();
+}
+
+void WlrDataControlFallbackReadsWritesAndReleasesOnlyItsCurrentSource() {
+  for (const uint32_t version : {1u, 2u}) {
+    PrivateWaylandServer server(false, "copy\nfile:///tmp/wlr-file.txt\r\n", false, false, false, true, version);
+    native_linux_wayland_clipboard::Session session;
+    native_linux_clipboard::Request read;
+    read.operation = native_linux_clipboard::Operation::Read;
+    const auto external = session.Invoke(read);
+    Require(external.ok && external.available && external.paths == std::vector<std::string>{"/tmp/wlr-file.txt"});
+
+    native_linux_clipboard::Request write;
+    write.operation = native_linux_clipboard::Operation::Write;
+    write.paths = {"/tmp/wlr-owned-file.txt"};
+    write.mode = native_linux_clipboard::Mode::Move;
+    const auto owned = session.Invoke(write);
+    Require(owned.ok && owned.available && owned.mode == write.mode && !owned.token.empty());
+    std::string transferred;
+    Require(server.WaitForSourceData(&transferred));
+    Require(transferred == "cut\nfile:///tmp/wlr-owned-file.txt\r\n");
+
+    native_linux_clipboard::Request cancel;
+    cancel.operation = native_linux_clipboard::Operation::Cancel;
+    cancel.paths = write.paths;
+    cancel.mode = write.mode;
+    cancel.token = owned.token;
+    const auto cancelled = session.Invoke(cancel);
+    Require(cancelled.ok && cancelled.matched);
+    Require(server.WaitForClear());
+    Require(server.ClearCount() == 0);
+    session.Shutdown(); session.AwaitStopped(); server.Stop();
+  }
+}
 }
 
 int main(int argc, char** argv) {
@@ -785,12 +994,15 @@ int main(int argc, char** argv) {
   if (argc > 1 && std::strcmp(argv[1], "empty-socket") == 0) { EmptyWaylandSocketDoesNotOverrideNamedDisplay(); return 0; }
   if (argc > 1 && std::strcmp(argv[1], "owned-identity") == 0) { OwnedTokenChangesWhenItsPathIdentityChanges(); return 0; }
   if (argc > 1 && std::strcmp(argv[1], "remaining-identity") == 0) { PartialMoveDoesNotRetainAReplacedRemainingPath(); return 0; }
+  if (argc > 1 && std::strcmp(argv[1], "partial-source-update") == 0) { PartialMoveAcknowledgementUpdatesTheCurrentSourceWithoutReplacingSelection(); return 0; }
   if (argc > 1 && std::strcmp(argv[1], "read-connection-loss") == 0) { CompositorLossDuringHeldOfferReadSettlesBeforeTheTransferDeadline(); return 0; }
   if (argc > 1 && std::strcmp(argv[1], "shutdown-pending") == 0) { ShutdownSettlesAnOfferReadAndAllQueuedRequestsAndReleasesResources(); return 0; }
   if (argc > 1 && std::strcmp(argv[1], "shutdown-roundtrip") == 0) { ShutdownInterruptsAWorkerBlockedInProtocolRoundtrip(); return 0; }
   if (argc > 1 && std::strcmp(argv[1], "write-connection-loss") == 0) { CompositorLossDuringWriteRoundtripReturnsAConnectionFailure(); return 0; }
   if (argc > 1 && std::strcmp(argv[1], "writer-lifecycle") == 0) { EarlyTransferPeerCloseDoesNotDeliverSigpipeAndShutdownJoinsTheWriter(); return 0; }
   if (argc > 1 && std::strcmp(argv[1], "preobserved-owner-change") == 0) { APreObservedForeignOwnerChangePreventsTheBackendFromSendingClear(); return 0; }
+  if (argc > 1 && std::strcmp(argv[1], "owner-release-race") == 0) { ReleasingAnOwnedSourceCannotClearACompetingOwnerThatWinsTheRace(); return 0; }
+  if (argc > 1 && std::strcmp(argv[1], "wlr-fallback") == 0) { WlrDataControlFallbackReadsWritesAndReleasesOnlyItsCurrentSource(); return 0; }
   MissingGlobalIsReportedAsUnsupported();
   GnomeFileSelectionIsReadThroughTheProtocol();
   FileSelectionWriteTransfersCanonicalPayloadAndCancelClearsTheSelection();
@@ -799,11 +1011,14 @@ int main(int argc, char** argv) {
   EmptyWaylandSocketDoesNotOverrideNamedDisplay();
   OwnedTokenChangesWhenItsPathIdentityChanges();
   PartialMoveDoesNotRetainAReplacedRemainingPath();
+  PartialMoveAcknowledgementUpdatesTheCurrentSourceWithoutReplacingSelection();
   CompositorLossDuringHeldOfferReadSettlesBeforeTheTransferDeadline();
   ShutdownSettlesAnOfferReadAndAllQueuedRequestsAndReleasesResources();
   ShutdownInterruptsAWorkerBlockedInProtocolRoundtrip();
   CompositorLossDuringWriteRoundtripReturnsAConnectionFailure();
   EarlyTransferPeerCloseDoesNotDeliverSigpipeAndShutdownJoinsTheWriter();
   APreObservedForeignOwnerChangePreventsTheBackendFromSendingClear();
+  ReleasingAnOwnedSourceCannotClearACompetingOwnerThatWinsTheRace();
+  WlrDataControlFallbackReadsWritesAndReleasesOnlyItsCurrentSource();
   return 0;
 }

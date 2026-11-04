@@ -117,6 +117,34 @@ const wl_interface g_offer_interface = {"ext_data_control_offer_v1", 1, 2, g_off
 const wl_interface g_device_interface = {"ext_data_control_device_v1", 1, 3, g_device_requests, 4, g_device_events};
 const wl_interface g_manager_interface = {"ext_data_control_manager_v1", 1, 3, g_manager_requests, 0, nullptr};
 
+const wl_interface* g_wlr_manager_types[3]{};
+const wl_message g_wlr_manager_requests[] = {
+    {"create_data_source", "n", &g_wlr_manager_types[0]},
+    {"get_data_device", "no", &g_wlr_manager_types[1]},
+    {"destroy", "", nullptr},
+};
+const wl_interface* g_wlr_device_types[1]{};
+const wl_message g_wlr_device_requests[] = {
+    {"set_selection", "?o", &g_wlr_device_types[0]},
+    {"destroy", "", nullptr},
+    {"set_primary_selection", "2?o", &g_wlr_device_types[0]},
+};
+const wl_interface* g_wlr_device_event_types[2]{};
+const wl_message g_wlr_device_events[] = {
+    {"data_offer", "n", &g_wlr_device_event_types[0]},
+    {"selection", "?o", &g_wlr_device_event_types[1]},
+    {"finished", "", nullptr},
+    {"primary_selection", "2?o", &g_wlr_device_event_types[1]},
+};
+const wl_message g_wlr_source_requests[] = {{"offer", "s", nullptr}, {"destroy", "", nullptr}};
+const wl_message g_wlr_source_events[] = {{"send", "sh", nullptr}, {"cancelled", "", nullptr}};
+const wl_message g_wlr_offer_requests[] = {{"receive", "sh", nullptr}, {"destroy", "", nullptr}};
+const wl_message g_wlr_offer_events[] = {{"offer", "s", nullptr}};
+const wl_interface g_wlr_source_interface = {"zwlr_data_control_source_v1", 1, 2, g_wlr_source_requests, 2, g_wlr_source_events};
+const wl_interface g_wlr_offer_interface = {"zwlr_data_control_offer_v1", 1, 2, g_wlr_offer_requests, 1, g_wlr_offer_events};
+const wl_interface g_wlr_device_interface = {"zwlr_data_control_device_v1", 2, 3, g_wlr_device_requests, 4, g_wlr_device_events};
+const wl_interface g_wlr_manager_interface = {"zwlr_data_control_manager_v1", 2, 3, g_wlr_manager_requests, 0, nullptr};
+
 struct Api {
   void* library = nullptr;
   wl_display* (*display_connect)(const char*) = nullptr;
@@ -272,6 +300,7 @@ class Session::Impl {
   std::string UnavailableReason() const { std::lock_guard<std::mutex> lock(mutex_); return reason_; }
 
  private:
+  enum class Protocol { Ext, Wlr };
   struct Command { Request request; std::promise<Result> promise; };
   struct Offer { wl_proxy* proxy = nullptr; std::set<std::string> mime_types; };
   struct Source { std::string uri_list; std::string gnome_files; };
@@ -279,7 +308,9 @@ class Session::Impl {
   static void RegistryGlobal(void* data, wl_proxy*, uint32_t name, const char* interface, uint32_t version) {
     auto* self = static_cast<Impl*>(data);
     if (std::strcmp(interface, "ext_data_control_manager_v1") == 0 && !self->manager_name_) {
-      self->manager_name_ = name; self->manager_version_ = std::min(version, 1u);
+      self->manager_name_ = name; self->manager_version_ = std::min(version, 1u); self->protocol_ = Protocol::Ext;
+    } else if (std::strcmp(interface, "zwlr_data_control_manager_v1") == 0 && !self->wlr_manager_name_) {
+      self->wlr_manager_name_ = name; self->wlr_manager_version_ = std::min(version, 2u);
     } else if (std::strcmp(interface, "wl_seat") == 0 && !self->seat_name_) {
       self->seat_name_ = name; self->seat_version_ = std::min(version, 1u);
     }
@@ -399,7 +430,7 @@ class Session::Impl {
     if (!SyncRoundtrip()) {
       SetUnavailable("WaylandConnectionUnavailable"); return false;
     }
-    if (!manager_name_) { SetUnavailable("WaylandDataControlUnavailable"); return false; }
+    if (!manager_name_ && !wlr_manager_name_) { SetUnavailable("WaylandDataControlUnavailable"); return false; }
     if (!seat_name_) { SetUnavailable("WaylandSeatUnavailable"); return false; }
     static std::once_flag protocol_types_once;
     std::call_once(protocol_types_once, [seat_interface]() {
@@ -409,13 +440,27 @@ class Session::Impl {
       g_device_types[0] = &g_source_interface;
       g_device_event_types[0] = &g_offer_interface;
       g_device_event_types[1] = &g_offer_interface;
+      g_wlr_manager_types[0] = &g_wlr_source_interface;
+      g_wlr_manager_types[1] = &g_wlr_device_interface;
+      g_wlr_manager_types[2] = seat_interface;
+      g_wlr_device_types[0] = &g_wlr_source_interface;
+      g_wlr_device_event_types[0] = &g_wlr_offer_interface;
+      g_wlr_device_event_types[1] = &g_wlr_offer_interface;
     });
-    manager_ = api_->proxy_marshal_flags(registry_, 0, &g_manager_interface, manager_version_, 0,
-        manager_name_, g_manager_interface.name, manager_version_, nullptr);
+    const wl_interface* manager_interface = &g_manager_interface;
+    if (!manager_name_) {
+      manager_name_ = wlr_manager_name_;
+      manager_version_ = wlr_manager_version_;
+      protocol_ = Protocol::Wlr;
+      manager_interface = &g_wlr_manager_interface;
+    }
+    manager_ = api_->proxy_marshal_flags(registry_, 0, manager_interface, manager_version_, 0,
+        manager_name_, manager_interface->name, manager_version_, nullptr);
     seat_ = api_->proxy_marshal_flags(registry_, 0, seat_interface, seat_version_, 0,
         seat_name_, seat_interface->name, seat_version_, nullptr);
     if (!manager_ || !seat_) { SetUnavailable("WaylandDataControlBindFailed"); return false; }
-    device_ = api_->proxy_marshal_flags(manager_, 1, &g_device_interface, 1, 0, nullptr, seat_);
+    const wl_interface* device_interface = protocol_ == Protocol::Wlr ? &g_wlr_device_interface : &g_device_interface;
+    device_ = api_->proxy_marshal_flags(manager_, 1, device_interface, protocol_ == Protocol::Wlr ? manager_version_ : 1u, 0, nullptr, seat_);
     if (!device_ || api_->proxy_add_listener(device_, DeviceListener, this) != 0) {
       SetUnavailable("WaylandDataControlDeviceUnavailable"); return false;
     }
@@ -591,7 +636,8 @@ class Session::Impl {
     std::string uris, gnome;
     if (!native_linux_clipboard::EncodeUriList(selection.paths, &uris) || !native_linux_clipboard::EncodeGnomeCopiedFiles(selection, &gnome)) return Failure("InvalidRequest", "The Wayland file selection is invalid.");
     wl_proxy* previous_source = own_source_;
-    wl_proxy* source = api_->proxy_marshal_flags(manager_, 0, &g_source_interface, 1, 0, nullptr);
+    const wl_interface* source_interface = protocol_ == Protocol::Wlr ? &g_wlr_source_interface : &g_source_interface;
+    wl_proxy* source = api_->proxy_marshal_flags(manager_, 0, source_interface, 1, 0, nullptr);
     if (!source) return Failure("ResourceExhausted", "The Wayland clipboard source could not be created.");
     auto [where, inserted] = sources_.emplace(source, Source{std::move(uris), std::move(gnome)});
     if (!inserted) { api_->proxy_destroy(source); return Failure("ResourceExhausted", "The Wayland clipboard source could not be retained."); }
@@ -626,8 +672,30 @@ class Session::Impl {
         Result result; result.ok = true; result.available = true; result.matched = false; return result;
       }
       if (!request.remaining_paths.empty()) {
-        Request replacement; replacement.operation = Operation::Write; replacement.paths = request.remaining_paths; replacement.mode = Mode::Move;
-        Result written = Write(replacement); written.matched = written.ok; return written;
+        if (!own_source_) {
+          Result result; result.ok = true; result.available = true; result.matched = false; return result;
+        }
+        FileSelection selection;
+        selection.paths = request.remaining_paths;
+        selection.mode = FileMode::Move;
+        Source replacement;
+        if (!native_linux_clipboard::EncodeUriList(selection.paths, &replacement.uri_list) ||
+            !native_linux_clipboard::EncodeGnomeCopiedFiles(selection, &replacement.gnome_files)) {
+          return Failure("InvalidRequest", "The Wayland move acknowledgement is invalid.");
+        }
+        const auto source = sources_.find(own_source_);
+        if (source == sources_.end()) {
+          Result result; result.ok = true; result.available = true; result.matched = false; return result;
+        }
+        source->second = std::move(replacement);
+        ++generation_;
+        own_paths_ = request.remaining_paths;
+        own_mode_ = Mode::Move;
+        CaptureOwnIdentities();
+        own_token_ = Token(generation_, own_paths_, own_mode_);
+        Result result; result.ok = true; result.available = true; result.matched = true;
+        result.paths = own_paths_; result.mode = own_mode_; result.token = own_token_;
+        return result;
       }
     }
     ClearOwned();
@@ -710,14 +778,15 @@ class Session::Impl {
   }
 
   void ClearOwned() {
-    if (!device_) return;
-    api_->proxy_marshal_flags(device_, 0, nullptr, 1, 0, nullptr);
-    (void)api_->display_flush(display_);
+    // Destroying this source lets the compositor clear it only if this exact
+    // source is still the active selection. A NULL selection request would
+    // unconditionally clear a newer selection owned by another client.
+    if (own_source_) { DestroySource(own_source_); own_source_ = nullptr; }
+    if (display_) (void)api_->display_flush(display_);
     own_selection_ = false;
     own_paths_.clear();
     own_path_identities_.clear();
     own_token_.clear();
-    if (own_source_) { DestroySource(own_source_); own_source_ = nullptr; }
     ++generation_;
   }
 
@@ -797,7 +866,9 @@ class Session::Impl {
   wl_proxy* device_ = nullptr;
   wl_proxy* selection_offer_ = nullptr;
   wl_proxy* own_source_ = nullptr;
-  uint32_t manager_name_ = 0, manager_version_ = 1, seat_name_ = 0, seat_version_ = 1;
+  uint32_t manager_name_ = 0, manager_version_ = 1, wlr_manager_name_ = 0, wlr_manager_version_ = 2;
+  uint32_t seat_name_ = 0, seat_version_ = 1;
+  Protocol protocol_ = Protocol::Ext;
   uint64_t generation_ = 0;
   bool own_selection_ = false;
   Mode own_mode_ = Mode::Copy;

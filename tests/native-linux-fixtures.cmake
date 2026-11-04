@@ -11,6 +11,13 @@ target_link_libraries(linux_clipboard_x11_protocol_tests PRIVATE "${XCB_TEST_LIB
 add_executable(linux_clipboard_wayland_tests ../tests/native-clipboard-wayland.test.cc src/clipboard-wayland-linux.cc src/clipboard-linux-formats.cc)
 find_program(WAYLAND_SCANNER_EXECUTABLE wayland-scanner HINTS "${CLIPBOARD_LINUX_SDK_ROOT}/usr/bin" REQUIRED)
 set(EXT_DATA_CONTROL_PROTOCOL "${CMAKE_CURRENT_SOURCE_DIR}/src/protocols/ext-data-control-v1.xml")
+set(WLR_DATA_CONTROL_PROTOCOL "${CMAKE_CURRENT_SOURCE_DIR}/src/protocols/wlr-data-control-unstable-v1.xml")
+file(READ "${WLR_DATA_CONTROL_PROTOCOL}" WLR_DATA_CONTROL_CONTENT)
+string(REPLACE "\r\n" "\n" WLR_DATA_CONTROL_CONTENT "${WLR_DATA_CONTROL_CONTENT}")
+string(SHA256 WLR_DATA_CONTROL_SHA256 "${WLR_DATA_CONTROL_CONTENT}")
+if(NOT WLR_DATA_CONTROL_SHA256 STREQUAL "2349ea0aae7479057ed5c8e1a177cc04d31c851bb2cc51cd7e40a1edf9a34485")
+  message(FATAL_ERROR "The wlr data-control protocol definition does not match the verified contract.")
+endif()
 file(READ "${EXT_DATA_CONTROL_PROTOCOL}" EXT_DATA_CONTROL_CONTENT)
 string(REPLACE "\r\n" "\n" EXT_DATA_CONTROL_CONTENT "${EXT_DATA_CONTROL_CONTENT}")
 string(SHA256 EXT_DATA_CONTROL_SHA256 "${EXT_DATA_CONTROL_CONTENT}")
@@ -24,8 +31,13 @@ add_custom_command(OUTPUT "${WAYLAND_GENERATED_DIR}/ext-data-control-v1-server-p
   COMMAND "${WAYLAND_SCANNER_EXECUTABLE}" server-header "${EXT_DATA_CONTROL_PROTOCOL}" "${WAYLAND_GENERATED_DIR}/ext-data-control-v1-server-protocol.h"
   COMMAND "${WAYLAND_SCANNER_EXECUTABLE}" private-code "${EXT_DATA_CONTROL_PROTOCOL}" "${WAYLAND_GENERATED_DIR}/ext-data-control-v1-protocol.c"
   DEPENDS "${EXT_DATA_CONTROL_PROTOCOL}" VERBATIM)
+add_custom_command(OUTPUT "${WAYLAND_GENERATED_DIR}/wlr-data-control-unstable-v1-server-protocol.h" "${WAYLAND_GENERATED_DIR}/wlr-data-control-unstable-v1-protocol.c"
+  COMMAND "${WAYLAND_SCANNER_EXECUTABLE}" server-header "${WLR_DATA_CONTROL_PROTOCOL}" "${WAYLAND_GENERATED_DIR}/wlr-data-control-unstable-v1-server-protocol.h"
+  COMMAND "${WAYLAND_SCANNER_EXECUTABLE}" private-code "${WLR_DATA_CONTROL_PROTOCOL}" "${WAYLAND_GENERATED_DIR}/wlr-data-control-unstable-v1-protocol.c"
+  DEPENDS "${WLR_DATA_CONTROL_PROTOCOL}" VERBATIM)
 add_executable(linux_clipboard_wayland_protocol_tests ../tests/native-clipboard-wayland-protocol.test.cc src/clipboard-wayland-linux.cc src/clipboard-linux-formats.cc
-  "${WAYLAND_GENERATED_DIR}/ext-data-control-v1-server-protocol.h" "${WAYLAND_GENERATED_DIR}/ext-data-control-v1-protocol.c")
+  "${WAYLAND_GENERATED_DIR}/ext-data-control-v1-server-protocol.h" "${WAYLAND_GENERATED_DIR}/ext-data-control-v1-protocol.c"
+  "${WAYLAND_GENERATED_DIR}/wlr-data-control-unstable-v1-server-protocol.h" "${WAYLAND_GENERATED_DIR}/wlr-data-control-unstable-v1-protocol.c")
 target_include_directories(linux_clipboard_wayland_protocol_tests PRIVATE "${WAYLAND_GENERATED_DIR}")
 target_compile_features(linux_clipboard_wayland_protocol_tests PRIVATE c_std_99)
 target_link_libraries(linux_clipboard_wayland_protocol_tests PRIVATE "${WAYLAND_SERVER_LIBRARY}")
