@@ -53,6 +53,102 @@
     "captures": []
   },
   {
+    "id": "path-copy",
+    "parentId": "main",
+    "title": "Copy a folder path",
+    "description": "Right-click the address bar and observe the actual clipboard confirmation.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "media/app.js",
+      "media/shortcut-runtime.js"
+    ],
+    "captures": [
+      {
+        "id": "gesture",
+        "format": "gif",
+        "gesture": "path-copy",
+        "expect": ".pane",
+        "text": "README"
+      }
+    ],
+    "kind": "mouse"
+  },
+  {
+    "id": "right-selection",
+    "parentId": "main",
+    "title": "Select files with the right mouse button",
+    "description": "Draw a selection with the right mouse button held down.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "media/app.js",
+      "media/shortcut-runtime.js"
+    ],
+    "captures": [
+      {
+        "id": "gesture",
+        "format": "gif",
+        "gesture": "right-selection",
+        "expect": ".pane",
+        "text": "README"
+      }
+    ],
+    "kind": "drag-and-drop"
+  },
+  {
+    "id": "right-drag",
+    "parentId": "main",
+    "title": "Drag a selection with the right button held",
+    "description": "Hold the right mouse button and drag selected files to a destination folder; review the move confirmation.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "media/app.js",
+      "media/shortcut-runtime.js"
+    ],
+    "captures": [
+      {
+        "id": "gesture",
+        "format": "gif",
+        "gesture": "right-drag",
+        "expect": ".pane",
+        "text": "README"
+      }
+    ],
+    "kind": "drag-and-drop"
+  },
+  {
+    "id": "shortcut-ctrl-l",
+    "parentId": "main",
+    "title": "Focus the address bar with Ctrl+L",
+    "description": "Press Ctrl+L and edit the selected path in the active address bar.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "media/app.js",
+      "media/shortcut-runtime.js"
+    ],
+    "captures": [
+      {
+        "id": "gesture",
+        "format": "gif",
+        "gesture": "ctrl-l",
+        "expect": ".pane",
+        "text": "README"
+      }
+    ],
+    "kind": "keyboard"
+  },
+  {
     "id": "main-menus",
     "parentId": "main",
     "title": "Commands organized by task",
@@ -949,16 +1045,20 @@
     "title": "Inspect local Git changes",
     "description": "Show modified, staged and untracked entries in the demonstration repository.",
     "paths": [
-      "${demo}/left",
+      "${demo}/left/bitfroest.fs",
       "${demo}/right"
     ],
     "sources": [
       "media/app.js",
       "git-status-provider.js"
     ],
-    "status": "pending",
-    "reason": "Needs a dedicated scene rooted in the nested demonstration repository.",
-    "captures": []
+    "captures": [
+      {
+        "id": "overview",
+        "expect": ".pane",
+        "text": "README"
+      }
+    ]
   },
   {
     "id": "git-history",
@@ -966,16 +1066,27 @@
     "title": "Browse commit history",
     "description": "Inspect the commit graph, commit message and changed files.",
     "paths": [
-      "${demo}/left",
+      "${demo}/left/bitfroest.fs",
       "${demo}/right"
     ],
     "sources": [
       "git-history.js",
       "media/git-history.js"
     ],
-    "status": "pending",
-    "reason": "Uses a separate product webview requiring another capture target.",
-    "captures": []
+    "captures": [
+      {
+        "id": "log",
+        "select": {
+          "side": 0,
+          "name": "README.md"
+        },
+        "command": "bitfroest.gitHistory",
+        "surface": "git-history",
+        "expect": "body",
+        "ready": "#file-rows [data-file]",
+        "text": "Git History"
+      }
+    ]
   },
   {
     "id": "git-diff",
@@ -983,16 +1094,27 @@
     "title": "Compare committed or working versions",
     "description": "Open the actual VS Code diff editor for a selected Git file.",
     "paths": [
-      "${demo}/left",
+      "${demo}/left/bitfroest.fs",
       "${demo}/right"
     ],
     "sources": [
       "extension.js",
       "git-history.js"
     ],
-    "status": "pending",
-    "reason": "Uses the native VS Code editor rather than the file-manager webview.",
-    "captures": []
+    "captures": [
+      {
+        "id": "working-tree",
+        "select": {
+          "side": 0,
+          "name": "README.md"
+        },
+        "command": "bitfroest.gitDiff",
+        "surface": "editor",
+        "expect": ".monaco-workbench",
+        "ready": ".monaco-diff-editor",
+        "text": "README.md"
+      }
+    ]
   },
   {
     "id": "git-branches",
@@ -1023,15 +1145,22 @@
       "configuration-editor.js",
       "media/configuration-view.js"
     ],
-    "status": "pending",
-    "reason": "Uses a separate configuration webview requiring another capture target.",
-    "captures": []
+    "captures": [
+      {
+        "id": "editor",
+        "command": "bitfroest.configureSettings",
+        "surface": "configuration",
+        "expect": "#settings-section",
+        "text": "Settings",
+        "ready": "#settings-results > *"
+      }
+    ]
   },
   {
     "id": "settings-favorites",
     "parentId": "settings",
     "title": "Configure favorite locations",
-    "description": "Inspect saved favorites and location paths.",
+    "description": "Manage favorite locations and groups.",
     "paths": [
       "${demo}/left",
       "${demo}/right"
@@ -1040,9 +1169,16 @@
       "configuration-editor.js",
       "media/configuration-view.js"
     ],
-    "status": "pending",
-    "reason": "Uses a separate configuration webview requiring another capture target.",
-    "captures": []
+    "captures": [
+      {
+        "id": "editor",
+        "command": "bitfroest.configureFavorites",
+        "surface": "configuration",
+        "expect": "#favorites-section",
+        "text": "Add favorite",
+        "ready": "#favorites-section [data-add-favorite]"
+      }
+    ]
   },
   {
     "id": "settings-columns",
@@ -1057,9 +1193,16 @@
       "configuration-editor.js",
       "media/configuration-view.js"
     ],
-    "status": "pending",
-    "reason": "Uses a separate configuration webview requiring another capture target.",
-    "captures": []
+    "captures": [
+      {
+        "id": "editor",
+        "command": "bitfroest.configureColumns",
+        "surface": "configuration",
+        "expect": "#columns-section",
+        "text": "Alignment",
+        "ready": "#columns-section table"
+      }
+    ]
   },
   {
     "id": "settings-shortcuts",
@@ -1074,9 +1217,16 @@
       "configuration-editor.js",
       "media/configuration-view.js"
     ],
-    "status": "pending",
-    "reason": "Uses a separate configuration webview requiring another capture target.",
-    "captures": []
+    "captures": [
+      {
+        "id": "editor",
+        "command": "bitfroest.configureShortcuts",
+        "surface": "configuration",
+        "expect": "#shortcuts-section",
+        "text": "Keyboard shortcuts",
+        "ready": "[data-shortcut-row]"
+      }
+    ]
   },
   {
     "id": "shortcut-capture",

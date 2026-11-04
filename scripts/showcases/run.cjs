@@ -8,8 +8,17 @@ const repository = path.resolve(__dirname, '../..');
 const output = path.join(repository, '.tmp/showcases');
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 const normalize = value => value.replace(/\\/g, '/').replace(/\/$/, '').toLowerCase();
-const filename = (scene, capture) => `windows-en-dark-${scene.id}${capture ? `-${capture.id}` : ''}.png`;
-const safeActions = ['mkdir', 'copy', 'move', 'rename-one', 'search', 'view', 'new-file', 'rename', 'pack', 'unpack', 'delete', 'delete-permanently', 'select-group', 'unselect-group', 'search-separate'];
+const filename = (scene, capture) => `${String(capture?.sequence || 1).padStart(4, '0')}-windows-en-dark-${scene.id}${capture ? `-${capture.id}` : ''}.${capture?.format === 'gif' ? 'gif' : 'png'}`;
+function numberCatalog(catalog) {
+  let sequence = 0;
+  for (const scene of catalog) for (const capture of scene.captures) capture.sequence = ++sequence;
+  return catalog;
+}
+function assertSurfaceState(state, capture) {
+  if (!state.visible || !state.ready || !state.text?.includes(capture.text)) throw new Error('The requested surface is not ready.');
+  if (capture.surface === 'editor' ? state.kind !== 'editor' || !state.diff : state.owner !== 'bitfroest.bitfroest-fs-prototype') throw new Error('The requested product surface was not observed.');
+}
+const safeActions = ['mkdir', 'copy', 'move', 'rename-one', 'search', 'view', 'new-file', 'rename', 'pack', 'unpack', 'delete', 'delete-permanently', 'select-group', 'unselect-group', 'search-separate', 'clear', 'refresh'];
 const safeListerActions = ['mode:text', 'mode:binary', 'mode:hex', 'mode:html', 'mode:unicode', 'mode:utf8', 'find', 'manual'];
 
 function parseOptions(args, defaultCode, root = repository) {
@@ -78,21 +87,32 @@ async function waitFor(read, timeout = 30000, interval = 100) {
   throw new Error(`Timed out waiting for the showcase state.${error ? ` ${error.message}` : ''}`);
 }
 
-function buildManifest(catalog, images, host) {
+function buildManifest(catalog, images, host, previous) {
   return {
     schemaVersion: 1, title: 'Bitfroest.fs showcases',
     description: 'The main file manager followed by its individual functions.',
     platform: 'win32', language: 'en', theme: 'Default Dark Modern', compact: true,
     host, generatedAt: new Date().toISOString(),
-    sections: catalog.map(scene => ({ id: scene.id, ...(scene.parentId ? { parentId: scene.parentId } : {}),
+    sections: catalog.map(scene => {
+      if (!scene.status && !images.some(image => image.scene === scene.id)) {
+        const saved = previous?.sections?.find(section => section.id === scene.id && section.status === 'rendered');
+        if (saved) return saved;
+        return { id: scene.id, ...(scene.parentId ? { parentId: scene.parentId } : {}), title: scene.title, description: scene.description,
+          status: 'unrecorded', reason: 'This scene has not been recorded in this output set.', images: [] };
+      }
+      return { id: scene.id, ...(scene.parentId ? { parentId: scene.parentId } : {}),
       title: scene.title, description: scene.description,
+      kind: scene.kind || 'mask', ...(!scene.status ? { host, recordedAt: new Date().toISOString() } : {}),
       status: scene.status || 'rendered', ...(scene.reason ? { reason: scene.reason } : {}),
       ...(scene.sources ? { sources: scene.sources } : {}),
       images: scene.captures.map(capture => {
         const image = images.find(item => item.scene === scene.id && item.capture === capture.id);
         if (!image) throw new Error(`Missing capture: ${scene.id}/${capture.id}`);
-        return { file: image.file, alt: capture.alt || scene.title, width: image.width, height: image.height };
-      }) }))
+        return { file: image.file, alt: capture.alt || scene.title, width: image.width, height: image.height,
+          ...(capture.format === 'gif' ? { format: 'gif', annotation: 'Documentation pointer; product response recorded live.' } : {}),
+          ...(capture.surface ? { surface: capture.surface, layout: 'native-editor' } : { layout: 'compact' }) };
+      }) };
+    })
   };
 }
 
@@ -121,17 +141,18 @@ async function main() {
   if (process.platform !== 'win32') throw new Error('Showcase rendering requires Windows.');
   const { code, demo, selected } = parseOptions(process.argv.slice(2), findCode());
   if (!code || !fs.existsSync(code) || !demo) throw new Error('Specify --code and --demo.');
-  const catalog = validateCatalog(JSON.parse(fs.readFileSync(path.join(__dirname, 'catalog.json'), 'utf8').replaceAll('${demo}', demo.replace(/\\/g, '/'))));
-  const included = new Set();
-  for (let scene = catalog.find(item => item.id === selected); scene; scene = catalog.find(item => item.id === scene.parentId)) included.add(scene.id);
-  const scenes = selected ? catalog.filter(scene => included.has(scene.id)) : catalog;
+  const catalog = numberCatalog(validateCatalog(JSON.parse(fs.readFileSync(path.join(__dirname, 'catalog.json'), 'utf8').replaceAll('${demo}', demo.replace(/\\/g, '/')))));
+  const scenes = selected ? catalog.filter(scene => scene.id === selected) : catalog;
   if (!scenes.length) throw new Error(`Unknown showcase: ${selected}`);
   for (const scene of scenes.filter(item => !item.status)) for (const folder of scene.paths) if (!fs.statSync(folder).isDirectory()) throw new Error(`Missing demo directory: ${folder}`);
   const run = path.join(output, 'runs', `${Date.now()}-${process.pid}`);
   fs.mkdirSync(path.join(run, 'profile/User'), { recursive: true });
   fs.writeFileSync(path.join(run, 'profile/User/settings.json'), JSON.stringify({
     'workbench.startupEditor': 'none', 'workbench.colorTheme': 'Default Dark Modern', 'window.restoreWindows': 'none',
-    'security.workspace.trust.enabled': false, 'telemetry.telemetryLevel': 'off', 'update.mode': 'none', 'bitfroest.language': 'en'
+    'security.workspace.trust.enabled': false, 'telemetry.telemetryLevel': 'off', 'update.mode': 'none', 'bitfroest.language': 'en',
+    'bitfroest.files.useSystemContextMenu': false, 'git.openRepositoryInParentFolders': 'never',
+    'workbench.statusBar.visible': false, 'workbench.activityBar.location': 'hidden',
+    'workbench.secondarySideBar.defaultVisibility': 'hidden'
   }));
   const port = await new Promise(resolve => { const server = net.createServer(); server.listen(0, '127.0.0.1', () => { const address = server.address(); server.close(() => resolve(address.port)); }); });
   fs.writeFileSync(path.join(run, 'launch.json'), JSON.stringify({ code, repository, tests: path.join(__dirname, 'host-tests.cjs'), port }));
@@ -140,7 +161,7 @@ async function main() {
     { windowsHide: true, env: { ...process.env, BFS_SHOWCASE_RUN: run }, stdio: ['ignore', log, log] });
   const exited = new Promise((resolve, reject) => { child.once('exit', resolve); child.once('error', reject); });
   const connections = [];
-  let manifest, failure;
+  let manifest, failure, diagnostic, stage = 'startup';
   try {
     const host = await waitFor(() => fs.existsSync(path.join(run, 'ready.json')) && JSON.parse(fs.readFileSync(path.join(run, 'ready.json'), 'utf8')), 90000);
     if (normalize(host.source) !== normalize(repository) || host.platform !== 'win32') throw new Error('The wrong product host was loaded.');
@@ -150,7 +171,7 @@ async function main() {
     let context;
     const evaluate = async (fn, ...values) => {
       const result = await view.call('Runtime.evaluate', { contextId: context.id, expression: `(${fn.toString()})(${values.map(value => JSON.stringify(value)).join(',')})`, returnByValue: true, awaitPromise: true });
-      if (result.exceptionDetails) throw new Error(result.exceptionDetails.text);
+      if (result.exceptionDetails) throw new Error(result.exceptionDetails.exception?.description || result.exceptionDetails.text);
       return result.result.value;
     };
     await waitFor(async () => {
@@ -162,6 +183,11 @@ async function main() {
     });
     const pageTarget = await waitFor(async () => (await targets()).find(item => item.type === 'page' && item.id === target.parentId));
     const page = await connect(pageTarget.webSocketDebuggerUrl); connections.push(page);
+    diagnostic = async () => {
+      const state = await evaluate(() => ({ saved: window.CommanderHost?.getState?.(), contexts: [...document.querySelectorAll('.pane .list')].map(item => item.dataset.vscodeContext), names: [...document.querySelectorAll('[data-file-row][data-id]')].map(item => item.title || item.querySelector('[data-cell]')?.title) }));
+      fs.writeFileSync(path.join(run, 'failure-state.json'), JSON.stringify({ stage, state }, null, 2));
+      const shot = await page.call('Page.captureScreenshot', { format: 'png' }); fs.writeFileSync(path.join(run, 'failure.png'), Buffer.from(shot.data, 'base64'));
+    };
     let commandSequence = 0;
     const invoke = async (command, args = []) => {
       const id = String(++commandSequence);
@@ -170,10 +196,14 @@ async function main() {
       fs.renameSync(`${commandFile}.writing`, commandFile);
       const reply = await waitFor(() => fs.existsSync(replyFile) && JSON.parse(fs.readFileSync(replyFile, 'utf8')));
       if (reply.error) throw new Error(reply.error);
+      return reply;
     };
     const images = [];
     for (const scene of scenes) {
       if (scene.status) continue;
+      stage = `${scene.id}: navigation`;
+      await invoke('showcase.focus-main');
+      if (scene.captures.some(capture => ['bitfroest.gitHistory', 'bitfroest.gitDiff'].includes(capture.command))) await invoke('showcase.prepare-repository', [scene.paths[0]]);
       await evaluate(() => {
         document.querySelector('dialog[open] #modal-cancel')?.click();
         for (const button of document.querySelectorAll('[data-search-close], [data-lister-close]')) button.click();
@@ -187,24 +217,47 @@ async function main() {
         }, side, directory);
         await waitFor(() => evaluate((side, directory) => {
           const pane = document.querySelector(`[data-pane="${side}"]`);
-          return pane.querySelector('.path-breadcrumbs')?.title.split('\n')[0].replace(/\\/g, '/').toLowerCase() === directory.replace(/\\/g, '/').toLowerCase() && !pane.querySelector('[data-directory-loading]');
+          return pane.querySelector('.path-breadcrumbs')?.title.split('\n')[0].replace(/\\/g, '/').toLowerCase() === directory.replace(/\\/g, '/').toLowerCase() && !document.querySelector('[data-directory-loading], .codicon-modifier-spin');
         }, side, directory));
       }
       for (const capture of scene.captures) {
+        stage = `${scene.id}/${capture.id}: selection`;
         await evaluate(() => { document.querySelector('dialog[open] #modal-cancel')?.click(); });
-        if (capture.select) await evaluate(({ side = 0, name }) => {
+        if (capture.select) await waitFor(() => evaluate(({ side = 0, name }) => {
           const pane = document.querySelector(`[data-pane="${side}"]`);
           const row = [...pane.querySelectorAll('[data-file-row][data-id]')].find(item => item.title === name || item.querySelector('[data-cell]')?.title === name);
-          if (!row) throw new Error(`Demo entry missing: ${name}`);
-          (row.querySelector('[data-filename]') || row).click(); pane.querySelector('.list').focus();
-        }, capture.select);
+          if (!row) {
+            const grid = window.agGrid.getGridApi(`files-${side}`);
+            grid.forEachNodeAfterFilterAndSort(node => { if (node.data?.name === name) grid.ensureIndexVisible(node.rowIndex, 'middle'); });
+            return false;
+          }
+          (row.querySelector('[data-filename]') || row).click(); pane.querySelector('.list').focus(); return true;
+        }, capture.select));
         if (capture.action) await invoke(`bitfroest.${capture.action}`);
+        if (capture.command) {
+          stage = `${scene.id}/${capture.id}: command ${capture.command}`;
+          const args = capture.command === 'bitfroest.gitHistory' || capture.command === 'bitfroest.gitDiff'
+            ? [await waitFor(() => evaluate(() => {
+              const value = document.querySelector('.pane.active .list')?.dataset.vscodeContext;
+              const context = value && JSON.parse(value); return context?.gitHistory ? context : false;
+            }))] : [];
+          await invoke(capture.command, args);
+        }
         if (capture.listerAction) await invoke('bitfroest.lister-action', [capture.listerAction]);
         for (const selector of capture.click || []) await evaluate(selector => {
           const button = document.querySelector(selector);
           if (!button || !button.getBoundingClientRect().width || button.disabled || button.type === 'submit') throw new Error(`Showcase control unavailable: ${selector}`);
           button.click();
         }, selector);
+        if (capture.surface) {
+          stage = `${scene.id}/${capture.id}: surface ${capture.surface}`;
+          const { captureSurface } = require('./surfaces.cjs');
+          const result = await captureSurface({ capture, targets, connect, connections, invoke, waitFor });
+          const bytes = Buffer.from(result.data, 'base64'), file = filename(scene, capture);
+          fs.writeFileSync(path.join(run, file), bytes);
+          images.push({ scene: scene.id, capture: capture.id, file, width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) });
+          console.log(`Rendered ${file}`); continue;
+        }
         await waitFor(async () => {
           const state = await evaluate(selector => {
             const element = document.querySelector(selector), rect = element?.getBoundingClientRect();
@@ -223,6 +276,13 @@ async function main() {
           const chrome = JSON.parse(result.result.value); return !chrome.status && !chrome.sidebar;
         });
         await evaluate(async () => { await document.fonts.ready; });
+        if (capture.format === 'gif') {
+          const { recordGesture } = require('./gestures.cjs');
+          const file = filename(scene, capture);
+          const size = await recordGesture({ capture, scene, view, page, target, evaluate, invoke, run, file, waitFor });
+          images.push({ scene: scene.id, capture: capture.id, file, ...size });
+          console.log(`Rendered ${file}`); continue;
+        }
         const shot = await page.call('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
         const bytes = Buffer.from(shot.data, 'base64'), file = filename(scene, capture);
         fs.writeFileSync(path.join(run, file), bytes);
@@ -232,11 +292,15 @@ async function main() {
     }
     const revision = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: repository, encoding: 'utf8' });
     const status = spawnSync('git', ['status', '--porcelain', '--untracked-files=normal'], { cwd: repository, encoding: 'utf8' });
-    manifest = buildManifest(scenes, images, { ...host, productVersion: require('../../package.json').version,
-      commit: revision.stdout?.trim(), workingTreeDirty: Boolean(status.stdout?.trim()) });
+    const previousFile = path.join(output, 'showcases.json');
+    const previous = selected && fs.existsSync(previousFile) ? JSON.parse(fs.readFileSync(previousFile, 'utf8')) : undefined;
+    manifest = buildManifest(catalog, images, { ...host, productVersion: require('../../package.json').version,
+      commit: revision.stdout?.trim(), workingTreeDirty: Boolean(status.stdout?.trim()) }, previous);
+    manifest.interactions = require('./inventory.cjs').interactionInventory(manifest);
     fs.writeFileSync(path.join(run, 'showcases.json'), JSON.stringify(manifest, null, 2));
   } catch (error) {
-    failure = error;
+    try { await diagnostic?.(); } catch { /* Retain the original capture failure. */ }
+    failure = new Error(`${stage}: ${error.message}; details: ${run}`, { cause: error });
   } finally {
     for (const connection of connections) connection.close();
     fs.writeFileSync(path.join(run, 'stop'), '');
@@ -247,10 +311,12 @@ async function main() {
     if (exitCode !== 0) failure = new Error(`Showcase desktop cleanup failed (${exitCode}); inspect ${run}`, { cause: failure });
   }
   if (failure) throw failure;
-  for (const section of manifest.sections) for (const image of section.images) fs.copyFileSync(path.join(run, image.file), path.join(output, image.file));
+  for (const section of manifest.sections) for (const image of section.images) {
+    const fresh = path.join(run, image.file); if (fs.existsSync(fresh)) fs.copyFileSync(fresh, path.join(output, image.file));
+  }
   fs.copyFileSync(path.join(run, 'showcases.json'), path.join(output, 'showcases.json'));
   console.log(`Showcase manifest: ${path.join(output, 'showcases.json')}`);
 }
 
-module.exports = { validateCatalog, filename, assertProductState, waitFor, buildManifest, parseOptions, safeActions, safeListerActions };
+module.exports = { validateCatalog, filename, numberCatalog, assertSurfaceState, assertProductState, waitFor, buildManifest, parseOptions, safeActions, safeListerActions };
 if (require.main === module) main().catch(error => { console.error(error.message); process.exitCode = 1; });

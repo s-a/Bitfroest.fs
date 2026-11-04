@@ -1,0 +1,268 @@
+[
+  {
+    "id": "pane-switch",
+    "kind": "keyboard",
+    "title": "Switch the active file panel",
+    "sources": [
+      "media/app.js"
+    ],
+    "keys": "Tab"
+  },
+  {
+    "id": "cursor-up-down",
+    "kind": "keyboard",
+    "title": "Move the file cursor",
+    "sources": [
+      "media/app.js"
+    ],
+    "keys": "Up / Down"
+  },
+  {
+    "id": "open-entry",
+    "kind": "keyboard",
+    "title": "Open the selected file, folder or archive",
+    "sources": [
+      "media/app.js"
+    ],
+    "keys": "Enter"
+  },
+  {
+    "id": "parent-directory",
+    "kind": "keyboard",
+    "title": "Navigate to the parent folder",
+    "sources": [
+      "media/app.js"
+    ],
+    "keys": "Backspace"
+  },
+  {
+    "id": "toggle-selection",
+    "kind": "keyboard",
+    "title": "Toggle selection and advance",
+    "sources": [
+      "media/app.js"
+    ],
+    "keys": "Space"
+  },
+  {
+    "id": "range-selection",
+    "kind": "keyboard",
+    "title": "Extend the file selection",
+    "sources": [
+      "media/app.js"
+    ],
+    "keys": "Shift + Up / Down"
+  },
+  {
+    "id": "cancel-operation",
+    "kind": "keyboard",
+    "title": "Cancel the current dialog, editor or gesture",
+    "sources": [
+      "media/app.js"
+    ],
+    "keys": "Escape"
+  },
+  {
+    "id": "address-copy",
+    "kind": "mouse",
+    "title": "Copy the address with a right click",
+    "sources": [
+      "media/app.js"
+    ],
+    "sceneId": "path-copy"
+  },
+  {
+    "id": "left-selection",
+    "kind": "mouse",
+    "title": "Select one entry with a left click",
+    "sources": [
+      "media/app.js"
+    ]
+  },
+  {
+    "id": "control-selection",
+    "kind": "mouse",
+    "title": "Add or remove an entry with Ctrl+click",
+    "sources": [
+      "media/app.js"
+    ]
+  },
+  {
+    "id": "shift-selection",
+    "kind": "mouse",
+    "title": "Select a range with Shift+click",
+    "sources": [
+      "media/app.js"
+    ]
+  },
+  {
+    "id": "double-click-open",
+    "kind": "mouse",
+    "title": "Open an entry with a double click",
+    "sources": [
+      "media/app.js"
+    ]
+  },
+  {
+    "id": "inline-rename-click",
+    "kind": "mouse",
+    "title": "Begin filename editing with a delayed name click",
+    "sources": [
+      "media/app.js"
+    ]
+  },
+  {
+    "id": "column-resize",
+    "kind": "mouse",
+    "title": "Resize a file-list column",
+    "sources": [
+      "media/app.js"
+    ]
+  },
+  {
+    "id": "column-autosize",
+    "kind": "mouse",
+    "title": "Autosize a column with a separator double click",
+    "sources": [
+      "media/app.js"
+    ]
+  },
+  {
+    "id": "address-edit",
+    "kind": "mouse",
+    "title": "Edit an address by clicking the path",
+    "sources": [
+      "media/app.js"
+    ]
+  },
+  {
+    "id": "right-marquee",
+    "kind": "drag-and-drop",
+    "title": "Select files with a right-button rectangle",
+    "sources": [
+      "tests/webview-pointer.test.js"
+    ],
+    "sceneId": "right-selection"
+  },
+  {
+    "id": "control-right-marquee",
+    "kind": "drag-and-drop",
+    "title": "Add files with Ctrl and a right-button rectangle",
+    "sources": [
+      "tests/webview-pointer.test.js"
+    ]
+  },
+  {
+    "id": "shift-right-marquee",
+    "kind": "drag-and-drop",
+    "title": "Add files with Shift and a right-button rectangle",
+    "sources": [
+      "tests/webview-pointer.test.js"
+    ]
+  },
+  {
+    "id": "right-hold-drag",
+    "kind": "drag-and-drop",
+    "title": "Hold the right button and drag a selected group to a target folder",
+    "sources": [
+      "tests/webview-right-drag.test.js"
+    ],
+    "sceneId": "right-drag"
+  },
+  {
+    "id": "left-copy",
+    "kind": "drag-and-drop",
+    "title": "Drag left to copy the selected entries",
+    "sources": [
+      "tests/webview-left-drag.test.js"
+    ]
+  },
+  {
+    "id": "shift-move",
+    "kind": "drag-and-drop",
+    "title": "Hold Shift while dragging to propose a move",
+    "sources": [
+      "tests/webview-pointer.test.js"
+    ]
+  },
+  {
+    "id": "folder-target",
+    "kind": "drag-and-drop",
+    "title": "Drop on a folder row",
+    "sources": [
+      "tests/webview-pointer.test.js"
+    ]
+  },
+  {
+    "id": "inactive-tab-target",
+    "kind": "drag-and-drop",
+    "title": "Drop on an inactive folder tab without navigating",
+    "sources": [
+      "tests/webview-parent-drop.test.js"
+    ]
+  },
+  {
+    "id": "parent-target",
+    "kind": "drag-and-drop",
+    "title": "Drop on the parent-directory row",
+    "sources": [
+      "tests/webview-parent-drop.test.js"
+    ]
+  },
+  {
+    "id": "delete-target",
+    "kind": "drag-and-drop",
+    "title": "Drop on the F8 deletion target",
+    "sources": [
+      "tests/webview-rename-delete-drop.test.js"
+    ]
+  },
+  {
+    "id": "rename-target",
+    "kind": "drag-and-drop",
+    "title": "Drop on the rename target",
+    "sources": [
+      "tests/webview-rename-delete-drop.test.js"
+    ]
+  },
+  {
+    "id": "tab-reorder",
+    "kind": "drag-and-drop",
+    "title": "Reorder folder tabs",
+    "sources": [
+      "tests/commander-tabs.test.js"
+    ]
+  },
+  {
+    "id": "column-reorder",
+    "kind": "drag-and-drop",
+    "title": "Reorder file-list columns",
+    "sources": [
+      "tests/webview-column-design.test.js"
+    ]
+  },
+  {
+    "id": "drag-cancel",
+    "kind": "drag-and-drop",
+    "title": "Cancel a file drag with Escape or pointer cancellation",
+    "sources": [
+      "tests/webview-right-drag.test.js"
+    ]
+  },
+  {
+    "id": "external-files",
+    "kind": "drag-and-drop",
+    "title": "Drop external file references onto a file panel",
+    "sources": [
+      "media/app.js"
+    ]
+  },
+  {
+    "id": "external-directory",
+    "kind": "drag-and-drop",
+    "title": "Drop an external folder onto the address area",
+    "sources": [
+      "media/app.js"
+    ]
+  }
+]

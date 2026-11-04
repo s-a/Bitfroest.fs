@@ -1,6 +1,7 @@
 .git/**
 TMP/**
 .tmp/**
+media/marketplace/showcases/**
 RunCom-Showcases.ps1
 .github/**
 design/**

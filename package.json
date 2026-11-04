@@ -3777,6 +3777,7 @@
   },
   "scripts": {
     "showcase": "node scripts/showcases/run.cjs",
+    "showcase:publish": "node scripts/showcases/publish.cjs",
     "package:beta": "npx --yes --package @vscode/vsce -- vsce package --pre-release --baseContentUrl https://github.com/s-a/Bitfroest.fs/blob/main/ --baseImagesUrl https://raw.githubusercontent.com/s-a/Bitfroest.fs/main/",
     "publish:beta": "npx --yes --package @vscode/vsce -- vsce publish --pre-release --baseContentUrl https://github.com/s-a/Bitfroest.fs/blob/main/ --baseImagesUrl https://raw.githubusercontent.com/s-a/Bitfroest.fs/main/",
     "preview": "node scripts/preview.cjs",
