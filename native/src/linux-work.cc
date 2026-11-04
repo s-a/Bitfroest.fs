@@ -18,6 +18,7 @@ struct Work {
   LinuxWorkExecute execute = nullptr;
   LinuxWorkComplete complete = nullptr;
   LinuxWorkDestroy destroy = nullptr;
+  std::shared_ptr<std::atomic<unsigned>> control;
   std::thread worker;
   std::mutex start_mutex;
   std::condition_variable start_changed;
@@ -92,6 +93,20 @@ napi_value ConfirmStart(napi_env env, napi_callback_info) {
   return result;
 }
 
+napi_value CancelRequest(napi_env env, napi_callback_info info) {
+  void* data = nullptr;
+  if (napi_get_cb_info(env, info, nullptr, nullptr, nullptr, &data) != napi_ok || !data) return nullptr;
+  const auto& control = *static_cast<std::shared_ptr<std::atomic<unsigned>>*>(data);
+  unsigned expected = 0;
+  napi_value result = nullptr;
+  if (napi_get_boolean(env, control && control->compare_exchange_strong(expected, 1), &result) != napi_ok) return nullptr;
+  return result;
+}
+
+void FinalizeCancel(napi_env, void* data, void*) {
+  delete static_cast<std::shared_ptr<std::atomic<unsigned>>*>(data);
+}
+
 void Deliver(napi_env env, napi_value callback, void* context, void* completion) {
   auto* work = static_cast<Work*>(context);
   napi_value receiver = nullptr, result = nullptr;
@@ -157,13 +172,15 @@ void Run(Work* work) {
 
 napi_value QueueLinuxWork(napi_env env, const std::shared_ptr<SessionState>& state,
                          const char* operation, void* data, LinuxWorkExecute execute,
-                         LinuxWorkComplete complete, LinuxWorkDestroy destroy) {
+                         LinuxWorkComplete complete, LinuxWorkDestroy destroy,
+                         std::shared_ptr<std::atomic<unsigned>> control) {
   std::unique_ptr<void, LinuxWorkDestroy> payload(data, destroy);
   auto work = std::make_unique<Work>();
   work->execute = execute;
   work->complete = complete;
   work->destroy = destroy;
   work->data = payload.release();
+  work->control = std::move(control);
   work->session = state;
   if (!state || state->closed.load()) return Fail(env, "SessionClosed", "The native session is closed.");
   if (!state->linux_locks_session) state->linux_locks_session = std::make_shared<LinuxLocksSessionState>();
@@ -173,6 +190,19 @@ napi_value QueueLinuxWork(napi_env env, const std::shared_ptr<SessionState>& sta
       napi_create_string_utf8(env, operation, NAPI_AUTO_LENGTH, &resource) != napi_ok ||
       napi_create_function(env, "confirmStart", NAPI_AUTO_LENGTH, ConfirmStart, nullptr, &callback) != napi_ok)
     return Fail(env, "BindingFailure", "The native request could not be created.");
+  if (work->control) {
+    napi_value cancel = nullptr;
+    auto* retained_control = new (std::nothrow) std::shared_ptr<std::atomic<unsigned>>(work->control);
+    if (!retained_control) return Fail(env, "ResourceExhausted", "The native cancellation control could not be allocated.");
+    if (napi_create_function(env, "cancel", NAPI_AUTO_LENGTH, CancelRequest, retained_control, &cancel) != napi_ok) {
+      delete retained_control;
+      return Fail(env, "BindingFailure", "The native cancellation control could not be created.");
+    }
+    if (napi_add_finalizer(env, cancel, retained_control, FinalizeCancel, nullptr, nullptr) != napi_ok)
+      { delete retained_control; return Fail(env, "BindingFailure", "The native cancellation control could not be retained."); }
+    if (napi_set_named_property(env, promise, "cancel", cancel) != napi_ok)
+      return Fail(env, "BindingFailure", "The native cancellation control could not be attached.");
+  }
   napi_value fallback_code, fallback_message, fallback_error;
   if (napi_create_string_utf8(env, "BindingFailure", NAPI_AUTO_LENGTH, &fallback_code) != napi_ok ||
       napi_create_string_utf8(env, "The native completion failed.", NAPI_AUTO_LENGTH, &fallback_message) != napi_ok ||

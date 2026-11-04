@@ -1,5 +1,6 @@
 #pragma once
 #include <node_api.h>
+#include <atomic>
 #include <memory>
 #include "session.h"
 
@@ -13,5 +14,6 @@ using LinuxWorkDestroy = void (*)(void*);
 
 napi_value QueueLinuxWork(napi_env env, const std::shared_ptr<SessionState>& state,
                          const char* operation, void* data, LinuxWorkExecute execute,
-                         LinuxWorkComplete complete, LinuxWorkDestroy destroy);
+                         LinuxWorkComplete complete, LinuxWorkDestroy destroy,
+                         std::shared_ptr<std::atomic<unsigned>> control = {});
 napi_value WhenLinuxWorkClosed(napi_env env, const std::shared_ptr<SessionState>& state);

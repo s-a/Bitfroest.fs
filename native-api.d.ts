@@ -129,6 +129,7 @@ export interface NativeGitUntrackRequest {
   readonly expectedReference: string;
   readonly expectedIndex: string;
   readonly expectedIno: string;
+  readonly expectedDev?: string;
 }
 
 export interface NativeGitUntrackResult {
