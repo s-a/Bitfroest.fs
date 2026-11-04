@@ -43,3 +43,26 @@ test('copy without an existing cursor or selection does not replace clipboard da
   const state=fixture();state.panes[0].cursor=null;state.folders['C:/tmp']=[];
   assert.equal(clipboard.capture(state,'copy'),null);
 });
+
+test('POSIX clipboard paths preserve literal backslashes and use case-sensitive identity', () => {
+  const state = { active: 0, panes: [{ tabs: ['/tmp'], tab: 0, cursor: 'one', selected: [] }, { tabs: ['/target'], tab: 0, selected: [] }],
+    folders: { '/tmp': [{ id: 'one', name: 'literal\\name.txt' }, { id: 'two', name: 'Case.txt' }, { id: 'three', name: 'a\\..\\b.txt' }, { id: 'upper', name: 'A.txt' }, { id: 'lower', name: 'a.txt' }], '/target': [] } };
+  const selection = clipboard.capture(state, 'move', 'linux');
+  assert.deepEqual(selection, { paths: ['/tmp/literal\\name.txt'], mode: 'move' });
+  state.panes[0].selected = ['three'];
+  assert.deepEqual(clipboard.capture(state, 'copy', 'linux').paths, ['/tmp/a\\..\\b.txt']);
+  state.panes[0].selected = ['upper', 'lower'];
+  assert.deepEqual(clipboard.capture(state, 'copy', 'linux').paths, ['/tmp/A.txt', '/tmp/a.txt']);
+  const plan = clipboard.inspectPaste(state, { paths: ['/tmp/literal\\name.txt'], mode: 'move' }, '/target', 'linux');
+  assert.deepEqual(plan.groups[0].paths, ['/tmp/literal\\name.txt']);
+  assert.throws(() => clipboard.inspectPaste(state, { paths: ['/tmp/case.txt'], mode: 'copy' }, '/target', 'linux'));
+  const selectionWithCase = { paths: ['/tmp/Case.txt'], mode: 'move' };
+  const differentlyCasedGroup = { ids: ['two'], paths: ['/tmp/case.txt'] };
+  assert.deepEqual(clipboard.remaining(selectionWithCase, [{ group: differentlyCasedGroup, result: { confirmed: true, completedIds: ['two'] } }], 'linux'), ['/tmp/Case.txt']);
+});
+
+test('Windows clipboard paths keep case-insensitive drive identity and separator normalization', () => {
+  const selection = { paths: ['C:\\Temp\\File.txt'], mode: 'move' };
+  const group = { ids: ['file'], paths: ['c:/temp/file.txt'] };
+  assert.deepEqual(clipboard.remaining(selection, [{ group, result: { confirmed: true, completedIds: ['file'] } }]), []);
+});

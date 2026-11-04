@@ -19,6 +19,15 @@ const path = require('node:path');
 const { create, dictionaries } = require('../media/commander-i18n');
 const { createApp } = require('./support/webview.cjs');
 
+test('Linux clipboard and native destination checks have explicit English messages', () => {
+  const { t } = create('en');
+  assert.equal(t('Die Dateien aus dieser Zwischenablage wurden bereits übertragen.'), 'The files in this clipboard selection have already been transferred.');
+  assert.equal(t('Native Datei-Zwischenablage ist in dieser Desktopsitzung nicht verfügbar.'), 'The native file clipboard is unavailable in this desktop session.');
+  assert.equal(t('Die native Zielidentität ist unvollständig.'), 'The native destination identity is incomplete.');
+  assert.equal(t('Die native Zielidentität hat sich geändert.'), 'The native destination identity changed.');
+  assert.equal(t('Die native Zielidentität hat sich bei der Veröffentlichung geändert.'), 'The native destination identity changed during publication.');
+});
+
 test('language follows the interface locale and unsupported locales use English', () => {
   for (const locale of ['en', 'en-US', 'fr', undefined]) assert.equal(create(locale).t('Neuer Ordner'), 'New folder');
   for (const locale of ['de', 'de-DE', 'DE-at']) assert.equal(create(locale).t('Neuer Ordner'), 'Neuer Ordner');

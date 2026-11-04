@@ -39,7 +39,7 @@ test('license credits contain the project author, complete required notices and 
     assert.ok(content.includes(author));
     for (const name of ['Apache-2.0', 'Microsoft', 'CC BY 4.0', 'Gildas Lormeau', 'Jean-loup Gailly', 'Mark Adler', 'Chromium', 'JCraft']) assert.ok(content.includes(name), name);
     assert.match(content, /https:\/\/www\.apache\.org\/licenses\/LICENSE-2\.0/);
-    for (const name of ['LICENSE', 'NOTICE', 'WORKBENCH-NOTICES.txt', 'licenses/CODICONS-CC-BY-4.0.txt', 'licenses/ZIP-BSD-3-Clause.txt', 'licenses/ZLIB-STREAMS.txt', 'licenses/ZLIB-STREAMS-TS.txt', 'licenses/JZLIB.txt', 'licenses/EMSCRIPTEN.txt', 'licenses/MUSL.txt']) {
+    for (const name of ['LICENSE', 'NOTICE', 'WORKBENCH-NOTICES.txt', 'licenses/CODICONS-CC-BY-4.0.txt', 'licenses/ZIP-BSD-3-Clause.txt', 'licenses/ZLIB-STREAMS.txt', 'licenses/ZLIB-STREAMS-TS.txt', 'licenses/JZLIB.txt', 'licenses/EMSCRIPTEN.txt', 'licenses/MUSL.txt', 'licenses/WAYLAND-DATA-CONTROL.txt']) {
       const text = fs.readFileSync(path.join(root, name), 'utf8').replace(/^\uFEFF/, '').trim();
       assert.ok(content.includes(text), `complete offline text: ${name}`);
     }

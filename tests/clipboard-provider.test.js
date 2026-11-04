@@ -13,20 +13,54 @@ test('Windows cancellation uses a separate operation without move acknowledgemen
   app.provider.dispose();
 });
 
-for (const platform of ['linux', 'darwin']) test(`${platform} system file clipboard is excluded without starting a helper or loading a binding`, async () => {
-  let calls = 0;
-  const provider = createClipboardProvider({ platform, contains: () => true,
-    runHelper: async () => { calls++; return JSON.stringify({ paths: ['/tmp/a'], mode: 'copy', token: 'one' }); },
-    nativeApiFactory: () => { calls++; throw new Error('Unexpected native load'); }
-  });
-  await assert.rejects(provider.read(), { code: 'CLIPBOARD_UNAVAILABLE' });
-  await assert.rejects(provider.write({ paths: ['/tmp/a'], mode: 'copy' }), { code: 'CLIPBOARD_UNAVAILABLE' });
-  await assert.rejects(provider.ack({ paths: ['/tmp/a'], remainingPaths: [], mode: 'move', token: 'one' }), { code: 'CLIPBOARD_UNAVAILABLE' });
-  provider.dispose();
-  assert.equal(calls, 0);
+test('Linux file clipboard uses a native session and preserves POSIX path bytes', async () => {
+  const selectedPath = '/tmp/Ordner\\name-ß.txt';
+  const app = nativeHarness({ selection: { paths: [selectedPath], mode: 'move', token: 'linux:1:4' } }, 'linux');
+  const selection = await app.provider.read();
+  assert.deepEqual(selection, { paths: [selectedPath], mode: 'move', token: 'linux:1:4', source: 'system' });
+  assert.equal(await app.provider.ack({ ...selection, remainingPaths: [] }), true);
+  assert.deepEqual(app.calls.map(call => call.operation), ['clipboard.readFiles', 'clipboard.acknowledge']);
+  assert.equal(app.calls[0].session, app.calls[1].session);
+  assert.deepEqual(app.calls[1].request, { token: 'linux:1:4', paths: [selectedPath], mode: 'move', remainingPaths: [] });
+  assert.equal(app.helperCalls(), 0);
+  app.provider.dispose();
+  assert.equal(app.sessions[0].closed, true);
 });
 
-function nativeHarness(options = {}) {
+test('Linux file clipboard writes and cancels through the persistent native session', async () => {
+  const app = nativeHarness({}, 'linux');
+  const selection = await app.provider.write({ paths: ['/tmp/a.txt'], mode: 'copy' });
+  assert.deepEqual(app.calls.map(call => call.operation), ['clipboard.writeFiles']);
+  assert.equal(await app.provider.reset(selection), true);
+  assert.deepEqual(app.calls.map(call => call.operation), ['clipboard.writeFiles', 'clipboard.cancelFiles']);
+  assert.equal(app.calls[0].session, app.calls[1].session);
+  assert.equal(app.helperCalls(), 0);
+  app.provider.dispose();
+});
+
+test('Linux clipboard accepts literal backslash traversal-like filename bytes but rejects slash traversal', async () => {
+  const app = nativeHarness({}, 'linux');
+  await app.provider.write({ paths: ['/tmp/a\\..\\b.txt'], mode: 'copy' });
+  assert.deepEqual(app.calls[0].request, { paths: ['/tmp/a\\..\\b.txt'], mode: 'copy' });
+  await assert.rejects(app.provider.write({ paths: ['/tmp/a/../b.txt'], mode: 'copy' }), /Ungültiger Zwischenablage-Pfad/);
+  app.provider.dispose();
+});
+
+test('Linux clipboard reports protocol-specific unsupported capabilities explicitly', async () => {
+  const app = nativeHarness({ capabilities: { 'clipboard.readFiles': { status: 'unsupported', reason: 'WaylandDataControlUnavailable' } } }, 'linux');
+  await assert.rejects(app.provider.read(), { code: 'CLIPBOARD_UNAVAILABLE' });
+  assert.equal(app.calls.length, 0);
+  app.provider.dispose();
+});
+
+test('Linux clipboard maps unavailable runtime protocols to the status-bar capability error', async () => {
+  const failure = Object.assign(new Error('WaylandDataControlUnavailable'), { code: 'UnsupportedOperation' });
+  const app = nativeHarness({ failure }, 'linux');
+  await assert.rejects(app.provider.read(), error => error.code === 'CLIPBOARD_UNAVAILABLE' && error.cause === failure);
+  app.provider.dispose();
+});
+
+function nativeHarness(options = {}, platform = 'win32') {
   const calls = [], sessions = [];
   const api = {
     capabilities: options.capabilities || {},
@@ -35,6 +69,7 @@ function nativeHarness(options = {}) {
         closed: false,
         invoke(operation, request) {
           calls.push({ operation, request, session });
+          if (options.failure) return Promise.reject(options.failure);
           if (session.closed) throw Object.assign(new Error('closed'), { code: 'SessionClosed' });
           if (operation === 'clipboard.readFiles') return Promise.resolve(options.selection || { paths: ['C:/tmp/Größe.txt'], mode: 'move', token: 'native-session:9:1' });
           if (operation === 'clipboard.writeFiles') return Promise.resolve({ paths: request.paths, mode: request.mode, token: 'native-session:9:2' });
@@ -49,8 +84,8 @@ function nativeHarness(options = {}) {
   };
   let helperCalls = 0;
   const provider = createClipboardProvider({
-    platform: 'win32',
-    contains: allowed,
+    platform,
+    contains: value => allowed(value) || value.startsWith('/tmp/'),
     nativeApiFactory: () => api,
     runHelper: async () => { helperCalls++; throw new Error('Windows must not start an external clipboard helper.'); }
   });

@@ -22,7 +22,7 @@
   const { language, t, ui, count } = window.CommanderI18n.create(document.body.dataset.language || document.documentElement.lang);
   const nativePlatform = document.body.dataset.platform;
   const menus = window.CommanderMenus;
-  const systemFileClipboardSupported = !nativePlatform || nativePlatform === 'win32';
+  const systemFileClipboardSupported = !nativePlatform || ['win32', 'linux'].includes(nativePlatform);
   const nativeDesktopSupported = !nativePlatform || ['win32', 'linux'].includes(nativePlatform);
   document.documentElement.lang = language;
   document.querySelector('#modal-close').setAttribute('aria-label', t('Dialog schließen'));
@@ -299,6 +299,12 @@
   let clipboardSelection = null, nativeClipboardUnavailable = false, clipboardSequence = 0;
   let clipboardWriteRequestId = null, clipboardPasteGeneration = null, clipboardPasteRequestId = null;
   let clipboardGeneration = 0, clipboardAvailabilityRevision = 0, clipboardAvailable = false, clipboardStatusPending = false;
+  let completedClipboardMoveToken = null;
+  const completedClipboardMovePaths = new Set();
+  function resetCompletedClipboardMoves(token = null) {
+    completedClipboardMoveToken = token;
+    completedClipboardMovePaths.clear();
+  }
   const fileIdentity = value => /^[a-z]:\//i.test(value) ? value.toLowerCase() : value;
   function fileMarkerState(file, directory, markedPaths) {
     const marked = file && markedPaths.has(fileIdentity(file.fsSource || join(directory, file.name)));
@@ -379,11 +385,12 @@
   function copyClipboard(mode, contextSelection) {
     if (selected().some(row => row.archive)) { toast(t('Dateioperationen innerhalb von Archiven sind nicht verfügbar. F3 zeigt den Inhalt schreibgeschützt an.')); return; }
     let captured;
-    try { captured = window.CommanderClipboard.capture(contextSelection ? { ...state, panes: state.panes.map((p, index) => index === state.active ? { ...p, selected: contextSelection.ids, cursor: null } : p) } : state, mode); }
+    try { captured = window.CommanderClipboard.capture(contextSelection ? { ...state, panes: state.panes.map((p, index) => index === state.active ? { ...p, selected: contextSelection.ids, cursor: null } : p) } : state, mode, nativePlatform); }
     catch (error) { toast(t(error.message)); return; }
     if (!captured) return;
     clipboardPasteGeneration = null; clipboardPasteRequestId = null;
     const generation = ++clipboardGeneration;
+    resetCompletedClipboardMoves();
     setClipboardSelection({ ...captured, source: 'internal' });
     if (!host || !state.realFilesystem) { toast(t(mode === 'move' ? 'Dateiauswahl intern zum Verschieben vorgemerkt.' : 'Dateiauswahl intern in die Zwischenablage übernommen.'), 'success'); return; }
     if (!systemFileClipboardSupported) { nativeClipboardUnavailable = true; toast(t('System-Datei-Zwischenablage nicht verfügbar; Auswahl nur intern übernommen.'), 'info'); return; }
@@ -392,7 +399,7 @@
     clipboardWriteRequestId = clipboardRequest({ type: 'clipboard-write', ...captured }, response => {
       if (generation !== clipboardGeneration) return;
       if (response.ok) { setClipboardSelection(response.selection); nativeClipboardUnavailable = false; reportStatus(t(mode === 'move' ? 'Dateiauswahl zum Verschieben in die System-Zwischenablage übernommen.' : 'Dateiauswahl in die System-Zwischenablage übernommen.'), 'success', statusVersion); }
-      else if (response.unavailable) { nativeClipboardUnavailable = true; reportStatus(t('System-Datei-Zwischenablage nicht verfügbar; Auswahl nur intern übernommen.'), 'error', statusVersion); }
+      else if (response.unavailable) { nativeClipboardUnavailable = true; reportStatus(t('System-Datei-Zwischenablage nicht verfügbar; Auswahl nur intern übernommen.'), 'info', statusVersion); }
       else { setClipboardSelection(null); reportStatus(t(response.error), 'error', statusVersion); }
     });
   }
@@ -418,20 +425,38 @@
     const targetPane = pane(), targetTab = targetPane.tabStates[targetPane.tab].id, snapshotId = state.snapshotId;
     const validRead = () => !contextPopup && !shellMenuPending && document.activeElement?.closest('.list') === document.querySelectorAll('[data-pane]')[targetSide]?.querySelector('.list') && !document.activeElement?.closest('.pathbar,input,textarea,select,[contenteditable="true"],[data-lister],.lister') && !$('#modal').open && !transferJob && !transferPending && (!filesystemPending || refreshingFilesystem) && state.active === targetSide && state.panes[targetSide] === targetPane && currentPath(targetPane) === targetPath && targetPane.tabStates[targetPane.tab].id === targetTab && state.snapshotId === snapshotId;
     const start = selection => {
+      const acknowledgedSelection = selection;
+      if (selection?.source === 'system' && selection.mode === 'move') {
+        if (completedClipboardMoveToken !== selection.token) resetCompletedClipboardMoves(selection.token);
+        const paths = selection.paths.filter(filePath => !completedClipboardMovePaths.has(fileIdentity(filePath)));
+        if (paths.length !== selection.paths.length) selection = paths.length ? { ...selection, paths } : null;
+        if (!selection) {
+          setClipboardSelection(null);
+          toast(t('Die Dateien aus dieser Zwischenablage wurden bereits übertragen.'), 'info');
+          return;
+        }
+      }
       setClipboardSelection(selection);
       if (!selection) { toast(t('Die Zwischenablage enthält keine Dateien.')); return; }
       let plan;
-      try { plan = window.CommanderClipboard.inspectPaste(state, selection, targetPath); }
+      try { plan = window.CommanderClipboard.inspectPaste(state, selection, targetPath, nativePlatform); }
       catch (error) { toast(t(error.message)); return; }
       if (!plan.ready) { requestFilesystem({ type: 'filesystem-prepare', paths: plan.directories, action: 'clipboard-paste', recursive: false }, () => start(selection)); return; }
       const completions = [], policyState = { value: 'ask' };
       const finish = () => {
-        const remainingPaths = window.CommanderClipboard.remaining(selection, completions);
-        setClipboardSelection(remainingPaths.length ? { ...selection, paths: remainingPaths } : null);
+        const remainingPaths = window.CommanderClipboard.remaining(selection, completions, nativePlatform);
+        if (acknowledgedSelection.source === 'system' && acknowledgedSelection.mode === 'move') {
+          const remainingSet = new Set(remainingPaths.map(fileIdentity));
+          for (const filePath of selection.paths) if (!remainingSet.has(fileIdentity(filePath))) completedClipboardMovePaths.add(fileIdentity(filePath));
+          const originalPaths = acknowledgedSelection.paths.filter(filePath => !completedClipboardMovePaths.has(fileIdentity(filePath)));
+          setClipboardSelection(originalPaths.length ? { ...acknowledgedSelection, paths: originalPaths } : null);
+        } else setClipboardSelection(remainingPaths.length ? { ...selection, paths: remainingPaths } : null);
         if (selection.source === 'system' && selection.mode === 'move' && completions.some(({ result }) => result.confirmed && result.completedIds?.length)) {
-          clipboardRequest({ type: 'clipboard-ack', token: selection.token, paths: selection.paths, mode: selection.mode, remainingPaths }, response => {
+          const moveGeneration = clipboardGeneration;
+          clipboardRequest({ type: 'clipboard-ack', token: selection.token, paths: acknowledgedSelection.paths, mode: selection.mode, remainingPaths }, response => {
+            if (moveGeneration !== clipboardGeneration) return;
             if (!response.ok) toast(t(response.error));
-            else if (!response.matched) { setClipboardSelection(null); toast(t('Dateien übertragen; inzwischen geänderte Zwischenablage bleibt unverändert.'), 'success'); }
+            else if (!response.matched) toast(t('Dateien übertragen; inzwischen geänderte Zwischenablage bleibt unverändert.'), 'success');
           });
         }
       };
@@ -3866,7 +3891,7 @@
       flushFocusRefresh(); return;
     }
     if (host && event.data?.type === 'clipboard-changed') {
-      if (systemFileClipboardSupported && state.realFilesystem) { clipboardGeneration++; setClipboardSelection(null); refreshClipboardAvailability(); }
+      if (systemFileClipboardSupported && state.realFilesystem) { clipboardGeneration++; resetCompletedClipboardMoves(); setClipboardSelection(null); refreshClipboardAvailability(); }
       return;
     }
     if (host && event.data?.type === 'clipboard-result') {

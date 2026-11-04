@@ -6,6 +6,12 @@ function fixture(real = false) {
   const pane = path => ({ tabs: [path], tab: 0, selected: [], cursor: null, filter: '', sort: 'name' });
   return { version: 1, active: 0, realFilesystem: real, snapshotId: 'clip-one', panes: [pane('C:/tmp'), pane('C:/temp')], folders: { 'C:/tmp': [{ id: 'a', name: 'a.txt', type: 'text', size: 3, content: 'new', fsSource: 'C:/tmp/a.txt' }], 'C:/temp': [] } };
 }
+function linuxFixture() {
+  const saved = fixture(true);
+  saved.panes[0].tabs = ['/tmp']; saved.panes[1].tabs = ['/temp'];
+  saved.folders = { '/tmp': [{ id: 'a', name: 'a.txt', type: 'text', size: 3, content: 'new', fsSource: '/tmp/a.txt' }], '/temp': [] };
+  return saved;
+}
 function respond(app, request, extra = {}) {
   app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'clipboard-result', requestId: request.requestId, ok: true, ...extra } }));
 }
@@ -308,13 +314,68 @@ test('an empty paste result cannot be overwritten by an earlier availability che
 });
 
 test('platforms without a system file clipboard keep paste available for their internal file selection', t => {
-  const app = createApp(t, fixture(true), { platform: 'linux' }); select(app);
+  const app = createApp(t, fixture(true), { platform: 'darwin' }); select(app);
   assert.equal(app.messages.some(message => message.type === 'clipboard-status'), false);
   app.action('clipboard-copy');
   assert.equal(app.messages.filter(message => message.type === 'inputFocus').at(-1).paste, true);
   app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'clipboard-changed' } }));
   assert.equal(app.messages.filter(message => message.type === 'inputFocus').at(-1).paste, true);
   assert.equal(app.messages.some(message => message.type === 'clipboard-write'), false);
+});
+
+test('Linux copy routes the file selection through the native clipboard protocol', t => {
+  const app = createApp(t, linuxFixture(), { platform: 'linux' }); select(app);
+  app.action('clipboard-copy');
+  const write = app.messages.find(message => message.type === 'clipboard-write');
+  assert.ok(write);
+  assert.equal(write.paths[0], '/tmp/a.txt');
+  assert.equal(app.document.querySelector('#status-message').dataset.outcome, 'info');
+  respond(app, write, { selection: { paths: write.paths, mode: 'copy', token: 'linux:2:1', source: 'system' } });
+  assert.equal(app.messages.some(message => message.type === 'clipboard-status'), true);
+});
+
+test('Linux copy preserves a literal backslash in a POSIX filename', t => {
+  const saved = fixture(true);
+  saved.panes[0].tabs = ['/tmp'];
+  saved.folders = { '/tmp': [{ id: 'posix-name', name: 'literal\\name.txt', type: 'text', size: 1, content: 'x', fsSource: '/tmp/literal\\name.txt' }], 'C:/temp': [] };
+  const app = createApp(t, saved, { platform: 'linux' });
+  app.click(app.row('literal\\name.txt').querySelector('[data-filename]'));
+  app.action('clipboard-copy');
+  const write = app.messages.find(message => message.type === 'clipboard-write'); assert.ok(write);
+  assert.equal(write.paths[0], '/tmp/literal\\name.txt');
+});
+
+test('Linux clipboard protocol unavailability keeps the internal selection and reports at the status bar', t => {
+  const app = createApp(t, linuxFixture(), { platform: 'linux' }); select(app);
+  app.action('clipboard-cut');
+  const write = app.messages.find(message => message.type === 'clipboard-write');
+  assert.ok(write);
+  respond(app, write, { ok: false, unavailable: true, error: 'Wayland data control is unavailable.' });
+  assert.equal(app.messages.filter(message => message.type === 'inputFocus').at(-1).paste, true);
+  assert.equal(app.document.querySelector('#status-message').dataset.outcome, 'info');
+  assert.equal(app.document.querySelector('dialog[open]'), null);
+});
+
+test('Linux move completion remains successful when a foreign clipboard owner cannot be acknowledged', async t => {
+  const app = createApp(t, linuxFixture(), { platform: 'linux' });
+  const selection = { paths: ['/tmp/a.txt'], mode: 'move', token: 'foreign-owner', source: 'system' };
+  app.key('Tab'); app.key('v', { ctrlKey: true });
+  const read = app.messages.find(message => message.type === 'clipboard-read'); assert.ok(read);
+  respond(app, read, { selection }); await tick();
+  const apply = app.messages.find(message => message.type === 'filesystem-apply'); assert.ok(apply);
+  const confirmed = structuredClone(apply.state); confirmed.snapshotId = 'linux-move-confirmed';
+  confirmed.folders['/temp'][0].fsSource = '/temp/a.txt';
+  app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-result', ok: true, state: confirmed } })); await tick();
+  const ack = app.messages.find(message => message.type === 'clipboard-ack'); assert.ok(ack);
+  respond(app, ack, { matched: false });
+  assert.equal(app.document.querySelector('#status-message').dataset.outcome, 'success');
+  assert.equal(app.messages.filter(message => message.type === 'clipboard-ack').length, 1);
+  assert.equal(app.state().folders['/tmp'].length, 0);
+  const applies = app.messages.filter(message => message.type === 'filesystem-apply').length;
+  app.key('v', { ctrlKey: true });
+  const reread = app.messages.filter(message => message.type === 'clipboard-read').at(-1); assert.ok(reread);
+  respond(app, reread, { selection }); await tick();
+  assert.equal(app.messages.filter(message => message.type === 'filesystem-apply').length, applies);
 });
 
 test('confirmed clipboard files remain pasteable across focus and pane changes with an overlapping status check', async t => {

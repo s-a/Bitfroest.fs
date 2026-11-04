@@ -10,7 +10,7 @@ function fixture() {
 }
 
 for (const language of ['de', 'en']) test(`${language} unsupported actions report only in the status bar when invoked`, t => {
-  for (const [platform, action] of [['linux', 'clipboard-copy'], ['linux', 'clipboard-paste'], ['linux', 'shell-context-menu'], ['darwin', 'open-trash'], ['darwin', 'inspect-folder-locks']]) {
+  for (const [platform, action] of [['linux', 'shell-context-menu'], ['darwin', 'open-trash'], ['darwin', 'inspect-folder-locks']]) {
     const app = createApp(t, fixture(), { platform, language });
     const unsupported = language === 'de' ? /nicht unterstützt|nicht verfügbar/ : /not supported|unavailable/;
     assert.doesNotMatch(app.document.querySelector('#status-message').textContent, unsupported);

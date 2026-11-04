@@ -236,6 +236,19 @@
     }
   },
   {
+    "name": "Wayland ext-data-control protocol",
+    "version": "1",
+    "author": "Simon Ser, Ivan Molodetskikh, Neal Gompa",
+    "license": "MIT-style permission notice",
+    "licenseUrl": "https://gitlab.freedesktop.org/wayland/wayland-protocols",
+    "source": "https://gitlab.freedesktop.org/wayland/wayland-protocols",
+    "files": ["licenses/WAYLAND-DATA-CONTROL.txt"],
+    "description": {
+      "de": "Protokollmetadaten für die native Linux-Dateizwischenablage; aus ext-data-control-v1 angepasst.",
+      "en": "Protocol metadata for the native Linux file clipboard, adapted from ext-data-control-v1."
+    }
+  },
+  {
     "name": "Material Symbols",
     "author": "Google LLC",
     "license": "Apache-2.0",

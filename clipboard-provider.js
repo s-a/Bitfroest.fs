@@ -12,10 +12,13 @@ function createClipboardProvider(options = {}) {
     if (!Array.isArray(value) || (!empty && !value.length) || value.length > 1024) throw new Error('Ungültige Datei-Zwischenablage.');
     const result = [], seen = new Set();
     for (const item of value) {
-      if (typeof item !== 'string' || item.length > 4096 || item.includes('\0') || !/^(?:[a-z]:[\\/]|\/)/i.test(item) || item.split(/[\\/]/).includes('..')) throw new Error('Ungültiger Zwischenablage-Pfad.');
-      const normalized = item.replace(/\\/g, '/');
+      if (typeof item !== 'string' || item.length > 4096 || item.includes('\0')) throw new Error('Ungültiger Zwischenablage-Pfad.');
+      const absolute = platform === 'linux' ? item.startsWith('/') : /^(?:[a-z]:[\\/]|\/)/i.test(item);
+      const segments = platform === 'linux' ? item.split('/') : item.split(/[\\/]/);
+      if (!absolute || segments.includes('..')) throw new Error('Ungültiger Zwischenablage-Pfad.');
+      const normalized = platform === 'win32' ? item.replace(/\\/g, '/') : item;
       if (!contains(normalized)) throw new Error('Zwischenablage enthält Pfade außerhalb der freigegebenen Ordner.');
-      const identity = /^[a-z]:\//i.test(normalized) ? normalized.toLowerCase() : normalized;
+      const identity = platform === 'win32' && /^[a-z]:\//i.test(normalized) ? normalized.toLowerCase() : normalized;
       if (!seen.has(identity)) { seen.add(identity); result.push(normalized); }
     }
     return result;
@@ -26,7 +29,7 @@ function createClipboardProvider(options = {}) {
   }
   async function invoke(payload) {
     if (Buffer.byteLength(JSON.stringify(payload)) > 1048576) throw new Error('Datei-Zwischenablage überschreitet die Größenbegrenzung.');
-    if (platform === 'win32') {
+    if (platform === 'win32' || platform === 'linux') {
       const operation = payload.action === 'read' ? 'clipboard.readFiles' : payload.action === 'write' ? 'clipboard.writeFiles' : payload.action === 'reset' ? 'clipboard.cancelFiles' : 'clipboard.acknowledge';
       const request = payload.action === 'read' ? {} : payload.action === 'write'
         ? { paths: payload.paths, mode: payload.mode }
@@ -47,6 +50,11 @@ function createClipboardProvider(options = {}) {
               reject(Object.assign(new Error('Datei-Zwischenablage antwortet nicht.'), { code: 'ClipboardTimeout' }));
             }, options.timeout || 10000); })
           ]);
+        } catch (error) {
+          if (platform === 'linux' && error?.code === 'UnsupportedOperation') {
+            throw unavailable('Native Datei-Zwischenablage ist in dieser Desktopsitzung nicht verfügbar.', error);
+          }
+          throw error;
         } finally { clearTimeout(timer); }
       });
       nativeQueue = result.catch(() => {});

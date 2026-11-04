@@ -10,3 +10,8 @@ Material Symbols: drag_click (sharp, filled, weight 400, optical size 48)
 Copyright Google LLC. Licensed under the Apache License, Version 2.0.
 The embedded arrow is omitted. The original circle paths use a white fill
 and black contrast outline. The full license text is included in LICENSE.
+
+Wayland ext-data-control-v1 protocol definitions
+Copyright 2018 Simon Ser, 2019 Ivan Molodetskikh, 2024 Neal Gompa.
+Native protocol metadata is adapted from the version 1 definitions.
+The permission and warranty notice is included in licenses/WAYLAND-DATA-CONTROL.txt.
