@@ -5,7 +5,7 @@ const Progress = require('./media/commander-progress');
 const { createGitStatusEngine } = require('./git-status-engine');
 
 const aborted = () => Object.assign(new Error('Quick Diff cancelled.'), { name: 'AbortError' });
-function createQuickDiff({ getRepository, lister, native, io = fs, locate }) {
+function createQuickDiff({ getRepository, lister, native, io = fs, locate, platform = process.platform }) {
   const listings = new Map(), initialized = new Set();
   const locateRepository = locate || createGitStatusEngine({ session: native }).locate;
   const paths = value => /^[A-Za-z]:[\\/]|^\\\\/.test(value) ? path.win32 : path.posix;
@@ -46,7 +46,7 @@ function createQuickDiff({ getRepository, lister, native, io = fs, locate }) {
       for (const change of changes) {
         for (const uri of [change.uri, change.originalUri, change.renameUri]) if (uri?.fsPath && inside(root, uri.fsPath)) changed.add(relative(uri.fsPath));
       }
-      const result = await step('status', id => native.invoke('git.status', { directory: root, scope: relative(scope) || '.', recursive: true, showIgnored: true }, {
+      const result = await step('status', id => native.invoke('git.status', { directory: root, scope: relative(scope) || '.', recursive: true, showIgnored: false }, {
         signal: options.signal,
         onProgress: update => { check(); plan.update(id, Progress.event({ phase: 'quick-diff-status', path: update.path, overall: Progress.unknown('items', 0, 'enumerating'), current: Progress.unknown('items', 0, 'native-operation') })); publish(); }
       }));
@@ -56,6 +56,7 @@ function createQuickDiff({ getRepository, lister, native, io = fs, locate }) {
         const rows = [], seen = new Set();
         for (const entry of result.entries || []) {
           check();
+          if (entry.ignored) continue;
           const name = entry.path?.replace(/\/$/, '');
           if (!name || seen.has(name) || name.split('/').includes('.git')) continue;
           const target = paths(root).resolve(root, name);
@@ -70,10 +71,13 @@ function createQuickDiff({ getRepository, lister, native, io = fs, locate }) {
           } catch (error) { if (error.code !== 'ENOENT') throw error; }
           if (!stat && !entry.head) continue;
           seen.add(name);
-          rows.push({ path: name, name: mode === 'repository' ? name : paths(root).basename(target), size: stat?.size || 0,
+          const display = platform === 'win32' ? name.replaceAll('/', '\\') : name;
+          rows.push({ path: name, name: name.includes('/') ? display : `${platform === 'win32' ? '.\\' : './'}${display}`, size: stat?.size || 0, modifiedAt: Number.isFinite(stat?.mtimeMs) ? stat.mtimeMs : null,
+            gitStatus: entry.conflicted ? 'conflict' : !stat ? 'deleted' : !entry.head ? entry.stage ? 'added' : 'untracked' : 'modified',
             status: entry.conflicted ? 'Conflict' : entry.ignored ? 'Ignored' : !stat ? 'Deleted' : !entry.head ? 'Added' : 'Modified', hasHead: Boolean(commit && entry.head) });
         }
-        return rows.sort((a, b) => a.name.localeCompare(b.name));
+        const priority = { Modified: 0, Added: 1, Deleted: 2, Conflict: 3 };
+        return rows.sort((a, b) => (priority[a.status] ?? 4) - (priority[b.status] ?? 4) || (b.modifiedAt ?? -Infinity) - (a.modifiedAt ?? -Infinity) || a.name.localeCompare(b.name));
       });
       const id = crypto.randomUUID(); listings.set(id, { repository, root, scope, commit, entries: new Map(entries.map(e => [e.path, e])) });
       return { id, root, scope, commit, entries };

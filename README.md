@@ -407,7 +407,7 @@ X-Ray Ultra updates the opposite preview after pausing over a text file for 200 
 <details>
 <summary>0054 · Quick Diff: current folder</summary>
 
-Select a changed file to compare its saved content with HEAD in a read-only inline diff. Unchanged sections are collapsed with three context lines and can be expanded. The title shows separate added, changed and deleted line counts. The file list occupies 40% of the width and includes a status column. Double-click the preview to open the full VS Code diff editor.
+Select a changed file to compare its saved content with HEAD in a read-only inline diff. Unchanged sections are collapsed with three context lines and can be expanded. The title shows separate added, changed and deleted line counts. Both modes show paths relative to the repository root with native separators. Filenames appear above smaller root-relative directories. The list shows relative modification times with exact-date tooltips, sorts by status and then newest first, and sizes its columns automatically. Ignored files are excluded. Double-click the preview to open the full VS Code diff editor.
 
 ![Quick Diff: current folder](media/marketplace/showcases/0054-windows-en-dark-quick-diff-folder-preview.png)
 
@@ -416,7 +416,7 @@ Select a changed file to compare its saved content with HEAD in a read-only inli
 <details>
 <summary>0055 · Quick Diff: entire repository</summary>
 
-Cycle the footer button to include the entire repository, including new and ignored files. Selecting a file without a version in HEAD shows a notice instead of a diff.
+Cycle the footer button to include the entire repository, including new files and excluding ignored files. Root-level files have an explicit relative prefix. Selecting a file without a version in HEAD shows a notice instead of a diff.
 
 ![Quick Diff: entire repository](media/marketplace/showcases/0055-windows-en-dark-quick-diff-repository-preview.png)
 
@@ -424,7 +424,7 @@ Cycle the footer button to include the entire repository, including new and igno
 
 <!-- showcase-gallery:end -->
 
-Quick Diff compares saved files with the last commit of the current branch. Its footer button cycles through the current folder including subfolders, the entire repository, and off. The read-only inline diff uses 60% of the width; unchanged sections collapse with three context lines and can be expanded. The file list uses 40% and includes a status column. The preview title counts added (+), changed (~) and deleted (−) lines without counting replacements twice. New and ignored files remain visible; files without a version in HEAD show a notice. Double-click the preview to open the same comparison in VS Code. The per-version limit defaults to 5 MiB (`bitfroest.files.quickDiffMaxFileSizeMiB`). The built-in Git extension and Git installation are required.
+Quick Diff compares saved files with HEAD in a read-only inline view. Its footer button cycles through the current folder including subfolders, the entire repository, and off. Filenames appear above smaller root-relative directory paths with native separators. The list uses normal file colors, automatic column widths and relative modification times with exact-date tooltips. It sorts Modified, Added, then Deleted, with newest files first within each status. Ignored files are excluded; files without a version in HEAD show a notice. Double-clicking opens the comparison in VS Code. The per-version limit defaults to 5 MiB (`bitfroest.files.quickDiffMaxFileSizeMiB`). The built-in Git extension and Git installation are required.
 
 ## Configuration
 

@@ -1483,24 +1483,24 @@
         set(tab, '--archive-tab-color', archiveColor ? safe(archiveColor, tabBackground) : '');
         set(tab, '--archive-tab-hover', archiveColor ? safe(archiveColor, tabHover) : '');
       }
-      const table = section.querySelector('.file-table');
-      if (!table) return;
-      for (const selection of ['active', 'inactive']) {
+      const tables = section.querySelectorAll('.file-table,[data-quick-diff-list]');
+      for (const table of tables) for (const selection of ['active', 'inactive']) {
         const back = colors.composite(variable(`--vscode-list-${selection}SelectionBackground`), background);
         const front = variable(`--vscode-list-${selection}SelectionForeground`) || foreground;
         set(table, `--${selection}-selection-text`, safe(front, back));
         set(table, `--${selection}-space-mark-text`, contrast ? '' : safe(variable('--vscode-list-highlightForeground') || variable('--vscode-textLink-foreground') || front, back));
       }
-      for (const row of section.querySelectorAll('[data-file-row][data-id]')) {
-        const file = entries.get(row.dataset.id), name = row.querySelector('[data-filename]');
+      for (const row of section.querySelectorAll('[data-file-row][data-id],.quick-diff-row[data-diff-path]')) {
+        const quick = row.dataset.diffPath !== undefined;
+        const file = quick ? { name: base(row.dataset.diffPath), type: 'file' } : entries.get(row.dataset.id), name = row.querySelector(quick ? '.quick-diff-name' : '[data-filename]');
         if (!file || !name) continue;
         const nativeImage = row.querySelector('img.native-icon');
         if (nativeImage) refreshNativeIconContrast(nativeImage);
         const desired = !contrast && settings.enabled !== false && file.type !== 'folder' ? matchFileColor(file.name) : null;
-        const error = gitEntryError(currentPath(p), file.name);
-        const title = error ? t('Git-Prüfung fehlgeschlagen: {error}', { error }) : emptyGitFolder(currentPath(p), file) ? t('Leer – von Git nicht erfasst') : '';
+        const error = quick ? null : gitEntryError(currentPath(p), file.name);
+        const title = quick ? name.title : error ? t('Git-Prüfung fehlgeschlagen: {error}', { error }) : emptyGitFolder(currentPath(p), file) ? t('Leer – von Git nicht erfasst') : '';
         if (row.title !== title) row.title = title;
-        const status = error ? 'error' : gitInfo(currentPath(p))?.statuses?.[file.name];
+        const status = quick ? row.dataset.diffStatus : error ? 'error' : gitInfo(currentPath(p))?.statuses?.[file.name];
         const gitColor = !contrast && settings.git !== false ? statusColor(status) : null;
         const nameColor = file.type === 'folder' ? gitColor : desired;
         const rowColor = file.type !== 'folder' && (!status || ['clean', 'untracked', 'ignored'].includes(status)) ? desired : gitColor;
@@ -1904,7 +1904,7 @@
   const actions = [['F2', t('Umbenennen'), 'rename-one'], ['F3', t('Anzeigen'), 'view'], ['F4', t('Bearbeiten'), 'edit'], ['F5', t('Kopieren'), 'copy'], ['F6', t('Verschieben'), 'move'], ['F7', t('Neuer Ordner'), 'mkdir'], ['F8', t('Löschen'), 'delete']];
   const lister = window.CommanderListerView.create({ host, state: () => state, t, escape, modal, restore: render, edit: file => preview(file, true), notify: toast, report: reportStatus, remember: rememberScroll, task: statusTask });
   const previewManager = window.CommanderPreview.create();
-  const quickDiff = window.CommanderQuickDiff.create({ host, t, state: () => state, currentPath, isArchive: isArchiveLocation, notify: toast, task: xrayTask, preview: previewManager, beforeStart: () => { document.querySelectorAll("[data-lister-close]").forEach(button => button.click()); }, icon: entry => entry.icon ? window.CommanderIcons.native(entry.icon) : baseIcon({ name: entry.name.split("/").pop(), type: "file", iconKey: entry.fsSource }, ""), });
+  const quickDiff = window.CommanderQuickDiff.create({ host, t, state: () => state, currentPath, isArchive: isArchiveLocation, notify: toast, task: xrayTask, preview: previewManager, decorate: refreshFileColors, beforeStart: () => { document.querySelectorAll("[data-lister-close]").forEach(button => button.click()); }, icon: entry => entry.icon ? window.CommanderIcons.native(entry.icon) : baseIcon({ name: entry.name.split("/").pop(), type: "file", iconKey: entry.fsSource }, ""), });
   const xray = window.CommanderXray.create({ host, t, state: () => state, currentPath, files, isArchive: isArchiveLocation, settings: () => fileSettings, task: xrayTask, notify: toast, preview: previewManager, beforeStart: () => { previewManager.activate("xray", () => xray.stop()); document.querySelectorAll("[data-lister-close]").forEach(button => button.click()); }, compact: (side, enabled) => fileGrid.compact(document.querySelector(`[data-pane="${side}"]`), enabled), restoreFocus: side => { state.active = side; document.querySelector(`[data-pane="${side}"] .list`)?.focus({ preventScroll: true }); } });
   const fileSearch = window.CommanderFileSearch.create({ host, t, escape, report: reportStatus, task: statusTask,
     context: () => ({ path: currentPath(pane()), selected: selected().map(row => row.fsSource || join(currentPath(pane()), row.name)), side: state.active, state }),

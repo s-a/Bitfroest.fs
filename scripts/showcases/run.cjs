@@ -276,7 +276,7 @@ async function main() {
       if (lockFixture) await invoke('showcase.close-locks');
       await invoke('showcase.focus-main');
       if (scene.captures.some(capture => ['bitfroest.gitHistory', 'bitfroest.gitDiff', 'bitfroest.showLocalBranches'].includes(capture.command))) await invoke('showcase.prepare-repository', [scene.paths[0]]);
-      if (scene.captures.some(capture => capture.quickDiffMode)) await invoke('showcase.prepare-repository', [path.join(demo, 'quick-diff-compact')]);
+      if (scene.captures.some(capture => capture.quickDiffMode)) await invoke('showcase.prepare-repository', [path.join(demo, 'quick-diff-list')]);
       await evaluate(() => {
         document.querySelector('dialog[open] #modal-cancel')?.click();
         for (const button of document.querySelectorAll('[data-search-close], [data-lister-close]')) button.click();
@@ -328,9 +328,9 @@ async function main() {
           if (typeof opened === 'string') throw new Error(opened);
           if (capture.quickDiffMode === 'repository') {
             await xrayPointer('[data-pane="0"] [data-quick-diff-toggle]');
-            await waitFor(() => evaluate(() => Boolean(document.querySelector('[data-quick-diff-list] .quick-diff-name[title="src/Orders.sql"]'))));
+            await waitFor(() => evaluate(() => Boolean(document.querySelector('[data-quick-diff-list] [data-diff-path="src/Orders.sql"]'))));
           }
-          await xrayPointer(`[data-quick-diff-list] .quick-diff-name[title="${capture.quickDiffMode === 'repository' ? 'src/' : ''}Orders.sql"]`);
+          await xrayPointer('[data-quick-diff-list] [data-diff-path="src/Orders.sql"] .quick-diff-name');
         }
         if (capture.action) await invoke(`bitfroest.${capture.action}`);
         if (capture.command) {
@@ -375,7 +375,22 @@ async function main() {
           const source = document.querySelector('.quick-diff-source'), preview = document.querySelector('[data-quick-diff]');
           const panes = [...document.querySelectorAll('#panes > .pane')], width = panes.reduce((sum, pane) => sum + pane.getBoundingClientRect().width, 0);
           const tokens = new Set([...preview.querySelectorAll('.view-line span')].flatMap(span => [...span.classList].filter(name => /^mtk\d+$/.test(name))));
+          const header = source.querySelector('.quick-diff-header'), row = source.querySelector('[data-diff-path="src/Orders.sql"]');
+          const cells = [...row.children].map(cell => cell.getBoundingClientRect());
+          const filename = row.querySelector('[data-diff-filename]'), directory = row.querySelector('[data-diff-directory]'), rect = row.getBoundingClientRect();
+          const rows = [...source.querySelectorAll('.quick-diff-row')], priority = { Modified: 0, Added: 1, Deleted: 2, Conflict: 3 };
+          const ordered = rows.every((item, index) => {
+            if (!index) return true;
+            const previous = rows[index - 1], before = priority[previous.children[1].textContent], after = priority[item.children[1].textContent];
+            return before < after || before === after && (Date.parse(previous.querySelector('time')?.dateTime) || -Infinity) >= (Date.parse(item.querySelector('time')?.dateTime) || -Infinity);
+          });
           return source.getBoundingClientRect().width / width > .39 && source.getBoundingClientRect().width / width < .41 &&
+            filename.textContent === 'Orders.sql' && directory.textContent === 'src\\' && parseFloat(getComputedStyle(directory).fontSize) < parseFloat(getComputedStyle(filename).fontSize) * .8 && header.children.length === 3 && row.children.length === 3 &&
+            !source.querySelector('[data-diff-status="ignored"]') && row.querySelector('.quick-diff-name').style.getPropertyValue('--file-type-color') && row.style.getPropertyValue('--git-text-color') &&
+            (mode !== 'repository' || source.querySelector('[data-diff-path="Overview.md"] [data-diff-directory]')?.textContent === '.\\') &&
+            rect.height >= 30 && rect.height <= 34 && cells.every(cell => cell.height > 0 && cell.top >= rect.top && cell.bottom <= rect.bottom) && cells[0].right <= cells[1].left && cells[1].right <= cells[2].left &&
+            header.querySelector('[data-diff-sort="status"]').closest('[role="columnheader"]').getAttribute('aria-sort') === 'ascending' && ordered &&
+            [...source.querySelectorAll('time')].every(time => time.textContent && time.title && !time.textContent.includes('/')) &&
             source.querySelector('[data-quick-diff-toggle]').dataset.mode === mode && source.querySelector('.quick-diff-header').textContent.includes('Status') &&
             preview.querySelector('[data-diff-summary]')?.textContent.includes('(+3 · ~2 · −0)') &&
             preview.querySelector('.line-insert,.char-insert') && preview.querySelector('.line-delete,.char-delete') && tokens.size > 1 &&

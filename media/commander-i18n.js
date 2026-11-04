@@ -5,6 +5,11 @@
 })(typeof globalThis === 'object' ? globalThis : this, function () {
   'use strict';
   const pairs = {
+    'Datei / Pfad': 'File / Path',
+    'Geändert': 'Modified',
+    'Innerhalb des Status: neueste Änderungen zuerst.': 'Within each status: newest changes first.',
+    'Geändert am': 'Modified at',
+    'Änderungszeit nicht verfügbar.': 'Modification time unavailable.',
     'Zeilen: {added} hinzugefügt, {changed} geändert, {deleted} gelöscht.': 'Lines: {added} added, {changed} changed, {deleted} deleted.',
     "Quick Diff: Kein Repository gefunden.": "Quick Diff: no repository.",
     "Quick Diff: Die Git-Erweiterung ist nicht verfügbar.": "Quick Diff: the Git extension is unavailable.",

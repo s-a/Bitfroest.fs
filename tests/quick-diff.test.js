@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createQuickDiff } = require('../quick-diff');
-const fixture = () => {
+const fixture = (platform = 'linux') => {
   const repository = { rootUri: { fsPath: '/repo' }, state: { HEAD: { commit: 'a'.repeat(40) } },
     diffWith: async () => [{ uri: { fsPath: '/repo/src/a.sql' }, originalUri: { fsPath: '/repo/src/a.sql' } }],
     getObjectDetails: async () => ({ size: 9 }), buffer: async () => Buffer.from('select 1;') };
@@ -11,12 +11,12 @@ const fixture = () => {
     { path: 'other/b.sql', head: 0, workdir: 2 }] }), close() {} };
   const io = { realpath: async p => p, lstat: async p => { if (p.endsWith('/.git')) throw Object.assign(new Error('Missing'), { code: 'ENOENT' }); return { size: 9, isFile: () => true, isSymbolicLink: () => false }; } };
   const lister = { fullText: async () => ({ text: 'select 2;', bytes: 9 }), decodeText: async b => ({ text: b.toString() }) };
-  return { repository, native, io, lister, provider: createQuickDiff({ getRepository: async () => repository, native, io, lister, locate: async () => ({ dir: '/repo' }) }) };
+  return { repository, native, io, lister, provider: createQuickDiff({ getRepository: async () => repository, native, io, lister, locate: async () => ({ dir: '/repo' }), platform }) };
 };
-test('Quick Diff lists recursive scope, ignored files and true HEAD differences', async () => {
+test('Quick Diff lists recursive scope and true HEAD differences while excluding ignored files', async () => {
   const { provider } = fixture();
   const result = await provider.list('/repo/src', 'folder');
-  assert.deepEqual(result.entries.map(e => [e.name, e.status]), [['a.sql', 'Modified'], ['file.log', 'Ignored'], ['new.sql', 'Added']]);
+  assert.deepEqual(result.entries.map(e => [e.name, e.status]), [['src/a.sql', 'Modified'], ['src/new.sql', 'Added']]);
   const repository = await provider.list('/repo/src', 'repository');
   assert.ok(repository.entries.some(entry => entry.name === 'src/a.sql'));
 });
@@ -26,7 +26,34 @@ test('Quick Diff waits for repository initialization on the first activation', a
   repository.state.HEAD = undefined;
   repository.status = async () => { repository.state.HEAD = { commit: 'a'.repeat(40) }; };
   const list = await provider.list('/repo/src', 'folder');
-  assert.ok(list.entries.some(entry => entry.name === 'a.sql'));
+  assert.ok(list.entries.some(entry => entry.name === 'src/a.sql'));
+});
+
+test('Quick Diff sorts Modified before Added and uses newest modification times within each status', async () => {
+  const { provider, io } = fixture(), stat = io.lstat;
+  io.lstat = async target => ({ ...await stat(target), mtimeMs: target.endsWith('new.sql') ? 3000 : target.endsWith('a.sql') ? 1000 : undefined });
+  const result = await provider.list('/repo/src', 'folder');
+  assert.deepEqual(result.entries.map(entry => [entry.path, entry.modifiedAt]), [['src/a.sql', 1000], ['src/new.sql', 3000]]);
+});
+
+test('Quick Diff explicitly shows root-relative paths in both modes, including root files', async () => {
+  const { provider, native } = fixture();
+  native.invoke = async () => ({ repository: true, head: 'a'.repeat(40), entries: [{ path: 'untracked.txt', head: 0, workdir: 2 }, { path: 'src/nested/query.sql', head: 0, workdir: 2 }] });
+  for (const mode of ['folder', 'repository']) {
+    const result = await provider.list('/repo', mode);
+    assert.equal(result.entries.find(entry => entry.path === 'untracked.txt').name, './untracked.txt');
+    assert.equal(result.entries.find(entry => entry.path === 'src/nested/query.sql').name, 'src/nested/query.sql');
+  }
+});
+
+test('Quick Diff uses Windows separators and an explicit dot for files at the root', async () => {
+  const { provider, native } = fixture('win32');
+  native.invoke = async () => ({ repository: true, head: 'a'.repeat(40), entries: [{ path: 'untracked.txt', head: 0, workdir: 2 }, { path: 'src/nested/query.sql', head: 0, workdir: 2 }] });
+  for (const mode of ['folder', 'repository']) {
+    const result = await provider.list('/repo', mode);
+    assert.equal(result.entries.find(entry => entry.path === 'untracked.txt').name, '.\\untracked.txt');
+    assert.equal(result.entries.find(entry => entry.path === 'src/nested/query.sql').name, 'src\\nested\\query.sql');
+  }
 });
 test('Quick Diff pins HEAD, loads both sides and rejects paths outside its list', async () => {
   const { provider, repository } = fixture();
@@ -105,12 +132,12 @@ test('Quick Diff reads native recursive status and real text versions without ch
   const statuses = [];
   const list = await provider.list(directory, 'repository', { onStatus: snapshot => statuses.push(snapshot) });
   const scoped = await provider.list(path.join(directory, 'src'), 'folder');
-  assert.deepEqual(scoped.entries.map(entry => entry.name), ['a.sql', 'new.sql']);
-  assert.deepEqual(list.entries.map(e => [e.name, e.status]), [['gone.txt', 'Deleted'], ['out/build.log', 'Ignored'], ['src/a.sql', 'Modified'], ['src/new.sql', 'Added']]);
+  assert.deepEqual(scoped.entries.map(entry => entry.path).sort(), ['src/a.sql', 'src/new.sql']);
+  assert.deepEqual(list.entries.map(e => [e.path, e.status]).sort((a,b)=>a[0].localeCompare(b[0])), [['gone.txt', 'Deleted'], ['src/a.sql', 'Modified'], ['src/new.sql', 'Added']]);
   const read = await provider.read(list.id, 'src/a.sql', { onStatus: snapshot => statuses.push(snapshot) });
   assert.equal(read.original, 'select 1;'); assert.equal(read.modified, 'select 2;');
   assert.equal((await provider.read(list.id, 'gone.txt')).modified, '');
-  assert.equal((await provider.read(list.id, 'out/build.log')).reason, 'no-head');
+  await assert.rejects(provider.read(list.id, 'out/build.log'), /selection/i);
   assert.deepEqual(await fs.readFile(path.join(directory, '.git/index')), before);
   assert.ok(statuses.length > 10);
 });
