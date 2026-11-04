@@ -458,7 +458,7 @@ class Session::Impl {
         api_->display_cancel_read(display_);
         goto finished;
       }
-      if (ready == 0 || (ready < 0 && errno == EINTR) || (descriptor.revents & POLLOUT)) {
+      if (ready == 0 || (ready < 0 && errno == EINTR)) {
         api_->display_cancel_read(display_);
         continue;
       }
@@ -559,7 +559,14 @@ class Session::Impl {
     if (!mime) { Result result; result.ok = true; result.available = true; return result; }
     const auto selection_generation = generation_;
     std::string bytes;
-    if (!Receive(captured_offer, mime, &bytes)) return Failure("ClipboardReadFailed", "The Wayland clipboard data could not be read.");
+    bool connection_lost = false;
+    if (!Receive(captured_offer, mime, &bytes, &connection_lost)) {
+      if (connection_lost) {
+        SetUnavailable("WaylandConnectionLost");
+        return Failure("ClipboardConnectionLost", "The Wayland clipboard connection was lost.");
+      }
+      return Failure("ClipboardReadFailed", "The Wayland clipboard data could not be read.");
+    }
     if (!SyncRoundtrip()) return Failure("ClipboardConnectionLost", "The Wayland clipboard connection was lost.");
     if (selection_generation != generation_ || captured_offer != selection_offer_) return Failure("ClipboardChanged", "The Wayland file selection changed.");
     std::vector<std::string> paths;
@@ -627,7 +634,8 @@ class Session::Impl {
     Result result; result.ok = true; result.available = true; result.matched = true; return result;
   }
 
-  bool Receive(wl_proxy* offer, const char* mime, std::string* output) {
+  bool Receive(wl_proxy* offer, const char* mime, std::string* output, bool* connection_lost) {
+    if (connection_lost) *connection_lost = false;
     int descriptors[2];
     if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, descriptors) != 0) return false;
     const int flags = fcntl(descriptors[0], F_GETFL, 0);
@@ -640,17 +648,61 @@ class Session::Impl {
     char buffer[8192];
     bool complete = false;
     while (!stopping_->load() && !complete && std::chrono::steady_clock::now() < deadline) {
-      const ssize_t count = recv(descriptors[0], buffer, sizeof(buffer), 0);
-      if (count > 0) {
-        if (data.size() + static_cast<size_t>(count) > kMaxClipboardBytes) break;
-        data.append(buffer, static_cast<size_t>(count));
-        continue;
+      while (api_->display_prepare_read(display_) != 0) {
+        if (api_->display_dispatch_pending(display_) < 0) {
+          if (connection_lost) *connection_lost = true;
+          goto finished;
+        }
+        if (stopping_->load()) goto finished;
       }
-      if (count == 0) { complete = true; break; }
-      if (errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) break;
-      pollfd descriptor{descriptors[0], POLLIN | POLLHUP, 0};
-      (void)poll(&descriptor, 1, 100);
+      const int flushed = api_->display_flush(display_);
+      const bool needs_write = flushed < 0 && errno == EAGAIN;
+      if (flushed < 0 && !needs_write) {
+        api_->display_cancel_read(display_);
+        if (connection_lost) *connection_lost = true;
+        break;
+      }
+      pollfd descriptors_to_poll[2] = {
+          {descriptors[0], static_cast<short>(POLLIN | POLLHUP), 0},
+          {api_->display_get_fd(display_), static_cast<short>(POLLIN | POLLHUP | POLLERR | POLLNVAL | (needs_write ? POLLOUT : 0)), 0}};
+      const int ready = poll(descriptors_to_poll, 2, 100);
+      if (ready < 0) {
+        api_->display_cancel_read(display_);
+        if (errno == EINTR) continue;
+        if (connection_lost) *connection_lost = true;
+        break;
+      }
+      if (ready == 0) {
+        api_->display_cancel_read(display_);
+      } else if (descriptors_to_poll[1].revents & POLLIN) {
+        if (api_->display_read_events(display_) < 0 || api_->display_dispatch_pending(display_) < 0) {
+          if (connection_lost) *connection_lost = true;
+          break;
+        }
+      } else {
+        api_->display_cancel_read(display_);
+        if (descriptors_to_poll[1].revents & (POLLHUP | POLLERR | POLLNVAL)) {
+          if (connection_lost) *connection_lost = true;
+          break;
+        }
+      }
+      if (descriptors_to_poll[1].revents & (POLLHUP | POLLERR | POLLNVAL)) {
+        if (connection_lost) *connection_lost = true;
+        break;
+      }
+      if (descriptors_to_poll[0].revents & (POLLIN | POLLHUP)) {
+        const ssize_t count = recv(descriptors[0], buffer, sizeof(buffer), 0);
+        if (count > 0) {
+          if (data.size() + static_cast<size_t>(count) > kMaxClipboardBytes) break;
+          data.append(buffer, static_cast<size_t>(count));
+        } else if (count == 0) {
+          complete = true;
+        } else if (errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) {
+          break;
+        }
+      }
     }
+  finished:
     close(descriptors[0]);
     if (!complete || stopping_->load()) return false;
     *output = std::move(data);

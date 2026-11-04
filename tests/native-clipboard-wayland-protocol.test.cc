@@ -6,6 +6,7 @@
 #include <ext-data-control-v1-server-protocol.h>
 
 #include <fcntl.h>
+#include <dirent.h>
 #include <poll.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -32,6 +33,17 @@
 namespace {
 void Require(bool value) { if (!value) std::abort(); }
 
+size_t CountDirectoryEntries(const char* path) {
+  DIR* directory = opendir(path);
+  Require(directory != nullptr);
+  size_t count = 0;
+  while (dirent* entry = readdir(directory)) {
+    if (std::strcmp(entry->d_name, ".") != 0 && std::strcmp(entry->d_name, "..") != 0) ++count;
+  }
+  closedir(directory);
+  return count;
+}
+
 class EnvironmentValue {
  public:
   explicit EnvironmentValue(const char* name) : name_(name) {
@@ -53,8 +65,8 @@ class EnvironmentValue {
 class PrivateWaylandServer {
  public:
   explicit PrivateWaylandServer(bool offer_data_control, std::string payload = {}, bool hold_receive = false,
-                                bool empty_wayland_socket = false)
-      : payload_(std::move(payload)), hold_receive_(hold_receive) {
+                                bool empty_wayland_socket = false, bool close_source_fd = false)
+      : payload_(std::move(payload)), hold_receive_(hold_receive), close_source_fd_(close_source_fd) {
     char pattern[] = "/tmp/wayland-protocol-test-XXXXXX";
     char* directory = mkdtemp(pattern);
     Require(directory != nullptr);
@@ -92,8 +104,8 @@ class PrivateWaylandServer {
     do { written = write(wake_pipe_[1], &wake, sizeof(wake)); } while (written < 0 && errno == EINTR);
     Require(written == sizeof(wake));
     if (server_thread_.joinable()) server_thread_.join();
-    if (transfer_thread_.joinable()) transfer_thread_.join();
     ReleaseHeldReceive();
+    if (transfer_thread_.joinable()) transfer_thread_.join();
     wl_display_destroy_clients(display_);
     wl_display_destroy(display_);
     display_ = nullptr;
@@ -116,7 +128,32 @@ class PrivateWaylandServer {
     std::unique_lock<std::mutex> lock(selection_mutex_);
     return selection_changed_.wait_for(lock, std::chrono::seconds(5), [&] { return clear_count_ > 0; });
   }
+  unsigned ClearCount() {
+    std::lock_guard<std::mutex> lock(selection_mutex_);
+    return clear_count_;
+  }
+  void ChangeOwnerToForeign() {
+    Post([this] {
+      if (current_source_) {
+        ext_data_control_source_v1_send_cancelled(current_source_->resource);
+        current_source_ = nullptr;
+      }
+      if (device_resource_ && initial_offer_resource_)
+        ext_data_control_device_v1_send_selection(device_resource_, initial_offer_resource_);
+      wl_display_flush_clients(display_);
+      foreign_selection_sent_.store(true);
+    });
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (!foreign_selection_sent_.load() && std::chrono::steady_clock::now() < deadline) usleep(1000);
+    Require(foreign_selection_sent_.load());
+  }
   bool OfferedExpectedMimes() const { return offered_uri_list_.load() && offered_gnome_files_.load(); }
+  bool WaitForSourceRequest() const {
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (!source_request_sent_.load() && std::chrono::steady_clock::now() < deadline) usleep(1000);
+    return source_request_sent_.load();
+  }
+  void JoinTransfer() { if (transfer_thread_.joinable()) transfer_thread_.join(); }
   bool WaitForHeldReceive() {
     std::unique_lock<std::mutex> lock(held_mutex_);
     return held_changed_.wait_for(lock, std::chrono::seconds(5), [&] { return held_fd_ >= 0; });
@@ -131,6 +168,29 @@ class PrivateWaylandServer {
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
     while (!selection_change_sent_.load() && std::chrono::steady_clock::now() < deadline) usleep(1000);
     return selection_change_sent_.load();
+  }
+  void PauseDispatch() {
+    pause_dispatch_.store(true);
+    Wake();
+    std::unique_lock<std::mutex> lock(pause_mutex_);
+    Require(pause_changed_.wait_for(lock, std::chrono::seconds(5), [&] { return dispatch_paused_; }));
+  }
+  bool WaitForClientRequest() const {
+    pollfd descriptor{wl_event_loop_get_fd(loop_), POLLIN, 0};
+    return poll(&descriptor, 1, 3000) > 0 && (descriptor.revents & POLLIN) != 0;
+  }
+  void DropClients() {
+    Post([this] {
+      wl_display_destroy_clients(display_);
+      clients_dropped_.store(true);
+    });
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+    while (!clients_dropped_.load() && std::chrono::steady_clock::now() < deadline) usleep(1000);
+    Require(clients_dropped_.load());
+  }
+  void CloseHeldReceive() {
+    std::lock_guard<std::mutex> lock(held_mutex_);
+    if (held_fd_ >= 0) { close(held_fd_); held_fd_ = -1; }
   }
   void ReleaseHeldReceive() {
     std::lock_guard<std::mutex> lock(held_mutex_);
@@ -156,6 +216,27 @@ class PrivateWaylandServer {
   void Run() {
     const int event_fd = wl_event_loop_get_fd(loop_);
     while (!stopping_.load()) {
+      if (pause_dispatch_.load()) {
+        {
+          std::lock_guard<std::mutex> lock(pause_mutex_);
+          dispatch_paused_ = true;
+        }
+        pause_changed_.notify_all();
+        pollfd wake{wake_pipe_[0], POLLIN, 0};
+        const int ready = poll(&wake, 1, -1);
+        if (ready < 0) { if (errno == EINTR) continue; break; }
+        char bytes[128];
+        while (read(wake_pipe_[0], bytes, sizeof(bytes)) > 0) {}
+        if (stopping_.load()) break;
+        std::deque<std::function<void()>> tasks;
+        { std::lock_guard<std::mutex> lock(task_mutex_); tasks.swap(tasks_); }
+        for (auto& task : tasks) task();
+        continue;
+      }
+      {
+        std::lock_guard<std::mutex> lock(pause_mutex_);
+        dispatch_paused_ = false;
+      }
       if (wl_event_loop_dispatch(loop_, 0) < 0) break;
       wl_event_loop_dispatch_idle(loop_);
       (void)wl_display_flush_clients(display_);
@@ -177,6 +258,9 @@ class PrivateWaylandServer {
 
   void Post(std::function<void()> task) {
     { std::lock_guard<std::mutex> lock(task_mutex_); tasks_.push_back(std::move(task)); }
+    Wake();
+  }
+  void Wake() {
     const char wake = 1;
     ssize_t written;
     do { written = write(wake_pipe_[1], &wake, sizeof(wake)); } while (written < 0 && errno == EINTR);
@@ -191,6 +275,14 @@ class PrivateWaylandServer {
     if (!offered || transfer_thread_.joinable()) return;
     int descriptors[2];
     Require(pipe2(descriptors, O_CLOEXEC | O_NONBLOCK) == 0);
+    if (close_source_fd_) {
+      close(descriptors[0]);
+      ext_data_control_source_v1_send_send(source->resource, mime.c_str(), descriptors[1]);
+      wl_display_flush_clients(display_);
+      close(descriptors[1]);
+      source_request_sent_.store(true);
+      return;
+    }
     transfer_thread_ = std::thread([this, fd = descriptors[0]] {
       std::string bytes;
       bool success = false;
@@ -219,6 +311,7 @@ class PrivateWaylandServer {
     ext_data_control_source_v1_send_send(source->resource, mime.c_str(), descriptors[1]);
     wl_display_flush_clients(display_);
     close(descriptors[1]);
+    source_request_sent_.store(true);
   }
 
   static void BindSeat(wl_client* client, void* data, uint32_t version, uint32_t id) {
@@ -263,6 +356,7 @@ class PrivateWaylandServer {
 
     wl_resource* offer = wl_resource_create(client, &ext_data_control_offer_v1_interface, 1, 0);
     if (!offer) { wl_client_post_no_memory(client); return; }
+    self->initial_offer_resource_ = offer;
     static const struct ext_data_control_offer_v1_interface offer_implementation = {Receive, DestroyOffer};
     wl_resource_set_implementation(offer, &offer_implementation, self, nullptr);
     ext_data_control_device_v1_send_data_offer(device, offer);
@@ -279,10 +373,14 @@ class PrivateWaylandServer {
         std::lock_guard<std::mutex> lock(self->selection_mutex_);
         ++self->clear_count_;
       }
+      self->current_source_ = nullptr;
       self->selection_changed_.notify_all();
       return;
     }
     auto* source = static_cast<SourceState*>(wl_resource_get_user_data(source_resource));
+    if (self->current_source_ && self->current_source_ != source)
+      ext_data_control_source_v1_send_cancelled(self->current_source_->resource);
+    self->current_source_ = source;
     self->BeginSourceTransfer(source);
   }
   static void DestroyDevice(wl_client*, wl_resource* resource) { wl_resource_destroy(resource); }
@@ -322,6 +420,7 @@ class PrivateWaylandServer {
 
   std::string payload_;
   bool hold_receive_ = false;
+  bool close_source_fd_ = false;
   std::string runtime_directory_;
   std::string socket_name_;
   EnvironmentValue runtime_{"XDG_RUNTIME_DIR"};
@@ -335,6 +434,7 @@ class PrivateWaylandServer {
   std::atomic<bool> expected_mime_{false};
   std::atomic<bool> offered_uri_list_{false};
   std::atomic<bool> offered_gnome_files_{false};
+  std::atomic<bool> source_request_sent_{false};
   std::atomic<bool> stopping_{false};
   std::mutex transfer_mutex_;
   std::condition_variable transfer_changed_;
@@ -351,9 +451,17 @@ class PrivateWaylandServer {
   std::mutex task_mutex_;
   std::deque<std::function<void()>> tasks_;
   std::atomic<bool> selection_change_sent_{false};
+  std::atomic<bool> foreign_selection_sent_{false};
+  std::atomic<bool> pause_dispatch_{false};
+  std::atomic<bool> clients_dropped_{false};
+  std::mutex pause_mutex_;
+  std::condition_variable pause_changed_;
+  bool dispatch_paused_ = false;
   std::mutex held_mutex_;
   std::condition_variable held_changed_;
   int held_fd_ = -1;
+  SourceState* current_source_ = nullptr;
+  wl_resource* initial_offer_resource_ = nullptr;
 };
 
 void MissingGlobalIsReportedAsUnsupported() {
@@ -548,6 +656,127 @@ void PartialMoveDoesNotRetainAReplacedRemainingPath() {
   session.Shutdown(); session.AwaitStopped(); server.Stop();
   std::error_code ignored; std::filesystem::remove_all(directory, ignored);
 }
+
+void CompositorLossDuringHeldOfferReadSettlesBeforeTheTransferDeadline() {
+  PrivateWaylandServer server(true, {}, true);
+  native_linux_wayland_clipboard::Session session;
+  native_linux_clipboard::Request read;
+  read.operation = native_linux_clipboard::Operation::Read;
+  auto pending = std::async(std::launch::async, [&] { return session.Invoke(read); });
+  Require(server.WaitForHeldReceive());
+  server.DropClients();
+  const bool ready = pending.wait_for(std::chrono::seconds(2)) == std::future_status::ready;
+  if (!ready) {
+    session.Shutdown(); server.CloseHeldReceive(); (void)pending.get(); Require(false);
+  }
+  const auto result = pending.get();
+  Require(!result.ok && result.code == "ClipboardConnectionLost");
+  session.Shutdown(); session.AwaitStopped(); server.CloseHeldReceive(); server.Stop();
+}
+
+void ShutdownSettlesAnOfferReadAndAllQueuedRequestsAndReleasesResources() {
+  PrivateWaylandServer server(true, {}, true);
+  const size_t base_fds = CountDirectoryEntries("/proc/self/fd");
+  const size_t base_threads = CountDirectoryEntries("/proc/self/task");
+  native_linux_wayland_clipboard::Session session;
+  native_linux_clipboard::Request read;
+  read.operation = native_linux_clipboard::Operation::Read;
+  std::promise<void> first_entered;
+  auto first = std::async(std::launch::async, [&] { first_entered.set_value(); return session.Invoke(read); });
+  first_entered.get_future().wait();
+  Require(server.WaitForHeldReceive());
+  std::promise<void> second_entered;
+  auto second = std::async(std::launch::async, [&] { second_entered.set_value(); return session.Invoke(read); });
+  second_entered.get_future().wait();
+  session.Shutdown();
+  session.AwaitStopped();
+  Require(first.wait_for(std::chrono::seconds(1)) == std::future_status::ready);
+  Require(second.wait_for(std::chrono::seconds(1)) == std::future_status::ready);
+  Require(!first.get().ok && !second.get().ok);
+  server.CloseHeldReceive();
+  Require(CountDirectoryEntries("/proc/self/fd") == base_fds);
+  Require(CountDirectoryEntries("/proc/self/task") == base_threads);
+  server.Stop();
+}
+
+void ShutdownInterruptsAWorkerBlockedInProtocolRoundtrip() {
+  PrivateWaylandServer server(true, "copy\nfile:///tmp/roundtrip-ready.txt\r\n");
+  native_linux_wayland_clipboard::Session session;
+  native_linux_clipboard::Request read;
+  read.operation = native_linux_clipboard::Operation::Read;
+  Require(session.Invoke(read).ok);
+  server.PauseDispatch();
+  auto pending = std::async(std::launch::async, [&] { return session.Invoke(read); });
+  Require(server.WaitForClientRequest());
+  session.Shutdown();
+  Require(pending.wait_for(std::chrono::seconds(2)) == std::future_status::ready);
+  Require(!pending.get().ok);
+  session.AwaitStopped();
+  server.Stop();
+}
+
+void CompositorLossDuringWriteRoundtripReturnsAConnectionFailure() {
+  PrivateWaylandServer server(true, "copy\nfile:///tmp/write-ready.txt\r\n");
+  native_linux_wayland_clipboard::Session session;
+  native_linux_clipboard::Request read;
+  read.operation = native_linux_clipboard::Operation::Read;
+  Require(session.Invoke(read).ok);
+  server.PauseDispatch();
+  native_linux_clipboard::Request write;
+  write.operation = native_linux_clipboard::Operation::Write;
+  write.paths = {"/tmp/write-during-loss.txt"};
+  auto pending = std::async(std::launch::async, [&] { return session.Invoke(write); });
+  Require(server.WaitForClientRequest());
+  server.DropClients();
+  Require(pending.wait_for(std::chrono::seconds(2)) == std::future_status::ready);
+  const auto result = pending.get();
+  Require(!result.ok && result.code == "ClipboardConnectionLost");
+  session.Shutdown(); session.AwaitStopped(); server.Stop();
+}
+
+void EarlyTransferPeerCloseDoesNotDeliverSigpipeAndShutdownJoinsTheWriter() {
+  PrivateWaylandServer server(true, {}, false, false, true);
+  const size_t base_fds = CountDirectoryEntries("/proc/self/fd");
+  const size_t base_threads = CountDirectoryEntries("/proc/self/task");
+  native_linux_wayland_clipboard::Session session;
+  native_linux_clipboard::Request write;
+  write.operation = native_linux_clipboard::Operation::Write;
+  write.paths = {"/tmp/early-peer-close.txt"};
+  Require(session.Invoke(write).ok);
+  Require(server.WaitForSourceRequest());
+  native_linux_clipboard::Request read;
+  read.operation = native_linux_clipboard::Operation::Read;
+  Require(session.Invoke(read).ok);
+  session.Shutdown(); session.AwaitStopped();
+  server.JoinTransfer();
+  Require(CountDirectoryEntries("/proc/self/fd") == base_fds);
+  Require(CountDirectoryEntries("/proc/self/task") == base_threads);
+  server.Stop();
+}
+
+void APreObservedForeignOwnerChangePreventsTheBackendFromSendingClear() {
+  PrivateWaylandServer server(true);
+  native_linux_wayland_clipboard::Session session;
+  native_linux_clipboard::Request write;
+  write.operation = native_linux_clipboard::Operation::Write;
+  write.paths = {"/tmp/foreign-owner-race.txt"};
+  write.mode = native_linux_clipboard::Mode::Move;
+  const auto written = session.Invoke(write);
+  Require(written.ok && !written.token.empty());
+  Require(server.WaitForSourceRequest());
+  std::string ignored;
+  Require(server.WaitForSourceData(&ignored));
+  server.ChangeOwnerToForeign();
+  native_linux_clipboard::Request acknowledge;
+  acknowledge.operation = native_linux_clipboard::Operation::Acknowledge;
+  acknowledge.paths = write.paths;
+  acknowledge.mode = write.mode;
+  acknowledge.token = written.token;
+  const auto result = session.Invoke(acknowledge);
+  Require(result.ok && !result.matched);
+  Require(server.ClearCount() == 0);
+  session.Shutdown(); session.AwaitStopped(); server.Stop();
+}
 }
 
 int main(int argc, char** argv) {
@@ -556,6 +785,12 @@ int main(int argc, char** argv) {
   if (argc > 1 && std::strcmp(argv[1], "empty-socket") == 0) { EmptyWaylandSocketDoesNotOverrideNamedDisplay(); return 0; }
   if (argc > 1 && std::strcmp(argv[1], "owned-identity") == 0) { OwnedTokenChangesWhenItsPathIdentityChanges(); return 0; }
   if (argc > 1 && std::strcmp(argv[1], "remaining-identity") == 0) { PartialMoveDoesNotRetainAReplacedRemainingPath(); return 0; }
+  if (argc > 1 && std::strcmp(argv[1], "read-connection-loss") == 0) { CompositorLossDuringHeldOfferReadSettlesBeforeTheTransferDeadline(); return 0; }
+  if (argc > 1 && std::strcmp(argv[1], "shutdown-pending") == 0) { ShutdownSettlesAnOfferReadAndAllQueuedRequestsAndReleasesResources(); return 0; }
+  if (argc > 1 && std::strcmp(argv[1], "shutdown-roundtrip") == 0) { ShutdownInterruptsAWorkerBlockedInProtocolRoundtrip(); return 0; }
+  if (argc > 1 && std::strcmp(argv[1], "write-connection-loss") == 0) { CompositorLossDuringWriteRoundtripReturnsAConnectionFailure(); return 0; }
+  if (argc > 1 && std::strcmp(argv[1], "writer-lifecycle") == 0) { EarlyTransferPeerCloseDoesNotDeliverSigpipeAndShutdownJoinsTheWriter(); return 0; }
+  if (argc > 1 && std::strcmp(argv[1], "preobserved-owner-change") == 0) { APreObservedForeignOwnerChangePreventsTheBackendFromSendingClear(); return 0; }
   MissingGlobalIsReportedAsUnsupported();
   GnomeFileSelectionIsReadThroughTheProtocol();
   FileSelectionWriteTransfersCanonicalPayloadAndCancelClearsTheSelection();
@@ -564,5 +799,11 @@ int main(int argc, char** argv) {
   EmptyWaylandSocketDoesNotOverrideNamedDisplay();
   OwnedTokenChangesWhenItsPathIdentityChanges();
   PartialMoveDoesNotRetainAReplacedRemainingPath();
+  CompositorLossDuringHeldOfferReadSettlesBeforeTheTransferDeadline();
+  ShutdownSettlesAnOfferReadAndAllQueuedRequestsAndReleasesResources();
+  ShutdownInterruptsAWorkerBlockedInProtocolRoundtrip();
+  CompositorLossDuringWriteRoundtripReturnsAConnectionFailure();
+  EarlyTransferPeerCloseDoesNotDeliverSigpipeAndShutdownJoinsTheWriter();
+  APreObservedForeignOwnerChangePreventsTheBackendFromSendingClear();
   return 0;
 }
