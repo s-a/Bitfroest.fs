@@ -5,6 +5,27 @@ const path = require('node:path');
 const os = require('node:os');
 const { createProvider } = require('../filesystem-provider');
 
+test('Linux cancellation before directory metadata does not confirm the whole folder as completed', { skip: process.platform !== 'linux' }, async t => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'native-folder-metadata-cancel-'));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const left = path.join(root, 'left'), right = path.join(root, 'right'), source = path.join(left, 'folder');
+  await Promise.all([fs.mkdir(source, { recursive: true }), fs.mkdir(right)]);
+  await fs.writeFile(path.join(source, 'data.txt'), 'copied data');
+  const provider = createProvider({ roots: [left, right] });
+  const before = await provider.load({ recursive: true }), after = structuredClone(before);
+  const folder = before.folders[left][0], target = path.join(right, 'folder');
+  after.folders[right].push({ ...folder, id: 'copied-folder' });
+  after.folders[target] = before.folders[source].map(row => ({ ...row, id: `copied-${row.id}` }));
+  const controller = new AbortController();
+  const result = await provider.apply(before, after, { signal: controller.signal,
+    transfer: { mode: 'copy', sourcePath: left, sourceSide: 0, ids: [folder.id] },
+    onProgress: event => { if (event.phase === 'metadata') controller.abort(); }
+  });
+  assert.equal(result.operationOutcome.cancelled, true);
+  assert.deepEqual(result.operationOutcome.completedIds, []);
+  assert.equal(await fs.readFile(path.join(source, 'data.txt'), 'utf8'), 'copied data');
+});
+
 test('Linux folder copying restores directory metadata after publishing its children', { skip: process.platform !== 'linux' }, async t => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'native-folder-metadata-'));
   t.after(() => fs.rm(root, { recursive: true, force: true }));

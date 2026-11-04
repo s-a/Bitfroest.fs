@@ -602,6 +602,7 @@ function createProvider(options = {}) {
     const newDirectories = [...desired.values()].filter(item => item.type === 'folder' && baseline.entries.get(identity(item.path))?.type !== 'folder').sort((a, b) => a.path.split('/').length - b.path.split('/').length);
     const backups = new Map(), moved = [], createdFiles = [], createdDirectories = [], stages = [], renamedCases = [];
     const createdDirectoryIdentities = new Map();
+    const completedDirectoryMetadata = new Set();
     const totalBytes = [...staged.values()].reduce((sum, file) => sum + (file.expectedSize ?? file.data?.length ?? file.source?.row.size ?? 0), 0);
     let publishedBytes = 0;
     /** @param {object} file @param {{phase: string, transferred?: number, [field: string]: unknown}} event */
@@ -848,6 +849,7 @@ function createProvider(options = {}) {
           const result = await operation.copySession().copy({ roots: permittedRoots(), source: source.path, target: directory.path, expected: describe(sourceStat), metadataOnly: true, expectedTarget: describe(targetStat) }, { signal: operation.signal });
           const observed = await fs.lstat(directory.path, { bigint: true });
           if (!result.ownedDestination || !matchesOwnedSnapshot(observed, result.ownedDestination)) throw new Error('Die native Ordner-Metadatenübernahme wurde nicht bestätigt.');
+          completedDirectoryMetadata.add(directory.path);
         }
       }
       for (const item of deferredSources) {
@@ -869,7 +871,9 @@ function createProvider(options = {}) {
         const origins = file => (file.appendSources?.length ? file.appendSources : [file.source]).filter(Boolean).map(entry => entry.path);
         const completedRoots = transfer.selected.filter(entry => {
           const related = [...staged.values()].filter(file => origins(file).some(source => below(source, entry.path)));
-          return related.length > 0 && related.every(file => file.completed);
+          const directories = process.platform === 'linux' && !options.fs
+            ? newDirectories.filter(directory => directory.row.fsSource && below(directory.row.fsSource, entry.path)) : [];
+          return related.length > 0 && related.every(file => file.completed) && directories.every(directory => completedDirectoryMetadata.has(directory.path));
         });
         const retainedPaths = [];
         try {
