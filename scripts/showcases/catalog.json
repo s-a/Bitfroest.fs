@@ -1533,7 +1533,7 @@
     "id": "quick-diff-folder",
     "parentId": "main",
     "title": "Quick Diff: current folder",
-    "description": "Select a changed file to compare its saved content with HEAD in a read-only inline diff. Unchanged sections are collapsed with three context lines and can be expanded. The title shows separate added, changed and deleted line counts. Both modes show paths relative to the repository root with native separators. Filenames appear above smaller root-relative directories. The list shows relative modification times with exact-date tooltips, sorts by status and then newest first, and sizes its columns automatically. Ignored files are excluded. Double-click the preview to open the full VS Code diff editor.",
+    "description": "Select a changed file to compare its saved content with HEAD in a read-only inline diff. Unchanged sections are collapsed with three context lines and can be expanded. The title shows separate added, changed and deleted line counts. Both modes show paths relative to the repository root with native separators. Full-width filenames appear above a compact status · relative time · root-relative directory line. Filenames and status use Git colors; time, separators and paths use the readable theme foreground. Name, status and date remain sortable, with status then newest first as the default order. Exact-date tooltips show the local modification time. Double-click a file to leave Quick Diff and select it in its folder. Ignored files are excluded. Double-click the preview to open the full VS Code diff editor.",
     "paths": [
       "${demo}/quick-diff-list/src",
       "${demo}/right"
@@ -1559,7 +1559,7 @@
     "id": "quick-diff-repository",
     "parentId": "main",
     "title": "Quick Diff: entire repository",
-    "description": "Cycle the footer button to include the entire repository, including new files and excluding ignored files. Root-level files have an explicit relative prefix. Selecting a file without a version in HEAD shows a notice instead of a diff.",
+    "description": "Cycle the footer button to include the entire repository, including new files and excluding ignored files. Root-level files omit the redundant directory marker. New files appear as syntax-highlighted additions against an empty original; deleted files show the HEAD content as removed lines.",
     "paths": [
       "${demo}/quick-diff-list/src",
       "${demo}/right"

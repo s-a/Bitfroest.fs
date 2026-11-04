@@ -1502,12 +1502,21 @@
         if (row.title !== title) row.title = title;
         const status = quick ? row.dataset.diffStatus : error ? 'error' : gitInfo(currentPath(p))?.statuses?.[file.name];
         const gitColor = !contrast && settings.git !== false ? statusColor(status) : null;
-        const nameColor = file.type === 'folder' ? gitColor : desired;
+        const quickColor = quick && !contrast ? row.dataset.diffKind === 'added' ? variable('--vscode-gitDecoration-addedResourceForeground') || '#008000' : statusColor(row.dataset.diffKind) : null;
+        const nameColor = quick ? quickColor : file.type === 'folder' ? gitColor : desired;
         const rowColor = file.type !== 'folder' && (!status || ['clean', 'untracked', 'ignored'].includes(status)) ? desired : gitColor;
         set(name, '--file-type-color', nameColor ? safe(nameColor, background) : '');
         set(name, '--file-type-hover', nameColor ? safe(nameColor, hover) : '');
         set(row, '--git-text-color', rowColor ? safe(rowColor, background) : '');
         set(row, '--git-hover-color', rowColor ? safe(rowColor, hover) : '');
+        if (quick) {
+          const statusCell = row.querySelector('[data-diff-status-cell]');
+          for (const [kind, back] of Object.entries({ base: background, hover, active: nativeIconBackgrounds.active, inactive: nativeIconBackgrounds.inactive })) {
+            const color = quickColor ? safe(quickColor, back) : '';
+            set(statusCell, `--quick-status-${kind}`, color);
+            set(name, `--quick-status-${kind}`, color);
+          }
+        }
       }
       for (const placeholder of section.querySelectorAll('[data-git-placeholder]')) {
         set(placeholder, 'width', `${iconSize}%`);
@@ -1838,7 +1847,7 @@
       <div class="address-fallback" ${p.columns.some(column => column.visible !== false) ? 'hidden' : ''}>${!p.columns.some(column => column.visible !== false) ? pathbarMarkup(p, index) : ''}</div>
       <div class="pane-jobs" role="region" aria-label="${escape(t('Aufträge'))}" hidden></div>
       <div class="list" tabindex="0" aria-label="Dateien ${index === 0 ? t('links') : t('rechts')}"><div class="file-table" data-file-grid></div>${empty ? `<div class="empty grid-empty">${empty}</div>` : ''}</div>
-      <div class="pane-status">${footerMarkup(p)}</div></section>`;
+      <div class="pane-status" data-id="pane-footer-${index}">${footerMarkup(p)}</div></section>`;
   }
   function footerMarkup(p) {
     return `<div class="pane-controls" data-vscode-context='{"preventDefaultContextMenuItems":true}'><button type="button" data-xray-toggle data-mode="off" aria-label="X-Ray" title="X-Ray">${window.CommanderIcons.svg('xray', 'eye-slash-fill')}</button><button type="button" data-quick-diff-toggle data-mode="off" aria-label="Quick Diff" title="Quick Diff">${window.CommanderIcons.svg('xray', 'file-diff')}</button></div><div class="pane-metrics">${footerMetrics(p)}</div>`;
@@ -1904,7 +1913,22 @@
   const actions = [['F2', t('Umbenennen'), 'rename-one'], ['F3', t('Anzeigen'), 'view'], ['F4', t('Bearbeiten'), 'edit'], ['F5', t('Kopieren'), 'copy'], ['F6', t('Verschieben'), 'move'], ['F7', t('Neuer Ordner'), 'mkdir'], ['F8', t('Löschen'), 'delete']];
   const lister = window.CommanderListerView.create({ host, state: () => state, t, escape, modal, restore: render, edit: file => preview(file, true), notify: toast, report: reportStatus, remember: rememberScroll, task: statusTask });
   const previewManager = window.CommanderPreview.create();
-  const quickDiff = window.CommanderQuickDiff.create({ host, t, state: () => state, currentPath, isArchive: isArchiveLocation, notify: toast, task: xrayTask, preview: previewManager, decorate: refreshFileColors, beforeStart: () => { document.querySelectorAll("[data-lister-close]").forEach(button => button.click()); }, icon: entry => entry.icon ? window.CommanderIcons.native(entry.icon) : baseIcon({ name: entry.name.split("/").pop(), type: "file", iconKey: entry.fsSource }, ""), });
+  const quickDiff = window.CommanderQuickDiff.create({ host, t, state: () => state, currentPath, isArchive: isArchiveLocation, notify: toast, task: xrayTask, preview: previewManager, decorate: refreshFileColors, reveal: revealQuickDiffEntry, beforeStart: () => { document.querySelectorAll("[data-lister-close]").forEach(button => button.click()); }, icon: entry => entry.icon ? window.CommanderIcons.native(entry.icon) : baseIcon({ name: entry.name.split("/").pop(), type: "file", iconKey: entry.fsSource }, ""), });
+  function revealQuickDiffEntry({ entry, root, side }) {
+    const target = join(root, entry.path), directory = parent(target);
+    const finish = () => {
+      state.active = side; rememberScroll(); const p = state.panes[side];
+      delete p.tabStates[p.tab].searchResult; tabs.navigate(p, directory);
+      const options = { platform: document.body.dataset.platform };
+      const file = files(p).find(value => paths.identity(value.fsSource || join(directory, value.name), options) === paths.identity(target, options));
+      p.cursor = file?.id || null; p.selected = file ? [file.id] : [];
+      render(true, undefined, false);
+      if (file) fileGrid.ensure(document.querySelector(`[data-pane="${side}"]`), file.id);
+      else toast(t('Die Datei ist nicht mehr vorhanden. Der Ordner wurde geöffnet.'), 'info');
+    };
+    if (host && state.realFilesystem) requestFilesystem({ type: 'filesystem-navigate', path: directory, side }, finish);
+    else finish();
+  }
   const xray = window.CommanderXray.create({ host, t, state: () => state, currentPath, files, isArchive: isArchiveLocation, settings: () => fileSettings, task: xrayTask, notify: toast, preview: previewManager, beforeStart: () => { previewManager.activate("xray", () => xray.stop()); document.querySelectorAll("[data-lister-close]").forEach(button => button.click()); }, compact: (side, enabled) => fileGrid.compact(document.querySelector(`[data-pane="${side}"]`), enabled), restoreFocus: side => { state.active = side; document.querySelector(`[data-pane="${side}"] .list`)?.focus({ preventScroll: true }); } });
   const fileSearch = window.CommanderFileSearch.create({ host, t, escape, report: reportStatus, task: statusTask,
     context: () => ({ path: currentPath(pane()), selected: selected().map(row => row.fsSource || join(currentPath(pane()), row.name)), side: state.active, state }),

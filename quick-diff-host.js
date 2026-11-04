@@ -68,8 +68,9 @@ function createQuickDiffHost({ vscode, panel, validateDirectory, t }) {
             const relative = path.relative(await fs.realpath(selection.root), await fs.realpath(target.fsPath));
             if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) throw new Error('Invalid Quick Diff path.');
           }
+          const left = selection.entry.hasHead ? api.toGitUri(target, selection.commit) : vscode.Uri.parse('bitfroest-quick-diff-empty:/added');
           const right = selection.entry.status === 'Deleted' ? vscode.Uri.parse('bitfroest-quick-diff-empty:/deleted') : target;
-          await vscode.commands.executeCommand('vscode.diff', api.toGitUri(target, selection.commit), right, `${selection.entry.name} (${selection.commit.slice(0, 8)}) ↔ ${selection.entry.name}`, { preview: false });
+          await vscode.commands.executeCommand('vscode.diff', left, right, `${selection.entry.name} (${selection.entry.hasHead ? selection.commit.slice(0, 8) : 'Added'}) ↔ ${selection.entry.name}`, { preview: false });
         }
       } catch (error) { await send({ type: 'quick-diff-action-error', error: errorText(error) }); }
       return true;

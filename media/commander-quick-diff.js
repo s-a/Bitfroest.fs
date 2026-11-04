@@ -1,9 +1,9 @@
 (function (root) {
   'use strict';
   root.CommanderQuickDiff = { create };
-  function create({ host, t, state, currentPath, isArchive, notify, beforeStart, preview, task, icon, decorate = () => {} }) {
+  function create({ host, t, state, currentPath, isArchive, notify, beforeStart, preview, task, icon, decorate = () => {}, reveal = () => {} }) {
     const container = document.querySelector('#panes');
-    let source = null, mode = 'off', generation = 0, serial = 0, listId = null, entries = [], selected = -1, context = '', sourceView = null, view = null, editor = null, loading = false;
+    let source = null, mode = 'off', generation = 0, serial = 0, listId = null, repositoryRoot = null, entries = [], selected = -1, context = '', sourceView = null, view = null, editor = null, loading = false;
     const instance = [...crypto.getRandomValues(new Uint8Array(8))].map(v => v.toString(16).padStart(2, '0')).join('');
     const pending = new Map(), activity = new Set(), requestedIcons = new Set(), icons = new Map(); let readRequest = null;
     let sortColumn = 'status', sortDirection = 'ascending';
@@ -20,11 +20,12 @@
       if (!sourceView?.isConnected || !sourceView.querySelector('[role="grid"]')) return;
       const canvas = document.createElement('canvas'), context = canvas.getContext('2d');
       if (!context) return;
-      const style = getComputedStyle(sourceView); context.font = style.font || `${style.fontSize || '13px'} ${style.fontFamily || 'sans-serif'}`;
-      const measure = values => Math.ceil(Math.max(...values.map(value => context.measureText(value).width))) + 12;
-      const status = Math.max(64, measure([t('Status'), ...sourceView.querySelectorAll('.quick-diff-row > span:nth-child(2)')].map(value => typeof value === 'string' ? value : value.textContent)));
-      const date = Math.max(82, measure([t('Geändert'), relativeFormat.format(-59, 'minute'), relativeFormat.format(-23, 'hour'), relativeFormat.format(-11, 'month'), ...[...sourceView.querySelectorAll('time')].map(time => time.textContent)]));
-      sourceView.style.setProperty('--quick-diff-status-width', `${status}px`); sourceView.style.setProperty('--quick-diff-date-width', `${date}px`); sourceView.style.setProperty('--quick-diff-min-width', `${140 + status + date + 32}px`);
+      const style = getComputedStyle(sourceView.querySelector('.quick-diff-info') || sourceView), header = getComputedStyle(sourceView.querySelector('.quick-diff-header'));
+      const font = value => value.font || `${value.fontSize || '13px'} ${value.fontFamily || 'sans-serif'}`;
+      const measure = (values, type = style) => { context.font = font(type); return Math.ceil(Math.max(...values.map(value => context.measureText(value).width))) + 12; };
+      const status = Math.max(48, measure([t('Status')], header), measure([...sourceView.querySelectorAll('[data-diff-status-cell]')].map(value => value.textContent).concat('')));
+      const date = Math.max(56, measure([t('Geändert')], header), measure([relativeFormat.format(-59, 'minute'), relativeFormat.format(-23, 'hour'), relativeFormat.format(-11, 'month'), ...[...sourceView.querySelectorAll('time')].map(time => time.textContent)]));
+      sourceView.style.setProperty('--quick-diff-status-width', `${status}px`); sourceView.style.setProperty('--quick-diff-date-width', `${date}px`); sourceView.style.setProperty('--quick-diff-min-width', `${100 + status + date + 32}px`);
     }
     const labels = { off: 'Quick Diff aus', folder: 'Quick Diff: aktueller Ordner', repository: 'Quick Diff: gesamtes Repository' };
     function send(type, data = {}) {
@@ -66,7 +67,7 @@
       clock ??= setInterval(updateTimes, 30000);
       const section = container.querySelector(`[data-pane="${source}"]`), opposite = container.querySelector(`[data-pane="${1 - source}"]`);
       section.classList.add('quick-diff-source'); opposite.classList.add('has-quick-diff');
-      if (!sourceView) { sourceView = document.createElement('div'); sourceView.dataset.quickDiffList = ''; resize.observe(sourceView); }
+      if (!sourceView) { sourceView = document.createElement('div'); sourceView.dataset.quickDiffList = ''; sourceView.dataset.id = `quick-diff-list-${instance}`; resize.observe(sourceView); }
       if (!section.contains(sourceView)) section.insertBefore(sourceView, section.querySelector('.pane-status'));
       if (!view) { view = document.createElement('section'); view.dataset.quickDiff = ''; view.tabIndex = 0; view.setAttribute('aria-label', 'Quick Diff'); }
       if (!opposite.contains(view)) opposite.append(view);
@@ -82,23 +83,26 @@
         const entry = entries[i], row = document.createElement('div'); row.role = 'row'; row.dataset.diffIndex = String(i); row.id = `${instance}-diff-${i}`;
         row.dataset.diffPath = entry.path;
         row.dataset.diffStatus = entry.gitStatus || entry.status.toLowerCase();
+        row.dataset.diffKind = entry.status.toLowerCase();
         entry.icon = icons.get(entry.path);
         if (!requestedIcons.has(entry.path) && needed.length < 100) { requestedIcons.add(entry.path); needed.push(entry.path); }
         row.className = 'quick-diff-row'; row.style.top = `${i * height}px`; row.setAttribute('aria-selected', String(i === selected)); row.setAttribute('aria-rowindex', String(i + 2));
-        const name = document.createElement('span'); name.role = 'gridcell'; name.className = 'quick-diff-name'; name.title = entry.name;
+        const name = document.createElement('span'); name.className = 'quick-diff-name'; name.title = entry.name;
         const glyph = document.createElement('span'); glyph.className = 'file-icon'; glyph.innerHTML = icon(entry);
-        const labels = document.createElement('span'); labels.className = 'quick-diff-labels';
         const filename = document.createElement('span'); filename.dataset.diffFilename = ''; filename.textContent = entry.path.split('/').pop();
-        const directory = document.createElement('small'); directory.dataset.diffDirectory = '';
+        const directory = document.createElement('span'); directory.dataset.diffDirectory = ''; directory.role = 'gridcell'; directory.setAttribute('aria-label', entry.name); directory.title = entry.name;
         const separator = Math.max(entry.name.lastIndexOf('/'), entry.name.lastIndexOf('\\'));
         directory.textContent = separator >= 0 ? entry.name.slice(0, separator + 1) : document.body.dataset.platform === 'win32' ? '.\\' : './';
-        labels.append(filename, directory); name.append(glyph, labels);
-        const status = document.createElement('span'); status.role = 'gridcell'; status.textContent = t(entry.status);
+        name.append(glyph, filename);
+        const status = document.createElement('span'); status.role = 'gridcell'; status.dataset.diffStatusCell = ''; status.textContent = t(entry.status);
         const modified = document.createElement('span'); modified.role = 'gridcell'; modified.dataset.modifiedAt = '';
         if (Number.isFinite(entry.modifiedAt)) {
           const time = document.createElement('time'), date = new Date(entry.modifiedAt); time.dateTime = date.toISOString(); time.textContent = relativeTime(entry.modifiedAt); time.title = date.toLocaleString(); modified.append(time);
         } else { modified.textContent = '—'; modified.title = t('Änderungszeit nicht verfügbar.'); }
-        row.append(name, status, modified); body.append(row);
+        const divider = () => { const dot = document.createElement('span'); dot.className = 'quick-diff-separator'; dot.setAttribute('aria-hidden', 'true'); dot.textContent = '·'; return dot; };
+        const info = document.createElement('div'); info.role = 'presentation'; info.className = 'quick-diff-info'; info.append(status, divider(), modified);
+        if (!['.\\', './'].includes(directory.textContent)) info.append(divider(), directory);
+        row.append(name, info); body.append(row);
       }
       if (needed.length) host?.postMessage({ type: 'quick-diff-icons', listId, generation, paths: needed.slice(0, 100) });
       grid.setAttribute('aria-rowcount', String(entries.length + 1));
@@ -115,7 +119,7 @@
           if (!Number.isFinite(b.modifiedAt)) return -1;
           return direction * (a.modifiedAt - b.modifiedAt) || a.path.localeCompare(b.path);
         }
-        return direction * a[sortColumn].localeCompare(b[sortColumn]) || a.path.localeCompare(b.path);
+        return direction * a.path.split('/').pop().localeCompare(b.path.split('/').pop()) || a.path.localeCompare(b.path);
       });
       selected = chosen ? entries.findIndex(entry => entry.path === chosen) : -1;
       sourceView.querySelectorAll('[data-diff-sort]').forEach(button => {
@@ -135,6 +139,12 @@
       const grid = document.createElement('div'); grid.role = 'grid'; grid.tabIndex = 0; grid.setAttribute('aria-label', t(labels[mode])); grid.setAttribute('aria-colcount', '3');
       const body = document.createElement('div'); body.className = 'quick-diff-rows'; grid.append(header, body); sourceView.append(grid); sortEntries();
       grid.addEventListener('scroll', rows); grid.addEventListener('click', event => { const row = event.target.closest('[data-diff-index]'); if (row) choose(Number(row.dataset.diffIndex)); });
+      grid.addEventListener('dblclick', event => {
+        const row = event.target.closest('[data-diff-index]'), entry = row && entries[Number(row.dataset.diffIndex)];
+        if (!entry) return;
+        event.preventDefault(); event.stopImmediatePropagation();
+        const side = source, root = repositoryRoot; stop(); reveal({ entry, root, side });
+      });
       grid.addEventListener('keydown', event => {
         let next = selected;
         if (event.key === 'ArrowDown') next++; else if (event.key === 'ArrowUp') next--; else if (event.key === 'Home') next = 0; else if (event.key === 'End') next = entries.length - 1; else if (event.key === 'PageDown') next += 10; else if (event.key === 'PageUp') next -= 10; else return;
@@ -143,7 +153,10 @@
     }
     function choose(index) {
       if (index < 0 || index >= entries.length) return;
-      selected = index; cancelReads(); rows(); message(t('Datei wird geöffnet…'));
+      if (selected === index && readRequest) return;
+      selected = index; cancelReads();
+      sourceView.querySelectorAll('[data-diff-index]').forEach(row => row.setAttribute('aria-selected', String(Number(row.dataset.diffIndex) === selected)));
+      sourceView.querySelector('[role="grid"]').setAttribute('aria-activedescendant', `${instance}-diff-${selected}`); decorate(); message(t('Datei wird geöffnet…'));
       readRequest = send('quick-diff-read', { listId, path: entries[index].path });
     }
     function load() {
@@ -187,17 +200,19 @@
       if (request.generation !== generation || source === null || data.generation !== generation) return;
       if (!data.ok) { loading = false; message(data.error); if (request.type === 'quick-diff-list') { notify(data.error, 'info'); stop(true); } return; }
       if (request.type === 'quick-diff-list') {
-        loading = false; listId = data.result.id; entries = data.result.entries; renderList();
+        loading = false; listId = data.result.id; repositoryRoot = data.result.root || currentPath(state().panes[source]); entries = data.result.entries; renderList();
         if (entries.length) { const index = entries.findIndex(e => e.path === data.selectedPath); choose(index < 0 ? 0 : index); } else message(t('Keine Änderungen vorhanden.'));
         focus();
       } else if (request.type === 'quick-diff-read') {
         if (readRequest !== data.requestId) return;
         if (data.result.reason) { message(t('Keine Dateiversion in HEAD vorhanden.')); host?.postMessage({ type: 'quick-diff-rendered', requestId: data.requestId, ok: true }); return; }
-        const title = document.createElement('div'); title.className = 'xray-title'; title.textContent = `${data.result.name} · HEAD ${data.result.commit.slice(0, 8)}`;
+        const reference = [data.result.ghost ? `${t('Ghost')} · ${t(data.result.ghost === 'added' ? 'Added' : 'Deleted')}` : '', data.result.commit ? `HEAD ${data.result.commit.slice(0, 8)}` : ''].filter(Boolean).join(' · ');
+        view.dataset.ghost = data.result.ghost || '';
+        const title = document.createElement('div'); title.className = 'xray-title'; title.textContent = `${data.result.name} · ${reference}`;
         const content = document.createElement('div'); content.className = 'xray-editor'; view.replaceChildren(title, content);
         try { editor = root.CommanderXrayEditor.createDiff(content, data.result.original, data.result.modified, data.result.name, {
           onStatistics: counts => {
-            title.textContent = `${data.result.name} (+${counts.added} · ~${counts.changed} · −${counts.deleted}) · HEAD ${data.result.commit.slice(0, 8)}`;
+            title.textContent = `${data.result.name} (+${counts.added} · ~${counts.changed} · −${counts.deleted}) · ${reference}`;
             title.title = t('Zeilen: {added} hinzugefügt, {changed} geändert, {deleted} gelöscht.', counts);
             title.dataset.diffSummary = '';
           },

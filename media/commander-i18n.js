@@ -5,6 +5,7 @@
 })(typeof globalThis === 'object' ? globalThis : this, function () {
   'use strict';
   const pairs = {
+    'Die Datei ist nicht mehr vorhanden. Der Ordner wurde geöffnet.': 'The file no longer exists. Its folder has been opened.',
     'Datei / Pfad': 'File / Path',
     'Geändert': 'Modified',
     'Innerhalb des Status: neueste Änderungen zuerst.': 'Within each status: newest changes first.',

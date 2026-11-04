@@ -88,14 +88,16 @@ function createQuickDiff({ getRepository, lister, native, io = fs, locate, platf
     if (!entry) throw new Error('Invalid Quick Diff selection.');
     return operation(options, async ({ step, check, plan, publish }) => {
       const finish = async result => { if (options.render) await step('render', () => options.render(result)); return result; };
-      if (!entry.hasHead) return finish({ reason: 'no-head' });
       const maxBytes = options.maxBytes ?? 5242880;
       if (!Number.isSafeInteger(maxBytes) || maxBytes < 1) throw new Error('Invalid Quick Diff limit.');
-      const details = await step('head-size', () => listing.repository.getObjectDetails(listing.commit, filename));
-      if (!Number.isSafeInteger(details.size) || details.size > maxBytes || details.size < 0) throw new Error('Quick Diff: size limit exceeded.');
-      const bytes = await step('head-read', () => listing.repository.buffer(listing.commit, filename));
-      if (!Buffer.isBuffer(bytes) || bytes.length !== details.size || bytes.length > maxBytes) throw new Error('Quick Diff: invalid HEAD content.');
-      const original = await step('head-decode', () => lister.decodeText(bytes));
+      let original = '';
+      if (entry.hasHead) {
+        const details = await step('head-size', () => listing.repository.getObjectDetails(listing.commit, filename));
+        if (!Number.isSafeInteger(details.size) || details.size > maxBytes || details.size < 0) throw new Error('Quick Diff: size limit exceeded.');
+        const bytes = await step('head-read', () => listing.repository.buffer(listing.commit, filename));
+        if (!Buffer.isBuffer(bytes) || bytes.length !== details.size || bytes.length > maxBytes) throw new Error('Quick Diff: invalid HEAD content.');
+        original = (await step('head-decode', () => lister.decodeText(bytes))).text;
+      }
       let modified = '';
       if (entry.status !== 'Deleted') {
         const target = paths(listing.root).resolve(listing.root, filename);
@@ -111,7 +113,7 @@ function createQuickDiff({ getRepository, lister, native, io = fs, locate, platf
         });
         check(); modified = result.text; plan.complete(parent); publish();
       }
-      return finish({ original: original.text, modified, commit: listing.commit, name: entry.name, path: filename });
+      return finish({ original, modified, commit: listing.commit, name: entry.name, path: filename, ghost: entry.status === 'Deleted' ? 'deleted' : !entry.hasHead ? 'added' : null });
     });
   }
   return { list, read, contains(target) { return [...listings.values()].some(listing => [...listing.entries.keys()].some(name => paths(listing.root).resolve(listing.root, name) === target)); }, size: () => listings.size, clear() { listings.clear(); initialized.clear(); }, listing: id => listings.get(id), selection(id, filename) { const listing = listings.get(id); if (!listing?.entries.has(filename)) throw new Error('Invalid Quick Diff selection.'); return { ...listing, entry: listing.entries.get(filename) }; }, release: id => listings.delete(id), dispose() { listings.clear(); initialized.clear(); native.close(); } };

@@ -2199,6 +2199,7 @@ test('Quick Diff generated host compares HEAD, copies and opens the same native 
   const fixture = await require('./support/git-fixture.cjs').repository(t);
   const filename = path.join(fixture.dir, 'modified.txt'), original = fs.readFileSync(filename);
   await fixture.write('modified.txt', 'SELECT 2;');
+  await fixture.write('fresh.sql', 'SELECT 3;');
   const commit = await fixture.git.resolveRef({ ref: 'HEAD' });
   const repository = { rootUri: { fsPath: fixture.dir }, state: { HEAD: { commit }, onDidChange: () => ({ dispose() {} }) },
     diffWith: async ref => { assert.equal(ref, commit); return [{ uri: { fsPath: filename } }]; },
@@ -2227,6 +2228,15 @@ test('Quick Diff generated host compares HEAD, copies and opens the same native 
   await panel.receive({ type: 'quick-diff-cancel', requestId: readId });
   await panel.receive({ type: 'quick-diff-open', requestId: readId });
   assert.equal(app.calls.filter(c => c.id === 'vscode.diff').length, 1);
+  const addedId = 'quick-diff-0123456789abcdef-3';
+  const added = panel.receive({ type: 'quick-diff-read', requestId: addedId, generation: 1, listId: listing.result.id, path: 'fresh.sql' });
+  for (let i = 0; i < 100 && !panel.messages.some(m => m.type === 'quick-diff-result' && m.requestId === addedId); i++) await new Promise(resolve => setTimeout(resolve, 5));
+  const ghost = panel.messages.find(m => m.type === 'quick-diff-result' && m.requestId === addedId);
+  assert.equal(ghost.ok, true, ghost.error); assert.equal(ghost.result.ghost, 'added'); assert.equal(ghost.result.original, ''); assert.equal(ghost.result.modified, 'SELECT 3;');
+  await panel.receive({ type: 'quick-diff-rendered', requestId: addedId, ok: true }); await added;
+  await panel.receive({ type: 'quick-diff-open', requestId: addedId });
+  const addedDiff = app.calls.filter(c => c.id === 'vscode.diff').at(-1);
+  assert.equal(addedDiff.args[0].toString(), 'bitfroest-quick-diff-empty:/added'); assert.equal(addedDiff.args[1].fsPath, path.join(fixture.dir, 'fresh.sql'));
 });
 
 test('X-Ray host opens known text, copies selections and opens the requested source line', async t => {

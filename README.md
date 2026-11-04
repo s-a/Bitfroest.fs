@@ -407,7 +407,7 @@ X-Ray Ultra updates the opposite preview after pausing over a text file for 200 
 <details>
 <summary>0054 · Quick Diff: current folder</summary>
 
-Select a changed file to compare its saved content with HEAD in a read-only inline diff. Unchanged sections are collapsed with three context lines and can be expanded. The title shows separate added, changed and deleted line counts. Both modes show paths relative to the repository root with native separators. Filenames appear above smaller root-relative directories. The list shows relative modification times with exact-date tooltips, sorts by status and then newest first, and sizes its columns automatically. Ignored files are excluded. Double-click the preview to open the full VS Code diff editor.
+Select a changed file to compare its saved content with HEAD in a read-only inline diff. Unchanged sections are collapsed with three context lines and can be expanded. The title shows separate added, changed and deleted line counts. Both modes show paths relative to the repository root with native separators. Full-width filenames appear above a compact status · relative time · root-relative directory line. Filenames and status use Git colors; time, separators and paths use the readable theme foreground. Name, status and date remain sortable, with status then newest first as the default order. Exact-date tooltips show the local modification time. Double-click a file to leave Quick Diff and select it in its folder. Ignored files are excluded. Double-click the preview to open the full VS Code diff editor.
 
 ![Quick Diff: current folder](media/marketplace/showcases/0054-windows-en-dark-quick-diff-folder-preview.png)
 
@@ -416,7 +416,7 @@ Select a changed file to compare its saved content with HEAD in a read-only inli
 <details>
 <summary>0055 · Quick Diff: entire repository</summary>
 
-Cycle the footer button to include the entire repository, including new files and excluding ignored files. Root-level files have an explicit relative prefix. Selecting a file without a version in HEAD shows a notice instead of a diff.
+Cycle the footer button to include the entire repository, including new files and excluding ignored files. Root-level files omit the redundant directory marker. New files appear as syntax-highlighted additions against an empty original; deleted files show the HEAD content as removed lines.
 
 ![Quick Diff: entire repository](media/marketplace/showcases/0055-windows-en-dark-quick-diff-repository-preview.png)
 
@@ -424,7 +424,7 @@ Cycle the footer button to include the entire repository, including new files an
 
 <!-- showcase-gallery:end -->
 
-Quick Diff compares saved files with HEAD in a read-only inline view. Its footer button cycles through the current folder including subfolders, the entire repository, and off. Filenames appear above smaller root-relative directory paths with native separators. The list uses normal file colors, automatic column widths and relative modification times with exact-date tooltips. It sorts Modified, Added, then Deleted, with newest files first within each status. Ignored files are excluded; files without a version in HEAD show a notice. Double-clicking opens the comparison in VS Code. The per-version limit defaults to 5 MiB (`bitfroest.files.quickDiffMaxFileSizeMiB`). The built-in Git extension and Git installation are required.
+Quick Diff compares saved files with HEAD in a read-only inline view. Its footer button cycles through the current folder including subfolders, the entire repository, and off. Full-width filenames sit above a compact status · relative time · root-relative directory line with native separators. Filenames and status use Git colors; other metadata uses the readable theme foreground. Name, status and date remain sortable; the default is Modified, Added, then Deleted, with newest files first within each status. Exact-date tooltips show local modification times. Ignored files are excluded. New files appear as additions against an empty original; deleted files show the removed HEAD content. Double-click the preview to open the VS Code comparison, or double-click a list entry to leave Quick Diff and select the file in its folder. The per-version limit defaults to 5 MiB (`bitfroest.files.quickDiffMaxFileSizeMiB`). The built-in Git extension and Git installation are required.
 
 ## Configuration
 

@@ -376,19 +376,22 @@ async function main() {
           const panes = [...document.querySelectorAll('#panes > .pane')], width = panes.reduce((sum, pane) => sum + pane.getBoundingClientRect().width, 0);
           const tokens = new Set([...preview.querySelectorAll('.view-line span')].flatMap(span => [...span.classList].filter(name => /^mtk\d+$/.test(name))));
           const header = source.querySelector('.quick-diff-header'), row = source.querySelector('[data-diff-path="src/Orders.sql"]');
-          const cells = [...row.children].map(cell => cell.getBoundingClientRect());
+          const info = row.querySelector('.quick-diff-info'), cells = [...info.children].map(cell => cell.getBoundingClientRect());
           const filename = row.querySelector('[data-diff-filename]'), directory = row.querySelector('[data-diff-directory]'), rect = row.getBoundingClientRect();
           const rows = [...source.querySelectorAll('.quick-diff-row')], priority = { Modified: 0, Added: 1, Deleted: 2, Conflict: 3 };
           const ordered = rows.every((item, index) => {
             if (!index) return true;
-            const previous = rows[index - 1], before = priority[previous.children[1].textContent], after = priority[item.children[1].textContent];
+            const previous = rows[index - 1], before = priority[previous.querySelector('[data-diff-status-cell]').textContent], after = priority[item.querySelector('[data-diff-status-cell]').textContent];
             return before < after || before === after && (Date.parse(previous.querySelector('time')?.dateTime) || -Infinity) >= (Date.parse(item.querySelector('time')?.dateTime) || -Infinity);
           });
           return source.getBoundingClientRect().width / width > .39 && source.getBoundingClientRect().width / width < .41 &&
-            filename.textContent === 'Orders.sql' && directory.textContent === 'src\\' && parseFloat(getComputedStyle(directory).fontSize) < parseFloat(getComputedStyle(filename).fontSize) * .8 && header.children.length === 3 && row.children.length === 3 &&
+            filename.textContent === 'Orders.sql' && directory.textContent === 'src\\' && parseFloat(getComputedStyle(directory).fontSize) < parseFloat(getComputedStyle(filename).fontSize) * .8 && header.children.length === 3 && row.children.length === 2 &&
+            info.children.length === 5 && info.children[0].hasAttribute('data-diff-status-cell') && info.children[2].hasAttribute('data-modified-at') && info.children[4] === directory &&
+            info.children[1].textContent === '·' && info.children[3].textContent === '·' && getComputedStyle(info).display === 'flex' &&
+            getComputedStyle(row.querySelector('.quick-diff-name')).color === getComputedStyle(info.children[0]).color && getComputedStyle(info.children[2]).color === getComputedStyle(directory).color &&
             !source.querySelector('[data-diff-status="ignored"]') && row.querySelector('.quick-diff-name').style.getPropertyValue('--file-type-color') && row.style.getPropertyValue('--git-text-color') &&
-            (mode !== 'repository' || source.querySelector('[data-diff-path="Overview.md"] [data-diff-directory]')?.textContent === '.\\') &&
-            rect.height >= 30 && rect.height <= 34 && cells.every(cell => cell.height > 0 && cell.top >= rect.top && cell.bottom <= rect.bottom) && cells[0].right <= cells[1].left && cells[1].right <= cells[2].left &&
+            (mode !== 'repository' || !source.querySelector('[data-diff-path="Overview.md"] [data-diff-directory]')) &&
+            rect.height >= 30 && rect.height <= 34 && cells.every((cell, index) => cell.height > 0 && cell.top >= rect.top && cell.bottom <= rect.bottom && (!index || cells[index - 1].right <= cell.left)) &&
             header.querySelector('[data-diff-sort="status"]').closest('[role="columnheader"]').getAttribute('aria-sort') === 'ascending' && ordered &&
             [...source.querySelectorAll('time')].every(time => time.textContent && time.title && !time.textContent.includes('/')) &&
             source.querySelector('[data-quick-diff-toggle]').dataset.mode === mode && source.querySelector('.quick-diff-header').textContent.includes('Status') &&

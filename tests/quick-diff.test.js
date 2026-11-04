@@ -63,7 +63,8 @@ test('Quick Diff pins HEAD, loads both sides and rejects paths outside its list'
   const diff = await provider.read(list.id, 'src/a.sql');
   assert.equal(ref, 'a'.repeat(40)); assert.equal(diff.original, 'select 1;'); assert.equal(diff.modified, 'select 2;');
   await assert.rejects(provider.read(list.id, '../secret'), /selection/i);
-  assert.equal((await provider.read(list.id, 'src/new.sql')).reason, 'no-head');
+  const added = await provider.read(list.id, 'src/new.sql');
+  assert.equal(added.original, ''); assert.equal(added.modified, 'select 2;'); assert.equal(added.ghost, 'added');
 });
 test('Quick Diff enforces the HEAD limit before allocating content and honors cancellation', async () => {
   const { provider, repository } = fixture();
@@ -98,7 +99,7 @@ test('Quick Diff handles unborn HEAD and rejects changed-size HEAD buffers', asy
   native.invoke = async () => ({ repository: true, head: null, entries: [{ path: 'src/new.sql', head: 0, workdir: 2 }] });
   const unborn = await provider.list('/repo/src', 'folder');
   assert.equal(unborn.entries[0].status, 'Added');
-  assert.equal((await provider.read(unborn.id, 'src/new.sql')).reason, 'no-head');
+  assert.equal((await provider.read(unborn.id, 'src/new.sql')).ghost, 'added');
 });
 
 test('Quick Diff reads native recursive status and real text versions without changing the index', async t => {
@@ -136,7 +137,9 @@ test('Quick Diff reads native recursive status and real text versions without ch
   assert.deepEqual(list.entries.map(e => [e.path, e.status]).sort((a,b)=>a[0].localeCompare(b[0])), [['gone.txt', 'Deleted'], ['src/a.sql', 'Modified'], ['src/new.sql', 'Added']]);
   const read = await provider.read(list.id, 'src/a.sql', { onStatus: snapshot => statuses.push(snapshot) });
   assert.equal(read.original, 'select 1;'); assert.equal(read.modified, 'select 2;');
-  assert.equal((await provider.read(list.id, 'gone.txt')).modified, '');
+  const deleted = await provider.read(list.id, 'gone.txt');
+  assert.equal(deleted.modified, ''); assert.equal(deleted.original, 'removed'); assert.equal(deleted.ghost, 'deleted');
+  assert.equal((await provider.read(list.id, 'src/new.sql')).modified, 'new');
   await assert.rejects(provider.read(list.id, 'out/build.log'), /selection/i);
   assert.deepEqual(await fs.readFile(path.join(directory, '.git/index')), before);
   assert.ok(statuses.length > 10);
