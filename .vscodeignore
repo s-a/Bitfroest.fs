@@ -1,5 +1,6 @@
 .git/**
 TMP/**
+.tmp/**
 RunCom-Showcases.ps1
 .github/**
 design/**

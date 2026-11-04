@@ -1,17 +1,19 @@
-/* global document, KeyboardEvent */
+/* global document, KeyboardEvent, window */
 const fs = require('node:fs');
 const path = require('node:path');
 const net = require('node:net');
 const { spawn, spawnSync } = require('node:child_process');
 
 const repository = path.resolve(__dirname, '../..');
-const output = path.join(repository, 'TMP/showcases');
+const output = path.join(repository, '.tmp/showcases');
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 const normalize = value => value.replace(/\\/g, '/').replace(/\/$/, '').toLowerCase();
 const filename = (scene, capture) => `windows-en-dark-${scene.id}${capture ? `-${capture.id}` : ''}.png`;
+const safeActions = ['mkdir', 'copy', 'move', 'rename-one', 'search', 'view', 'new-file', 'rename', 'pack', 'unpack', 'delete', 'delete-permanently', 'select-group', 'unselect-group', 'search-separate'];
+const safeListerActions = ['mode:text', 'mode:binary', 'mode:hex', 'mode:html', 'mode:unicode', 'mode:utf8', 'find', 'manual'];
 
 function parseOptions(args, defaultCode, root = repository) {
-  const options = { code: defaultCode, demo: path.join(root, 'TMP/demo'), selected: undefined };
+  const options = { code: defaultCode, demo: path.join(root, '.tmp/demo'), selected: undefined };
   const names = { '--code': 'code', '--demo': 'demo', '--scene': 'selected' };
   for (let i = 0; i < args.length; i += 2) {
     if (!Object.hasOwn(names, args[i])) throw new Error(`Unknown option: ${args[i]}`);
@@ -41,14 +43,19 @@ function validateCatalog(catalog) {
     ids.add(scene.id);
     if (!scene.title?.trim() || !scene.description?.trim()) throw new Error('A title and description are required.');
     if (scene.paths?.length !== 2 || scene.paths.some(p => !path.win32.isAbsolute(p))) throw new Error('Two absolute demo paths are required.');
-    if (!scene.captures?.length) throw new Error('At least one capture is required.');
+    if (scene.status && !['pending', 'excluded'].includes(scene.status)) throw new Error('Invalid inventory status.');
+    if (scene.status && !scene.reason?.trim()) throw new Error('An inventory status requires a reason.');
+    if (scene.status && scene.captures?.length) throw new Error('Inventory-only masks cannot have active captures.');
+    if (!scene.status && !scene.captures?.length) throw new Error('At least one capture is required.');
     const captures = new Set();
     for (const capture of scene.captures) {
       identifier(capture.id);
       if (captures.has(capture.id)) throw new Error('Duplicate capture identifier.');
       captures.add(capture.id);
       if (!capture.expect || !capture.text) throw new Error('Capture readiness criteria are required.');
-      if (capture.action && !['mkdir', 'copy', 'move', 'rename-one', 'search', 'view'].includes(capture.action)) throw new Error('Unsupported showcase action.');
+      if (capture.action && !safeActions.includes(capture.action)) throw new Error('Unsupported showcase action.');
+      if (capture.listerAction && !safeListerActions.includes(capture.listerAction)) throw new Error('Unsupported viewer action.');
+      if (capture.select && (!['string'].includes(typeof capture.select.name) || ![0, 1].includes(capture.select.side ?? 0))) throw new Error('Invalid demo selection.');
     }
   }
   return catalog;
@@ -79,6 +86,8 @@ function buildManifest(catalog, images, host) {
     host, generatedAt: new Date().toISOString(),
     sections: catalog.map(scene => ({ id: scene.id, ...(scene.parentId ? { parentId: scene.parentId } : {}),
       title: scene.title, description: scene.description,
+      status: scene.status || 'rendered', ...(scene.reason ? { reason: scene.reason } : {}),
+      ...(scene.sources ? { sources: scene.sources } : {}),
       images: scene.captures.map(capture => {
         const image = images.find(item => item.scene === scene.id && item.capture === capture.id);
         if (!image) throw new Error(`Missing capture: ${scene.id}/${capture.id}`);
@@ -117,7 +126,7 @@ async function main() {
   for (let scene = catalog.find(item => item.id === selected); scene; scene = catalog.find(item => item.id === scene.parentId)) included.add(scene.id);
   const scenes = selected ? catalog.filter(scene => included.has(scene.id)) : catalog;
   if (!scenes.length) throw new Error(`Unknown showcase: ${selected}`);
-  for (const scene of scenes) for (const folder of scene.paths) if (!fs.statSync(folder).isDirectory()) throw new Error(`Missing demo directory: ${folder}`);
+  for (const scene of scenes.filter(item => !item.status)) for (const folder of scene.paths) if (!fs.statSync(folder).isDirectory()) throw new Error(`Missing demo directory: ${folder}`);
   const run = path.join(output, 'runs', `${Date.now()}-${process.pid}`);
   fs.mkdirSync(path.join(run, 'profile/User'), { recursive: true });
   fs.writeFileSync(path.join(run, 'profile/User/settings.json'), JSON.stringify({
@@ -153,9 +162,23 @@ async function main() {
     });
     const pageTarget = await waitFor(async () => (await targets()).find(item => item.type === 'page' && item.id === target.parentId));
     const page = await connect(pageTarget.webSocketDebuggerUrl); connections.push(page);
+    let commandSequence = 0;
+    const invoke = async (command, args = []) => {
+      const id = String(++commandSequence);
+      const commandFile = path.join(run, `command-${id}.json`), replyFile = path.join(run, `reply-${id}.json`);
+      fs.writeFileSync(`${commandFile}.writing`, JSON.stringify({ command, args }));
+      fs.renameSync(`${commandFile}.writing`, commandFile);
+      const reply = await waitFor(() => fs.existsSync(replyFile) && JSON.parse(fs.readFileSync(replyFile, 'utf8')));
+      if (reply.error) throw new Error(reply.error);
+    };
     const images = [];
     for (const scene of scenes) {
-      await evaluate(() => { document.querySelector('dialog[open] #modal-cancel')?.click(); });
+      if (scene.status) continue;
+      await evaluate(() => {
+        document.querySelector('dialog[open] #modal-cancel')?.click();
+        for (const button of document.querySelectorAll('[data-search-close], [data-lister-close]')) button.click();
+        document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+      });
       for (const [side, directory] of scene.paths.entries()) {
         await evaluate((side, directory) => {
           const pane = document.querySelector(`[data-pane="${side}"]`); pane.querySelector('[data-path-edit]').click();
@@ -169,17 +192,26 @@ async function main() {
       }
       for (const capture of scene.captures) {
         await evaluate(() => { document.querySelector('dialog[open] #modal-cancel')?.click(); });
-        if (capture.action) await evaluate(action => {
-          const button = document.querySelector(`[data-action="${action}"]`);
-          if (!button) throw new Error(`Showcase control missing: ${action}`);
+        if (capture.select) await evaluate(({ side = 0, name }) => {
+          const pane = document.querySelector(`[data-pane="${side}"]`);
+          const row = [...pane.querySelectorAll('[data-file-row][data-id]')].find(item => item.title === name || item.querySelector('[data-cell]')?.title === name);
+          if (!row) throw new Error(`Demo entry missing: ${name}`);
+          (row.querySelector('[data-filename]') || row).click(); pane.querySelector('.list').focus();
+        }, capture.select);
+        if (capture.action) await invoke(`bitfroest.${capture.action}`);
+        if (capture.listerAction) await invoke('bitfroest.lister-action', [capture.listerAction]);
+        for (const selector of capture.click || []) await evaluate(selector => {
+          const button = document.querySelector(selector);
+          if (!button || !button.getBoundingClientRect().width || button.disabled || button.type === 'submit') throw new Error(`Showcase control unavailable: ${selector}`);
           button.click();
-        }, capture.action);
+        }, selector);
         await waitFor(async () => {
           const state = await evaluate(selector => {
             const element = document.querySelector(selector), rect = element?.getBoundingClientRect();
+            const saved = window.CommanderHost?.getState?.();
             return { platform: document.body.dataset.platform, realFilesystem: JSON.parse(document.body.dataset.initialState || 'null')?.realFilesystem,
-              paths: [...document.querySelectorAll('.pane .path-breadcrumbs')].map(item => item.title.split('\n')[0]),
-              visible: Boolean(rect?.width && rect?.height), text: selector === '.pane' ? document.body.innerText : element?.textContent,
+              paths: saved?.panes?.map(pane => pane.tabs[pane.tab]) || [...document.querySelectorAll('.pane .path-breadcrumbs')].map(item => item.title.split('\n')[0]),
+              visible: Boolean(rect?.width && rect?.height), text: selector === '.pane' ? document.body.innerText : element?.value || element?.textContent,
               iconsReady: !document.querySelector('[data-file-row][data-id] .fileicon:not(.native-icon)') &&
                 [...document.querySelectorAll('img.native-icon')].every(image => image.complete && image.naturalWidth > 0),
               pending: Boolean(document.querySelector('[data-directory-loading], .codicon-modifier-spin')) };
@@ -220,5 +252,5 @@ async function main() {
   console.log(`Showcase manifest: ${path.join(output, 'showcases.json')}`);
 }
 
-module.exports = { validateCatalog, filename, assertProductState, waitFor, buildManifest, parseOptions };
+module.exports = { validateCatalog, filename, assertProductState, waitFor, buildManifest, parseOptions, safeActions, safeListerActions };
 if (require.main === module) main().catch(error => { console.error(error.message); process.exitCode = 1; });

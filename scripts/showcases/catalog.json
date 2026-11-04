@@ -2,20 +2,1274 @@
   {
     "id": "main",
     "title": "Two folders side by side",
-    "description": "Browse the demonstration folders with native Windows file icons and file colors.",
-    "paths": ["${demo}/left", "${demo}/right"],
+    "description": "Browse real demonstration folders with native Windows file icons and file colors.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "media/app.js"
+    ],
     "captures": [
-      { "id": "overview", "expect": ".pane", "text": "Bitfroest.fs" }
+      {
+        "id": "overview",
+        "expect": ".pane",
+        "text": "README"
+      }
     ]
+  },
+  {
+    "id": "startup-loading",
+    "parentId": "main",
+    "title": "Startup and resource loading",
+    "description": "Inspect the real loading view and its resource log.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "extension.js",
+      "media/webview-bootstrap.js"
+    ],
+    "status": "pending",
+    "reason": "Requires observing startup before readiness; no loading state is fabricated.",
+    "captures": []
+  },
+  {
+    "id": "startup-error",
+    "parentId": "main",
+    "title": "Startup failure details",
+    "description": "Inspect a real bootstrap or resource failure and its diagnostic log.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "extension.js",
+      "media/webview-bootstrap.js"
+    ],
+    "status": "pending",
+    "reason": "Requires a controlled real startup failure.",
+    "captures": []
+  },
+  {
+    "id": "main-menus",
+    "parentId": "main",
+    "title": "Commands organized by task",
+    "description": "Discover file actions, selection tools, navigation, view options, configuration and help.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "media/index.html",
+      "media/commander-menu.js"
+    ],
+    "captures": [
+      {
+        "id": "files",
+        "expect": "#main-menu-popup",
+        "text": "Pack",
+        "click": [
+          "[data-main-menu] > button:nth-of-type(1)"
+        ]
+      },
+      {
+        "id": "selection",
+        "expect": "#main-menu-popup",
+        "text": "Select group",
+        "click": [
+          "[data-main-menu] > button:nth-of-type(2)"
+        ]
+      },
+      {
+        "id": "commands",
+        "expect": "#main-menu-popup",
+        "text": "Search",
+        "click": [
+          "[data-main-menu] > button:nth-of-type(3)"
+        ]
+      },
+      {
+        "id": "view",
+        "expect": "#main-menu-popup",
+        "text": "Sort",
+        "click": [
+          "[data-main-menu] > button:nth-of-type(4)"
+        ]
+      },
+      {
+        "id": "configuration",
+        "expect": "#main-menu-popup",
+        "text": "Settings",
+        "click": [
+          "[data-main-menu] > button:nth-of-type(5)"
+        ]
+      },
+      {
+        "id": "help",
+        "expect": "#main-menu-popup",
+        "text": "GitHub",
+        "click": [
+          "[data-main-menu] > button:nth-of-type(6)"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "location-menu",
+    "parentId": "main",
+    "title": "Locations and favorites",
+    "description": "Choose favorite locations and context-specific Git or archive actions.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "media/app.js"
+    ],
+    "status": "pending",
+    "reason": "The location popup needs a capture-specific navigation setup.",
+    "captures": []
+  },
+  {
+    "id": "history-menu",
+    "parentId": "main",
+    "title": "Navigation history",
+    "description": "Return to a previously visited folder in the active tab.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "media/app.js"
+    ],
+    "status": "pending",
+    "reason": "The history menu needs a recorded sequence of real navigation steps.",
+    "captures": []
+  },
+  {
+    "id": "tab-menu",
+    "parentId": "main",
+    "title": "Folder-tab context menu",
+    "description": "Manage the selected folder tab without changing the other panel.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "media/app.js"
+    ],
+    "status": "pending",
+    "reason": "The tab context menu needs a context-menu capture step.",
+    "captures": []
+  },
+  {
+    "id": "columns-menu",
+    "parentId": "main",
+    "title": "Column context menu",
+    "description": "Open column configuration from the file-list heading.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "media/app.js"
+    ],
+    "status": "pending",
+    "reason": "The column context menu needs a context-menu capture step.",
+    "captures": []
+  },
+  {
+    "id": "file-context-menu",
+    "parentId": "main",
+    "title": "File and folder context menus",
+    "description": "Show actions for selected files, folders and Git entries.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "media/app.js"
+    ],
+    "status": "pending",
+    "reason": "Context-menu variants need explicit context targets and native-menu capture support.",
+    "captures": []
+  },
+  {
+    "id": "select-group",
+    "parentId": "main",
+    "title": "Select files by pattern",
+    "description": "Enter file masks or regular expressions without applying a selection.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "media/app.js"
+    ],
+    "captures": [
+      {
+        "id": "dialog",
+        "action": "select-group",
+        "expect": "dialog[open]",
+        "text": "Select group"
+      }
+    ]
+  },
+  {
+    "id": "unselect-group",
+    "parentId": "main",
+    "title": "Remove a group from the selection",
+    "description": "Specify the file pattern to remove from the current selection.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "media/app.js"
+    ],
+    "captures": [
+      {
+        "id": "dialog",
+        "action": "unselect-group",
+        "expect": "dialog[open]",
+        "text": "Unselect group"
+      }
+    ]
+  },
+  {
+    "id": "selection-files",
+    "parentId": "main",
+    "title": "Save and load file selections",
+    "description": "Persist or restore a list of selected paths through native file dialogs.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "media/app.js"
+    ],
+    "status": "pending",
+    "reason": "Native save/open dialogs are outside the current WebContents image export.",
+    "captures": []
   },
   {
     "id": "new-folder",
     "parentId": "main",
     "title": "Create a folder",
-    "description": "Open the new-folder dialog for the active destination folder using F7.",
-    "paths": ["${demo}/left", "${demo}/right"],
+    "description": "Inspect the folder name and destination before creating anything.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "media/app.js"
+    ],
     "captures": [
-      { "id": "dialog", "action": "mkdir", "expect": "dialog[open]", "text": "New folder" }
+      {
+        "id": "dialog",
+        "action": "mkdir",
+        "expect": "dialog[open]",
+        "text": "New folder"
+      }
     ]
+  },
+  {
+    "id": "new-file",
+    "parentId": "main",
+    "title": "Create a text file",
+    "description": "Inspect the new text-file dialog without creating a file.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "media/app.js"
+    ],
+    "captures": [
+      {
+        "id": "dialog",
+        "action": "new-file",
+        "expect": "dialog[open]",
+        "text": "New text file"
+      }
+    ]
+  },
+  {
+    "id": "copy",
+    "parentId": "main",
+    "title": "Copy files",
+    "description": "Review the destination, overwrite policy and verification options before copying.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "media/app.js"
+    ],
+    "captures": [
+      {
+        "id": "dialog",
+        "action": "copy",
+        "expect": "dialog[open]",
+        "text": "Copy",
+        "select": {
+          "side": 0,
+          "name": "Project-Plan.md"
+        }
+      }
+    ]
+  },
+  {
+    "id": "move",
+    "parentId": "main",
+    "title": "Move files",
+    "description": "Review the destination and transfer options before moving files.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "media/app.js"
+    ],
+    "captures": [
+      {
+        "id": "dialog",
+        "action": "move",
+        "expect": "dialog[open]",
+        "text": "Move",
+        "select": {
+          "side": 0,
+          "name": "Project-Plan.md"
+        }
+      }
+    ]
+  },
+  {
+    "id": "rename-inline",
+    "parentId": "main",
+    "title": "Rename a single entry",
+    "description": "Edit the filename in the file list without committing the rename.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "media/app.js"
+    ],
+    "captures": [
+      {
+        "id": "editor",
+        "action": "rename-one",
+        "expect": "input.inline-rename",
+        "text": "Project-Plan",
+        "select": {
+          "side": 0,
+          "name": "Project-Plan.md"
+        }
+      }
+    ]
+  },
+  {
+    "id": "rename-multiple",
+    "parentId": "main",
+    "title": "Preview multiple filenames",
+    "description": "Inspect naming masks, counters and replacement rules before applying changes.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "media/app.js"
+    ],
+    "captures": [
+      {
+        "id": "dialog",
+        "action": "rename",
+        "expect": "dialog[open]",
+        "text": "Multi-rename",
+        "select": {
+          "side": 0,
+          "name": "Project-Plan.md"
+        }
+      }
+    ]
+  },
+  {
+    "id": "transfer-individual-name",
+    "parentId": "main",
+    "title": "Choose an individual destination name",
+    "description": "Set a copy or move name for one entry.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "media/app.js"
+    ],
+    "status": "pending",
+    "reason": "This transfer variant needs its own verified command sequence.",
+    "captures": []
+  },
+  {
+    "id": "delete-trash",
+    "parentId": "main",
+    "title": "Review a recycle-bin deletion",
+    "description": "Inspect the confirmation for moving selected entries to the recycle bin.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "media/app.js"
+    ],
+    "captures": [
+      {
+        "id": "confirmation",
+        "action": "delete",
+        "expect": "dialog[open]",
+        "text": "Trash",
+        "select": {
+          "side": 0,
+          "name": "Project-Plan.md"
+        }
+      }
+    ]
+  },
+  {
+    "id": "delete-permanently",
+    "parentId": "main",
+    "title": "Review permanent deletion",
+    "description": "Inspect the permanent-deletion warning without confirming it.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "media/app.js"
+    ],
+    "captures": [
+      {
+        "id": "confirmation",
+        "action": "delete-permanently",
+        "expect": "dialog[open]",
+        "text": "Delete permanently",
+        "select": {
+          "side": 0,
+          "name": "Project-Plan.md"
+        }
+      }
+    ]
+  },
+  {
+    "id": "delete-network",
+    "parentId": "main",
+    "title": "Review network or mixed deletion",
+    "description": "Distinguish local recycle-bin handling from permanent network deletion.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "media/app.js"
+    ],
+    "status": "pending",
+    "reason": "Requires real network-path fixtures; no network or deletion action is simulated.",
+    "captures": []
+  },
+  {
+    "id": "transfer-conflict",
+    "parentId": "main",
+    "title": "Resolve an existing target file",
+    "description": "Compare source and destination and inspect overwrite, skip and rename choices.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "media/app.js"
+    ],
+    "status": "pending",
+    "reason": "Requires a real transfer reaching a conflict; no operation is confirmed by this catalog.",
+    "captures": []
+  },
+  {
+    "id": "conflict-comparison",
+    "parentId": "transfer-conflict",
+    "title": "Compare conflicting file contents",
+    "description": "Inspect the comparison opened from a real copy or move conflict.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "media/app.js"
+    ],
+    "status": "pending",
+    "reason": "Requires the real transfer-conflict state and complete text previews.",
+    "captures": []
+  },
+  {
+    "id": "operation-progress",
+    "parentId": "main",
+    "title": "Monitor foreground and background work",
+    "description": "Inspect measured progress, job details and cancellation controls.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "media/app.js",
+      "media/commander-statusbar.js",
+      "media/commander-jobs.js"
+    ],
+    "status": "pending",
+    "reason": "Requires a real running operation; progress must not be synthesized.",
+    "captures": []
+  },
+  {
+    "id": "operation-error",
+    "parentId": "main",
+    "title": "Inspect a failed operation",
+    "description": "Show the actual operation error and any retained editing context.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "media/app.js"
+    ],
+    "status": "pending",
+    "reason": "Requires a controlled real failure; errors must not be injected.",
+    "captures": []
+  },
+  {
+    "id": "file-search",
+    "parentId": "main",
+    "title": "Find files",
+    "description": "Inspect basic criteria, advanced filters and saved searches before starting a search.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "media/file-search-view.js"
+    ],
+    "captures": [
+      {
+        "id": "general",
+        "action": "search",
+        "expect": "dialog[open]",
+        "text": "Find files"
+      },
+      {
+        "id": "advanced",
+        "expect": "dialog[open]",
+        "text": "Find files",
+        "click": [
+          "dialog[open] [data-page=\"1\"]"
+        ]
+      },
+      {
+        "id": "presets",
+        "expect": "dialog[open]",
+        "text": "Find files",
+        "click": [
+          "dialog[open] [data-page=\"2\"]"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "file-search-separate",
+    "parentId": "main",
+    "title": "Keep a search window open",
+    "description": "Open the nonmodal search variant alongside the file manager.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "media/file-search-view.js"
+    ],
+    "captures": [
+      {
+        "id": "dialog",
+        "action": "search-separate",
+        "expect": "dialog[open]",
+        "text": "Find files"
+      }
+    ]
+  },
+  {
+    "id": "search-results",
+    "parentId": "file-search",
+    "title": "Browse search results",
+    "description": "Inspect matching paths, result errors and transfer to a file panel.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "media/file-search-view.js"
+    ],
+    "status": "pending",
+    "reason": "Needs a bounded real search against prepared fixtures.",
+    "captures": []
+  },
+  {
+    "id": "search-skip-confirmation",
+    "parentId": "file-search",
+    "title": "Skip a directory during search",
+    "description": "Review the native confirmation for skipping a real active search directory.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "extension.js"
+    ],
+    "status": "pending",
+    "reason": "Requires a real running search and a native confirmation target.",
+    "captures": []
+  },
+  {
+    "id": "duplicate-selection",
+    "parentId": "file-search",
+    "title": "Select duplicate files",
+    "description": "Inspect date, size and folder-based rules for groups of real duplicates.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "media/app.js"
+    ],
+    "status": "pending",
+    "reason": "Requires real duplicate search results before opening the selection dialog.",
+    "captures": []
+  },
+  {
+    "id": "file-viewer",
+    "parentId": "main",
+    "title": "Inspect file contents",
+    "description": "View a real file in text, binary, hexadecimal, HTML-text, Unicode and UTF-8 modes.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "media/lister-view.js"
+    ],
+    "captures": [
+      {
+        "id": "text",
+        "action": "view",
+        "expect": ".lister",
+        "text": "Notes.txt",
+        "select": {
+          "side": 0,
+          "name": "Notes.txt"
+        }
+      },
+      {
+        "id": "binary",
+        "expect": ".lister",
+        "text": "Notes.txt",
+        "listerAction": "mode:binary"
+      },
+      {
+        "id": "hex",
+        "expect": ".lister",
+        "text": "Notes.txt",
+        "listerAction": "mode:hex"
+      },
+      {
+        "id": "html",
+        "expect": ".lister",
+        "text": "Notes.txt",
+        "listerAction": "mode:html"
+      },
+      {
+        "id": "unicode",
+        "expect": ".lister",
+        "text": "Notes.txt",
+        "listerAction": "mode:unicode"
+      },
+      {
+        "id": "utf8",
+        "expect": ".lister",
+        "text": "Notes.txt",
+        "listerAction": "mode:utf8"
+      },
+      {
+        "id": "edit-menu",
+        "expect": "#lister-menu-popup",
+        "text": "Search",
+        "click": [
+          "[data-main-menu] > button:nth-of-type(1)"
+        ]
+      },
+      {
+        "id": "options-menu",
+        "expect": "#lister-menu-popup",
+        "text": "Hex",
+        "click": [
+          "[data-main-menu] > button:nth-of-type(2)"
+        ]
+      },
+      {
+        "id": "encoding-menu",
+        "expect": "#lister-menu-popup",
+        "text": "Other codepage",
+        "click": [
+          "[data-main-menu] > button:nth-of-type(3)"
+        ]
+      }
+    ]
+  },
+  {
+    "id": "viewer-search",
+    "parentId": "file-viewer",
+    "title": "Search inside the viewer",
+    "description": "Inspect text-search, direction and matching options.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "media/lister-view.js"
+    ],
+    "captures": [
+      {
+        "id": "dialog",
+        "action": "view",
+        "expect": "[data-lister-search]",
+        "text": "Search text",
+        "select": {
+          "side": 0,
+          "name": "Notes.txt"
+        },
+        "listerAction": "find"
+      }
+    ]
+  },
+  {
+    "id": "viewer-codepage",
+    "parentId": "file-viewer",
+    "title": "Choose another codepage",
+    "description": "Inspect the codepage input without saving an encoding preference.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "media/lister-view.js"
+    ],
+    "captures": [
+      {
+        "id": "dialog",
+        "action": "view",
+        "expect": "dialog[open]",
+        "text": "Other codepage",
+        "select": {
+          "side": 0,
+          "name": "Notes.txt"
+        },
+        "listerAction": "manual"
+      }
+    ]
+  },
+  {
+    "id": "archive-browser",
+    "parentId": "main",
+    "title": "Browse ZIP contents",
+    "description": "Navigate a real archive with entry metadata and read-only previews.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "media/app.js"
+    ],
+    "status": "pending",
+    "reason": "Archive navigation needs an explicit real ZIP-open step.",
+    "captures": []
+  },
+  {
+    "id": "archive-pack",
+    "parentId": "archive-browser",
+    "title": "Prepare a ZIP archive",
+    "description": "Inspect compression, encryption and recursive packing options without creating an archive.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "media/app.js"
+    ],
+    "captures": [
+      {
+        "id": "dialog",
+        "action": "pack",
+        "expect": "dialog[open]",
+        "text": "Pack selection",
+        "select": {
+          "side": 0,
+          "name": "Project-Plan.md"
+        }
+      }
+    ]
+  },
+  {
+    "id": "archive-unpack",
+    "parentId": "archive-browser",
+    "title": "Prepare ZIP extraction",
+    "description": "Inspect destination and extraction options without writing files.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "media/app.js"
+    ],
+    "captures": [
+      {
+        "id": "dialog",
+        "action": "unpack",
+        "expect": "dialog[open]",
+        "text": "Unpack archive",
+        "select": {
+          "side": 0,
+          "name": "Drafts-2026-11-03.zip"
+        }
+      }
+    ]
+  },
+  {
+    "id": "archive-entry-properties",
+    "parentId": "archive-browser",
+    "title": "Inspect an archive entry",
+    "description": "Show stored size, compressed size, method and encryption for a real ZIP entry.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "media/app.js"
+    ],
+    "status": "pending",
+    "reason": "Requires a selected entry inside an opened real archive.",
+    "captures": []
+  },
+  {
+    "id": "archive-entry-actions",
+    "parentId": "archive-browser",
+    "title": "Edit an archive listing",
+    "description": "Inspect archive-specific new-folder, new-file and deletion confirmations.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "media/app.js"
+    ],
+    "status": "pending",
+    "reason": "Requires a real opened archive and verified cancellation paths.",
+    "captures": []
+  },
+  {
+    "id": "archive-password",
+    "parentId": "archive-browser",
+    "title": "Enter a ZIP password",
+    "description": "Inspect the native masked password input and retry variant.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "extension.js"
+    ],
+    "status": "pending",
+    "reason": "Native password inputs need encrypted archive fixtures and a separate capture target.",
+    "captures": []
+  },
+  {
+    "id": "archive-overwrite",
+    "parentId": "archive-browser",
+    "title": "Review archive overwrite prompts",
+    "description": "Inspect existing-archive and existing-entry overwrite choices.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "extension.js"
+    ],
+    "status": "pending",
+    "reason": "Native Quick Picks require a real archive write reaching an existing target.",
+    "captures": []
+  },
+  {
+    "id": "archive-repack",
+    "parentId": "archive-browser",
+    "title": "Review changed extracted files",
+    "description": "Choose whether to repack a genuinely modified extracted working copy.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "extension.js"
+    ],
+    "status": "pending",
+    "reason": "Requires a real edited extracted file and a native Quick Pick.",
+    "captures": []
+  },
+  {
+    "id": "archive-preview-choice",
+    "parentId": "archive-browser",
+    "title": "Choose how to view an archive file",
+    "description": "Inspect the native confirmation used for an archive search result.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "extension.js"
+    ],
+    "status": "pending",
+    "reason": "Requires a real archive search result and a native Quick Pick.",
+    "captures": []
+  },
+  {
+    "id": "git-status",
+    "parentId": "main",
+    "title": "Inspect local Git changes",
+    "description": "Show modified, staged and untracked entries in the demonstration repository.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "media/app.js",
+      "git-status-provider.js"
+    ],
+    "status": "pending",
+    "reason": "Needs a dedicated scene rooted in the nested demonstration repository.",
+    "captures": []
+  },
+  {
+    "id": "git-history",
+    "parentId": "git-status",
+    "title": "Browse commit history",
+    "description": "Inspect the commit graph, commit message and changed files.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "git-history.js",
+      "media/git-history.js"
+    ],
+    "status": "pending",
+    "reason": "Uses a separate product webview requiring another capture target.",
+    "captures": []
+  },
+  {
+    "id": "git-diff",
+    "parentId": "git-status",
+    "title": "Compare committed or working versions",
+    "description": "Open the actual VS Code diff editor for a selected Git file.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "extension.js",
+      "git-history.js"
+    ],
+    "status": "pending",
+    "reason": "Uses the native VS Code editor rather than the file-manager webview.",
+    "captures": []
+  },
+  {
+    "id": "git-branches",
+    "parentId": "git-status",
+    "title": "Inspect available local branches",
+    "description": "Open the read-only branch list for the active repository.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "extension.js"
+    ],
+    "status": "pending",
+    "reason": "Uses a native Quick Pick requiring another capture target.",
+    "captures": []
+  },
+  {
+    "id": "settings",
+    "parentId": "main",
+    "title": "Configure the file manager",
+    "description": "Inspect the native integration entry and extension configuration categories.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "configuration-editor.js",
+      "media/configuration-view.js"
+    ],
+    "status": "pending",
+    "reason": "Uses a separate configuration webview requiring another capture target.",
+    "captures": []
+  },
+  {
+    "id": "settings-favorites",
+    "parentId": "settings",
+    "title": "Configure favorite locations",
+    "description": "Inspect saved favorites and location paths.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "configuration-editor.js",
+      "media/configuration-view.js"
+    ],
+    "status": "pending",
+    "reason": "Uses a separate configuration webview requiring another capture target.",
+    "captures": []
+  },
+  {
+    "id": "settings-columns",
+    "parentId": "settings",
+    "title": "Configure file-list columns",
+    "description": "Inspect column sets, field choices and column visibility.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "configuration-editor.js",
+      "media/configuration-view.js"
+    ],
+    "status": "pending",
+    "reason": "Uses a separate configuration webview requiring another capture target.",
+    "captures": []
+  },
+  {
+    "id": "settings-shortcuts",
+    "parentId": "settings",
+    "title": "Configure keyboard shortcuts",
+    "description": "Inspect commands, editable bindings and conflict information.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "configuration-editor.js",
+      "media/configuration-view.js"
+    ],
+    "status": "pending",
+    "reason": "Uses a separate configuration webview requiring another capture target.",
+    "captures": []
+  },
+  {
+    "id": "shortcut-capture",
+    "parentId": "settings-shortcuts",
+    "title": "Record a keyboard binding",
+    "description": "Inspect the shortcut recorder and local conflict states.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "media/shortcut-configuration.js"
+    ],
+    "status": "pending",
+    "reason": "Needs the actual configuration webview and an unsaved recording session.",
+    "captures": []
+  },
+  {
+    "id": "language-picker",
+    "parentId": "settings",
+    "title": "Choose the interface language",
+    "description": "Inspect available languages without saving a preference.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "extension.js"
+    ],
+    "status": "pending",
+    "reason": "Uses a native Quick Pick requiring another capture target.",
+    "captures": []
+  },
+  {
+    "id": "tab-scope-picker",
+    "parentId": "settings",
+    "title": "Choose where tabs are stored",
+    "description": "Inspect workspace and shared tab-storage choices without changing scope.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "extension.js"
+    ],
+    "status": "pending",
+    "reason": "Uses a native Quick Pick requiring another capture target.",
+    "captures": []
+  },
+  {
+    "id": "favorite-name",
+    "parentId": "settings-favorites",
+    "title": "Name a favorite location",
+    "description": "Inspect the native favorite-name input without saving a location.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "extension.js"
+    ],
+    "status": "pending",
+    "reason": "Uses a native Input Box requiring another capture target.",
+    "captures": []
+  },
+  {
+    "id": "folder-locks",
+    "parentId": "main",
+    "title": "Inspect references to a folder",
+    "description": "Show real locking processes, details and available actions without releasing locks.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "lock-inspector.js",
+      "media/lock-inspector.js"
+    ],
+    "status": "pending",
+    "reason": "Uses a separate product webview and requires controlled real process references.",
+    "captures": []
+  },
+  {
+    "id": "folder-lock-actions",
+    "parentId": "folder-locks",
+    "title": "Choose a folder-lock action",
+    "description": "Inspect available process and folder actions for a real scan result.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "lock-inspector.js"
+    ],
+    "status": "pending",
+    "reason": "Requires controlled scan results and a native Quick Pick.",
+    "captures": []
+  },
+  {
+    "id": "folder-lock-target",
+    "parentId": "folder-locks",
+    "title": "Choose a destination for a locked folder",
+    "description": "Inspect the complete destination path before a lock-management copy or move.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "lock-inspector.js"
+    ],
+    "status": "pending",
+    "reason": "Requires a real lock-management session and a native Input Box.",
+    "captures": []
+  },
+  {
+    "id": "folder-lock-confirmation",
+    "parentId": "folder-locks",
+    "title": "Review a lock-management operation",
+    "description": "Inspect the operation-specific warnings for releasing references, unloading modules, terminating processes and file operations.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "lock-inspector.js"
+    ],
+    "status": "pending",
+    "reason": "Requires a real lock-management session; destructive operations are never confirmed by this catalog.",
+    "captures": []
+  },
+  {
+    "id": "native-browse-dialogs",
+    "parentId": "main",
+    "title": "Browse for a file or directory",
+    "description": "Inspect the native pickers used by search, configuration and selection files.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "extension.js",
+      "configuration-editor.js"
+    ],
+    "status": "pending",
+    "reason": "Native operating-system dialogs are outside the current WebContents image export.",
+    "captures": []
+  },
+  {
+    "id": "native-drag-choice",
+    "parentId": "main",
+    "title": "Choose a drag-and-drop action",
+    "description": "Inspect copy, move and cancel choices after a real drag.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "extension.js"
+    ],
+    "status": "pending",
+    "reason": "Requires a real drag sequence and a native Quick Pick.",
+    "captures": []
+  },
+  {
+    "id": "licenses",
+    "parentId": "main",
+    "title": "Read licenses and acknowledgements",
+    "description": "Inspect the bundled product and third-party notices.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "license-information.js"
+    ],
+    "status": "pending",
+    "reason": "Uses the native VS Code Markdown preview, with a text-editor fallback, requiring another capture target.",
+    "captures": []
+  },
+  {
+    "id": "legacy-demo-masks",
+    "parentId": "main",
+    "title": "Legacy browser-only sample dialogs",
+    "description": "Record the sample editor, command list and prototype-help dialogs separately from product masks.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "media/app.js"
+    ],
+    "status": "excluded",
+    "reason": "These paths belong to the standalone sample mode and must not be published as real product screenshots.",
+    "captures": []
   }
 ]
