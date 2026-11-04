@@ -98,6 +98,13 @@ else()
       message(FATAL_ERROR "GLIB_SDK_ROOT must name the preinstalled GLib development SDK prefix.")
     endif()
     target_sources(binding PRIVATE src/locks-linux.cc src/binding-locks-linux.cc src/linux-work.cc)
+    target_sources(binding PRIVATE src/git-index-linux.cc src/file-transfer-linux.cc src/binding-transfer-linux.cc)
+    set(CLIPBOARD_LINUX_SDK_ROOT "" CACHE PATH "Path to the preinstalled Linux clipboard development SDK.")
+    find_path(XCB_INCLUDE_DIR xcb/xcb.h HINTS "${CLIPBOARD_LINUX_SDK_ROOT}/usr/include" REQUIRED)
+    find_path(XCB_XFIXES_INCLUDE_DIR xcb/xfixes.h HINTS "${CLIPBOARD_LINUX_SDK_ROOT}/usr/include" REQUIRED)
+    find_path(WAYLAND_CLIENT_INCLUDE_DIR wayland-client-core.h HINTS "${CLIPBOARD_LINUX_SDK_ROOT}/usr/include" REQUIRED)
+    target_sources(binding PRIVATE src/clipboard-linux.cc src/clipboard-wayland-linux.cc src/clipboard-linux-formats.cc src/binding-clipboard-linux.cc)
+    target_include_directories(binding PRIVATE "${XCB_INCLUDE_DIR}" "${XCB_XFIXES_INCLUDE_DIR}" "${WAYLAND_CLIENT_INCLUDE_DIR}")
     target_sources(binding PRIVATE src/desktop-linux.cc src/binding-desktop-linux.cc)
     target_sources(binding PRIVATE src/binding-folder-icons-posix.cc src/folder-icons-linux.cc)
     target_include_directories(binding PRIVATE "${GLIB_INCLUDE_DIR}" "${GLIB_CONFIG_INCLUDE_DIR}")
@@ -110,8 +117,6 @@ option(BITFROEST_BUILD_TEST_FIXTURES "Build native test modules outside the exte
 if(WIN32 AND BITFROEST_BUILD_TEST_FIXTURES)
   include("${CMAKE_CURRENT_SOURCE_DIR}/../tests/native-fixtures.cmake")
 endif()
-
-
-
-
-
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND BITFROEST_BUILD_TEST_FIXTURES)
+  include("${CMAKE_CURRENT_SOURCE_DIR}/../tests/native-linux-fixtures.cmake")
+endif()

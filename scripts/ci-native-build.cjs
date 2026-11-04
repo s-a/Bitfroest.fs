@@ -41,9 +41,12 @@ async function main() {
     const library = path.join(root, 'node.lib');
     await download('https://nodejs.org/dist/v24.18.0/win-x64/node.lib', library, '589684168a73547ca47cd22d76a4e465ef561abe89fb1b2b23fe35bbe857d505');
     args.push('-G', 'Visual Studio 18 2026', '-A', 'x64', `-DNODE_LIBRARY=${library}`, '-DBITFROEST_BUILD_TEST_FIXTURES=ON');
+  } else if (process.platform === 'linux') {
+    args.push('-DBITFROEST_BUILD_TEST_FIXTURES=ON');
   }
   run('cmake', args);
   run('cmake', ['--build', build, '--config', 'Release', '--parallel', '2']);
+  if (process.platform === 'linux') run('ctest', ['--test-dir', build, '--output-on-failure']);
   const binary = path.join(build, process.platform === 'win32' ? 'Release/binding.node' : 'binding.node');
   fs.copyFileSync(binary, path.resolve('native/binding.node'));
   if (process.platform === 'win32') {

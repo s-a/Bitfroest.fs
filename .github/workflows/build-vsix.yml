@@ -38,11 +38,11 @@ jobs:
         run: node scripts/check-release-notes.cjs
       - name: Install locked development dependencies
         run: npm ci
-      - name: Install the Linux desktop SDK and icon loaders
+      - name: Install the Linux native SDK and headless test fixtures
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends libglib2.0-dev libgdk-pixbuf-2.0-0 librsvg2-common shared-mime-info
+          sudo apt-get install --yes --no-install-recommends libglib2.0-dev libgdk-pixbuf-2.0-0 librsvg2-common shared-mime-info libxcb1-dev libxcb-xfixes0-dev libwayland-dev libwayland-bin gvfs gvfs-daemons dbus-daemon xvfb xclip
       - name: Build the native module from pinned sources
         run: node scripts/ci-native-build.cjs
       - name: Check syntax and lint

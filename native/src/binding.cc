@@ -18,6 +18,11 @@
 #include "locks-linux.h"
 #include "binding-desktop-linux.h"
 #include "desktop-linux.h"
+#include "git-index-linux.h"
+#include "binding-transfer-linux.h"
+#include "file-transfer-win.h"
+#include "binding-clipboard-linux.h"
+#include "clipboard-linux.h"
 #endif
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -135,6 +140,27 @@ napi_value Close(napi_env env, napi_callback_info info) {
       closing = combined;
     }
     CHECK(napi_create_reference(env, closing, 1, &session->closing));
+  }
+#endif
+#ifdef __linux__
+  if (changed) {
+    CloseLinuxClipboardSession(session->state);
+    napi_value clipboard = WhenLinuxClipboardClosed(env, session->state);
+    napi_value copies = ShutdownLinuxCopies(env, session->state);
+    napi_value work = WhenLinuxLocksClosed(env, session->state);
+    napi_value icons = WhenPosixIconsClosed(env, session->state);
+    if (!copies || !work || !icons || !clipboard) return nullptr;
+    napi_value global, constructor, all, promises, combined;
+    CHECK(napi_get_global(env, &global));
+    CHECK(napi_get_named_property(env, global, "Promise", &constructor));
+    CHECK(napi_get_named_property(env, constructor, "all", &all));
+    CHECK(napi_create_array_with_length(env, 4, &promises));
+    CHECK(napi_set_element(env, promises, 0, copies));
+    CHECK(napi_set_element(env, promises, 1, work));
+    CHECK(napi_set_element(env, promises, 2, icons));
+    CHECK(napi_set_element(env, promises, 3, clipboard));
+    CHECK(napi_call_function(env, constructor, all, 1, &promises, &combined));
+    CHECK(napi_create_reference(env, combined, 1, &session->closing));
   }
 #endif
   napi_value result;
@@ -384,6 +410,21 @@ napi_value Invoke(napi_env env, napi_callback_info info) {
       }
 #endif
 #ifdef __linux__
+      if (IsLinuxClipboardOperation(known)) {
+        if (count != 2) return Fail(env, "InvalidRequest", "A clipboard request is required.");
+        return StartLinuxClipboardQuery(env, session->state, known, args[1]);
+      }
+      if (std::strcmp(known, "git.untrack") == 0) {
+        if (count != 2) return Fail(env, "InvalidRequest", "A Git index request is required.");
+        if (!ProbeLinuxGitIndex()) return Fail(env, "HashUnavailable", "The Linux kernel SHA-256 interface is unavailable.");
+        return StartLinuxGitUntrack(env, session->state, args[1]);
+      }
+      if (std::strcmp(known, "files.copy") == 0) {
+        if (count < 2) return Fail(env, "InvalidRequest", "A copy request is required.");
+        napi_value progress;
+        if (count == 3) progress = args[2]; else CHECK(napi_get_undefined(env, &progress));
+        return StartLinuxCopy(env, session->state, args[1], progress);
+      }
       if (IsLinuxDesktopOperation(known)) {
         if (count != 2) return Fail(env, "InvalidRequest", "A Linux desktop request is required.");
         return StartLinuxDesktop(env, session->state, known, args[1]);
@@ -417,6 +458,10 @@ void Finalize(napi_env env, void* data, void*) {
   CloseWindowsClipboardSession(session->state);
   if (session->state->copy_session) session->state->copy_session->Shutdown();
 #endif
+#ifdef __linux__
+  CloseLinuxClipboardSession(session->state);
+  if (session->state->copy_session) session->state->copy_session->Shutdown();
+#endif
   if (session->closing) napi_delete_reference(env, session->closing);
   delete session;
 }
@@ -448,7 +493,7 @@ napi_value Init(napi_env env, napi_value exports) {
   napi_value version, major, minor, capabilities;
   CHECK(napi_create_object(env, &version));
   CHECK(napi_create_uint32(env, 1, &major));
-  CHECK(napi_create_uint32(env, 7, &minor));
+  CHECK(napi_create_uint32(env, 8, &minor));
   CHECK(napi_set_named_property(env, version, "major", major));
   CHECK(napi_set_named_property(env, version, "minor", minor));
   CHECK(napi_object_freeze(env, version));
@@ -461,6 +506,11 @@ napi_value Init(napi_env env, napi_value exports) {
     bool locks = false;
     bool desktop = false;
     bool icons = false;
+    bool linux_index = false;
+    bool linux_clipboard = false;
+#ifdef __linux__
+    std::string clipboard_reason;
+#endif
 #if defined(__linux__) || defined(__APPLE__)
     icons = std::strcmp(operation, "icons.resolve") == 0 && PosixIconsAvailable();
     supported = supported || icons;
@@ -470,7 +520,9 @@ napi_value Init(napi_env env, napi_value exports) {
     locks = (std::strcmp(operation, "locks.rename") == 0 && linux_locks.rename) ||
         (std::strcmp(operation, "processes.terminate") == 0 && linux_locks.terminate);
     desktop = IsLinuxDesktopOperation(operation) && ProbeLinuxDesktop();
-    supported = supported || locks || desktop;
+    linux_index = std::strcmp(operation, "git.untrack") == 0 && ProbeLinuxGitIndex();
+    linux_clipboard = IsLinuxClipboardOperation(operation) && ProbeLinuxClipboard(&clipboard_reason);
+    supported = supported || locks || desktop || linux_index || linux_clipboard || std::strcmp(operation, "files.copy") == 0;
 #endif
 #ifdef _WIN32
     supported = std::strcmp(operation, "shell.openTerminal") == 0 || std::strcmp(operation, "git.status") == 0 || std::strcmp(operation, "git.info") == 0 || std::strcmp(operation, "metadata.query") == 0 || std::strcmp(operation, "files.rename") == 0 || std::strcmp(operation, "files.copy") == 0 || std::strcmp(operation, "icons.resolve") == 0 || std::strcmp(operation, "shell.openAssociated") == 0 || std::strcmp(operation, "shell.openTrash") == 0 || std::strcmp(operation, "shell.showContextMenu") == 0 || std::strcmp(operation, "windows.maximize") == 0 || IsWindowsQuery(operation) || IsWindowsClipboardOperation(operation);
@@ -480,14 +532,14 @@ napi_value Init(napi_env env, napi_value exports) {
 #endif
     const bool rename = std::strcmp(operation, "files.rename") == 0 && supported;
     const bool codepage = (std::strcmp(operation, "encoding.decodeBlock") == 0 || std::strcmp(operation, "encoding.decodeChunk") == 0) && supported;
-    const bool conditional = codepage || rename || locks || desktop || icons;
+    const bool conditional = codepage || rename || locks || desktop || icons || linux_index || linux_clipboard;
     CHECK(napi_set_named_property(env, entry, "status", Text(env, conditional ? "conditional" : supported ? "supported" : "unsupported")));
     if (conditional) {
       const char* lock_reason = "Windows10Or11X64AndProcessAccess";
 #ifdef __linux__
       lock_reason = "LinuxKernelSupportAndProcessAccess";
 #endif
-      CHECK(napi_set_named_property(env, entry, "reason", Text(env, icons ? "LocalIconMetadataAndInstalledImageLoaders" : desktop ? "GioDesktopSessionAndAssociation" : locks ? lock_reason : rename ? "CaseOnlySameDirectory" : "SingleDoubleByteUtf8AndGB18030Codepages")));
+      CHECK(napi_set_named_property(env, entry, "reason", Text(env, linux_clipboard ? "DesktopClipboardProtocolAndAccess" : icons ? "LocalIconMetadataAndInstalledImageLoaders" : desktop ? "GioDesktopSessionAndAssociation" : locks ? lock_reason : linux_index ? "LinuxSha256AndRepositoryAccess" : rename ? "CaseOnlySameDirectory" : "SingleDoubleByteUtf8AndGB18030Codepages")));
     }
     if (codepage) {
       napi_value max_bytes;
@@ -503,6 +555,10 @@ napi_value Init(napi_env env, napi_value exports) {
       const char* reason = "NotImplemented";
 #ifdef _WIN32
       if (IsLocksOperation(operation)) reason = "UnsupportedWindowsVersionOrArchitecture";
+#endif
+#ifdef __linux__
+      if (std::strcmp(operation, "git.untrack") == 0) reason = "LinuxSha256Unavailable";
+      if (IsLinuxClipboardOperation(operation)) reason = clipboard_reason.empty() ? "DesktopClipboardUnavailable" : clipboard_reason.c_str();
 #endif
       CHECK(napi_set_named_property(env, entry, "reason", Text(env, reason)));
     }

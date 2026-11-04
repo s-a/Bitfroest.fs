@@ -4,6 +4,7 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const { execFileSync, spawnSync } = require('node:child_process');
+const { missingDesktopFixture } = require('../scripts/test-linux.cjs');
 const binary = process.env.NATIVE_BINDING_TEST_PATH || path.join(__dirname, '../native/binding.node');
 const posix = { skip: !['linux', 'darwin'].includes(process.platform) };
 
@@ -62,7 +63,7 @@ test('Linux reads GNOME custom icon metadata in an isolated desktop session', { 
       encoding: 'utf8', timeout: 15000,
       env: { ...process.env, DISPLAY: '', WAYLAND_DISPLAY: '', XDG_CURRENT_DESKTOP: 'GNOME', XDG_DATA_HOME: path.join(root, 'data') }
     });
-    if (result.error?.code === 'ENOENT' || result.status === 77) { t.skip('A GIO metadata service and an isolated D-Bus session are required.'); return; }
+    if (missingDesktopFixture(result)) { t.skip('A GIO metadata service and an isolated D-Bus session are required.'); return; }
     assert.equal(result.status, 0, result.stderr || String(result.error));
   } finally { await fs.rm(root, { recursive: true, force: true }); }
 });

@@ -43,7 +43,7 @@ test('a missing marked window reports the native search stage without a desktop 
 
 test('compiled binding exposes an honest versioned capability contract', () => {
   const binding = require(binary);
-  assert.deepEqual(binding.apiVersion, { major: 1, minor: 7 });
+  assert.deepEqual(binding.apiVersion, { major: 1, minor: 8 });
   assert.equal(binding.capabilities['git.status'].dirtySummary, true);
   assert.ok(Object.keys(binding.capabilities).length >= 20);
   for (const [operation, capability] of Object.entries(binding.capabilities)) {
@@ -60,6 +60,16 @@ test('compiled binding exposes an honest versioned capability contract', () => {
       assert.equal(capability.status, 'supported');
     } else if (process.platform === 'win32' && ['windows.inspect', 'files.readDirectory', 'git.untrack'].includes(operation)) {
       assert.equal(capability.status, 'supported');
+    } else if (process.platform === 'linux' && operation === 'files.copy') {
+      assert.equal(capability.status, 'supported');
+    } else if (process.platform === 'linux' && operation === 'git.untrack') {
+      assert.ok(['conditional', 'unsupported'].includes(capability.status));
+      assert.equal(capability.reason, capability.status === 'conditional' ? 'LinuxSha256AndRepositoryAccess' : 'LinuxSha256Unavailable');
+    } else if (process.platform === 'linux' && operation.startsWith('clipboard.')) {
+      assert.ok(['conditional', 'unsupported'].includes(capability.status));
+      assert.equal(typeof capability.reason, 'string');
+      assert.ok(capability.reason.length > 0);
+      if (capability.status === 'conditional') assert.equal(capability.reason, 'DesktopClipboardProtocolAndAccess');
     } else if (process.platform === 'linux' && ['icons.resolve', 'locks.rename', 'processes.terminate', 'shell.openAssociated', 'shell.openTrash', 'shell.openTerminal'].includes(operation)) {
       const reason = operation === 'icons.resolve' ? 'LocalIconMetadataAndInstalledImageLoaders'
         : operation.startsWith('shell.') ? 'GioDesktopSessionAndAssociation' : 'LinuxKernelSupportAndProcessAccess';

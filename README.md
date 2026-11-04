@@ -60,12 +60,14 @@ The copy and move dialog includes **Compare file contents after copying**, disab
 | Platform | Support |
 | --- | --- |
 | Windows | Primary supported platform, including native Windows integrations |
-| Linux | Supported native capabilities and portable file operations; the system file clipboard and Windows shell context menu are unavailable |
+| Linux | Native file copy, Git index actions, supported desktop capabilities and portable file operations; file clipboard access requires X11 with XFixes or Wayland with ext-data-control-v1. The Windows shell context menu is unavailable |
 | macOS | Not supported |
 
 Published Windows and Linux packages target x64 processors. Linux packages target Ubuntu 24.04 or a compatible newer runtime.
 
 Native folder icons on Linux require GIO, GdkPixbuf and installed image loaders. SVG icons require the librsvg loader. On Ubuntu, these runtime components are provided by `libglib2.0-0t64`, `libgdk-pixbuf-2.0-0`, `librsvg2-common` and `shared-mime-info`.
+
+Linux file clipboard access uses the current extension host's desktop session and requires `libxcb.so.1` with `libxcb-xfixes.so.0`, or `libwayland-client.so.0` with compositor permission to use `ext-data-control-v1`. Compositors without that optional protocol cannot expose the system file clipboard to the extension host. Internal copy and paste remain available. A completed move is confirmed by the file-operation backend; another application consuming a cut selection does not provide a standardized move-completion notification. Clipboard contents published by the extension remain available while their native session is active.
 
 When an operating system function is unavailable, the file manager reports it in its lower status bar when that function is used. VS Code remote hosts, browser use and processor architectures beyond the published packages are not covered by a general compatibility claim.
 
