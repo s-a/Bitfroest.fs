@@ -178,6 +178,12 @@ async function main() {
   const scenes = selected ? catalog.filter(scene => selected.split(',').includes(scene.id)) : catalog;
   if (!scenes.length) throw new Error(`Unknown showcase: ${selected}`);
   for (const scene of scenes.filter(item => !item.status)) for (const folder of scene.paths) if (!fs.statSync(folder).isDirectory()) throw new Error(`Missing demo directory: ${folder}`);
+  if (scenes.some(scene => scene.id === 'xray-hover')) {
+    const sample = path.join(demo, 'left', 'X-Ray-Sample.ps1');
+    const content = '# Sample project report\nparam([string]$Project = "Demo")\n\n$files = @(\n    "Configuration.json",\n    "Readme.md",\n    "Build.ps1"\n)\n\nforeach ($file in $files) {\n    Write-Output "$Project : $file"\n}\n';
+    if (fs.existsSync(sample) && fs.readFileSync(sample, 'utf8') !== content) throw new Error('The X-Ray demo fixture contains unexpected data.');
+    if (!fs.existsSync(sample)) fs.writeFileSync(sample, content);
+  }
   const run = path.join(output, 'runs', `${Date.now()}-${process.pid}`);
   fs.mkdirSync(path.join(run, 'profile/User'), { recursive: true });
   fs.writeFileSync(path.join(run, 'profile/User/settings.json'), JSON.stringify(profileSettings(demo)));
@@ -244,6 +250,7 @@ async function main() {
       await evaluate(() => {
         document.querySelector('dialog[open] #modal-cancel')?.click();
         for (const button of document.querySelectorAll('[data-search-close], [data-lister-close]')) button.click();
+        document.querySelector('[data-xray]')?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
         document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
       });
       for (const [side, directory] of scene.paths.entries()) {
@@ -270,6 +277,15 @@ async function main() {
           }
           (row.querySelector('[data-filename]') || row).click(); pane.querySelector('.list').focus(); return true;
         }, capture.select));
+        if (capture.xrayMode) await evaluate(({ mode, name }) => {
+          const pane = document.querySelector('[data-pane="0"]');
+          pane.querySelector('[data-xray-toggle]').click();
+          if (mode === 'hover') {
+            pane.querySelector('[data-xray-toggle]').click();
+            const row = [...pane.querySelectorAll('[data-file-row][data-id]')].find(row => row.querySelector('[data-cell]')?.title === name || row.title === name);
+            row.dispatchEvent(new window.MouseEvent('mouseover', { bubbles: true }));
+          }
+        }, { mode: capture.xrayMode, name: capture.select.name });
         if (capture.action) await invoke(`bitfroest.${capture.action}`);
         if (capture.command) {
           stage = `${scene.id}/${capture.id}: command ${capture.command}`;
@@ -313,7 +329,7 @@ async function main() {
           const result = await page.call('Runtime.evaluate', { expression: 'JSON.stringify({status:[...document.querySelectorAll(".part.statusbar")].some(e=>e.getBoundingClientRect().height>0),sidebar:[...document.querySelectorAll(".part.sidebar")].some(e=>e.getBoundingClientRect().width>0)})', returnByValue: true });
           const chrome = JSON.parse(result.result.value); return !chrome.status && !chrome.sidebar;
         });
-        await evaluate(async () => { await document.fonts.ready; });
+        await evaluate(async () => { await document.fonts.ready; await new Promise(resolve => window.requestAnimationFrame(() => window.requestAnimationFrame(resolve))); });
         if (capture.format === 'gif') {
           const { recordGesture } = require('./gestures.cjs');
           const file = filename(scene, capture);

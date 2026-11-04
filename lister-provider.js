@@ -4,7 +4,8 @@ const path = require('node:path');
 const { Worker } = require('node:worker_threads');
 const core = require('./media/commander-lister');
 const { createCodepageDecoder } = require('./lister-codepages');
-const BLOCK = 196608, WINDOW = 32768;
+const Progress = require('./media/commander-progress');
+const BLOCK = core.readBlockSize, WINDOW = 32768;
 const signature = stat => [stat.dev, stat.ino, stat.size, stat.mtimeMs, stat.ctimeMs].join(':');
 const abort = () => Object.assign(new Error('Suche abgebrochen.'), { name: 'AbortError' });
 
@@ -87,6 +88,55 @@ function createListerProvider(options = {}) {
       Object.assign(session, core.detect(bytes));
       return { id: session.id, size: session.size, mode: session.mode, encoding: session.encoding, view: await view(session.id) };
     } catch (error) { await close(session.id); throw error; }
+  }
+  async function fullText(original, { maxBytes = 5242880, expectedSize, signal, onProgress = _progress => {}, onStep = (_step, _state) => {} } = {}) {
+    async function step(name, action) {
+      onStep(name, 'start');
+      const result = await action();
+      onStep(name, 'complete'); return result;
+    }
+    const cancelled = () => { if (signal?.aborted || disposed) throw abort(); };
+    cancelled();
+    if (!Number.isSafeInteger(maxBytes) || maxBytes < 1) throw new Error('Invalid X-Ray limit.');
+    if (!options.validate(original)) throw new Error('Invalid X-Ray path.');
+    const stat = await step('inspect', () => io.lstat(original));
+    if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('Invalid X-Ray path.');
+    if (expectedSize !== undefined && stat.size !== expectedSize) throw new Error('X-Ray: Datei geändert. Vorschau erneut aktivieren.');
+    if (stat.size > maxBytes) throw new Error('X-Ray size limit exceeded.');
+    const handle = await step('open', () => io.open(original, 'r'));
+    const session = { path: original, size: stat.size, signature: signature(stat), handle, closed: false };
+    try {
+      await step('initial-check', () => check(session)); cancelled();
+      const chunks = []; let completed = 0;
+      onStep('read', 'start');
+      onProgress(Progress.event({ phase: 'xray-read', overall: Progress.known('bytes', completed, stat.size), current: Progress.known('bytes', completed, stat.size) }));
+      while (completed < stat.size) {
+        cancelled();
+        const length = Math.min(BLOCK, stat.size - completed);
+        const bytes = await step(`read/block-${completed}`, () => read(session, completed, length));
+        chunks.push(bytes); completed += bytes.length;
+        onProgress(Progress.event({ phase: 'xray-read', overall: Progress.known('bytes', completed, stat.size), current: Progress.known('bytes', bytes.length, length) }));
+      }
+      onStep('read', 'complete');
+      await step('final-check', () => check(session)); cancelled();
+      onStep('encoding', 'start');
+      const bytes = Buffer.concat(chunks), sample = bytes.subarray(0, 512);
+      let encoding = 'utf-8';
+      if (bytes[0] === 255 && bytes[1] === 254) encoding = 'utf-16le';
+      else if (bytes[0] === 254 && bytes[1] === 255) encoding = 'utf-16be';
+      else if (sample.includes(0)) {
+        const le = sample.every((byte, index) => index % 2 ? byte === 0 : byte !== 0);
+        const be = sample.every((byte, index) => index % 2 ? byte !== 0 : byte === 0);
+        if (!le && !be) throw new Error('X-Ray: binary content.');
+        encoding = le ? 'utf-16le' : 'utf-16be';
+      } else {
+        try { new TextDecoder('utf-8', { fatal: true }).decode(bytes); }
+        catch { encoding = '0'; }
+      }
+      onStep('encoding', 'complete');
+      const text = await step('decode', () => encoding === '0' ? decoder.text(bytes, encoding) : new TextDecoder(encoding).decode(bytes));
+      cancelled(); return { text, encoding, bytes: completed, identity: session.signature };
+    } finally { session.closed = true; await step('close', () => handle.close()); }
   }
   async function close(id) {
     const session = sessions.get(id);
@@ -194,6 +244,6 @@ function createListerProvider(options = {}) {
     }
     return settings.hex ? parts.join(' ') : (await decoder.text(Buffer.concat(parts), encoding)).replace(/\0/g, ' ');
   }
-  return { open, view, search, copy, close, path: id => get(id).path, validate: id => check(get(id)), async validateEncoding(encoding) { await decoder.decode(Buffer.from([128]), String(encoding)); }, async dispose() { disposed = true; await Promise.all([...sessions.keys()].map(close)); decoder.dispose(); } };
+  return { open, fullText, view, search, copy, close, path: id => get(id).path, validate: id => check(get(id)), async validateEncoding(encoding) { await decoder.decode(Buffer.from([128]), String(encoding)); }, async dispose() { disposed = true; await Promise.all([...sessions.keys()].map(close)); decoder.dispose(); } };
 }
 module.exports = { createListerProvider };

@@ -47,8 +47,8 @@ function inspectIconSource(source, filename = 'source.js') {
 
 function checkProduct() {
   const root = path.resolve(__dirname, '..');
-  const excluded = new Set(['.git', '.vscode', '.agents', '.codex', 'node_modules', 'scripts', 'tests', 'Docs', 'coverage', 'design']);
-  const resources = new Set(['media/commander-icons.js', 'media/workbench-icons.js', 'media/git-status-icons.js', 'media/icon-font-metrics.js', 'media/codicons.css', 'media/icon-metrics.css']);
+  const excluded = new Set(['.git', '.vscode', '.agents', '.codex', '.tmp', 'node_modules', 'scripts', 'tests', 'Docs', 'coverage', 'design']);
+  const resources = new Set(['media/xray-icons.js', 'media/xray-editor.js', 'media/xray-editor.css', 'media/commander-icons.js', 'media/workbench-icons.js', 'media/git-status-icons.js', 'media/icon-font-metrics.js', 'media/codicons.css', 'media/icon-metrics.css']);
   function files(directory, prefix = '') {
     return fs.readdirSync(directory, { withFileTypes: true }).flatMap(item => {
       if (!prefix && excluded.has(item.name)) return [];

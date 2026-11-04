@@ -3,6 +3,12 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const files = {
+  '/xray-editor-view.js': ['xray-editor-view.js', 'text/javascript; charset=utf-8'],
+  '/commander-xray.js': ['commander-xray.js', 'text/javascript; charset=utf-8'],
+  '/xray-icons.js': ['xray-icons.js', 'text/javascript; charset=utf-8'],
+  '/xray-editor.js': ['xray-editor.js', 'text/javascript; charset=utf-8'],
+  '/xray-editor.css': ['xray-editor.css', 'text/css; charset=utf-8'],
+  '/xray-codicon.ttf': ['xray-codicon.ttf', 'font/ttf'],
   '/icon-layout.js': ['icon-layout.js', 'text/javascript; charset=utf-8'],
   '/commander-icons.js': ['commander-icons.js', 'text/javascript; charset=utf-8'],
   '/icon-font-metrics.js': ['icon-font-metrics.js', 'text/javascript; charset=utf-8'],

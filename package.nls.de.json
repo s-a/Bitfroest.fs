@@ -188,5 +188,7 @@
   "shortcuts.command": "Tastaturbelegungen konfigurieren",
   "shortcuts.title": "Tastaturbelegungen",
   "shortcuts.bindings": "Lokale Tastaturbelegungen nach stabiler Belegungskennung. Kombinationen mit | trennen; eine leere Zeichenfolge deaktiviert die Belegung. Fehlende Kennungen verwenden die geerbte Belegung oder den Standard. Bearbeitung über „Tastaturbelegungen konfigurieren“ empfohlen.",
-  "files.useSystemContextMenu.description": "Systemkontextmenü nutzen. Aktiviert das Windows-Systemmenü in Dateilisten. Andernfalls erscheint das Dateiverwaltungsmenü mit Kopieren, Ausschneiden, Einfügen und der Untersuchung von Ordnersperren."
+  "files.useSystemContextMenu.description": "Systemkontextmenü nutzen. Aktiviert das Windows-Systemmenü in Dateilisten. Andernfalls erscheint das Dateiverwaltungsmenü mit Kopieren, Ausschneiden, Einfügen und der Untersuchung von Ordnersperren.",
+  "files.xrayMaxFileSizeMiB.description": "Maximale Dateigröße in MiB für die vollständige, schreibgeschützte X-Ray-Vorschau mit Syntaxhervorhebung und Minimap.",
+  "command.bitfroest.xray.title": "X-Ray-Vorschaumodus wechseln"
 }

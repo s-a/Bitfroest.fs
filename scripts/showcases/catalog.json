@@ -1490,5 +1490,57 @@
     "status": "excluded",
     "reason": "These paths belong to the standalone sample mode and must not be published as real product screenshots.",
     "captures": []
+  },
+  {
+    "id": "xray-click",
+    "parentId": "main",
+    "title": "X-Ray on click",
+    "description": "Inspect a text file in the opposite pane with syntax highlighting and a complete minimap. The preview uses 80% of the available width. Select files by clicking or using the keyboard. Right-click the eye to turn X-Ray off.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "media/commander-xray.js",
+      "lister-provider.js"
+    ],
+    "captures": [
+      {
+        "id": "preview",
+        "select": {
+          "side": 0,
+          "name": "Colors.json"
+        },
+        "xrayMode": "click",
+        "expect": "[data-xray]:has(.monaco-editor .minimap)",
+        "text": "Colors.json"
+      }
+    ]
+  },
+  {
+    "id": "xray-hover",
+    "parentId": "main",
+    "title": "X-Ray Ultra",
+    "description": "X-Ray Ultra updates the opposite preview after pausing over a text file for 200 ms. Syntax highlighting and a complete minimap use 80% of the available width; the source list shows filenames and icons. Right-click the eye to turn X-Ray off.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "media/commander-xray.js",
+      "lister-provider.js"
+    ],
+    "captures": [
+      {
+        "id": "preview",
+        "select": {
+          "side": 0,
+          "name": "X-Ray-Sample.ps1"
+        },
+        "xrayMode": "hover",
+        "expect": "[data-xray]:has(.monaco-editor .minimap)",
+        "text": "X-Ray-Sample.ps1"
+      }
+    ]
   }
 ]

@@ -200,7 +200,7 @@ function activate(context) {
   }
   const fileSettings = () => {
     const settings = vscode.workspace.getConfiguration('bitfroest');
-    return { verifyAfterCopy: settings.get('files.verifyAfterCopy', false) === true, useSystemContextMenu: settings.get('files.useSystemContextMenu', false) === true, countFolderSizeOnSpace: settings.get('files.countFolderSizeOnSpace', true) !== false, selectDirectories: settings.get('files.selectDirectories', true) !== false,
+    return { verifyAfterCopy: settings.get('files.verifyAfterCopy', false) === true, useSystemContextMenu: settings.get('files.useSystemContextMenu', false) === true, xrayMaxFileSizeMiB: settings.get('files.xrayMaxFileSizeMiB', 5), countFolderSizeOnSpace: settings.get('files.countFolderSizeOnSpace', true) !== false, selectDirectories: settings.get('files.selectDirectories', true) !== false,
       iconSize: iconLayout.resolve(settings.get('appearance.iconSize', iconLayout.defaults.size)).size,
       colors: { enabled: settings.get('colors.fileTypes', true), git: settings.get('colors.gitStatus', true), rules: settings.get('colors.rules', defaultFileColors) },
       gitStatus: { iconSizePercent: settings.get('gitStatus.iconSizePercent', iconLayout.defaults.badgeRatio * 100) },
@@ -782,7 +782,7 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
       const startupRows = startupEvents.splice(0).map(event => `<li>[${(event.elapsed / 1000).toFixed(3)} s] ${escape(event.message)}</li>`).join('');
       panel.webview.html = template
         .replace('<html lang="de">', () => `<html lang="de" data-startup-id="${currentStartup.id}" data-document-id="${documentId}">`)
-        .replace('<!--POLICY-->', `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${panel.webview.cspSource} 'nonce-${nonce}'; script-src 'nonce-${nonce}'; img-src ${panel.webview.cspSource} data:; font-src ${panel.webview.cspSource};"><style nonce="${nonce}">${icons.css(panel.webview)}</style>`)
+        .replace('<!--POLICY-->', `<meta name="webview-nonce" content="${nonce}"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${panel.webview.cspSource} 'nonce-${nonce}'; style-src-attr 'unsafe-inline'; script-src 'nonce-${nonce}'; img-src ${panel.webview.cspSource} data:; font-src ${panel.webview.cspSource};"><style nonce="${nonce}">${icons.css(panel.webview)}</style>`)
         .replace('<body>', `<body data-vscode-context='{"preventDefaultContextMenuItems":true}' data-shortcut-settings="${encodeURIComponent(JSON.stringify(shortcutState()))}" data-favorite-settings="${encodeURIComponent(JSON.stringify(favoriteSettings()))}" data-startup-error="${encodeURIComponent(t('Die Dateiverwaltung konnte nicht gestartet werden. Diesen Tab schließen und erneut öffnen.'))}" data-language="${encodeURIComponent(language)}" data-file-settings="${encodeURIComponent(JSON.stringify(fileSettings()))}" data-column-settings="${encodeURIComponent(JSON.stringify(columnSettings()))}" data-icon-theme="${encodeURIComponent(JSON.stringify(icons.associations))}">`)
         .replace('<body ', `<body data-platform="${process.platform}" data-extension-version="${encodeURIComponent(require('./package.json').version)}" data-initial-state="${JSON.stringify(savedState || null).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;')}" `)
         .replace('<body ', `<body data-startup-elapsed="${elapsed}" data-startup-log-labels="${encodeURIComponent(JSON.stringify({ webviewStarted: t('Webview-Initialisierung läuft'), waitingStyle: t('Warten auf Stylesheet: {resource}'), requestedScript: t('Skript angefordert: {resource}'), loadedScript: t('Skript geladen: {resource}'), loadedStyle: t('Stylesheet geladen: {resource}'), failedScript: t('Skript konnte nicht geladen werden: {resource}'), failedStyle: t('Stylesheet konnte nicht geladen werden: {resource}'), initializing: t('Dateiverwaltung wird initialisiert'), settings: t('Einstellungen und Dateisymbole werden eingerichtet'), restore: t('Ordner und Einträge werden wiederhergestellt'), controls: t('Tastaturbedienung wird registriert'), rendering: t('Dateilisten werden aufgebaut') }))}" data-startup-resource="${encodeURIComponent(t('Ressource geladen: {resource}'))}" data-startup-labels="${encodeURIComponent(JSON.stringify({ close: t('Schließen'), details: t('Details'), select: t('Details auswählen'), copy: t('Fehlerdetails kopieren') }))}" `)
@@ -982,6 +982,7 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
     }
     const lister = createListerProvider({ validate: target => provider.contains(target) || extractedSearchFiles.has(target) });
     const listerSides = new Map(), listerJobs = new Map(), listerVersions = [0, 0];
+    let xrayJob = null, xraySession = null;
     async function closeLister(id) {
       let target; try { target = lister.path(id); } catch { /* The session may already be closed. */ }
       await lister.close(id);
@@ -989,9 +990,9 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
         await fs.promises.rm(target, { force: true }); extractedSearchFiles.delete(target); searchCatalog.delete(target);
       }
     }
-    resetListerViews = async () => { listerVersions[0]++; listerVersions[1]++; for (const job of listerJobs.values()) job.abort(); listerJobs.clear(); const ids = [...listerSides.values()]; listerSides.clear(); await Promise.all(ids.map(closeLister)); };
+    resetListerViews = async () => { xraySession = null; xrayJob?.controller.abort(); xrayJob = null; listerVersions[0]++; listerVersions[1]++; for (const job of listerJobs.values()) job.abort(); listerJobs.clear(); const ids = [...listerSides.values()]; listerSides.clear(); await Promise.all(ids.map(closeLister)); };
     let listerDisposed = false;
-    const closeListers = () => { listerDisposed = true; listerVersions[0]++; listerVersions[1]++; for (const job of listerJobs.values()) job.abort(); listerJobs.clear(); listerSides.clear(); return lister.dispose().catch(() => {}); };
+    const closeListers = () => { xraySession = null; xrayJob?.controller.abort(); xrayJob = null; listerDisposed = true; listerVersions[0]++; listerVersions[1]++; for (const job of listerJobs.values()) job.abort(); listerJobs.clear(); listerSides.clear(); return lister.dispose().catch(() => {}); };
     context.subscriptions.push({ dispose: closeListers });
     messagePanel.onDidDispose(closeListers);
     const selectionIO = createSelectionIO(vscode, t, () => panel === messagePanel && !listerDisposed, resolveUncPaths);
@@ -1237,6 +1238,53 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
           for (const encoding of Object.values(values)) await lister.validateEncoding(encoding);
           await vscode.workspace.getConfiguration('bitfroest').update('lister.codepages', values, vscode.ConfigurationTarget.Global);
         } catch (error) { vscode.window.showErrorMessage(t(error.message)); }
+        return;
+      }
+      if (message?.type === 'xray-cancel') {
+        if (xrayJob?.id === message.requestId) { xrayJob.controller.abort(); xrayJob = null; }
+        if (xraySession?.id === message.requestId) xraySession = null;
+        return;
+      }
+      if (message?.type === 'xray-copy' || message?.type === 'xray-open-line') {
+        const session = xraySession;
+        if (!session || message.requestId !== session.id || listerDisposed || panel !== messagePanel) return;
+        try {
+          if (message.type === 'xray-copy') {
+            if (typeof message.text !== 'string' || message.text.length > session.length) return;
+            await writeClipboardText(message.text);
+          } else {
+            if (!Number.isSafeInteger(message.line) || message.line < 1 || message.line > session.lines || session.snapshotId !== filesystemState?.snapshotId || !knownFilePath(session.path)) throw new Error('Invalid X-Ray position.');
+            const stat = await fs.promises.lstat(session.path);
+            if (!stat.isFile() || stat.isSymbolicLink() || [stat.dev, stat.ino, stat.size, stat.mtimeMs, stat.ctimeMs].join(':') !== session.identity) throw new Error('X-Ray: Datei geändert. Vorschau erneut aktivieren.');
+            const document = await vscode.workspace.openTextDocument(vscode.Uri.file(session.path));
+            if (xraySession !== session || listerDisposed || panel !== messagePanel) return;
+            const line = message.line - 1;
+            await vscode.window.showTextDocument(document, { preview: true, selection: new vscode.Range(line, 0, line, 0) });
+          }
+          await messagePanel.webview.postMessage({ type: 'xray-action-result', requestId: session.id, ok: true });
+        } catch (error) { await messagePanel.webview.postMessage({ type: 'xray-action-result', requestId: session.id, ok: false, error: t(error.message) }); }
+        return;
+      }
+      if (message?.type === 'xray-open') {
+        if (typeof message.requestId !== 'string' || !/^xray-[a-f0-9]{16}-\d{1,15}$/.test(message.requestId)) return;
+        xrayJob?.controller.abort();
+        xraySession = null;
+        const job = { id: message.requestId, controller: new AbortController() }; xrayJob = job;
+        const current = () => xrayJob === job && !job.controller.signal.aborted && !listerDisposed && panel === messagePanel;
+        try {
+          if (!filesystemState || message.snapshotId !== filesystemState.snapshotId || typeof message.path !== 'string' || extractedSearchFiles.has(message.path) || !knownFilePath(message.path)) throw new Error('Invalid X-Ray path.');
+          const limit = vscode.workspace.getConfiguration('bitfroest').get('files.xrayMaxFileSizeMiB', 5);
+          const result = await lister.fullText(message.path, { maxBytes: (Number.isInteger(limit) && limit >= 1 && limit <= 100 ? limit : 5) * 1048576, expectedSize: message.expectedSize, signal: job.controller.signal,
+            onProgress: progress => { if (current()) void messagePanel.webview.postMessage({ type: 'xray-progress', requestId: job.id, progress }); },
+            onStep: (step, state) => { if (current()) void messagePanel.webview.postMessage({ type: 'xray-step', requestId: job.id, step, state }); } });
+          if (current()) {
+            xraySession = { id: job.id, path: message.path, identity: result.identity, snapshotId: message.snapshotId, length: result.text.length, lines: result.text.split(/\r\n|\r|\n/).length };
+            await messagePanel.webview.postMessage({ type: 'xray-result', requestId: job.id, ok: true, text: result.text, encoding: result.encoding, bytes: result.bytes });
+          }
+        } catch (error) {
+          const text = ({ 'X-Ray: binary content.': 'Keine Textvorschau verfügbar.', 'X-Ray size limit exceeded.': 'X-Ray: Größenlimit überschritten.', 'Die Datei wurde verändert. Mit F2 neu laden.': 'X-Ray: Datei geändert. Vorschau erneut aktivieren.' })[error.message] || error.message;
+          if (current()) await messagePanel.webview.postMessage({ type: 'xray-result', requestId: job.id, ok: false, error: t(text) });
+        } finally { if (xrayJob === job) xrayJob = null; }
         return;
       }
       if (message?.type === 'lister-demo-copy') {
@@ -1959,7 +2007,7 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
     context.subscriptions.push(vscode.commands.registerCommand(`bitfroest.${action}`, options => { if (panel && panelReady) panel.webview.postMessage({ type: 'action', action, reverseDirectories: options?.reverseDirectories === true }); }));
   }
   context.subscriptions.push(vscode.commands.registerCommand('bitfroest.lister-action', action => { if (panel && panelReady && typeof action === 'string') panel.webview.postMessage({ type: 'action', action: `lister:${action}` }); }));
-  for (const action of ['open-terminal', 'shell-context-menu', 'view', 'edit', 'clipboard-copy', 'clipboard-cut', 'clipboard-paste', 'copy', 'copy-same', 'move', 'mkdir', 'mkdir-other', 'new-file', 'delete', 'delete-alternate', 'delete-permanently', 'pack', 'pack-move', 'test-archives', 'unpack', 'rename', 'select-all', 'invert', 'clear', 'toggle-selection-next', 'open-trash', 'swap', 'reset', 'help', 'new-tab', 'close-tab', 'next-tab', 'previous-tab', 'refresh', 'filter', 'path', 'path-clipboard', 'background-tab', 'open-dir-tab', 'open-dir-other-tab', 'rename-one', 'back', 'forward', 'swap-paths']) {
+  for (const action of ['open-terminal', 'shell-context-menu', 'xray', 'view', 'edit', 'clipboard-copy', 'clipboard-cut', 'clipboard-paste', 'copy', 'copy-same', 'move', 'mkdir', 'mkdir-other', 'new-file', 'delete', 'delete-alternate', 'delete-permanently', 'pack', 'pack-move', 'test-archives', 'unpack', 'rename', 'select-all', 'invert', 'clear', 'toggle-selection-next', 'open-trash', 'swap', 'reset', 'help', 'new-tab', 'close-tab', 'next-tab', 'previous-tab', 'refresh', 'filter', 'path', 'path-clipboard', 'background-tab', 'open-dir-tab', 'open-dir-other-tab', 'rename-one', 'back', 'forward', 'swap-paths']) {
     context.subscriptions.push(vscode.commands.registerCommand(`bitfroest.${action}`, options => {
       if (panel && panelReady) panel.webview.postMessage({ type: 'action', action, ...(options?.reverseDirectories === true ? { reverseDirectories: true } : {}), ...(['clipboard-copy', 'clipboard-cut', 'clipboard-paste'].includes(action) && ['files', 'folder', 'fileBackground'].includes(options?.webviewSection) ? { contextSelection: { directory: options.directory, ids: options.ids, snapshotId: options.snapshotId } } : {}) });
     }));

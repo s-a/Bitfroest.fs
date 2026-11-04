@@ -1470,6 +1470,7 @@ function harness(t, options = {}) {
   let status, serializer;
   const tabGroups = [], tabListeners = new Set(), groupListeners = new Set();
   const vscode = {
+    Range: class { constructor(startLine, startCharacter, endLine, endCharacter) { this.start = { line: startLine, character: startCharacter }; this.end = { line: endLine, character: endCharacter }; } },
     version: options.vscodeVersion || '1.144.1',
     extensions: { getExtension: id => id === 'vscode.git' && options.gitExtension ? { activate: async () => options.gitExtension } : undefined },
     env: { language: options.language || 'de', remoteName: options.remoteName, openExternal: async uri => { calls.push({ id: 'openExternal', args: [uri.toString()] }); return true; }, clipboard: { writeText: async text => { clipboardCalls.push({ action: 'writeText', text }); await options.writeClipboardText?.(text); }, readText: async () => { clipboardCalls.push({ action: 'readText' }); if (options.readClipboardText) return options.readClipboardText(); return options.clipboardText || ''; } } },
@@ -2139,7 +2140,7 @@ test('cancelled favorite input returns through the real host refresh protocol wi
   const view = require('./support/webview.cjs').createApp(t, initial, { html: panel.webview.html });
   const policy = view.document.querySelector('meta[http-equiv="Content-Security-Policy"]').content;
   assert.match(policy, /script-src 'nonce-/);
-  assert.doesNotMatch(policy, /unsafe-inline/);
+  assert.doesNotMatch(/script-src ([^;]+)/.exec(policy)[1], /unsafe-inline/);
   await panel.receive(view.messages.find(message => message.type === 'app-ready'));
   const lists = [...view.document.querySelectorAll('.list')];
   const row = view.row('a.txt');
@@ -2190,6 +2191,29 @@ test('favorite writes preserve configuration scopes and removal uses the owning 
   const removed = app.updateCalls.filter(call => call.key === 'favorites.items').at(-1);
   assert.equal(removed.target, 2);
   assert.deepEqual(removed.value, []);
+});
+
+test('X-Ray host opens known text, copies selections and opens the requested source line', async t => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'xray-host-'));
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const original = path.join(directory, 'sample.ps1').replace(/\\/g, '/'); fs.writeFileSync(original, 'first\nsecond\nthird');
+  const initial = clipboardFixture();
+  initial.folders['C:/tmp'][0] = { id: 'a', name: 'sample.ps1', type: 'text', fsSource: original, size: fs.statSync(original).size };
+  const app = harness(t, { filesystemLoad: async () => initial, containsPath: candidate => candidate.startsWith(directory.replace(/\\/g, '/') + '/') });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  const requestId = 'xray-0123456789abcdef-1';
+  await panel.receive({ type: 'xray-open', requestId, path: original, snapshotId: initial.snapshotId });
+  const result = panel.messages.find(message => message.type === 'xray-result' && message.requestId === requestId);
+  assert.equal(result.ok, true); assert.equal(result.text, 'first\nsecond\nthird');
+  await panel.receive({ type: 'xray-copy', requestId, text: 'second' });
+  assert.equal(app.clipboardCalls.at(-1)?.text, 'second');
+  await panel.receive({ type: 'xray-open-line', requestId, line: 2 });
+  assert.equal(app.textDocuments.length, 1);
+  const opened = app.textEditors.find(editor => editor.options?.selection);
+  assert.ok(opened); assert.equal(opened.options.selection.start.line, 1);
+  await panel.receive({ type: 'xray-cancel', requestId });
+  await panel.receive({ type: 'xray-open-line', requestId, line: 1 });
+  assert.equal(app.textDocuments.length, 1);
 });
 
 test('lister host protocol opens only known files, renders generated HTML, copies matches and closes on Escape', async t => {
@@ -2383,6 +2407,8 @@ test('generated webview HTML authorizes and resolves every startup script includ
   const policy = document.querySelector('meta[http-equiv="Content-Security-Policy"]').content;
   const nonce = /script-src 'nonce-([^']+)'/.exec(policy)?.[1];
   assert.ok(nonce);
+  assert.match(policy, /style-src-attr 'unsafe-inline'/, 'Monaco line layout requires style attributes while scripts remain nonce protected');
+  assert.equal(document.querySelector('meta[name="webview-nonce"]').content, nonce);
   const bootstrap = document.querySelector('head script:not([src])');
   assert.ok(bootstrap, 'the error handler must not depend on loading an external script');
   assert.equal(bootstrap.getAttribute('nonce'), nonce);

@@ -318,9 +318,24 @@
         if (!container.isConnected) { record.api.destroy(); instances.delete(container); }
       }
     }
+    function compact(section, enabled) {
+      const record = instances.get(section?.querySelector('[data-file-grid]'));
+      if (!record) return;
+      const changed = Boolean(record.compactState) !== enabled;
+      if (enabled && !record.compactState) record.compactState = record.api.getColumnState();
+      if (!enabled && !record.compactState) return;
+      record.updating = true;
+      try {
+        if (enabled) {
+          const name = record.p.columns.find(column => column.key === 'name' || options.isFilename(column));
+          record.api.applyColumnState({ state: record.p.columns.map(column => ({ colId: column.key, hide: column !== name, flex: column === name ? 1 : null })) });
+        } else { record.api.applyColumnState({ state: record.compactState, applyOrder: true }); record.compactState = null; }
+        if (changed) record.api.refreshCells({ force: true });
+      } finally { record.updating = false; }
+    }
     function dispose() { for (const record of instances.values()) { record.addressHost?.remove(); record.api.destroy(); } instances.clear(); }
     root.addEventListener('pagehide', dispose, { once: true });
-    return { mount, sync, ensure, prepareAutosize, remeasure, prune, dispose, api };
+    return { mount, sync, ensure, prepareAutosize, remeasure, compact, prune, dispose, api };
   }
   root.CommanderGrid = { create, parentId };
 })(typeof globalThis === 'object' ? globalThis : this);

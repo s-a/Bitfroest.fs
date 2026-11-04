@@ -5,6 +5,12 @@
 })(typeof globalThis === 'object' ? globalThis : this, function () {
   'use strict';
   const pairs = {
+    'X-Ray aus': 'X-Ray off',
+    'X-Ray bei Klick': 'X-Ray on click',
+    'X-Ray Ultra: Vorschau beim Darüberfahren': 'X-Ray Ultra: preview on hover',
+    'X-Ray: Größenlimit überschritten.': 'X-Ray: file size limit exceeded.',
+    'X-Ray konnte nicht geladen werden.': 'X-Ray could not be loaded.',
+    'X-Ray: Datei geändert. Vorschau erneut aktivieren.': 'X-Ray: file changed. Activate the preview again.',
     'Abweichende Quellmerkmale': 'Mismatched source fields',
     'Erwartet': 'Expected',
     'Gelesen': 'Observed',

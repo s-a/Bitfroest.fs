@@ -202,8 +202,8 @@
       "licenses/BOOTSTRAP-ICONS-MIT.txt"
     ],
     "description": {
-      "de": "Neun lokal eingebundene SVG-Symbole: check-circle-fill, exclamation-circle-fill, plus-circle-fill, dash-circle-fill, question-circle-fill, slash-circle-fill, exclamation-triangle-fill, folder-fill und git. SVG-Hüllen sind für Zugänglichkeit angepasst; Pfadgeometrien und currentColor-Füllung bleiben unverändert.",
-      "en": "Nine locally embedded SVG icons: check-circle-fill, exclamation-circle-fill, plus-circle-fill, dash-circle-fill, question-circle-fill, slash-circle-fill, exclamation-triangle-fill, folder-fill and git. SVG wrappers are adapted for accessibility; path geometries and currentColor fill remain unchanged."
+      "de": "Zwölf lokal eingebundene SVG-Symbole: check-circle-fill, exclamation-circle-fill, plus-circle-fill, dash-circle-fill, question-circle-fill, slash-circle-fill, exclamation-triangle-fill, folder-fill, git, eye, eye-fill und eye-slash-fill. SVG-Hüllen sind für Zugänglichkeit angepasst; Pfadgeometrien und currentColor-Füllung bleiben unverändert.",
+      "en": "Twelve locally embedded SVG icons: check-circle-fill, exclamation-circle-fill, plus-circle-fill, dash-circle-fill, question-circle-fill, slash-circle-fill, exclamation-triangle-fill, folder-fill, git, eye, eye-fill and eye-slash-fill. SVG wrappers are adapted for accessibility; path geometries and currentColor fill remain unchanged."
     }
   },
   {
@@ -242,7 +242,9 @@
     "license": "MIT-style permission notice",
     "licenseUrl": "https://gitlab.freedesktop.org/wayland/wayland-protocols",
     "source": "https://gitlab.freedesktop.org/wayland/wayland-protocols",
-    "files": ["licenses/WAYLAND-DATA-CONTROL.txt"],
+    "files": [
+      "licenses/WAYLAND-DATA-CONTROL.txt"
+    ],
     "description": {
       "de": "Protokollmetadaten für die native Linux-Dateizwischenablage; aus ext-data-control-v1 angepasst.",
       "en": "Protocol metadata for the native Linux file clipboard, adapted from ext-data-control-v1."
@@ -255,7 +257,9 @@
     "license": "MIT-style permission notice",
     "licenseUrl": "https://github.com/swaywm/wlr-protocols/blob/master/unstable/wlr-data-control-unstable-v1.xml",
     "source": "https://github.com/swaywm/wlr-protocols",
-    "files": ["licenses/WAYLAND-DATA-CONTROL.txt"],
+    "files": [
+      "licenses/WAYLAND-DATA-CONTROL.txt"
+    ],
     "description": {
       "de": "Protokollmetadaten für die native Linux-Dateizwischenablage; aus wlr-data-control-unstable-v1 angepasst.",
       "en": "Protocol metadata for the native Linux file clipboard, adapted from wlr-data-control-unstable-v1."
@@ -273,6 +277,22 @@
     "description": {
       "de": "Lokal eingebundene Kreisformen des SVG-Symbols drag_click, sharp, FILL 1, Gewicht 400, optische Größe 48. Eingebetteter Pfeil entfernt; Kreisformen mit weißer Füllung und schwarzer Kontrastkontur. Der Systemcursor bleibt unverändert.",
       "en": "Locally bundled circle paths from the drag_click SVG symbol, sharp, FILL 1, weight 400, optical size 48. Embedded arrow omitted; circles use a white fill and black contrast outline. The system cursor remains unchanged."
+    }
+  },
+  {
+    "name": "Monaco Editor",
+    "version": "0.55.1",
+    "author": "Microsoft Corporation",
+    "license": "MIT",
+    "licenseUrl": "https://github.com/microsoft/monaco-editor/blob/v0.55.1/LICENSE",
+    "source": "https://github.com/microsoft/monaco-editor/tree/v0.55.1",
+    "files": [
+      "licenses/MONACO-EDITOR-LICENSE.txt",
+      "media/xray-editor.js.LEGAL.txt"
+    ],
+    "description": {
+      "de": "Schreibgeschützte X-Ray-Codeansicht mit Syntaxhervorhebung und Minimap. Gebündelte Stylesheets übernehmen die Nonce der Webview; Grammatikimporte lassen ungenutzte Editorintegrationen aus.",
+      "en": "Read-only X-Ray code view with syntax highlighting and minimap. Bundled stylesheets use the webview nonce; grammar imports omit unused editor integrations."
     }
   }
 ]

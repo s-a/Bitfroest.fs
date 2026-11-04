@@ -722,3 +722,17 @@ body[data-file-drag-cursor="none"] * { cursor: no-drop !important; }
 .file-drag-count { position: static; display: block; width: max-content; margin: 2px 0 0 auto; padding: 0 4px; font-weight: bold; background: var(--vscode-badge-background, var(--surface)); color: var(--vscode-badge-foreground, var(--text)); }
 .file-drag-more { padding: 0 4px; background: var(--vscode-list-activeSelectionBackground, var(--surface)); }
 .native-file-drag-preview { position: fixed; left: -10000px; top: 0; pointer-events: none; }
+
+.pane-controls { display:flex; align-items:center; flex-shrink:0; gap:4px; }
+.pane-controls button { display:flex; align-items:center; justify-content:center; width:22px; height:22px; padding:3px; border:0; background:transparent; color:var(--vscode-icon-foreground,var(--text)); }
+.pane-controls button:hover { background:var(--vscode-toolbar-hoverBackground); }
+.pane-controls button:focus-visible { outline:1px solid var(--vscode-focusBorder); }
+.pane-controls svg { width:16px; height:16px; fill:currentColor; }
+.pane-metrics { display:flex; justify-content:flex-end; gap:8px; margin-left:auto; min-width:0; overflow:hidden; text-align:right; }
+.pane-metrics > span { overflow:hidden; text-overflow:ellipsis; }
+.pane.has-xray > :not([data-xray]) { display:none !important; }
+[data-xray] { display:flex; flex:1; flex-direction:column; min-width:0; min-height:0; overflow:hidden; color:var(--vscode-editor-foreground,var(--text)); background:var(--vscode-editor-background,var(--bg)); }
+[data-xray] > p { padding:12px; white-space:normal; overflow-wrap:anywhere; }
+.xray-title { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding:5px 8px; border-bottom:1px solid var(--line); }
+.xray-editor { flex:1; min-height:0; min-width:0; position:relative; }
+.xray-hover-line { background:var(--vscode-editor-hoverHighlightBackground,var(--vscode-list-hoverBackground)); }

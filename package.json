@@ -2,7 +2,7 @@
   "name": "bitfroest-fs-prototype",
   "displayName": "Bitfroest.fs (Beta)",
   "description": "%extension.description%",
-  "version": "0.0.50",
+  "version": "0.0.51",
   "preview": true,
   "publisher": "bitfroest",
   "author": "Stephan Ahlf",
@@ -1300,6 +1300,11 @@
         "command": "bitfroest.configureShortcuts",
         "title": "%shortcuts.command%",
         "category": "Bitfroest.fs"
+      },
+      {
+        "command": "bitfroest.xray",
+        "title": "%command.bitfroest.xray.title%",
+        "category": "Bitfroest.fs"
       }
     ],
     "submenus": [
@@ -1803,6 +1808,14 @@
               "shift_jis"
             ],
             "description": "%files.commentEncoding.description%"
+          },
+          "bitfroest.files.xrayMaxFileSizeMiB": {
+            "type": "integer",
+            "default": 5,
+            "minimum": 1,
+            "maximum": 100,
+            "scope": "window",
+            "description": "%files.xrayMaxFileSizeMiB.description%"
           }
         }
       },
@@ -3787,19 +3800,21 @@
     "test:architecture": "node --test tests/runtime-architecture-policy.test.js tests/product-runtime-architecture.test.js tests/icon-architecture.test.js tests/product-icons.test.js",
     "test:native": "node --test tests/native-directory.test.js tests/native-terminal.test.js tests/native-api.test.js tests/native-binding.test.js tests/native-windows-queries.test.js tests/native-case-rename.test.js tests/native-network-direct.test.js tests/native-icons-api.test.js tests/native-desktop-api.test.js tests/native-window-actions.test.js tests/native-window.test.js tests/native-locks-api.test.js tests/native-async-lifecycle.test.js tests/native-clipboard-direct.test.js tests/native-copy.test.js tests/native-copy-session.test.js tests/native-copy-progress.test.js tests/native-copy-contract.test.js tests/native-copy-windows.test.js tests/native-copy-network.test.js tests/native-default-routing.test.js tests/native-transfer-integration.test.js tests/git-status-native.test.js",
     "test:native:linux": "node scripts/test-linux.cjs",
-    "vscode:prepublish": "npm run check:progress && npm run check:operations && npm run check:icons && npm run test:architecture",
-    "coverage": "c8 --check-coverage --lines=95 --statements=95 --functions=95 --branches=90 --all --include=zip-*.js --include=search-archives.js --include=search-metadata.js --include=search-provider.js --include=file-search-worker.js --include=file-search.js --include=lister-provider.js --include=lister-codepages.js --include=lister-search-worker.js --include=git-status-engine.js --include=git-status-paths.js --include=git-status-provider.js --include=git-status-worker.js --include=network-paths.js --include=selection-io.js --include=startup-paths.js --include=extension.js --include=operation-errors.js --include=open-trash.js --include=native-copy.js --include=native-directory.js --include=native-shell-menu.js --include=folder-locks.js --include=folder-locks-posix.js --include=lock-inspector.js --include=native-rename.js --include=clipboard-provider.js --include=icon-theme.js --include=filesystem-icons.js --include=filesystem-provider.js --include=pe-file-version.js --include=content-comments.js --include=readonly-files.js --include=media/*.js --reporter=text --reporter=html --reporter=lcov --reporter=json-summary --reports-dir=coverage npm test",
+    "vscode:prepublish": "npm run build:xray && npm run check:progress && npm run check:operations && npm run check:icons && npm run test:architecture",
+    "coverage": "c8 --check-coverage --lines=95 --statements=95 --functions=95 --branches=90 --all --exclude=media/xray-editor.js --include=zip-*.js --include=search-archives.js --include=search-metadata.js --include=search-provider.js --include=file-search-worker.js --include=file-search.js --include=lister-provider.js --include=lister-codepages.js --include=lister-search-worker.js --include=git-status-engine.js --include=git-status-paths.js --include=git-status-provider.js --include=git-status-worker.js --include=network-paths.js --include=selection-io.js --include=startup-paths.js --include=extension.js --include=operation-errors.js --include=open-trash.js --include=native-copy.js --include=native-directory.js --include=native-shell-menu.js --include=folder-locks.js --include=folder-locks-posix.js --include=lock-inspector.js --include=native-rename.js --include=clipboard-provider.js --include=icon-theme.js --include=filesystem-icons.js --include=filesystem-provider.js --include=pe-file-version.js --include=content-comments.js --include=readonly-files.js --include=media/*.js --reporter=text --reporter=html --reporter=lcov --reporter=json-summary --reports-dir=coverage npm test",
     "lint": "eslint . --max-warnings=0",
     "check:operations": "node scripts/check-operations.cjs",
     "check:progress": "node scripts/check-progress.cjs",
     "check:zip": "node --check zip-codecs.js && node --check zip-editor.js && node --check zip-filter.js && node --check zip-io.js && node --check zip-operations.js && node --check zip-password.js && node --check zip-provider.js && node --check zip-filesystem.js",
     "generate:file-colors": "node scripts/generate-file-color-defaults.cjs",
     "generate:icons": "node scripts/generate-icon-metrics.cjs",
-    "check:icons": "node scripts/generate-icon-metrics.cjs --check && node scripts/check-icons.cjs && node --test tests/icon-layout.test.js tests/icon-spinner.test.js tests/icon-metrics.test.js tests/commander-icons.test.js tests/product-icons.test.js tests/icon-architecture.test.js"
+    "check:icons": "node scripts/generate-icon-metrics.cjs --check && node scripts/check-icons.cjs && node --test tests/icon-layout.test.js tests/icon-spinner.test.js tests/icon-metrics.test.js tests/commander-icons.test.js tests/product-icons.test.js tests/icon-architecture.test.js",
+    "build:xray": "node scripts/build-xray.cjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "c8": "^12.0.0",
+    "esbuild": "0.25.12",
     "eslint": "^10.13.0",
     "globals": "^17.13.0",
     "jsdom": "^30.1.3",
@@ -3810,6 +3825,7 @@
   ],
   "dependencies": {
     "@zip.js/zip.js": "2.24.0",
-    "ag-grid-community": "36.2.0"
+    "ag-grid-community": "36.2.0",
+    "monaco-editor": "0.55.1"
   }
 }

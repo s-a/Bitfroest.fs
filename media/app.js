@@ -588,6 +588,12 @@
     }
     updateDirectoryActivity();
   }
+  /** @param {import('./commander-progress').StatusSnapshot | null} snapshot */
+  function xrayTask(id, label, snapshot) {
+    if (!snapshot) statusTasks.delete(id);
+    else statusTasks.set(id, { label, startedAt: snapshot.startedAt, progress: snapshot, snapshot: Progress.readStatus(snapshot) });
+    updateDirectoryActivity();
+  }
   function beginDirectoryRefresh(side) {
     iconGeneration++;
     for (const key of requestedIcons) if (!nativeIcons.has(key)) requestedIcons.delete(key);
@@ -1247,7 +1253,7 @@
         if (!activities.length) activities.push(t(refreshPlan.filesystemDone ? 'Git-Abfrage' : 'Dateiliste bereitstellen'));
       }
     }
-    for (const task of statusTasks.values()) { activities.push(task.label); if (!refreshPlan) measured = task.progress; }
+    for (const task of statusTasks.values()) { activities.push(task.label); if (!refreshPlan) { if (task.snapshot) planned = task.snapshot; else measured = task.progress; } }
     statusbar.setActivity(activities.join(' | '), planned || (measured ? plannedStatus(measured) : null));
     if (!measured && !transferJob && transferStatusPlan?.snapshot().plan.state !== 'running') statusPlans.clear();
   }
@@ -1797,7 +1803,8 @@
       const file = displayFile(original, p);
       const result = column.field === undefined ? null : columnModel.evaluateColumnTemplate(file, column.field);
       const unavailable = result?.unavailableFields;
-      const text = unavailable?.length ? t('Nicht verfügbar: {field}', { field: unavailable.join(', ') }) : columns.displayValue(file, column.field === undefined ? column.key : column);
+      const compactName = isFilenameColumn(column) && Number(document.querySelector('#panes').dataset.xraySource) === state.panes.indexOf(p) && document.querySelector('#panes').hasAttribute('data-xray-source');
+      const text = compactName ? file.name : unavailable?.length ? t('Nicht verfügbar: {field}', { field: unavailable.join(', ') }) : columns.displayValue(file, column.field === undefined ? column.key : column);
       const isName = isFilenameColumn(column);
       const content = isName ? `<span class="filename">${icon(file, currentPath(p))}<span data-filename${file.type === 'link' ? ' class="is-link"' : ''}><span class="filename-text">${highlight(text, p.filter)}</span></span>${resultView(p) ? `<span data-result-source class="result-source" title="${escape(displayPath(file.fsSource))}">${escape(displayPath(parent(file.fsSource)))}</span>` : ''}</span>` : highlight(text, column.key === 'type' && p.filter.startsWith('.') ? p.filter.slice(1) : p.filter);
       return content;
@@ -1824,7 +1831,6 @@
     tabs.ensure(p);
     if (!hasParent(p)) { p.selected = p.selected.filter(id => id !== parentId); if (p.cursor === parentId) p.cursor = null; }
     prepareColumns(p);
-    const marked = selectedFor(p);
     const empty = !p.columns.some(column => column.visible !== false) ? t('Keine sichtbaren Spalten') : !(p.searchFilter && p.filter ? search.matches(files(p), p.filter) : files(p)).length ? t('Keine Einträge') : '';
     return ui`<section class="pane ${state.active === index ? 'active' : ''}" data-pane="${index}" data-tab-key="${p.tabStates[p.tab].id}" data-directory="${escape(currentPath(p))}" aria-label="${index === 0 ? t('Linke') : t('Rechte')} Dateiliste">
       <div class="pane-label"><span>${index === 0 ? t('LINKE') : t('RECHTE')} DATEILISTE</span><span>${state.active === index ? t('AKTIV') : t('GEGENSEITE')}</span></div>
@@ -1832,7 +1838,11 @@
       <div class="address-fallback" ${p.columns.some(column => column.visible !== false) ? 'hidden' : ''}>${!p.columns.some(column => column.visible !== false) ? pathbarMarkup(p, index) : ''}</div>
       <div class="pane-jobs" role="region" aria-label="${escape(t('Aufträge'))}" hidden></div>
       <div class="list" tabindex="0" aria-label="Dateien ${index === 0 ? t('links') : t('rechts')}"><div class="file-table" data-file-grid></div>${empty ? `<div class="empty grid-empty">${empty}</div>` : ''}</div>
-      <div class="pane-status"><span><strong>${marked.length ? ui`${marked.length} markiert` : count('file', files(p).filter(f => f.type !== 'folder').length)}</strong>${searchSummary(p)} · ${count('folder', files(p).filter(f => f.type === 'folder').length)}</span><span>${size((marked.length ? marked : files(p)).reduce((sum, f) => sum + displayBytes(f, p), 0))}</span></div></section>`;
+      <div class="pane-status">${footerMarkup(p)}</div></section>`;
+  }
+  function footerMarkup(p) {
+    const marked = selectedFor(p);
+    return ui`<div class="pane-controls" data-vscode-context='{"preventDefaultContextMenuItems":true}'><button type="button" data-xray-toggle data-mode="off" aria-label="X-Ray" title="X-Ray">${window.CommanderIcons.svg('xray', 'eye-slash-fill')}</button></div><div class="pane-metrics"><span><strong>${marked.length ? ui`${marked.length} markiert` : count('file', files(p).filter(f => f.type !== 'folder').length)}</strong>${searchSummary(p)} · ${count('folder', files(p).filter(f => f.type === 'folder').length)}</span><span>${size((marked.length ? marked : files(p)).reduce((sum, f) => sum + displayBytes(f, p), 0))}</span></div>`;
   }
   function searchSummary(p) {
     if (!p.searchFilter) return '';
@@ -1853,7 +1863,7 @@
       if (!file) return;
       fileGrid.api(section)?.refreshCells({ rowNodes: [fileGrid.api(section).getRowNode(String(file.id))].filter(Boolean), force: true });
       const marked = selectedFor(p);
-      section.querySelector('.pane-status > span:last-child').textContent = size((marked.length ? marked : files(p)).reduce((sum, file) => sum + displayBytes(file, p), 0));
+      section.querySelector('.pane-metrics > span:last-child').textContent = size((marked.length ? marked : files(p)).reduce((sum, file) => sum + displayBytes(file, p), 0));
     });
   }
   function refreshSelection() {
@@ -1882,14 +1892,15 @@
         row.classList.toggle('focused', p.cursor === id);
         row.setAttribute('aria-selected', String(selectedIds.has(id)));
       });
-      const marked = selectedFor(p);
-      section.querySelector('.pane-status').innerHTML = ui`<span><strong>${marked.length ? ui`${marked.length} markiert` : count('file', files(p).filter(f => f.type !== 'folder').length)}</strong>${searchSummary(p)} · ${count('folder', files(p).filter(f => f.type === 'folder').length)}</span><span>${size((marked.length ? marked : files(p)).reduce((sum, f) => sum + displayBytes(f, p), 0))}</span>`;
+      section.querySelector('.pane-status').innerHTML = footerMarkup(p);
     });
     lister.updateMenu();
+    xray.sync();
     persist();
   }
   const actions = [['F2', t('Umbenennen'), 'rename-one'], ['F3', t('Anzeigen'), 'view'], ['F4', t('Bearbeiten'), 'edit'], ['F5', t('Kopieren'), 'copy'], ['F6', t('Verschieben'), 'move'], ['F7', t('Neuer Ordner'), 'mkdir'], ['F8', t('Löschen'), 'delete']];
   const lister = window.CommanderListerView.create({ host, state: () => state, t, escape, modal, restore: render, edit: file => preview(file, true), notify: toast, report: reportStatus, remember: rememberScroll, task: statusTask });
+  const xray = window.CommanderXray.create({ host, t, state: () => state, currentPath, files, isArchive: isArchiveLocation, settings: () => fileSettings, task: xrayTask, notify: toast, beforeStart: () => { document.querySelectorAll("[data-lister-close]").forEach(button => button.click()); }, compact: (side, enabled) => fileGrid.compact(document.querySelector(`[data-pane="${side}"]`), enabled), restoreFocus: side => { state.active = side; document.querySelector(`[data-pane="${side}"] .list`)?.focus({ preventScroll: true }); } });
   const fileSearch = window.CommanderFileSearch.create({ host, t, escape, report: reportStatus, task: statusTask,
     context: () => ({ path: currentPath(pane()), selected: selected().map(row => row.fsSource || join(currentPath(pane()), row.name)), side: state.active, state }),
     apply: (fresh, rows, source, id, name) => {
@@ -1994,6 +2005,7 @@
       fileGrid.mount(section, p, visible(p));
     });
     lister.mount();
+    xray.mount();
     if (focusList) { if (lister.has(state.active)) lister.focus(); else document.querySelector('.pane.active .list')?.focus({ preventScroll: true }); }
     if (focusList && pane().filter && !lister.has(state.active)) {
       const current = files(pane()).find(file => file.id === pane().cursor);
@@ -2429,7 +2441,7 @@
   function removeTree(path, archive = false) { Object.keys(state.folders).filter(key => inTree(key, path, archive)).forEach(key => delete state.folders[key]); }
   function preview(file, edit) {
     if (file.type === 'folder' || edit && file.type === 'archive' && !state.realFilesystem) { openFile(file); return; }
-    if (!edit) { lister.open(state.active, file); return; }
+    if (!edit) { xray.stop(); lister.open(state.active, file); return; }
     if (host) {
       hostAction(edit ? 'edit' : 'preview', { content: file.content || '', language: file.type === 'markdown' ? 'markdown' : 'plaintext', ...(state.realFilesystem ? { path: file.fsSource } : {}) });
       return;
@@ -3183,6 +3195,7 @@
     };
   }
   function run(command, reverseDirectories = false, contextSelection) {
+    if (command === "xray") { document.querySelector(`[data-pane="${state.active}"] [data-xray-toggle]`)?.click(); return; }
     clearPendingRenameCue(); lastNameClick = null;
     if (['git-diff', 'git-history', 'git-untrack', 'git-ignore'].includes(command)) { requestGitDiff(contextSelection, command); return; }
     if (typeof command !== 'string') return;
@@ -3293,6 +3306,7 @@
   }
   document.addEventListener('click', event => {
     const target = event.target;
+    if (target.closest('[data-xray]')) return;
     if (target.closest('[data-resize]') || target.closest('.inline-rename')) return;
     clearPendingRenameCue();
     const previousNameClick = lastNameClick; lastNameClick = null;
@@ -3741,10 +3755,10 @@
       return;
     }
   });
-  $('#panes').addEventListener('focusin', event => { const section = event.target.closest('[data-pane]'); if (section) { state.active = Number(section.dataset.pane); refreshSelection(); lister.updateMenu(); } });
+  $('#panes').addEventListener('focusin', event => { if (event.target.closest('[data-xray]')) return; const section = event.target.closest('[data-pane]'); if (section) { state.active = Number(section.dataset.pane); refreshSelection(); lister.updateMenu(); } });
   document.addEventListener('keydown', event => {
     if (event.target.closest('.ag-header') && !event.target.closest('[data-history],.pathbar')) return;
-    if (event.target.closest('[data-lister]') && !$('#modal').open) return;
+    if (event.target.closest('[data-lister],[data-xray]') && !$('#modal').open) return;
     if (event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'd' && event.target.closest('.list') && !$('#modal').open) {
       event.preventDefault(); showFavorites(document.querySelectorAll('[data-favorites]')[state.active]); return;
     }
@@ -4168,7 +4182,7 @@
       if (!retained) { gitBindings.clear(); gitDirectories.clear(); }
       gitMenuSelection = null; pendingGitDiff = null;
       fileSearch.dispose();
-      if (event.data.resetViews) lister.dispose();
+      if (event.data.resetViews) { lister.dispose(); xray.stop(); }
       refreshingFilesystem = false; refreshRequestId = null; refreshStages.clear(); refreshPlan = null;
       if (!retained) { cancelFolderSizes(); folderSizes.clear(); }
       transferCheckpoint?.cancel(); transferCheckpoint = null;
@@ -4293,7 +4307,8 @@
   });
   $('#panes').addEventListener('contextmenu', event => {
     if (event.target.closest('input,textarea,[contenteditable="true"]')) return;
-    if (event.target.closest('[data-lister]')) return;
+    if (event.target.closest('.pane-status')) { event.preventDefault(); event.stopPropagation(); return; }
+    if (event.target.closest('[data-lister],[data-xray]')) return;
     const section = event.target.closest('[data-pane]');
     if (!section) return;
     state.active = Number(section.dataset.pane);
@@ -4336,7 +4351,7 @@
     const focused = document.activeElement;
     const viewing = Boolean(focused?.closest('.lister')) && !$('#modal').open;
     const searching = Boolean(focused?.closest('[data-file-search]'));
-    const editing = searching || $('#modal').open || !viewing && Boolean(focused?.matches('input,textarea,select,[contenteditable="true"]'));
+    const editing = Boolean(focused?.closest('[data-xray]')) || searching || $('#modal').open || !viewing && Boolean(focused?.matches('input,textarea,select,[contenteditable="true"]'));
     return { tabFocus: !editing && !viewing && !focused?.closest('.operation-error') && Boolean(focused?.closest('[data-pane]')), searchFocus: searching, searchResultsFocus: Boolean(searching && focused?.matches('[data-search-results]')), searchResults: Boolean(resultView(pane())), listerFocus: Boolean(viewing && focused?.matches('textarea')), textInput: editing, listFocus: !editing && !focused?.closest('.pathbar') && Boolean(focused?.closest('.list')), conflictDialog: Boolean(conflictAction && $('#modal').open), inlineRenameInput: Boolean(focused?.matches('.inline-rename')), fileDialog: Boolean(searching || $('#modal').open || focused?.matches('.inline-rename') || focused?.closest('.operation-error')), transferNameInput: Boolean($('#modal').open && focused?.matches('#value[data-transfer-name]')) };
   }
   function reportFocus() {

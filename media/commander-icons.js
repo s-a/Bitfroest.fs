@@ -15,7 +15,7 @@
       return ` ${name}="${escape(value)}"`;
     }).join('');
   }
-  for (const [collection, registry] of [['workbench', root.CommanderWorkbenchIcons], ['status', root.CommanderStatusIcons]]) {
+  for (const [collection, registry] of [['workbench', root.CommanderWorkbenchIcons], ['status', root.CommanderStatusIcons], ['xray', root.CommanderXrayIcons]]) {
     for (const [name, source] of Object.entries(registry || {})) {
       const template = document.createElement('template'); template.innerHTML = source;
       const svg = template.content.firstElementChild;

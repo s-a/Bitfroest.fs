@@ -34,6 +34,8 @@ The default shortcut is `Ctrl+Alt+Shift+F12` on Windows and Linux. Repeating the
 
 Shortcuts apply while the file manager has focus. Text fields and code editors keep their own bindings. **Configuration → Keyboard shortcuts** opens the binding editor. Local conflicts must be resolved before saving. External bindings and operating system shortcuts are not checked; chords are not supported.
 
+X-Ray previews text files in the opposite pane with syntax highlighting and a complete minimap. Click the eye in a pane footer to cycle through off, X-Ray on click, and **X-Ray Ultra** on hover. Right-click the eye to turn it off. The preview uses 80% of the width while the source list shows filenames and icons. Selected text can be copied with Ctrl+C or the preview context menu; double-clicking a text line opens the original file at that line. The default file limit is 5 MiB, configurable with `bitfroest.files.xrayMaxFileSizeMiB`. Archives and archive entries are excluded.
+
 <!-- showcase-gallery:start -->
 ## Feature walkthrough
 
@@ -381,6 +383,24 @@ Review the complete destination path for a folder copy. The example leaves the i
 Review the warning before closing file handles or unloading modules. The example stops before Run.
 
 ![Review a lock-management operation](media/marketplace/showcases/0051-windows-en-dark-folder-lock-confirmation-warning.png)
+
+</details>
+
+<details>
+<summary>0052 · X-Ray on click</summary>
+
+Inspect a text file in the opposite pane with syntax highlighting and a complete minimap. The preview uses 80% of the available width. Select files by clicking or using the keyboard. Right-click the eye to turn X-Ray off.
+
+![X-Ray on click](media/marketplace/showcases/0052-windows-en-dark-xray-click-preview.png)
+
+</details>
+
+<details>
+<summary>0053 · X-Ray Ultra</summary>
+
+X-Ray Ultra updates the opposite preview after pausing over a text file for 200 ms. Syntax highlighting and a complete minimap use 80% of the available width; the source list shows filenames and icons. Right-click the eye to turn X-Ray off.
+
+![X-Ray Ultra](media/marketplace/showcases/0053-windows-en-dark-xray-hover-preview.png)
 
 </details>
 

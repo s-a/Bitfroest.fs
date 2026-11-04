@@ -149,5 +149,5 @@
     if (!bytes.length) throw new Error('Ungültige Hexsuche.');
     return Uint8Array.from(bytes);
   }
-  return { modes, codepages, detect, decode, format, parseHex, decoderLabel };
+  return { modes, codepages, detect, decode, format, parseHex, decoderLabel, readBlockSize: 196608 };
 });
