@@ -38,6 +38,21 @@ test('the X-Ray command uses the same mode control as the footer', t => {
   assert.ok(app.document.querySelector('[data-xray]'));
 });
 
+test('a pointer click survives the focus change before mouseup on the eye button', t => {
+  const app = createApp(t);
+  app.document.querySelector('[data-pane="1"] .list').focus();
+  const button = app.document.querySelector('[data-pane="0"] [data-xray-toggle]');
+  const icon = button.querySelector('svg');
+  icon.dispatchEvent(new app.window.MouseEvent('mousedown', { bubbles: true, button: 0, buttons: 1 }));
+  button.focus();
+  assert.equal(button.isConnected, true, 'focus must not replace the pressed control');
+  assert.equal(app.document.activeElement, button);
+  icon.dispatchEvent(new app.window.MouseEvent('mouseup', { bubbles: true, button: 0 }));
+  app.click(icon);
+  assert.equal(button.dataset.mode, 'click');
+  assert.ok(app.document.querySelector('[data-pane="1"] [data-xray]'));
+});
+
 test('enabling X-Ray closes an existing F3 view before replacing the opposite pane', t => {
   const app = createApp(t);
   app.click(app.row('README.md')); app.key('F3');

@@ -1841,8 +1841,11 @@
       <div class="pane-status">${footerMarkup(p)}</div></section>`;
   }
   function footerMarkup(p) {
+    return `<div class="pane-controls" data-vscode-context='{"preventDefaultContextMenuItems":true}'><button type="button" data-xray-toggle data-mode="off" aria-label="X-Ray" title="X-Ray">${window.CommanderIcons.svg('xray', 'eye-slash-fill')}</button></div><div class="pane-metrics">${footerMetrics(p)}</div>`;
+  }
+  function footerMetrics(p) {
     const marked = selectedFor(p);
-    return ui`<div class="pane-controls" data-vscode-context='{"preventDefaultContextMenuItems":true}'><button type="button" data-xray-toggle data-mode="off" aria-label="X-Ray" title="X-Ray">${window.CommanderIcons.svg('xray', 'eye-slash-fill')}</button></div><div class="pane-metrics"><span><strong>${marked.length ? ui`${marked.length} markiert` : count('file', files(p).filter(f => f.type !== 'folder').length)}</strong>${searchSummary(p)} · ${count('folder', files(p).filter(f => f.type === 'folder').length)}</span><span>${size((marked.length ? marked : files(p)).reduce((sum, f) => sum + displayBytes(f, p), 0))}</span></div>`;
+    return ui`<span><strong>${marked.length ? ui`${marked.length} markiert` : count('file', files(p).filter(f => f.type !== 'folder').length)}</strong>${searchSummary(p)} · ${count('folder', files(p).filter(f => f.type === 'folder').length)}</span><span>${size((marked.length ? marked : files(p)).reduce((sum, f) => sum + displayBytes(f, p), 0))}</span>`;
   }
   function searchSummary(p) {
     if (!p.searchFilter) return '';
@@ -1892,7 +1895,7 @@
         row.classList.toggle('focused', p.cursor === id);
         row.setAttribute('aria-selected', String(selectedIds.has(id)));
       });
-      section.querySelector('.pane-status').innerHTML = footerMarkup(p);
+      section.querySelector('.pane-metrics').innerHTML = footerMetrics(p);
     });
     lister.updateMenu();
     xray.sync();

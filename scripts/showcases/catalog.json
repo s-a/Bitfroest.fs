@@ -1493,11 +1493,12 @@
         "id": "preview",
         "select": {
           "side": 0,
-          "name": "Colors.json"
+          "name": "Notes.txt"
         },
         "xrayMode": "click",
         "expect": "[data-xray]:has(.monaco-editor .minimap)",
-        "text": "Colors.json"
+        "text": "Colors.json",
+        "xrayFile": "Colors.json"
       }
     ]
   },
@@ -1519,11 +1520,12 @@
         "id": "preview",
         "select": {
           "side": 0,
-          "name": "X-Ray-Sample.ps1"
+          "name": "Colors.json"
         },
         "xrayMode": "hover",
         "expect": "[data-xray]:has(.monaco-editor .minimap)",
-        "text": "X-Ray-Sample.ps1"
+        "text": "X-Ray-Sample.ps1",
+        "xrayFile": "X-Ray-Sample.ps1"
       }
     ]
   }

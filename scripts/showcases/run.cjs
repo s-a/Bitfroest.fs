@@ -39,6 +39,11 @@ function renumberManifest(catalog, previous) {
 function clickControl(selector, root = document) {
   const button = root.querySelector(selector);
   if (!button || !button.getBoundingClientRect().width || button.disabled || button.type === 'submit' && button.form) throw new Error(`Showcase control unavailable: ${selector}`);
+  const MouseEvent = button.ownerDocument.defaultView.MouseEvent;
+  button.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, buttons: 1 }));
+  button.focus({ preventScroll: true });
+  if (!button.isConnected) throw new Error(`Showcase control replaced during focus: ${selector}`);
+  button.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, button: 0 }));
   button.click();
 }
 function assertSurfaceState(state, capture) {
@@ -224,6 +229,21 @@ async function main() {
     });
     const pageTarget = await waitFor(async () => (await targets()).find(item => item.type === 'page' && item.id === target.parentId));
     const page = await connect(pageTarget.webSocketDebuggerUrl); connections.push(page);
+    const pointerInputs = [];
+    async function xrayPointer(selector, name, click = true) {
+      const point = await waitFor(() => evaluate(({ selector, name }) => {
+        let element = document.querySelector(selector);
+        if (name) element = [...element.querySelectorAll('[data-file-row][data-id]')].find(row => row.title === name || row.querySelector('[data-cell]')?.title === name)?.querySelector('[data-filename]');
+        const rect = element?.getBoundingClientRect();
+        return rect?.width && rect?.height ? { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 } : false;
+      }, { selector, name }));
+      const position = point;
+      for (const type of click ? ['mouseMoved', 'mousePressed', 'mouseReleased'] : ['mouseMoved']) {
+        const event = { type, ...position, button: type === 'mouseMoved' ? 'none' : 'left', buttons: type === 'mousePressed' ? 1 : 0, clickCount: type === 'mouseMoved' ? 0 : 1 };
+        await view.call('Input.dispatchMouseEvent', event); pointerInputs.push({ ...event, selector, name });
+      }
+      fs.writeFileSync(path.join(run, 'xray-pointer-inputs.json'), JSON.stringify(pointerInputs, null, 2));
+    }
     diagnostic = async () => {
       const state = await evaluate(() => ({ saved: window.CommanderHost?.getState?.(), contexts: [...document.querySelectorAll('.pane .list')].map(item => item.dataset.vscodeContext), names: [...document.querySelectorAll('[data-file-row][data-id]')].map(item => item.title || item.querySelector('[data-cell]')?.title) }));
       fs.writeFileSync(path.join(run, 'failure-state.json'), JSON.stringify({ stage, state }, null, 2));
@@ -277,15 +297,13 @@ async function main() {
           }
           (row.querySelector('[data-filename]') || row).click(); pane.querySelector('.list').focus(); return true;
         }, capture.select));
-        if (capture.xrayMode) await evaluate(({ mode, name }) => {
-          const pane = document.querySelector('[data-pane="0"]');
-          pane.querySelector('[data-xray-toggle]').click();
-          if (mode === 'hover') {
-            pane.querySelector('[data-xray-toggle]').click();
-            const row = [...pane.querySelectorAll('[data-file-row][data-id]')].find(row => row.querySelector('[data-cell]')?.title === name || row.title === name);
-            row.dispatchEvent(new window.MouseEvent('mouseover', { bubbles: true }));
+        if (capture.xrayMode) {
+          await xrayPointer('[data-pane="0"] [data-xray-toggle]');
+          if (capture.xrayMode === 'hover') {
+            await xrayPointer('[data-pane="0"] [data-xray-toggle]');
           }
-        }, { mode: capture.xrayMode, name: capture.select.name });
+          await xrayPointer('[data-pane="0"]', capture.xrayFile, capture.xrayMode === 'click');
+        }
         if (capture.action) await invoke(`bitfroest.${capture.action}`);
         if (capture.command) {
           stage = `${scene.id}/${capture.id}: command ${capture.command}`;

@@ -4,6 +4,29 @@ const { validateCatalog, filename, assertProductState, waitFor, buildManifest, p
 
 const scene = () => ({ id: 'new-folder', title: 'Create a folder', description: 'Open the folder dialog.', paths: ['C:/demo/left', 'C:/demo/right'], captures: [{ id: 'dialog', action: 'mkdir', expect: 'dialog[open]', text: 'New folder' }] });
 
+test('X-Ray captures require switching away from the file selected before activation', () => {
+  const scenes = require('../scripts/showcases/catalog.json').filter(scene => ['xray-click', 'xray-hover'].includes(scene.id));
+  assert.equal(scenes.length, 2);
+  for (const scene of scenes) for (const capture of scene.captures) {
+    assert.ok(capture.xrayFile);
+    assert.notEqual(capture.xrayFile, capture.select.name);
+    assert.equal(capture.text, capture.xrayFile);
+  }
+});
+
+test('capture clicks include the focus transition between pressing and releasing', () => {
+  const { JSDOM } = require('jsdom');
+  const { clickControl } = require('../scripts/showcases/run.cjs');
+  const dom = new JSDOM('<button id="eye" type="button">Eye</button>');
+  try {
+    const button = dom.window.document.querySelector('button'), events = [];
+    button.getBoundingClientRect = () => ({ width: 20 });
+    for (const type of ['mousedown', 'focus', 'mouseup', 'click']) button.addEventListener(type, () => events.push(type));
+    clickControl('#eye', dom.window.document);
+    assert.deepEqual(events, ['mousedown', 'focus', 'mouseup', 'click']);
+  } finally { dom.window.close(); }
+});
+
 test('each gesture pointer is already centered when its first visible element is appended', () => {
   const { JSDOM } = require('jsdom');
   const { installPointer } = require('../scripts/showcases/gestures.cjs');
@@ -230,14 +253,19 @@ test('catalog additions renumber existing media without changing recorded proven
 
 test('capture clicks allow standalone buttons but reject submitting a real form', () => {
   const { clickControl } = require('../scripts/showcases/run.cjs');
-  let clicked = 0;
-  const button = { getBoundingClientRect: () => ({ width: 24 }), disabled: false, type: 'submit', form: null, click: () => clicked++ };
-  const root = { querySelector: () => button };
-  clickControl('button', root);
-  assert.equal(clicked, 1);
-  button.form = {};
-  assert.throws(() => clickControl('button', root), /unavailable/);
-  assert.equal(clicked, 1);
+  const { JSDOM } = require('jsdom');
+  const dom = new JSDOM('<button id="standalone">Click</button><form><button id="submit">Submit</button></form>');
+  try {
+    let clicked = 0;
+    for (const button of dom.window.document.querySelectorAll('button')) {
+      button.getBoundingClientRect = () => ({ width: 24 });
+      button.addEventListener('click', () => clicked++);
+    }
+    clickControl('#standalone', dom.window.document);
+    assert.equal(clicked, 1);
+    assert.throws(() => clickControl('#submit', dom.window.document), /unavailable/);
+    assert.equal(clicked, 1);
+  } finally { dom.window.close(); }
 });
 
 test('publishing renumbered media removes previous gallery references and preserves unrelated files', () => {

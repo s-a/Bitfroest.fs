@@ -24,8 +24,8 @@
       for (const side of [0, 1]) compact(side, side === source);
       document.querySelectorAll('[data-xray-toggle]').forEach(button => {
         const active = Number(button.closest('[data-pane]').dataset.pane) === source ? mode : 'off';
+        if (button.dataset.mode !== active) button.innerHTML = root.CommanderIcons.svg('xray', icons[active]);
         button.dataset.mode = active; button.title = t(labels[active]); button.setAttribute('aria-label', t(labels[active])); button.setAttribute('aria-pressed', String(active !== 'off'));
-        button.innerHTML = root.CommanderIcons.svg('xray', icons[active]);
       });
       if (source === null) return;
       const section = container.querySelector(`[data-pane="${1 - source}"]`);
