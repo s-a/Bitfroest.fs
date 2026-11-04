@@ -757,17 +757,13 @@ body[data-file-drag-cursor="none"] * { cursor: no-drop !important; }
 .quick-diff-row[aria-selected="true"] { background:var(--vscode-list-activeSelectionBackground); color:var(--vscode-list-activeSelectionForeground); }
 .quick-diff-row > span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .quick-diff-name { display:flex; align-items:center; gap:6px; }
-.quick-diff-name .file-icon { display:inline-flex; flex-shrink:0; width:16px; height:16px; }
 
-.quick-diff-row { color:var(--git-text-color,var(--text)); }
-.quick-diff-row:hover { color:var(--git-hover-color,var(--text)); }
-.quick-diff-name { color:var(--file-type-color,inherit); }
-.quick-diff-row:hover .quick-diff-name { color:var(--file-type-hover,inherit); }
+.quick-diff-row { color:var(--vscode-foreground,var(--text)); }
 .quick-diff-row[aria-selected="true"] > span { color:var(--inactive-selection-text,var(--vscode-list-inactiveSelectionForeground,var(--text))); }
 .pane.active .quick-diff-row[aria-selected="true"] > span { color:var(--active-selection-text,var(--vscode-list-activeSelectionForeground,var(--text))); }
 
 .quick-diff-name [data-diff-filename] { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.quick-diff-info { display:flex; align-items:baseline; gap:5px; padding-left:22px; box-sizing:border-box; font-size:.64em; line-height:1.2; min-width:0; color:var(--vscode-foreground,var(--text)); }
+.quick-diff-info { display:flex; align-items:baseline; gap:5px; padding-left:0; box-sizing:border-box; font-size:.64em; line-height:1.2; min-width:0; color:var(--vscode-foreground,var(--text)); }
 .quick-diff-info > span { flex:0 0 auto; white-space:nowrap; }
 .quick-diff-info [data-diff-directory] { flex:0 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; }
 [data-diff-status-cell] { color:var(--quick-status-base,inherit); }
@@ -777,5 +773,3 @@ body[data-file-drag-cursor="none"] * { cursor: no-drop !important; }
 .quick-diff-row[aria-selected="true"] .quick-diff-info { color:inherit; }
 .quick-diff-row[aria-selected="true"] [data-diff-status-cell] { color:var(--quick-status-inactive,inherit); }
 .pane.active .quick-diff-row[aria-selected="true"] [data-diff-status-cell] { color:var(--quick-status-active,inherit); }
-.quick-diff-row[aria-selected="true"] .quick-diff-name { color:var(--quick-status-inactive,inherit); }
-.pane.active .quick-diff-row[aria-selected="true"] .quick-diff-name { color:var(--quick-status-active,inherit); }

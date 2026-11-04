@@ -105,19 +105,20 @@ test('Quick Diff name sorting compares filenames across directories and preserve
   app.click(name); assert.deepEqual(paths(), ['a/z.sql', 'z/a.sql']);
 });
 
-test('Quick Diff uses Git colors for filename and status while keeping metadata readable', async t => {
+test('Quick Diff keeps filenames neutral without icons and colors only the status', async t => {
   const app = createApp(t, undefined, { fileSettings: { colors: { enabled: true, git: true, rules: { '*.sql': '#ffffff' } } } });
   app.click(app.document.querySelector('[data-quick-diff-toggle]'));
   const request = app.messages.find(message => message.type === 'quick-diff-list');
   app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'quick-diff-result', requestId: request.requestId, generation: request.generation, ok: true,
     result: { id: 'colors', entries: [{ path: 'nested/query.sql', name: 'nested/query.sql', status: 'Modified', gitStatus: 'modified', modifiedAt: 1000 }] } } }));
   const row = app.document.querySelector('.quick-diff-row');
-  assert.ok(row.querySelector('.quick-diff-name').style.getPropertyValue('--file-type-color'));
-  assert.ok(row.style.getPropertyValue('--git-text-color'));
+  assert.equal(row.querySelector('.quick-diff-name').style.getPropertyValue('--file-type-color'), '');
+  assert.equal(row.style.getPropertyValue('--git-text-color'), '');
+  assert.equal(row.querySelector('.file-icon,img,svg'), null);
+  assert.equal(app.messages.some(message => message.type === 'quick-diff-icons'), false);
   assert.equal(row.querySelector('[data-modified-at]').style.getPropertyValue('--file-type-color'), '');
   assert.ok(row.querySelector('[data-diff-status-cell]').style.getPropertyValue('--quick-status-base'));
-  assert.equal(row.querySelector('.quick-diff-name').style.getPropertyValue('--file-type-color'), row.querySelector('[data-diff-status-cell]').style.getPropertyValue('--quick-status-base'));
-  assert.notEqual(row.querySelector('.quick-diff-name').style.getPropertyValue('--file-type-color'), '#ffffff');
+  assert.equal(row.querySelector('.quick-diff-name').style.getPropertyValue('--quick-status-base'), '');
   const list = app.document.querySelector('[data-quick-diff-list]');
   assert.ok(parseFloat(list.style.getPropertyValue('--quick-diff-status-width')) > 0);
   assert.ok(parseFloat(list.style.getPropertyValue('--quick-diff-date-width')) > 0);
@@ -139,6 +140,8 @@ test('Quick Diff metadata uses the bright foreground even on unselected rows', t
   const row = app.document.querySelector('[data-diff-path="src/b.sql"]');
   assert.equal(row.getAttribute('aria-selected'), 'false');
   for (const cell of ['[data-diff-directory]', '[data-modified-at]', '.quick-diff-separator']) assert.equal(app.window.getComputedStyle(row.querySelector(cell)).color, 'rgb(204, 204, 204)');
+  assert.equal(app.window.getComputedStyle(row.querySelector('.quick-diff-name')).color, 'rgb(204, 204, 204)');
+  assert.equal(app.window.getComputedStyle(row.querySelector('.quick-diff-info')).paddingLeft, '0px');
   assert.equal(app.document.querySelector('[data-diff-path="a.sql"] .quick-diff-info').children.length, 3);
 });
 
@@ -241,4 +244,27 @@ test('Quick Diff history waits for the filesystem navigation acknowledgement bef
   receive({ type: 'filesystem-result', navigationRequestId: back.navigationRequestId, ok: true, state: back.state });
   assert.ok(app.document.querySelector('[data-quick-diff]'));
   assert.equal(app.messages.filter(message => message.type === 'quick-diff-list').at(-1).selectedPath, 'docs/audit.sql');
+});
+
+test('Quick Diff tooltips and path shortcuts use the complete selected path', t => {
+  const app = createApp(t, undefined, { platform: 'win32' });
+  app.click(app.document.querySelector('[data-quick-diff-toggle]'));
+  const request = app.messages.find(message => message.type === 'quick-diff-list');
+  app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'quick-diff-result', requestId: request.requestId, generation: request.generation, ok: true,
+    result: { id: 'paths', root: 'C:/repo', entries: [{ path: 'src/query.sql', name: 'src\\query.sql', status: 'Modified' }] } } }));
+  assert.equal(app.document.querySelector('.quick-diff-name').title, 'C:\\repo\\src\\query.sql');
+  assert.equal(app.document.querySelector('[data-diff-directory]').title, 'C:\\repo\\src\\query.sql');
+  const grid = app.document.querySelector('[data-quick-diff-list] [role="grid"]'); grid.focus();
+  app.key('y', { ctrlKey: true }, grid);
+  let copy = app.messages.filter(message => message.type === 'selection-io').at(-1);
+  assert.equal(copy.text, 'C:\\repo\\src\\query.sql'); assert.equal(copy.pathStyle, undefined);
+  app.key('Y', { ctrlKey: true, shiftKey: true }, grid);
+  copy = app.messages.filter(message => message.type === 'selection-io').at(-1);
+  assert.equal(copy.text, 'C:\\repo\\src\\query.sql'); assert.equal(copy.pathStyle, 'slash');
+  app.action('copy-full-names');
+  assert.equal(app.messages.filter(message => message.type === 'selection-io').at(-1).pathStyle, undefined);
+  grid.blur(); const count = app.messages.filter(message => message.type === 'selection-io').length;
+  app.document.querySelector('[data-quick-diff]').focus();
+  app.key('y', { ctrlKey: true }, app.document.activeElement);
+  assert.equal(app.messages.filter(message => message.type === 'selection-io').length, count);
 });

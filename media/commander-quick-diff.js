@@ -1,11 +1,11 @@
 (function (root) {
   'use strict';
   root.CommanderQuickDiff = { create };
-  function create({ host, t, state, currentPath, isArchive, notify, beforeStart, preview, task, icon, decorate = () => {}, reveal = () => {} }) {
+  function create({ host, t, state, currentPath, isArchive, notify, beforeStart, preview, task, decorate = () => {}, reveal = () => {}, copy = () => {} }) {
     const container = document.querySelector('#panes');
     let source = null, mode = 'off', generation = 0, serial = 0, listId = null, repositoryRoot = null, entries = [], selected = -1, context = '', sourceView = null, view = null, editor = null, loading = false;
     const instance = [...crypto.getRandomValues(new Uint8Array(8))].map(v => v.toString(16).padStart(2, '0')).join('');
-    const pending = new Map(), activity = new Set(), requestedIcons = new Set(), icons = new Map(); let readRequest = null;
+    const pending = new Map(), activity = new Set(); let readRequest = null;
     let sortColumn = 'status', sortDirection = 'ascending';
     let restoration = null;
     const rowHeight = 32, relativeFormat = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto', style: 'short' });
@@ -16,6 +16,12 @@
     }
     function updateTimes() { sourceView?.querySelectorAll('time').forEach(time => { const text = relativeTime(Date.parse(time.dateTime)); if (time.textContent !== text) time.textContent = text; }); }
     let clock = null;
+    const fullPath = entry => root.CommanderPaths.displayPath(root.CommanderPaths.joinPath(repositoryRoot || currentPath(state().panes[source]), entry.path), { platform: document.body.dataset.platform });
+    function copyPath(slash = false) {
+      if (!sourceView?.contains(document.activeElement)) return false;
+      const entry = entries[selected]; if (entry) copy(fullPath(entry), slash);
+      return true;
+    }
     const resize = new ResizeObserver(() => autoSize());
     function autoSize() {
       if (!sourceView?.isConnected || !sourceView.querySelector('[role="grid"]')) return;
@@ -44,7 +50,7 @@
       for (const [requestId] of pending) host?.postMessage({ type: 'quick-diff-cancel', requestId });
       pending.clear();
       if (listId) host?.postMessage({ type: 'quick-diff-release', listId });
-      listId = null; entries = []; selected = -1; loading = false; requestedIcons.clear(); icons.clear();
+      listId = null; entries = []; selected = -1; loading = false;
     }
     function message(text) { editor?.dispose(); editor = null; if (!view) return; const p = document.createElement('p'); p.role = 'status'; p.textContent = text; view.replaceChildren(p); }
     function focus() { sourceView?.querySelector('[role="grid"]')?.focus({ preventScroll: true }); }
@@ -79,22 +85,18 @@
       const body = grid.querySelector('.quick-diff-rows');
       const height = rowHeight, start = Math.max(0, Math.floor(grid.scrollTop / height) - 5), count = Math.ceil((grid.clientHeight || 560) / height) + 10;
       body.style.height = `${entries.length * height}px`; body.replaceChildren();
-      const needed = [];
       for (let i = start; i < Math.min(entries.length, start + count); i++) {
         const entry = entries[i], row = document.createElement('div'); row.role = 'row'; row.dataset.diffIndex = String(i); row.id = `${instance}-diff-${i}`;
         row.dataset.diffPath = entry.path;
         row.dataset.diffStatus = entry.gitStatus || entry.status.toLowerCase();
         row.dataset.diffKind = entry.status.toLowerCase();
-        entry.icon = icons.get(entry.path);
-        if (!requestedIcons.has(entry.path) && needed.length < 100) { requestedIcons.add(entry.path); needed.push(entry.path); }
         row.className = 'quick-diff-row'; row.style.top = `${i * height}px`; row.setAttribute('aria-selected', String(i === selected)); row.setAttribute('aria-rowindex', String(i + 2));
-        const name = document.createElement('span'); name.className = 'quick-diff-name'; name.title = entry.name;
-        const glyph = document.createElement('span'); glyph.className = 'file-icon'; glyph.innerHTML = icon(entry);
+        const name = document.createElement('span'); name.className = 'quick-diff-name'; name.title = fullPath(entry);
         const filename = document.createElement('span'); filename.dataset.diffFilename = ''; filename.textContent = entry.path.split('/').pop();
-        const directory = document.createElement('span'); directory.dataset.diffDirectory = ''; directory.role = 'gridcell'; directory.setAttribute('aria-label', entry.name); directory.title = entry.name;
+        const directory = document.createElement('span'); directory.dataset.diffDirectory = ''; directory.role = 'gridcell'; directory.setAttribute('aria-label', entry.name); directory.title = fullPath(entry);
         const separator = Math.max(entry.name.lastIndexOf('/'), entry.name.lastIndexOf('\\'));
         directory.textContent = separator >= 0 ? entry.name.slice(0, separator + 1) : document.body.dataset.platform === 'win32' ? '.\\' : './';
-        name.append(glyph, filename);
+        name.append(filename);
         const status = document.createElement('span'); status.role = 'gridcell'; status.dataset.diffStatusCell = ''; status.textContent = t(entry.status);
         const modified = document.createElement('span'); modified.role = 'gridcell'; modified.dataset.modifiedAt = '';
         if (Number.isFinite(entry.modifiedAt)) {
@@ -105,7 +107,6 @@
         if (!['.\\', './'].includes(directory.textContent)) info.append(divider(), directory);
         row.append(name, info); body.append(row);
       }
-      if (needed.length) host?.postMessage({ type: 'quick-diff-icons', listId, generation, paths: needed.slice(0, 100) });
       grid.setAttribute('aria-rowcount', String(entries.length + 1));
       if (selected >= 0) grid.setAttribute('aria-activedescendant', `${instance}-diff-${selected}`); else grid.removeAttribute('aria-activedescendant');
       decorate();
@@ -147,6 +148,9 @@
         const side = source, root = repositoryRoot, previewState = snapshot(); stop(); reveal({ entry, root, side, previewState });
       });
       grid.addEventListener('keydown', event => {
+        if (!event.altKey && (event.ctrlKey || event.metaKey && document.body.dataset.platform === 'darwin') && event.key.toLowerCase() === 'y') {
+          event.preventDefault(); event.stopImmediatePropagation(); copyPath(event.shiftKey); return;
+        }
         let next = selected;
         if (event.key === 'ArrowDown') next++; else if (event.key === 'ArrowUp') next--; else if (event.key === 'Home') next = 0; else if (event.key === 'End') next = entries.length - 1; else if (event.key === 'PageDown') next += 10; else if (event.key === 'PageUp') next -= 10; else return;
         event.preventDefault(); event.stopImmediatePropagation(); choose(Math.max(0, Math.min(entries.length - 1, next))); grid.scrollTop = Math.max(0, selected * rowHeight - grid.clientHeight / 2); rows();
@@ -191,16 +195,6 @@
     }
     function receive(event) {
       const data = event.data;
-      if (data?.type === 'quick-diff-icons-result') {
-        if (data.listId === listId && data.generation === generation) {
-          for (const [name, value] of Object.entries(data.icons || {})) if (value) icons.set(name, value);
-          sourceView.querySelectorAll('[data-diff-index]').forEach(row => {
-            const entry = entries[Number(row.dataset.diffIndex)]; entry.icon = icons.get(entry.path);
-            const glyph = row.querySelector('.file-icon'); if (entry.icon && glyph.querySelector('img')?.src !== entry.icon) glyph.innerHTML = icon(entry);
-          });
-        }
-        return;
-      }
       if (data?.type === 'quick-diff-progress' && activity.has(data.requestId)) { task(data.requestId, 'Quick Diff', data.progress); return; }
       if (data?.type === 'quick-diff-finished' && activity.has(data.requestId)) { activity.delete(data.requestId); task(data.requestId, null, null); return; }
       if (data?.type === 'quick-diff-action-error') { notify(data.error, 'error'); return; }
@@ -241,6 +235,6 @@
     document.addEventListener('keydown', event => { if (source !== null && event.key === 'Escape' && event.target.closest('[data-quick-diff],[data-quick-diff-list]')) { event.preventDefault(); event.stopImmediatePropagation(); stop(true); } }, true);
     const theme = new MutationObserver(() => autoSize()); theme.observe(document.body, { attributes: true, attributeFilter: ['class', 'style'] });
     window.addEventListener('message', receive); window.addEventListener('pagehide', () => { stop(); clearInterval(clock); resize.disconnect(); theme.disconnect(); }, { once: true });
-    return { mount, sync, stop, snapshot, restore, refresh() { if (source === null) return false; load(); return true; } };
+    return { mount, sync, stop, snapshot, restore, copyPath, refresh() { if (source === null) return false; load(); return true; } };
   }
 })(globalThis);

@@ -388,8 +388,9 @@ async function main() {
             filename.textContent === 'Orders.sql' && directory.textContent === 'src\\' && parseFloat(getComputedStyle(directory).fontSize) < parseFloat(getComputedStyle(filename).fontSize) * .8 && header.children.length === 3 && row.children.length === 2 &&
             info.children.length === 5 && info.children[0].hasAttribute('data-diff-status-cell') && info.children[2].hasAttribute('data-modified-at') && info.children[4] === directory &&
             info.children[1].textContent === '·' && info.children[3].textContent === '·' && getComputedStyle(info).display === 'flex' &&
-            getComputedStyle(row.querySelector('.quick-diff-name')).color === getComputedStyle(info.children[0]).color && getComputedStyle(info.children[2]).color === getComputedStyle(directory).color &&
-            !source.querySelector('[data-diff-status="ignored"]') && row.querySelector('.quick-diff-name').style.getPropertyValue('--file-type-color') && row.style.getPropertyValue('--git-text-color') &&
+            getComputedStyle(row.querySelector('.quick-diff-name')).color !== getComputedStyle(info.children[0]).color && getComputedStyle(info.children[2]).color === getComputedStyle(directory).color &&
+            Math.abs(filename.getBoundingClientRect().left - info.children[0].getBoundingClientRect().left) < 1 &&
+            !source.querySelector('[data-diff-status="ignored"]') && !row.querySelector('.quick-diff-name').style.getPropertyValue('--file-type-color') && !row.style.getPropertyValue('--git-text-color') &&
             (mode !== 'repository' || !source.querySelector('[data-diff-path="Overview.md"] [data-diff-directory]')) &&
             rect.height >= 30 && rect.height <= 34 && cells.every((cell, index) => cell.height > 0 && cell.top >= rect.top && cell.bottom <= rect.bottom && (!index || cells[index - 1].right <= cell.left)) &&
             header.querySelector('[data-diff-sort="status"]').closest('[role="columnheader"]').getAttribute('aria-sort') === 'ascending' && ordered &&
@@ -398,7 +399,7 @@ async function main() {
             preview.querySelector('[data-diff-summary]')?.textContent.includes('(+3 · ~2 · −0)') &&
             preview.querySelector('.line-insert,.char-insert') && preview.querySelector('.line-delete,.char-delete') && tokens.size > 1 &&
             ![...preview.querySelectorAll('.minimap')].some(node => node.getBoundingClientRect().width > 0) && Boolean(preview.querySelector('.diff-hidden-lines')) &&
-            [...source.querySelectorAll('.quick-diff-row .native-icon')].length === source.querySelectorAll('.quick-diff-row').length;
+            !source.querySelector('.quick-diff-row .file-icon,.quick-diff-row img,.quick-diff-row svg');
         }, capture.quickDiffMode));
         if (capture.xrayMode) await waitFor(() => evaluate(() => {
           const panes = document.querySelector('#panes'), side = panes.dataset.xraySource;

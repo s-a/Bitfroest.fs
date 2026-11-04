@@ -1503,8 +1503,8 @@
         const status = quick ? row.dataset.diffStatus : error ? 'error' : gitInfo(currentPath(p))?.statuses?.[file.name];
         const gitColor = !contrast && settings.git !== false ? statusColor(status) : null;
         const quickColor = quick && !contrast ? row.dataset.diffKind === 'added' ? variable('--vscode-gitDecoration-addedResourceForeground') || '#008000' : statusColor(row.dataset.diffKind) : null;
-        const nameColor = quick ? quickColor : file.type === 'folder' ? gitColor : desired;
-        const rowColor = file.type !== 'folder' && (!status || ['clean', 'untracked', 'ignored'].includes(status)) ? desired : gitColor;
+        const nameColor = quick ? null : file.type === 'folder' ? gitColor : desired;
+        const rowColor = quick ? null : file.type !== 'folder' && (!status || ['clean', 'untracked', 'ignored'].includes(status)) ? desired : gitColor;
         set(name, '--file-type-color', nameColor ? safe(nameColor, background) : '');
         set(name, '--file-type-hover', nameColor ? safe(nameColor, hover) : '');
         set(row, '--git-text-color', rowColor ? safe(rowColor, background) : '');
@@ -1514,7 +1514,6 @@
           for (const [kind, back] of Object.entries({ base: background, hover, active: nativeIconBackgrounds.active, inactive: nativeIconBackgrounds.inactive })) {
             const color = quickColor ? safe(quickColor, back) : '';
             set(statusCell, `--quick-status-${kind}`, color);
-            set(name, `--quick-status-${kind}`, color);
           }
         }
       }
@@ -1913,7 +1912,7 @@
   const actions = [['F2', t('Umbenennen'), 'rename-one'], ['F3', t('Anzeigen'), 'view'], ['F4', t('Bearbeiten'), 'edit'], ['F5', t('Kopieren'), 'copy'], ['F6', t('Verschieben'), 'move'], ['F7', t('Neuer Ordner'), 'mkdir'], ['F8', t('Löschen'), 'delete']];
   const lister = window.CommanderListerView.create({ host, state: () => state, t, escape, modal, restore: render, edit: file => preview(file, true), notify: toast, report: reportStatus, remember: rememberScroll, task: statusTask });
   const previewManager = window.CommanderPreview.create();
-  const quickDiff = window.CommanderQuickDiff.create({ host, t, state: () => state, currentPath, isArchive: isArchiveLocation, notify: toast, task: xrayTask, preview: previewManager, decorate: refreshFileColors, reveal: revealQuickDiffEntry, beforeStart: () => { document.querySelectorAll("[data-lister-close]").forEach(button => button.click()); }, icon: entry => entry.icon ? window.CommanderIcons.native(entry.icon) : baseIcon({ name: entry.name.split("/").pop(), type: "file", iconKey: entry.fsSource }, ""), });
+  const quickDiff = window.CommanderQuickDiff.create({ host, t, state: () => state, currentPath, isArchive: isArchiveLocation, notify: toast, task: xrayTask, preview: previewManager, decorate: refreshFileColors, reveal: revealQuickDiffEntry, copy: (text, slash) => selectionIO('copy', text, [{ start: 0, length: text.length }], undefined, slash ? 'slash' : 'native'), beforeStart: () => { document.querySelectorAll("[data-lister-close]").forEach(button => button.click()); }, });
   function revealQuickDiffEntry({ entry, root, side, previewState }) {
     const target = join(root, entry.path), directory = parent(target);
     const finish = () => {
@@ -3231,6 +3230,7 @@
     clearPendingRenameCue(); lastNameClick = null;
     if (['git-diff', 'git-history', 'git-untrack', 'git-ignore'].includes(command)) { requestGitDiff(contextSelection, command); return; }
     if (typeof command !== 'string') return;
+    if (['copy-full-names', 'copy-full-names-slash'].includes(command) && quickDiff.copyPath(command === 'copy-full-names-slash')) return;
     if (command === 'open-terminal') {
       if ($('#modal').open || document.activeElement?.matches('input,textarea,select,[contenteditable="true"]') || !document.activeElement?.closest('.list') || filesystemPending) return;
       if (state.archiveLocations?.[currentPath(pane())] || currentPath(pane()).startsWith('zip:')) return toast(t('Diese Aktion ist innerhalb eines ZIP-Archivs nicht verfügbar.'));
