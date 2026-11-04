@@ -177,6 +177,10 @@ test('partial move keeps empty destination subdirectories before removing comple
   assert.equal(result.operationOutcome.cancelled, true);
   assert.equal((await fs.stat(`${f.right}/docs/empty`)).isDirectory(), true);
   assert.equal(await fs.readFile(`${f.right}/docs/item.txt`, 'utf8'), 'child');
+  if (process.platform === 'linux') {
+    assert.deepEqual(result.operationOutcome.completedIds, [], 'directory metadata has not been confirmed');
+    assert.equal((await fs.stat(`${f.left}/docs/empty`)).isDirectory(), true, 'unconfirmed directory metadata remains at its source');
+  }
 });
 
 test('source-removal failure after cancellation exposes recovery without a moved acknowledgement', async t => {

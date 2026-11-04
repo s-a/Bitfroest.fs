@@ -869,11 +869,14 @@ function createProvider(options = {}) {
       if (error.name === 'AbortError' && transfer) {
         const completedFiles = createdFiles.filter(file => file.completed);
         const origins = file => (file.appendSources?.length ? file.appendSources : [file.source]).filter(Boolean).map(entry => entry.path);
-        const completedRoots = transfer.selected.filter(entry => {
+        const publishedRoots = transfer.selected.filter(entry => {
           const related = [...staged.values()].filter(file => origins(file).some(source => below(source, entry.path)));
+          return related.length > 0 && related.every(file => file.completed);
+        });
+        const completedRoots = publishedRoots.filter(entry => {
           const directories = process.platform === 'linux' && !options.fs
             ? newDirectories.filter(directory => directory.row.fsSource && below(directory.row.fsSource, entry.path)) : [];
-          return related.length > 0 && related.every(file => file.completed) && directories.every(directory => completedDirectoryMetadata.has(directory.path));
+          return directories.every(directory => completedDirectoryMetadata.has(directory.path));
         });
         const retainedPaths = [];
         try {
@@ -904,7 +907,7 @@ function createProvider(options = {}) {
           }
           for (const directory of createdDirectories.reverse()) {
             const originalDirectory = desired.get(identity(directory))?.row.fsSource;
-            if (completedFiles.some(file => below(file.path, directory)) || originalDirectory && completedRoots.some(entry => entry.type === 'folder' && below(originalDirectory, entry.path))) continue;
+            if (completedFiles.some(file => below(file.path, directory)) || originalDirectory && publishedRoots.some(entry => entry.type === 'folder' && below(originalDirectory, entry.path))) continue;
             await assertComponents(directory); await fs.rmdir(directory);
           }
           for (const item of moved.filter(item => !item.restored)) await removeBackup(item.backup, item.path);
@@ -914,6 +917,7 @@ function createProvider(options = {}) {
             for (const entry of directories) {
               const destination = [...desired.values()].find(item => item.type === 'folder' && item.row.fsSource && identity(item.row.fsSource) === identity(entry.path) && identity(item.path) !== identity(entry.path));
               if (!destination || !nativeFs.existsSync(destination.path) || !nativeFs.existsSync(entry.path) || (await fs.readdir(entry.path)).length) continue;
+              if (process.platform === 'linux' && !options.fs && !completedDirectoryMetadata.has(destination.path)) continue;
               await assertComponents(entry.path);
               const stat = await fs.lstat(entry.path, { bigint: true });
               if (`${stat.dev}:${stat.ino}` !== entry.signature.split(':').slice(0, 2).join(':')) throw new Error('Ordner extern verändert.', { cause: error });
