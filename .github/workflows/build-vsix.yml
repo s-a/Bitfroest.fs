@@ -77,7 +77,15 @@ jobs:
         run: node --test tests/native-clipboard-wayland-compositor.test.js
       - name: Verify metadata failures in an unprivileged host
         if: runner.os == 'Linux'
-        run: sudo --preserve-env=PATH,NATIVE_BINDING_TEST_PATH node --test --test-name-pattern="unprivileged host" tests/native-copy-linux-api.test.js
+        run: |
+          node_binary="$(command -v node)"
+          "$node_binary" --version
+          permissions_root="$(mktemp -d /tmp/bitfroest-permissions.XXXXXX)"
+          trap 'rm -rf "$permissions_root"' EXIT
+          cp native/binding.node "$permissions_root/binding.node"
+          chmod 0755 "$permissions_root"
+          chmod 0644 "$permissions_root/binding.node"
+          sudo env "PATH=$PATH" "NATIVE_BINDING_TEST_PATH=$permissions_root/binding.node" "$node_binary" --test --test-name-pattern="unprivileged host" tests/native-copy-linux-api.test.js
       - name: Release the private test filesystem
         if: always() && runner.os == 'Linux'
         run: |
