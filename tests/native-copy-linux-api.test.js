@@ -28,18 +28,37 @@ async function fixture(t, size = 8 * 1024 * 1024) {
 
 test('Linux native files.copy preserves contents and POSIX mode and reports actual bytes', { skip: process.platform !== 'linux' }, async t => {
   const f = await fixture(t);
+  await fs.utimes(f.source, new Date('2001-02-03T04:05:06.123Z'), new Date('2001-02-03T04:05:07.456Z'));
+  const sourceBefore = await fs.stat(f.source, { bigint: true });
+  f.request.expected = Object.fromEntries(['dev', 'ino', 'size', 'mtimeNs', 'ctimeNs'].map(key => [key, String(sourceBefore[key])]));
   assert.ok(['supported', 'conditional'].includes(f.api.capabilities['files.copy'].status), f.api.capabilities['files.copy'].reason);
   const session = f.api.openSession();
   const progress = [];
   const outcome = await session.invoke('files.copy', f.request, { onProgress: value => progress.push(value) });
   assert.equal(outcome.status, 'committed');
-  assert.deepEqual(await fs.readFile(f.target), await fs.readFile(f.source));
+  const targetExact = await fs.stat(f.target, { bigint: true });
+  assert.equal(String(targetExact.atimeNs), String(sourceBefore.atimeNs));
+  assert.equal(String(targetExact.mtimeNs), String(sourceBefore.mtimeNs));
   const [sourceStat, targetStat] = await Promise.all([fs.stat(f.source), fs.stat(f.target)]);
   assert.equal(targetStat.mode & 0o7777, sourceStat.mode & 0o7777);
-  assert.equal(targetStat.mtimeMs, sourceStat.mtimeMs);
+  assert.deepEqual(await fs.readFile(f.target), await fs.readFile(f.source));
   assert.ok(progress.some(event => event.transferred > 0 && event.transferred < event.total));
   assert.equal(progress.at(-1).transferred, 8 * 1024 * 1024);
   session.close();
+});
+
+test('Linux native files.copy ignores cancellation requested after commit and retains the committed destination', { skip: process.platform !== 'linux' }, async t => {
+  const f = await fixture(t, 4096);
+  const rawSession = require(bindingPath).openSession();
+  const pending = rawSession.invoke('files.copy', f.request);
+  const committed = await pending;
+  assert.equal(committed.status, 'committed');
+  pending.cancel();
+  assert.equal(committed.cancelled, false);
+  assert.deepEqual(await fs.readFile(f.target), await fs.readFile(f.source));
+  assert.equal((await fs.stat(f.target)).size, 4096);
+  rawSession.close();
+  await rawSession.whenClosed();
 });
 
 test('Linux native files.copy never replaces a destination and binds completion to the created inode', { skip: process.platform !== 'linux' }, async t => {
