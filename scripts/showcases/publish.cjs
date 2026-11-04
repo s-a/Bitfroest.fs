@@ -44,17 +44,13 @@ function mediaName(value) {
   if (!/^\d{4}-windows-en-dark-[a-z0-9-]+\.(png|gif)$/.test(value)) throw new Error('Invalid showcase media filename.');
   return value;
 }
-function mediaIcons(images) {
-  const formats = new Set(images.map(image => path.extname(mediaName(image.file))));
-  return ['.gif', '.png'].filter(format => formats.has(format)).map(format => format === '.gif' ? '🎞️' : '🖼️');
-}
 function renderGallery(manifest) {
   const lines = [begin, '## Feature walkthrough', '',
     'Windows examples with sample project files. Animations include a pointer highlight and keystroke hints. Drag-and-drop demonstrations stop at the confirmation dialog.', ''];
   for (const section of manifest.sections.filter(item => item.status === 'rendered' && item.id !== 'main')) {
     if (!section.images.length) continue;
     const excerpt = summaryExcerpts[section.id];
-    const summary = `${excerpt ? `<small>${excerpt}</small><br>` : ''}${mediaIcons(section.images).join(' ')} ${section.title}`;
+    const summary = `${excerpt ? `<small>${excerpt}</small><br>` : ''}${section.title}`;
     lines.push(`<details>`, `<summary>${summary}</summary>`, '', section.description, '');
     for (const image of section.images) lines.push(`![${image.alt}](${mediaDirectory}/${mediaName(image.file)})`, '');
     lines.push('</details>', '');
