@@ -104,6 +104,8 @@ async function recordGesture({ capture, scene, page, target, evaluate, invoke, r
     if (type === 'mouseReleased') buttons &= ~(button === 'right' ? 2 : 1);
     await page.call('Input.dispatchMouseEvent', { type, x: point.x, y: point.y, button, buttons, modifiers, clickCount: type === 'mouseMoved' ? 0 : 1 });
     mouseEvents.push({ type, ...point, button, buttons, timestamp: Date.now() });
+    if (type === 'mousePressed') await annotation(button === 'right' ? 'Right click' : 'Left click', true);
+    else if (type === 'mouseReleased') await annotation(button === 'right' ? 'Right click' : 'Left click');
     if (type === 'mousePressed') {
       await pageEvaluate(point => {
         const pointer = document.querySelector('#showcase-pointer');
@@ -146,8 +148,8 @@ async function recordGesture({ capture, scene, page, target, evaluate, invoke, r
     await page.call('Page.startScreencast', { format: 'png', maxWidth: 1280, maxHeight: 900, everyNthFrame: 1 });
     await waitFor(() => records.length > 0);
     if (capture.gesture === 'path-copy') {
-      await annotation('Right click'); await hold(350); await move(await point('.path-breadcrumbs', 0), 'Right click'); await hold(350);
-      await mouse('mouseMoved'); await mouse('mousePressed', position, 'right'); await annotation('Right click', true); await hold(20);
+      await hold(350); await move(await point('.path-breadcrumbs', 0), ''); await hold(350);
+      await mouse('mouseMoved'); await mouse('mousePressed', position, 'right'); await hold(20);
       await mouse('mouseReleased', position, 'right');
       await waitFor(async () => (await invoke('showcase.clipboard-check', [scene.paths[0].replace(/\//g, '\\')])).matched);
       result = { clipboardMatched: true }; await hold(1100);
