@@ -313,6 +313,7 @@ test('Linux native files.copy reports a distinct partial outcome when an unprivi
     '})().catch(error => { console.error(error); process.exitCode = 1; });'
   ].join('\n');
   const child = spawnSync(process.execPath, ['-e', childSource], {
+    cwd: f.root,
     env: { ...process.env, NATIVE_BINDING_TEST_PATH: bindingPath, NATIVE_COPY_REQUEST: JSON.stringify(f.request) },
     encoding: 'utf8', timeout: 10000, killSignal: 'SIGKILL'
   });
