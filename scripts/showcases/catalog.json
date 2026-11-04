@@ -1476,22 +1476,6 @@
     "captures": []
   },
   {
-    "id": "legacy-demo-masks",
-    "parentId": "main",
-    "title": "Legacy browser-only sample dialogs",
-    "description": "Record the sample editor, command list and prototype-help dialogs separately from product masks.",
-    "paths": [
-      "${demo}/left",
-      "${demo}/right"
-    ],
-    "sources": [
-      "media/app.js"
-    ],
-    "status": "excluded",
-    "reason": "These paths belong to the standalone sample mode and must not be published as real product screenshots.",
-    "captures": []
-  },
-  {
     "id": "xray-click",
     "parentId": "main",
     "title": "X-Ray on click",
