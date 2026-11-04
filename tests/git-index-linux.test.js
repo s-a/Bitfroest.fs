@@ -19,6 +19,10 @@ function git(root, ...args) {
   }).trim();
 }
 
+async function descriptorCount() {
+  return (await fs.readdir('/proc/self/fd')).length;
+}
+
 async function fixture(t) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'git-index-linux-'));
   t.after(() => fs.rm(root, { recursive: true, force: true }));
@@ -202,4 +206,57 @@ test('Linux native untrack cancellation and session close settle only after the 
   else assert.equal(settled.value.status, 'committed');
   assert.deepEqual(await fs.readFile(path.join(closingFixture.root, '.git', 'index')), closingBefore);
   await assert.rejects(fs.stat(path.join(closingFixture.root, '.git', 'index.lock')), { code: 'ENOENT' });
+});
+
+test('Linux native untrack rejects cancellation after commit without rolling back the atomic index publication', { skip: process.platform !== 'linux' }, async t => {
+  const app = await fixture(t);
+  const raw = require(binary).openSession();
+  const request = await app.prepare();
+  const indexPath = path.join(app.root, '.git', 'index');
+  const before = await fs.readFile(indexPath);
+  const pending = raw.invoke('git.untrack', request);
+  const result = await pending;
+  assert.equal(result.status, 'committed');
+  assert.equal(pending.cancel(), false);
+  assert.notDeepEqual(await fs.readFile(indexPath), before);
+  assert.equal(git(app.root, 'ls-files', '--', 'file.txt'), '');
+  await assert.rejects(fs.stat(path.join(app.root, '.git', 'index.lock')), { code: 'ENOENT' });
+  raw.close();
+  await raw.whenClosed();
+});
+
+test('Linux native untrack releases index, temporary and hash descriptors after repeated atomicity rejections', { skip: process.platform !== 'linux' }, async t => {
+  const app = await fixture(t);
+  git(app.root, 'update-index', '--split-index');
+  const request = await app.prepare();
+  const indexPath = path.join(app.root, '.git', 'index');
+  const original = await fs.readFile(indexPath);
+  await assert.rejects(app.session.invoke('git.untrack', request), { code: 'UnsupportedIndex' });
+  assert.deepEqual(await fs.readFile(indexPath), original);
+  await assert.rejects(fs.stat(path.join(app.root, '.git', 'index.lock')), { code: 'ENOENT' });
+  const baseline = await descriptorCount();
+  for (let attempt = 0; attempt < 12; attempt++) {
+    await assert.rejects(app.session.invoke('git.untrack', request), { code: 'UnsupportedIndex' });
+    assert.deepEqual(await fs.readFile(indexPath), original);
+    await assert.rejects(fs.stat(path.join(app.root, '.git', 'index.lock')), { code: 'ENOENT' });
+    assert.equal(await descriptorCount(), baseline);
+  }
+});
+
+test('Linux native untrack closes a non-regular index descriptor when rejecting an exchanged index path', { skip: process.platform !== 'linux' }, async t => {
+  const app = await fixture(t);
+  const indexPath = path.join(app.root, '.git', 'index');
+  const retainedPath = path.join(app.root, '.git', 'index.original');
+  const request = await app.prepare();
+  await fs.rename(indexPath, retainedPath);
+  await fs.mkdir(indexPath);
+  const before = await descriptorCount();
+  try {
+    await assert.rejects(app.session.invoke('git.untrack', request), { code: 'UnsafePath' });
+    assert.equal(await descriptorCount(), before);
+    await assert.rejects(fs.stat(path.join(app.root, '.git', 'index.lock')), { code: 'ENOENT' });
+  } finally {
+    await fs.rm(indexPath, { recursive: true, force: true });
+    await fs.rename(retainedPath, indexPath);
+  }
 });

@@ -99,9 +99,10 @@ int OpenDirectoryTree(const std::filesystem::path& path) {
 int OpenRegularAt(int directory, const char* name, int flags) {
   const int fd = openat(directory, name, flags | O_CLOEXEC | O_NOFOLLOW);
   Require(fd >= 0, errno == ELOOP ? "UnsafePath" : "FileAccessDenied", "A regular Git file could not be opened.");
+  Fd opened(fd);
   struct stat info{};
-  Require(fstat(fd, &info) == 0 && S_ISREG(info.st_mode), "UnsafePath", "Only regular Git files are supported.");
-  return fd;
+  Require(fstat(opened.value, &info) == 0 && S_ISREG(info.st_mode), "UnsafePath", "Only regular Git files are supported.");
+  return std::exchange(opened.value, -1);
 }
 
 std::vector<unsigned char> ReadAll(int fd) {
