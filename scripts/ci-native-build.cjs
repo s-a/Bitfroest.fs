@@ -61,6 +61,11 @@ async function main() {
       if (!fs.existsSync(fixture)) throw new Error(`Missing native test module: ${file}`);
       fs.appendFileSync(process.env.GITHUB_ENV, `${name}=${fixture}\n`);
     }
+  } else if (process.platform === 'linux') {
+    const fixture = path.join(build, 'linux_clipboard_x11_protocol_tests');
+    if (!fs.existsSync(fixture)) throw new Error('Missing native X11 protocol test fixture.');
+    if (!process.env.GITHUB_ENV) throw new Error('Workflow environment file is unavailable.');
+    fs.appendFileSync(process.env.GITHUB_ENV, `NATIVE_X11_PROTOCOL_TEST_FIXTURE=${fixture}\n`);
   }
   const binding = require(path.resolve('native/binding.node'));
   if (binding.apiVersion.major !== 1) throw new Error('Unexpected native API version.');

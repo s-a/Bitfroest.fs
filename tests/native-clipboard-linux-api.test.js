@@ -51,7 +51,7 @@ async function x11Fixture(t, script) {
     encoding: 'utf8', timeout: 20000,
     env: { ...process.env, DISPLAY: display, XAUTHORITY: authority, WAYLAND_DISPLAY: '', WAYLAND_SOCKET: '',
       TEST_CLIPBOARD_ROOT: directory, TEST_CLIPBOARD_API: path.resolve(__dirname, '../native-api.js'),
-      NATIVE_BINDING_TEST_PATH: binary }
+      NATIVE_BINDING_TEST_PATH: binary, TEST_XVFB_PID: String(server.pid) }
   });
   assert.ifError(result.error);
   assert.equal(result.status, 0, result.stderr || result.stdout);
@@ -170,5 +170,181 @@ test('X11 large selections complete INCR transfers between clients and an indepe
     assert.equal(peer.status, 0, peer.stderr);
     const expected = 'cut\\n' + paths.map(value => 'file://' + encodeURI(value)).join('\\r\\n') + '\\r\\n';
     assert.equal(peer.stdout, expected);
+  `);
+});
+
+test('X11 serves simultaneous outgoing INCR transfers to separate requestors', {
+  skip: process.platform !== 'linux', timeout: 30000
+}, async t => {
+  assert.ok(process.env.NATIVE_X11_PROTOCOL_TEST_FIXTURE, 'NATIVE_X11_PROTOCOL_TEST_FIXTURE must name the built X11 protocol fixture.');
+  await x11Fixture(t, `
+    const prefix = path.join(root, ...Array(4).fill('x'.repeat(180)));
+    const paths = Array.from({ length: 600 }, (_, index) => path.join(prefix, 'file-' + index));
+    const writer = api.openSession();
+    await writer.invoke('clipboard.writeFiles', { paths, mode: 'move' });
+    const peer = require('node:child_process').spawnSync(process.env.NATIVE_X11_PROTOCOL_TEST_FIXTURE, ['parallel'], {
+      encoding: 'utf8', timeout: 10000, env: process.env
+    });
+    assert.ifError(peer.error);
+    assert.equal(peer.status, 0, peer.stderr || peer.stdout);
+  `);
+});
+
+test('X11 rejects a multi-part read when its selection owner changes mid-transfer', {
+  skip: process.platform !== 'linux', timeout: 30000
+}, async t => {
+  assert.ok(process.env.NATIVE_X11_PROTOCOL_TEST_FIXTURE, 'NATIVE_X11_PROTOCOL_TEST_FIXTURE must name the built X11 protocol fixture.');
+  await x11Fixture(t, `
+    const { spawn } = require('node:child_process');
+    const { once } = require('node:events');
+    let payload = 'cut\\n' + Array.from({ length: 700 }, (_, index) =>
+      'file://' + encodeURI(path.join(root, 'old-' + index + '-' + 'x'.repeat(100))) + '\\r\\n').join('');
+    await fs.writeFile(path.join(root, 'payload'), payload);
+    const helper = spawn(process.env.NATIVE_X11_PROTOCOL_TEST_FIXTURE, ['serve-incr', path.join(root, 'payload')], {
+      stdio: ['pipe', 'pipe', 'inherit'], env: process.env
+    });
+    let output = '';
+    const waitFor = text => new Promise((resolve, reject) => {
+      if (helper.exitCode !== null || helper.signalCode !== null) {
+        reject(new Error('X11 helper exited with ' + helper.exitCode + '/' + helper.signalCode + ': ' + output));
+        return;
+      }
+      const timer = setTimeout(() => reject(new Error('Timed out waiting for X11 helper: ' + output)), 5000);
+      const check = chunk => {
+        output += chunk.toString();
+        if (output.includes(text)) { clearTimeout(timer); helper.stdout.off('data', check); resolve(); }
+      };
+      helper.stdout.on('data', check);
+      helper.once('exit', code => { clearTimeout(timer); reject(new Error('X11 helper exited with ' + code + ': ' + output)); });
+    });
+    try {
+      await waitFor('READY');
+      const reader = api.openSession(), replacement = api.openSession();
+      const pending = reader.invoke('clipboard.readFiles', {});
+      const rejected = assert.rejects(pending, error => error.code === 'ClipboardChanged');
+      await waitFor('TRANSFER');
+      const newPaths = [path.join(root, 'new-owner.txt')];
+      await fs.writeFile(newPaths[0], 'new');
+      await replacement.invoke('clipboard.writeFiles', { paths: newPaths, mode: 'copy' });
+      helper.stdin.write('GO\\n');
+      await rejected;
+    } finally {
+      helper.kill();
+      if (helper.exitCode === null && helper.signalCode === null) await once(helper, 'exit');
+    }
+  `);
+});
+
+test('X11 reports a stalled selection owner as a bounded request timeout', {
+  skip: process.platform !== 'linux', timeout: 10000
+}, async t => {
+  assert.ok(process.env.NATIVE_X11_PROTOCOL_TEST_FIXTURE, 'NATIVE_X11_PROTOCOL_TEST_FIXTURE must name the built X11 protocol fixture.');
+  await x11Fixture(t, `
+    const { spawn } = require('node:child_process');
+    const { once } = require('node:events');
+    const helper = spawn(process.env.NATIVE_X11_PROTOCOL_TEST_FIXTURE, ['stall'], {
+      stdio: ['pipe', 'pipe', 'inherit'], env: process.env
+    });
+    let output = '';
+    const waitFor = text => new Promise((resolve, reject) => {
+      if (helper.exitCode !== null || helper.signalCode !== null) {
+        reject(new Error('X11 helper exited with ' + helper.exitCode + '/' + helper.signalCode + ': ' + output));
+        return;
+      }
+      const timer = setTimeout(() => reject(new Error('Timed out waiting for X11 helper: ' + output)), 5000);
+      const check = chunk => { output += chunk.toString(); if (output.includes(text)) { clearTimeout(timer); helper.stdout.off('data', check); resolve(); } };
+      helper.stdout.on('data', check);
+      helper.once('exit', code => { clearTimeout(timer); reject(new Error('X11 helper exited with ' + code + ': ' + output)); });
+    });
+    try {
+      await waitFor('READY');
+      const session = api.openSession();
+      const started = Date.now();
+      const pending = session.invoke('clipboard.readFiles', {});
+      const rejected = assert.rejects(pending, error => error.code === 'X11RequestTimeout');
+      await waitFor('REQUEST');
+      await rejected;
+      assert.ok(Date.now() - started < 3000);
+    } finally {
+      helper.kill();
+      if (helper.exitCode === null && helper.signalCode === null) await once(helper, 'exit');
+    }
+  `);
+});
+
+test('X11 closes an incoming INCR transfer promptly when its session shuts down', {
+  skip: process.platform !== 'linux', timeout: 10000
+}, async t => {
+  assert.ok(process.env.NATIVE_X11_PROTOCOL_TEST_FIXTURE, 'NATIVE_X11_PROTOCOL_TEST_FIXTURE must name the built X11 protocol fixture.');
+  await x11Fixture(t, `
+    const { spawn } = require('node:child_process');
+    const { once } = require('node:events');
+    const payload = 'cut\\n' + Array.from({ length: 700 }, (_, index) =>
+      'file://' + encodeURI(path.join(root, 'held-' + index + '-' + 'x'.repeat(100))) + '\\r\\n').join('');
+    await fs.writeFile(path.join(root, 'payload'), payload);
+    const helper = spawn(process.env.NATIVE_X11_PROTOCOL_TEST_FIXTURE, ['serve-incr', path.join(root, 'payload')], {
+      stdio: ['pipe', 'pipe', 'inherit'], env: process.env
+    });
+    let output = '';
+    const waitFor = text => new Promise((resolve, reject) => {
+      if (helper.exitCode !== null || helper.signalCode !== null) {
+        reject(new Error('X11 helper exited with ' + helper.exitCode + '/' + helper.signalCode + ': ' + output));
+        return;
+      }
+      const timer = setTimeout(() => reject(new Error('Timed out waiting for X11 helper: ' + output)), 5000);
+      const check = chunk => { output += chunk.toString(); if (output.includes(text)) { clearTimeout(timer); helper.stdout.off('data', check); resolve(); } };
+      helper.stdout.on('data', check);
+      helper.once('exit', code => { clearTimeout(timer); reject(new Error('X11 helper exited with ' + code + ': ' + output)); });
+    });
+    try {
+      await waitFor('READY');
+      const session = api.openSession();
+      const pending = session.invoke('clipboard.readFiles', {});
+      const rejected = assert.rejects(pending, error => error.code === 'SessionClosed');
+      await waitFor('WAITING');
+      const started = Date.now();
+      await session.closeAsync();
+      assert.ok(Date.now() - started < 500);
+      await rejected;
+    } finally {
+      helper.kill();
+      if (helper.exitCode === null && helper.signalCode === null) await once(helper, 'exit');
+    }
+  `);
+});
+
+test('X11 returns a connection error when the X server disconnects during a clipboard read', {
+  skip: process.platform !== 'linux', timeout: 10000
+}, async t => {
+  assert.ok(process.env.NATIVE_X11_PROTOCOL_TEST_FIXTURE, 'NATIVE_X11_PROTOCOL_TEST_FIXTURE must name the built X11 protocol fixture.');
+  await x11Fixture(t, `
+    const { spawn } = require('node:child_process');
+    const { once } = require('node:events');
+    const helper = spawn(process.env.NATIVE_X11_PROTOCOL_TEST_FIXTURE, ['stall'], {
+      stdio: ['pipe', 'pipe', 'inherit'], env: process.env
+    });
+    let output = '';
+    const waitFor = text => new Promise((resolve, reject) => {
+      if (helper.exitCode !== null || helper.signalCode !== null) {
+        reject(new Error('X11 helper exited with ' + helper.exitCode + '/' + helper.signalCode + ': ' + output));
+        return;
+      }
+      const timer = setTimeout(() => reject(new Error('Timed out waiting for X11 helper: ' + output)), 5000);
+      const check = chunk => { output += chunk.toString(); if (output.includes(text)) { clearTimeout(timer); helper.stdout.off('data', check); resolve(); } };
+      helper.stdout.on('data', check);
+      helper.once('exit', code => { clearTimeout(timer); reject(new Error('X11 helper exited with ' + code + ': ' + output)); });
+    });
+    try {
+      await waitFor('READY');
+      const session = api.openSession();
+      const pending = session.invoke('clipboard.readFiles', {});
+      const rejected = assert.rejects(pending, error => error.code === 'X11ConnectionLost');
+      await waitFor('REQUEST');
+      process.kill(Number(process.env.TEST_XVFB_PID), 'SIGTERM');
+      await rejected;
+    } finally {
+      helper.kill();
+      if (helper.exitCode === null && helper.signalCode === null) await once(helper, 'exit');
+    }
   `);
 });

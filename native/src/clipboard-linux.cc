@@ -33,6 +33,7 @@ namespace {
 constexpr size_t kMaximumSelectionBytes = 1024 * 1024;
 constexpr size_t kIncrementalThreshold = 48 * 1024;
 constexpr size_t kIncrementalChunkBytes = 32 * 1024;
+constexpr size_t kMaximumOutgoingTransfers = 16;
 constexpr auto kRequestTimeout = std::chrono::milliseconds(1800);
 constexpr uint8_t kXFixesSelectionNotify = XCB_XFIXES_SELECTION_NOTIFY;
 
@@ -144,9 +145,20 @@ class Session::Impl {
  private:
   struct Job { Request request; std::promise<Result> promise; };
   struct OutgoingTransfer {
-    bool active = false; xcb_window_t requestor = XCB_WINDOW_NONE; xcb_atom_t property = XCB_ATOM_NONE;
     xcb_atom_t target = XCB_ATOM_NONE; std::string payload; size_t offset = 0;
     std::chrono::steady_clock::time_point deadline{};
+  };
+  struct TransferKey {
+    xcb_window_t requestor = XCB_WINDOW_NONE;
+    xcb_atom_t property = XCB_ATOM_NONE;
+    bool operator==(const TransferKey& other) const {
+      return requestor == other.requestor && property == other.property;
+    }
+  };
+  struct TransferKeyHash {
+    size_t operator()(const TransferKey& key) const {
+      return (static_cast<size_t>(key.requestor) << 32) ^ static_cast<size_t>(key.property);
+    }
   };
   static Result Failure(std::string code, std::string message) {
     Result result; result.code = std::move(code); result.message = std::move(message); return result;
@@ -212,8 +224,10 @@ class Session::Impl {
   }
   bool WaitEvent(uint8_t expected, xcb_generic_event_t** output) {
     const auto deadline = std::chrono::steady_clock::now() + kRequestTimeout;
-    while (std::chrono::steady_clock::now() < deadline && !StopRequested()) {
-      if (api_.has_error(connection_)) return false;
+    wait_failure_code_.clear();
+    while (std::chrono::steady_clock::now() < deadline) {
+      if (StopRequested()) { wait_failure_code_ = "SessionClosed"; return false; }
+      if (api_.has_error(connection_)) { wait_failure_code_ = "X11ConnectionLost"; return false; }
       while (auto* event = api_.poll_event(connection_)) {
         const uint8_t type = event->response_type & 0x7f;
         if (type == expected) { *output = event; return true; }
@@ -222,8 +236,13 @@ class Session::Impl {
       }
       pollfd fd{api_.file_descriptor(connection_), POLLIN, 0};
       const auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(deadline - std::chrono::steady_clock::now());
-      if (::poll(&fd, 1, std::max(1, std::min(20, static_cast<int>(remaining.count())))) < 0) return false;
+      const int ready = ::poll(&fd, 1, std::max(1, std::min(20, static_cast<int>(remaining.count()))));
+      if (ready < 0 && errno != EINTR) { wait_failure_code_ = "X11ConnectionLost"; return false; }
+      if (ready > 0 && (fd.revents & (POLLERR | POLLHUP | POLLNVAL))) {
+        wait_failure_code_ = "X11ConnectionLost"; return false;
+      }
     }
+    wait_failure_code_ = StopRequested() ? "SessionClosed" : "X11RequestTimeout";
     return false;
   }
   bool StopRequested() {
@@ -231,22 +250,33 @@ class Session::Impl {
   }
   template <typename Cookie>
   xcb_generic_reply_t* WaitReply(Cookie cookie) {
+    wait_failure_code_.clear();
     api_.flush(connection_);
     const auto deadline = std::chrono::steady_clock::now() + kRequestTimeout;
     for (;;) {
       void* reply = nullptr;
       xcb_generic_error_t* error = nullptr;
       if (api_.poll_reply(connection_, cookie.sequence, &reply, &error)) {
-        if (error) std::free(error);
+        if (error) { std::free(error); wait_failure_code_ = "X11RequestFailed"; }
         return static_cast<xcb_generic_reply_t*>(reply);
       }
-      if (error) { std::free(error); return nullptr; }
+      if (error) { std::free(error); wait_failure_code_ = "X11RequestFailed"; return nullptr; }
       if (StopRequested() || api_.has_error(connection_) || std::chrono::steady_clock::now() >= deadline) {
+        wait_failure_code_ = StopRequested() ? "SessionClosed" : api_.has_error(connection_) ?
+            "X11ConnectionLost" : "X11RequestTimeout";
         api_.discard_reply(connection_, cookie.sequence);
         return nullptr;
       }
       pollfd fd{api_.file_descriptor(connection_), POLLIN, 0};
-      if (::poll(&fd, 1, 20) < 0) { api_.discard_reply(connection_, cookie.sequence); return nullptr; }
+      const int ready = ::poll(&fd, 1, 20);
+      if (ready < 0 && errno != EINTR) {
+        wait_failure_code_ = "X11ConnectionLost";
+        api_.discard_reply(connection_, cookie.sequence); return nullptr;
+      }
+      if (ready > 0 && (fd.revents & (POLLERR | POLLHUP | POLLNVAL))) {
+        wait_failure_code_ = "X11ConnectionLost";
+        api_.discard_reply(connection_, cookie.sequence); return nullptr;
+      }
     }
   }
   bool GetProperty(xcb_atom_t property, xcb_atom_t requested_type, std::string* data, xcb_atom_t* type = nullptr) {
@@ -295,8 +325,10 @@ class Session::Impl {
   }
   bool WaitProperty(uint8_t state, xcb_generic_event_t** output) {
     const auto deadline = std::chrono::steady_clock::now() + kRequestTimeout;
-    while (std::chrono::steady_clock::now() < deadline && !StopRequested()) {
-      if (api_.has_error(connection_)) return false;
+    wait_failure_code_.clear();
+    while (std::chrono::steady_clock::now() < deadline) {
+      if (StopRequested()) { wait_failure_code_ = "SessionClosed"; return false; }
+      if (api_.has_error(connection_)) { wait_failure_code_ = "X11ConnectionLost"; return false; }
       while (auto* event = api_.poll_event(connection_)) {
         const uint8_t type = event->response_type & 0x7f;
         if (type == XCB_PROPERTY_NOTIFY && reinterpret_cast<xcb_property_notify_event_t*>(event)->state == state) {
@@ -305,8 +337,13 @@ class Session::Impl {
         HandleEvent(event); std::free(event);
       }
       pollfd fd{api_.file_descriptor(connection_), POLLIN, 0};
-      if (::poll(&fd, 1, 20) < 0) return false;
+      const int ready = ::poll(&fd, 1, 20);
+      if (ready < 0 && errno != EINTR) { wait_failure_code_ = "X11ConnectionLost"; return false; }
+      if (ready > 0 && (fd.revents & (POLLERR | POLLHUP | POLLNVAL))) {
+        wait_failure_code_ = "X11ConnectionLost"; return false;
+      }
     }
+    wait_failure_code_ = StopRequested() ? "SessionClosed" : "X11RequestTimeout";
     return false;
   }
   uint32_t ServerTimestamp() {
@@ -371,12 +408,51 @@ class Session::Impl {
     }
     return false;
   }
+  void ObserveOwner(xcb_window_t owner) {
+    if (owner == seen_owner_) return;
+    seen_owner_ = owner;
+    if (owner != window_) {
+      own_paths_.clear(); own_payload_.clear(); own_uri_.clear(); own_path_identities_.clear();
+    }
+  }
+  bool CurrentSelectionSnapshot(xcb_window_t* owner, uint64_t* generation) {
+    auto cookie = api_.get_owner(connection_, atoms_.clipboard);
+    auto* reply = reinterpret_cast<xcb_get_selection_owner_reply_t*>(WaitReply(cookie));
+    if (!reply) return false;
+    *owner = reply->owner;
+    std::free(reply);
+    while (auto* event = api_.poll_event(connection_)) { HandleEvent(event); std::free(event); }
+    ObserveOwner(*owner);
+    *generation = owner_generation_;
+    return true;
+  }
+  bool SelectionStillMatches(xcb_window_t owner, uint64_t generation) {
+    xcb_window_t current_owner = XCB_WINDOW_NONE;
+    uint64_t current_generation = 0;
+    return CurrentSelectionSnapshot(&current_owner, &current_generation) &&
+        current_owner == owner && current_generation == generation;
+  }
+  Result ReadFailure(xcb_window_t owner, uint64_t generation, const char* fallback_code, const char* message) {
+    const std::string operation_failure = wait_failure_code_;
+    if (operation_failure == "X11ConnectionLost")
+      return Failure("X11ConnectionLost", "The X11 clipboard connection was lost.");
+    if (operation_failure == "SessionClosed")
+      return Failure("SessionClosed", "The clipboard session is closed.");
+    if (!SelectionStillMatches(owner, generation)) {
+      if (wait_failure_code_ == "SessionClosed" || operation_failure == "SessionClosed")
+        return Failure("SessionClosed", "The clipboard session is closed.");
+      if (wait_failure_code_ == "X11ConnectionLost") return Failure("X11ConnectionLost", "The X11 clipboard connection was lost.");
+      return Failure("ClipboardChanged", "The clipboard selection changed while it was being read.");
+    }
+    const std::string code = operation_failure.empty() ? fallback_code : operation_failure;
+    return Failure(code, message);
+  }
   Result Read() {
     Result result; result.ok = true; result.available = true;
-    auto cookie = api_.get_owner(connection_, atoms_.clipboard);
-    auto* owner = reinterpret_cast<xcb_get_selection_owner_reply_t*>(WaitReply(cookie));
-    if (!owner) return Failure("X11ConnectionLost", "The X11 clipboard connection was lost.");
-    const xcb_window_t owner_window = owner->owner; std::free(owner);
+    xcb_window_t owner_window = XCB_WINDOW_NONE;
+    uint64_t owner_generation = 0;
+    if (!CurrentSelectionSnapshot(&owner_window, &owner_generation))
+      return Failure(wait_failure_code_.empty() ? "X11ConnectionLost" : wait_failure_code_, "The X11 clipboard connection was lost.");
     if (owner_window == XCB_WINDOW_NONE) return result;
     if (owner_window == window_ && !own_paths_.empty()) {
       if (OwnPathIdentityChanged()) {
@@ -390,16 +466,27 @@ class Session::Impl {
     std::string targets_data;
     xcb_atom_t targets_type = XCB_ATOM_NONE;
     if (!Convert(atoms_.targets, &targets_data, &targets_type) || targets_type != atoms_.atom || targets_data.size() % sizeof(xcb_atom_t))
-      return Failure("ClipboardRequestFailed", "The current clipboard owner did not provide its target list.");
+      return ReadFailure(owner_window, owner_generation, "ClipboardRequestFailed", "The current clipboard owner did not provide its target list.");
     std::vector<xcb_atom_t> targets(targets_data.size() / sizeof(xcb_atom_t));
     std::memcpy(targets.data(), targets_data.data(), targets_data.size());
     const auto supports = [&](xcb_atom_t atom) { return std::find(targets.begin(), targets.end(), atom) != targets.end(); };
     std::string payload;
     FileSelection selection;
     bool parsed = false;
-    if (supports(atoms_.gnome) && Convert(atoms_.gnome, &payload)) parsed = ParseGnomeCopiedFiles(payload, &selection);
-    if (!parsed && supports(atoms_.uri) && Convert(atoms_.uri, &payload)) {
-      parsed = ParseUriList(payload, &selection.paths); selection.mode = FileMode::Copy;
+    if (supports(atoms_.gnome)) {
+      if (Convert(atoms_.gnome, &payload)) parsed = ParseGnomeCopiedFiles(payload, &selection);
+      else if (!wait_failure_code_.empty())
+        return ReadFailure(owner_window, owner_generation, "ClipboardRequestFailed", "The current clipboard owner did not provide file data.");
+    }
+    if (!parsed && supports(atoms_.uri)) {
+      if (Convert(atoms_.uri, &payload)) { parsed = ParseUriList(payload, &selection.paths); selection.mode = FileMode::Copy; }
+      else if (!wait_failure_code_.empty())
+        return ReadFailure(owner_window, owner_generation, "ClipboardRequestFailed", "The current clipboard owner did not provide file data.");
+    }
+    if (!SelectionStillMatches(owner_window, owner_generation)) {
+      if (wait_failure_code_ == "SessionClosed") return Failure("SessionClosed", "The clipboard session is closed.");
+      if (wait_failure_code_ == "X11ConnectionLost") return Failure("X11ConnectionLost", "The X11 clipboard connection was lost.");
+      return Failure("ClipboardChanged", "The clipboard selection changed while it was being read.");
     }
     if (!parsed) return result;
     result.paths = std::move(selection.paths);
@@ -420,14 +507,15 @@ class Session::Impl {
     } else if (request.target == atoms_.uri || request.target == atoms_.gnome) {
       const std::string& payload = request.target == atoms_.uri ? own_uri_ : own_payload_;
       if (payload.size() > kIncrementalThreshold) {
-        if (outgoing_.active) property = XCB_ATOM_NONE;
+        const TransferKey key{request.requestor, property};
+        if (outgoing_.size() >= kMaximumOutgoingTransfers || outgoing_.find(key) != outgoing_.end()) property = XCB_ATOM_NONE;
         else {
           const uint32_t length = static_cast<uint32_t>(payload.size());
-          const uint32_t event_mask = XCB_EVENT_MASK_PROPERTY_CHANGE;
+          const uint32_t event_mask = XCB_EVENT_MASK_PROPERTY_CHANGE | XCB_EVENT_MASK_STRUCTURE_NOTIFY;
           api_.change_attributes(connection_, request.requestor, XCB_CW_EVENT_MASK, &event_mask);
           api_.change_property(connection_, XCB_PROP_MODE_REPLACE, request.requestor, property, atoms_.incr, 32, 1, &length);
-          outgoing_ = {true, request.requestor, property, request.target, payload, 0,
-                       std::chrono::steady_clock::now() + kRequestTimeout};
+          outgoing_.emplace(key, OutgoingTransfer{request.target, payload, 0,
+              std::chrono::steady_clock::now() + kRequestTimeout});
         }
       } else {
         api_.change_property(connection_, XCB_PROP_MODE_REPLACE, request.requestor, property, request.target, 8,
@@ -445,23 +533,37 @@ class Session::Impl {
     if (type == XCB_SELECTION_REQUEST) Respond(*reinterpret_cast<xcb_selection_request_event_t*>(event));
     if (type == XCB_PROPERTY_NOTIFY) {
       auto* changed = reinterpret_cast<xcb_property_notify_event_t*>(event);
-      if (outgoing_.active && changed->window == outgoing_.requestor && changed->atom == outgoing_.property &&
-          changed->state == XCB_PROPERTY_DELETE) {
-        const size_t size = std::min(kIncrementalChunkBytes, outgoing_.payload.size() - outgoing_.offset);
-        api_.change_property(connection_, XCB_PROP_MODE_REPLACE, outgoing_.requestor, outgoing_.property,
-                             outgoing_.target, 8, static_cast<uint32_t>(size),
-                             size ? outgoing_.payload.data() + outgoing_.offset : nullptr);
-        outgoing_.offset += size;
-        outgoing_.deadline = std::chrono::steady_clock::now() + kRequestTimeout;
-        if (size == 0) outgoing_ = {};
+      if (changed->state == XCB_PROPERTY_DELETE) {
+        const TransferKey key{changed->window, changed->atom};
+        const auto transfer = outgoing_.find(key);
+        if (transfer != outgoing_.end()) {
+          auto& current = transfer->second;
+          const size_t size = std::min(kIncrementalChunkBytes, current.payload.size() - current.offset);
+          api_.change_property(connection_, XCB_PROP_MODE_REPLACE, key.requestor, key.property,
+                               current.target, 8, static_cast<uint32_t>(size),
+                               size ? current.payload.data() + current.offset : nullptr);
+          current.offset += size;
+          current.deadline = std::chrono::steady_clock::now() + kRequestTimeout;
+          if (size == 0) outgoing_.erase(transfer);
+        }
         api_.flush(connection_);
+      }
+    }
+    if (type == XCB_DESTROY_NOTIFY) {
+      const auto* destroyed = reinterpret_cast<const xcb_destroy_notify_event_t*>(event);
+      for (auto transfer = outgoing_.begin(); transfer != outgoing_.end();) {
+        if (transfer->first.requestor == destroyed->window) transfer = outgoing_.erase(transfer);
+        else ++transfer;
       }
     }
     if (type == fixes_event_base_ + kXFixesSelectionNotify) {
       auto* notify = reinterpret_cast<xcb_xfixes_selection_notify_event_t*>(event);
-      if (notify->selection == atoms_.clipboard && notify->owner != window_) {
-        seen_owner_ = notify->owner; ++owner_generation_;
-        own_paths_.clear(); own_payload_.clear(); own_uri_.clear();
+      if (notify->selection == atoms_.clipboard) {
+        seen_owner_ = notify->owner;
+        ++owner_generation_;
+        if (notify->owner != window_) {
+          own_paths_.clear(); own_payload_.clear(); own_uri_.clear(); own_path_identities_.clear();
+        }
       }
     }
   }
@@ -483,6 +585,7 @@ class Session::Impl {
     auto* owner = reinterpret_cast<xcb_get_selection_owner_reply_t*>(WaitReply(cookie));
     if (!owner || owner->owner != window_) { if (owner) std::free(owner); return Failure("ClipboardOwnerChanged", "The clipboard selection could not be retained."); }
     std::free(owner);
+    seen_owner_ = window_;
     Result result; result.ok = true; result.available = true; result.paths = request.paths; result.mode = request.mode;
     result.token = own_token_; seen_token_ = result.token;
     return result;
@@ -543,7 +646,11 @@ class Session::Impl {
         Result result = ready ? Apply(job->request) : Failure(UnavailableReason(), "The X11 clipboard is unavailable.");
         job->promise.set_value(std::move(result));
       }
-      if (outgoing_.active && std::chrono::steady_clock::now() >= outgoing_.deadline) outgoing_ = {};
+      const auto now = std::chrono::steady_clock::now();
+      for (auto transfer = outgoing_.begin(); transfer != outgoing_.end();) {
+        if (now >= transfer->second.deadline) transfer = outgoing_.erase(transfer);
+        else ++transfer;
+      }
       if (ready && connection_ && !api_.has_error(connection_)) {
         while (auto* event = api_.poll_event(connection_)) { HandleEvent(event); std::free(event); }
       } else if (ready) { ready = false; SetUnavailable("X11ConnectionLost"); }
@@ -574,12 +681,13 @@ class Session::Impl {
   Mode own_mode_ = Mode::Copy;
   std::string own_payload_, own_uri_, seen_payload_, seen_token_;
   std::string own_token_;
+  std::string wait_failure_code_;
   std::unordered_map<std::string, std::string> own_path_identities_;
   xcb_window_t seen_owner_ = XCB_WINDOW_NONE;
   uint64_t owner_generation_ = 0;
   uint32_t own_timestamp_ = XCB_CURRENT_TIME;
   uint8_t fixes_event_base_ = 0;
-  OutgoingTransfer outgoing_;
+  std::unordered_map<TransferKey, OutgoingTransfer, TransferKeyHash> outgoing_;
 };
 
 Session::Session() : impl_(std::make_unique<Impl>()) {}
