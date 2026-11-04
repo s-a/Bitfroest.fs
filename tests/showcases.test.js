@@ -3,6 +3,24 @@ const assert = require('node:assert/strict');
 const { validateCatalog, filename, assertProductState, waitFor, buildManifest, parseOptions, numberCatalog, assertSurfaceState } = require('../scripts/showcases/run.cjs');
 
 const scene = () => ({ id: 'new-folder', title: 'Create a folder', description: 'Open the folder dialog.', paths: ['C:/demo/left', 'C:/demo/right'], captures: [{ id: 'dialog', action: 'mkdir', expect: 'dialog[open]', text: 'New folder' }] });
+
+test('lock documentation permits only inspection and unconfirmed operation previews', () => {
+  for (const lockAction of ['unlock', 'terminate', 'delete', 'schedule', 'run']) {
+    const value = scene();
+    value.captures[0].lockAction = lockAction;
+    assert.throws(() => validateCatalog([value]), /lock.*preview/i);
+  }
+});
+
+test('isolated lock documentation uses the actual custom workbench dialogs', () => {
+  const { profileSettings } = require('../scripts/showcases/run.cjs');
+  assert.equal(profileSettings('C:/demo')['window.dialogStyle'], 'custom');
+  for (const surface of ['inputbox', 'confirmation']) {
+    const capture = { surface, text: 'Folder locks' };
+    assert.doesNotThrow(() => assertSurfaceState({ visible: true, ready: true, text: 'Folder locks', kind: surface }, capture));
+    assert.throws(() => assertSurfaceState({ visible: true, ready: true, text: 'Folder locks', kind: 'webview' }, capture), /surface/);
+  }
+});
 test('the npm entry uses the repository demo and accepts explicit overrides', () => {
   const path = require('node:path');
   assert.equal(require('../package.json').scripts.showcase, 'node scripts/showcases/run.cjs');

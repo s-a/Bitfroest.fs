@@ -23,7 +23,7 @@ try {
  $startInfo.desktop = 'winsta0\' + $desktopName
  $processInfo = New-Object ShowcaseDesktop+PI
  $appPath = $config.code
- $argsText = '"' + $appPath + '" --new-window --disable-gpu --disable-workspace-trust --skip-welcome --skip-release-notes --user-data-dir="' + $RunDirectory + '\profile" --extensions-dir="' + $RunDirectory + '\extensions" --extensionDevelopmentPath="' + $config.repository + '" --extensionTestsPath="' + $config.tests + '" --remote-debugging-port=' + $config.port
+ $argsText = '"' + $appPath + '" --new-window --disable-gpu --disable-workspace-trust --skip-welcome --skip-release-notes --user-data-dir="' + $RunDirectory + '\profile" --extensions-dir="' + $RunDirectory + '\extensions" --extensionDevelopmentPath="' + $config.repository + '" --remote-debugging-port=' + $config.port
  $command = New-Object System.Text.StringBuilder($argsText)
  if (-not [ShowcaseDesktop]::CreateProcess($appPath,$command,[IntPtr]::Zero,[IntPtr]::Zero,$false,0,[IntPtr]::Zero,$RunDirectory,[ref]$startInfo,[ref]$processInfo)) { throw "CreateProcess failed: $([Runtime.InteropServices.Marshal]::GetLastWin32Error())" }
  $processInfo.pid | Set-Content -LiteralPath (Join-Path $RunDirectory 'process-id.txt')

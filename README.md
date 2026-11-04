@@ -348,6 +348,42 @@ Inspect commands, editable bindings and conflict information.
 
 </details>
 
+<details>
+<summary>0048 · Inspect references to a folder</summary>
+
+A preview build keeps Build.log open and loads Preview-Plugin.dll. Inspect its real process references and the scan's access limits without releasing locks.
+
+![Inspect references to a folder](media/marketplace/showcases/0048-windows-en-dark-folder-locks-processes.png)
+
+</details>
+
+<details>
+<summary>0049 · Choose a folder-lock action</summary>
+
+Inspect available process and folder actions for a real scan result.
+
+![Choose a folder-lock action](media/marketplace/showcases/0049-windows-en-dark-folder-lock-actions-quickpick.png)
+
+</details>
+
+<details>
+<summary>0050 · Choose a destination for a locked folder</summary>
+
+Review the complete destination path for a folder copy. The example leaves the input unconfirmed.
+
+![Choose a destination for a locked folder](media/marketplace/showcases/0050-windows-en-dark-folder-lock-target-destination.png)
+
+</details>
+
+<details>
+<summary>0051 · Review a lock-management operation</summary>
+
+Review the warning before closing file handles or unloading modules. The example stops before Run.
+
+![Review a lock-management operation](media/marketplace/showcases/0051-windows-en-dark-folder-lock-confirmation-warning.png)
+
+</details>
+
 <!-- showcase-gallery:end -->
 
 ## Configuration

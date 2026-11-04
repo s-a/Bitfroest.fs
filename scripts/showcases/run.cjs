@@ -21,6 +21,7 @@ function profileSettings(demo) {
     'bitfroest.files.useSystemContextMenu': false, 'git.openRepositoryInParentFolders': 'never',
     'workbench.statusBar.visible': false, 'workbench.activityBar.location': 'hidden',
     'workbench.secondarySideBar.defaultVisibility': 'hidden',
+    'window.dialogStyle': 'custom',
     'bitfroest.favorites.items': [
       ['sources', 'Project sources', 'left/bitfroest.fs'], ['documents', 'Documents', 'left/documents'], ['delivery', 'Delivery inbox', 'right/inbox']
     ].map(([id, name, folder]) => ({ id, name, type: 'favorite', parent: null, path: path.join(demo, folder) }))
@@ -42,7 +43,7 @@ function clickControl(selector, root = document) {
 }
 function assertSurfaceState(state, capture) {
   if (!state.visible || !state.ready || !state.text?.includes(capture.text)) throw new Error('The requested surface is not ready.');
-  if (capture.surface === 'editor' ? state.kind !== 'editor' || !state.diff : capture.surface === 'quickpick' ? state.kind !== 'quickpick' : state.owner !== 'bitfroest.bitfroest-fs-prototype') throw new Error('The requested product surface was not observed.');
+  if (capture.surface === 'editor' ? state.kind !== 'editor' || !state.diff : ['quickpick', 'inputbox', 'confirmation'].includes(capture.surface) ? state.kind !== capture.surface : state.owner !== 'bitfroest.bitfroest-fs-prototype') throw new Error('The requested product surface was not observed.');
 }
 const safeActions = ['mkdir', 'copy', 'move', 'rename-one', 'search', 'view', 'new-file', 'rename', 'pack', 'unpack', 'delete', 'delete-permanently', 'select-group', 'unselect-group', 'search-separate', 'clear', 'refresh'];
 const safeListerActions = ['mode:text', 'mode:binary', 'mode:hex', 'mode:html', 'mode:unicode', 'mode:utf8', 'find', 'manual'];
@@ -89,6 +90,7 @@ function validateCatalog(catalog) {
       captures.add(capture.id);
       if (!capture.expect || !capture.text) throw new Error('Capture readiness criteria are required.');
       if (capture.action && !safeActions.includes(capture.action)) throw new Error('Unsupported showcase action.');
+      if (capture.lockAction && !['inspect', 'actions', 'destination', 'confirmation'].includes(capture.lockAction)) throw new Error('Unsupported lock documentation preview.');
       if (capture.listerAction && !safeListerActions.includes(capture.listerAction)) throw new Error('Unsupported viewer action.');
       if (capture.select && (!['string'].includes(typeof capture.select.name) || ![0, 1].includes(capture.select.side ?? 0))) throw new Error('Invalid demo selection.');
     }
@@ -173,12 +175,16 @@ async function main() {
   const { code, demo, selected } = parseOptions(process.argv.slice(2), findCode());
   if (!code || !fs.existsSync(code) || !demo) throw new Error('Specify --code and --demo.');
   const catalog = numberCatalog(validateCatalog(JSON.parse(fs.readFileSync(path.join(__dirname, 'catalog.json'), 'utf8').replaceAll('${demo}', demo.replace(/\\/g, '/')))));
-  const scenes = selected ? catalog.filter(scene => scene.id === selected) : catalog;
+  const scenes = selected ? catalog.filter(scene => selected.split(',').includes(scene.id)) : catalog;
   if (!scenes.length) throw new Error(`Unknown showcase: ${selected}`);
   for (const scene of scenes.filter(item => !item.status)) for (const folder of scene.paths) if (!fs.statSync(folder).isDirectory()) throw new Error(`Missing demo directory: ${folder}`);
   const run = path.join(output, 'runs', `${Date.now()}-${process.pid}`);
   fs.mkdirSync(path.join(run, 'profile/User'), { recursive: true });
   fs.writeFileSync(path.join(run, 'profile/User/settings.json'), JSON.stringify(profileSettings(demo)));
+  const driver = path.join(run, 'extensions/bitfroest.showcase-host');
+  fs.mkdirSync(driver, { recursive: true });
+  fs.writeFileSync(path.join(driver, 'package.json'), JSON.stringify({ name: 'showcase-host', publisher: 'bitfroest', version: '0.0.1', engines: { vscode: '^1.100.0' }, activationEvents: ['onStartupFinished'], main: './extension.cjs' }));
+  fs.writeFileSync(path.join(driver, 'extension.cjs'), `exports.activate=()=>{require(${JSON.stringify(path.join(__dirname, 'host-tests.cjs'))}).run().catch(error=>require('node:fs').writeFileSync(${JSON.stringify(path.join(run, 'driver-error.log'))},error.stack||String(error)));};`);
   const previousFile = path.join(output, 'showcases.json');
   const original = selected && fs.existsSync(previousFile) ? JSON.parse(fs.readFileSync(previousFile, 'utf8')) : undefined;
   const previous = original && renumberManifest(catalog, original);
@@ -189,6 +195,7 @@ async function main() {
     { windowsHide: true, env: { ...process.env, BFS_SHOWCASE_RUN: run }, stdio: ['ignore', log, log] });
   const exited = new Promise((resolve, reject) => { child.once('exit', resolve); child.once('error', reject); });
   const connections = [];
+  let lockFixture;
   let manifest, failure, diagnostic, stage = 'startup';
   try {
     const host = await waitFor(() => fs.existsSync(path.join(run, 'ready.json')) && JSON.parse(fs.readFileSync(path.join(run, 'ready.json'), 'utf8')), 90000);
@@ -227,9 +234,11 @@ async function main() {
       return reply;
     };
     const images = [];
+    if (scenes.some(scene => scene.captures.some(capture => capture.lockAction))) lockFixture = await require('./locks.cjs').createLockFixture(demo);
     for (const scene of scenes) {
       if (scene.status) continue;
       stage = `${scene.id}: navigation`;
+      if (lockFixture) await invoke('showcase.close-locks');
       await invoke('showcase.focus-main');
       if (scene.captures.some(capture => ['bitfroest.gitHistory', 'bitfroest.gitDiff', 'bitfroest.showLocalBranches'].includes(capture.command))) await invoke('showcase.prepare-repository', [scene.paths[0]]);
       await evaluate(() => {
@@ -275,6 +284,7 @@ async function main() {
             }))] : [];
           await invoke(capture.command, args);
         }
+        if (capture.lockAction) await require('./locks.cjs').prepareLockCapture({ capture, lockFixture, targets, connect, connections, waitFor });
         if (capture.listerAction) await invoke('bitfroest.lister-action', [capture.listerAction]);
         for (const selector of capture.click || []) await evaluate(clickControl, selector);
         if (capture.surface) {
@@ -335,6 +345,7 @@ async function main() {
     clearTimeout(cleanupTimer);
     fs.closeSync(log);
     if (exitCode !== 0) failure = new Error(`Showcase desktop cleanup failed (${exitCode}); inspect ${run}`, { cause: failure });
+    if (lockFixture) await lockFixture.dispose();
   }
   if (failure) throw failure;
   if (original) for (const [index, section] of original.sections.entries()) for (const [imageIndex, image] of section.images.entries()) {

@@ -1317,7 +1317,7 @@
     "id": "folder-locks",
     "parentId": "main",
     "title": "Inspect references to a folder",
-    "description": "Show real locking processes, details and available actions without releasing locks.",
+    "description": "A preview build keeps Build.log open and loads Preview-Plugin.dll. Inspect its real process references and the scan's access limits without releasing locks.",
     "paths": [
       "${demo}/left",
       "${demo}/right"
@@ -1326,9 +1326,21 @@
       "lock-inspector.js",
       "media/lock-inspector.js"
     ],
-    "status": "pending",
-    "reason": "Uses a separate product webview and requires controlled real process references.",
-    "captures": []
+    "captures": [
+      {
+        "id": "processes",
+        "surface": "folder-locks",
+        "expect": "body",
+        "ready": "#processes[aria-busy=\"false\"] .process",
+        "text": "Inspect folder locks",
+        "lockAction": "inspect",
+        "select": {
+          "side": 0,
+          "name": "Build-Output"
+        },
+        "command": "bitfroest.inspect-folder-locks"
+      }
+    ]
   },
   {
     "id": "folder-lock-actions",
@@ -1342,15 +1354,27 @@
     "sources": [
       "lock-inspector.js"
     ],
-    "status": "pending",
-    "reason": "Requires controlled scan results and a native Quick Pick.",
-    "captures": []
+    "captures": [
+      {
+        "id": "quickpick",
+        "surface": "quickpick",
+        "expect": ".quick-input-widget",
+        "ready": ".quick-input-list .monaco-list-row",
+        "text": "Folder locks",
+        "lockAction": "actions",
+        "select": {
+          "side": 0,
+          "name": "Build-Output"
+        },
+        "command": "bitfroest.inspect-folder-locks"
+      }
+    ]
   },
   {
     "id": "folder-lock-target",
     "parentId": "folder-locks",
     "title": "Choose a destination for a locked folder",
-    "description": "Inspect the complete destination path before a lock-management copy or move.",
+    "description": "Review the complete destination path for a folder copy. The example leaves the input unconfirmed.",
     "paths": [
       "${demo}/left",
       "${demo}/right"
@@ -1358,15 +1382,27 @@
     "sources": [
       "lock-inspector.js"
     ],
-    "status": "pending",
-    "reason": "Requires a real lock-management session and a native Input Box.",
-    "captures": []
+    "captures": [
+      {
+        "id": "destination",
+        "surface": "inputbox",
+        "expect": ".quick-input-widget",
+        "ready": ".quick-input-box input",
+        "text": "Full destination path",
+        "lockAction": "destination",
+        "select": {
+          "side": 0,
+          "name": "Build-Output"
+        },
+        "command": "bitfroest.inspect-folder-locks"
+      }
+    ]
   },
   {
     "id": "folder-lock-confirmation",
     "parentId": "folder-locks",
     "title": "Review a lock-management operation",
-    "description": "Inspect the operation-specific warnings for releasing references, unloading modules, terminating processes and file operations.",
+    "description": "Review the warning before closing file handles or unloading modules. The example stops before Run.",
     "paths": [
       "${demo}/left",
       "${demo}/right"
@@ -1374,9 +1410,21 @@
     "sources": [
       "lock-inspector.js"
     ],
-    "status": "pending",
-    "reason": "Requires a real lock-management session; destructive operations are never confirmed by this catalog.",
-    "captures": []
+    "captures": [
+      {
+        "id": "warning",
+        "surface": "confirmation",
+        "expect": ".monaco-dialog-box",
+        "ready": ".monaco-dialog-box .dialog-buttons-row .monaco-button",
+        "text": "Selected file handles will be closed",
+        "lockAction": "confirmation",
+        "select": {
+          "side": 0,
+          "name": "Build-Output"
+        },
+        "command": "bitfroest.inspect-folder-locks"
+      }
+    ]
   },
   {
     "id": "native-browse-dialogs",

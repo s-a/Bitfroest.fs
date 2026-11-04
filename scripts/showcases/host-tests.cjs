@@ -28,6 +28,10 @@ exports.run = async function () {
       try {
         const { command, args = [] } = JSON.parse(fs.readFileSync(commandFile, 'utf8'));
         if (command === 'showcase.focus-main') await vscode.commands.executeCommand('bitfroest.show');
+        else if (command === 'showcase.close-locks') {
+          const tabs = vscode.window.tabGroups.all.flatMap(group => group.tabs).filter(tab => tab.input?.viewType?.includes('bitfroestFolderLocks') || tab.label === 'Inspect folder locks');
+          if (tabs.length) await vscode.window.tabGroups.close(tabs);
+        }
         else if (command === 'showcase.prepare-editor') {
           await vscode.commands.executeCommand('workbench.action.closeSidebar');
           await vscode.commands.executeCommand('workbench.action.closeAuxiliaryBar');
@@ -54,7 +58,7 @@ exports.run = async function () {
           const api = (await vscode.extensions.getExtension('vscode.git').activate()).getAPI(1);
           await api.openRepository(vscode.Uri.file(selection.directory));
           await vscode.commands.executeCommand(command, selection);
-        } else if (['bitfroest.configureSettings', 'bitfroest.configureFavorites', 'bitfroest.configureColumns', 'bitfroest.configureShortcuts', 'bitfroest.licenses', 'bitfroest.showLocalBranches', 'bitfroest.chooseLanguage', 'bitfroest.chooseTabMode'].includes(command) && !args.length) {
+        } else if (['bitfroest.inspect-folder-locks', 'bitfroest.configureSettings', 'bitfroest.configureFavorites', 'bitfroest.configureColumns', 'bitfroest.configureShortcuts', 'bitfroest.licenses', 'bitfroest.showLocalBranches', 'bitfroest.chooseLanguage', 'bitfroest.chooseTabMode'].includes(command) && !args.length) {
           await vscode.commands.executeCommand(command);
         } else {
           if (command === 'bitfroest.lister-action' ? args.length !== 1 || !safeListerActions.includes(args[0]) : !safeActions.some(action => command === `bitfroest.${action}`) || args.length) throw new Error('Showcase command is not permitted.');
