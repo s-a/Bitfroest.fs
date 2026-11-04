@@ -1,0 +1,21 @@
+[
+  {
+    "id": "main",
+    "title": "Two folders side by side",
+    "description": "Browse the demonstration folders with native Windows file icons and file colors.",
+    "paths": ["${demo}/left", "${demo}/right"],
+    "captures": [
+      { "id": "overview", "expect": ".pane", "text": "Bitfroest.fs" }
+    ]
+  },
+  {
+    "id": "new-folder",
+    "parentId": "main",
+    "title": "Create a folder",
+    "description": "Open the new-folder dialog for the active destination folder using F7.",
+    "paths": ["${demo}/left", "${demo}/right"],
+    "captures": [
+      { "id": "dialog", "action": "mkdir", "expect": "dialog[open]", "text": "New folder" }
+    ]
+  }
+]

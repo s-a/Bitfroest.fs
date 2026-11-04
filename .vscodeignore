@@ -1,4 +1,6 @@
 .git/**
+TMP/**
+RunCom-Showcases.ps1
 .github/**
 design/**
 native/src/**
