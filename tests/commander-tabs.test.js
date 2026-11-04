@@ -71,6 +71,17 @@ test('navigation history resets directory selection and truncates forward histor
   assert.deepEqual(list.tabStates[0].history, ['/alpha', '/different']);
 });
 
+test('preview transitions can record the same directory and discard abandoned forward previews', () => {
+  const list = pane(['/alpha']); tabs.ensure(list);
+  const state = list.tabStates[0]; state.historyPreviews = { 0: { mode: 'repository' } };
+  tabs.navigate(list, '/alpha', { forceHistory: true });
+  assert.deepEqual(state.history, ['/alpha', '/alpha']);
+  state.historyPreviews[1] = { mode: 'folder' };
+  tabs.back(list); tabs.navigate(list, '/other');
+  assert.deepEqual(state.historyPreviews, { 0: { mode: 'repository' } });
+  assert.equal(tabs.forward(list), false);
+});
+
 test('closing an inactive tab keeps the active path and view', () => {
   const list = pane();
   tabs.activate(list, 2);

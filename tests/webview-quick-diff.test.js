@@ -180,4 +180,65 @@ test('double-clicking a Quick Diff entry exits and selects it in the restored fi
   assert.equal(app.document.querySelector('[data-quick-diff]'), null);
   assert.equal(app.state().panes[0].cursor, original);
   assert.deepEqual(app.state().panes[0].selected, [original]);
+  assert.match(app.document.querySelector('[data-pane="0"] [data-history="back"]').title, /Quick Diff/);
+  app.action('back');
+  assert.ok(app.document.querySelector('[data-quick-diff]'));
+  const back = app.messages.filter(message => message.type === 'quick-diff-list').at(-1);
+  assert.equal(back.mode, 'folder'); assert.equal(back.selectedPath, 'package.json');
+  receive({ type: 'quick-diff-result', requestId: back.requestId, generation: back.generation, ok: true, result: { id: 'returned', root: path, entries: [{ path: 'README.md', name: 'README.md', status: 'Modified' }, { path: 'package.json', name: 'package.json', status: 'Modified' }] } });
+  assert.equal(app.document.querySelector('[data-diff-path="package.json"]').getAttribute('aria-selected'), 'true');
+  app.action('forward');
+  assert.equal(app.document.querySelector('[data-quick-diff]'), null);
+  assert.equal(app.state().panes[0].cursor, original);
+});
+
+test('history restores repository mode, sorting and scroll position from either source side', t => {
+  for (const side of [0, 1]) {
+    const app = createApp(t), receive = data => app.window.dispatchEvent(new app.window.MessageEvent('message', { data }));
+    const button = app.document.querySelector(`[data-pane="${side}"] [data-quick-diff-toggle]`);
+    app.click(button); app.click(button);
+    const request = app.messages.filter(message => message.type === 'quick-diff-list').at(-1);
+    const entries = [{ path: 'src/z.sql', name: 'src/z.sql', status: 'Modified' }, { path: 'README.md', name: 'README.md', status: 'Modified' }];
+    receive({ type: 'quick-diff-result', requestId: request.requestId, generation: request.generation, ok: true, result: { id: 'repository', root: app.state().panes[side].tabs[0], entries } });
+    app.click(app.document.querySelector('[data-diff-sort="name"]'));
+    app.click(app.document.querySelector('[data-diff-path="README.md"]'));
+    const grid = app.document.querySelector('[data-quick-diff-list] [role="grid"]'); grid.scrollTop = 32;
+    app.document.querySelector('[data-diff-path="README.md"]').dispatchEvent(new app.window.MouseEvent('dblclick', { bubbles: true }));
+    app.action('back');
+    const back = app.messages.filter(message => message.type === 'quick-diff-list').at(-1);
+    assert.equal(back.mode, 'repository');
+    assert.equal(back.selectedPath, 'README.md');
+    receive({ type: 'quick-diff-result', requestId: back.requestId, generation: back.generation, ok: true, result: { id: 'restored', entries } });
+    assert.equal(app.document.querySelector(`[data-pane="${side}"] [data-quick-diff-toggle]`).dataset.mode, 'repository');
+    assert.equal(app.document.querySelector('[data-diff-sort="name"]').closest('[role="columnheader"]').getAttribute('aria-sort'), 'ascending');
+    assert.equal(app.document.querySelector('[data-quick-diff-list] [role="grid"]').scrollTop, 32);
+  }
+});
+
+test('Quick Diff names its sortable first heading File Name in English', t => {
+  const app = createApp(t, undefined, { language: 'en' }); app.click(app.document.querySelector('[data-quick-diff-toggle]'));
+  const request = app.messages.find(message => message.type === 'quick-diff-list');
+  app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'quick-diff-result', requestId: request.requestId, generation: request.generation, ok: true, result: { id: 'heading', entries: [] } } }));
+  assert.equal(app.document.querySelector('[data-diff-sort="name"]').textContent, 'File Name');
+});
+
+test('Quick Diff history waits for the filesystem navigation acknowledgement before restoring the preview', t => {
+  const initial = { version: 1, realFilesystem: true, snapshotId: 'history-diff', active: 0,
+    panes: [{ tabs: ['/repo/src'], tab: 0, selected: [] }, { tabs: ['/other'], tab: 0, selected: [] }],
+    folders: { '/repo/src': [], '/repo/docs': [{ id: 'audit', name: 'audit.sql', type: 'file' }], '/other': [] } };
+  const app = createApp(t, initial), receive = data => app.window.dispatchEvent(new app.window.MessageEvent('message', { data }));
+  app.click(app.document.querySelector('[data-quick-diff-toggle]'));
+  const request = app.messages.find(message => message.type === 'quick-diff-list');
+  receive({ type: 'quick-diff-result', requestId: request.requestId, generation: request.generation, ok: true, result: { id: 'ack', root: '/repo', entries: [{ path: 'docs/audit.sql', name: 'docs/audit.sql', status: 'Modified' }] } });
+  app.document.querySelector('[data-diff-path]').dispatchEvent(new app.window.MouseEvent('dblclick', { bubbles: true }));
+  const open = app.messages.filter(message => message.type === 'filesystem-navigate').at(-1);
+  assert.equal(open.path, '/repo/docs');
+  receive({ type: 'filesystem-result', navigationRequestId: open.navigationRequestId, ok: true, state: open.state });
+  assert.equal(app.state().panes[0].tabs[0], '/repo/docs');
+  app.action('back');
+  const back = app.messages.filter(message => message.type === 'filesystem-navigate').at(-1);
+  assert.equal(back.path, '/repo/src'); assert.equal(app.document.querySelector('[data-quick-diff]'), null);
+  receive({ type: 'filesystem-result', navigationRequestId: back.navigationRequestId, ok: true, state: back.state });
+  assert.ok(app.document.querySelector('[data-quick-diff]'));
+  assert.equal(app.messages.filter(message => message.type === 'quick-diff-list').at(-1).selectedPath, 'docs/audit.sql');
 });

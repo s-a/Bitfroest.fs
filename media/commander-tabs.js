@@ -110,8 +110,9 @@
     ensure(pane);
     if (typeof path !== 'string' || !path) return false;
     const state = remember(pane);
-    if (path === state.path) return true;
+    if (path === state.path && !options.forceHistory) return true;
     if (options.recordHistory !== false) {
+      for (const key of Object.keys(state.historyPreviews || {})) if (Number(key) > state.historyIndex) delete state.historyPreviews[key];
       state.history.splice(state.historyIndex + 1);
       state.history.push(path);
       state.historyIndex = state.history.length - 1;

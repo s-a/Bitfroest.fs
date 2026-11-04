@@ -5,6 +5,8 @@
 })(typeof globalThis === 'object' ? globalThis : this, function () {
   'use strict';
   const pairs = {
+    'Zurück zu Quick Diff': 'Back to Quick Diff',
+    'Vorwärts zu Quick Diff': 'Forward to Quick Diff',
     'Die Datei ist nicht mehr vorhanden. Der Ordner wurde geöffnet.': 'The file no longer exists. Its folder has been opened.',
     'Datei / Pfad': 'File / Path',
     'Geändert': 'Modified',
@@ -440,7 +442,7 @@
     'Keine vollständigen Dateien für einen Vergleich verfügbar.': 'Complete files are not available for comparison.',
     'Dateivergleich fehlgeschlagen: {error}': 'File comparison failed: {error}',
     'Löschen fehlgeschlagen nach {count} Einträgen: {error}': 'Deletion failed after {count} items: {error}',
-    'Neue Textdatei': 'New text file', 'Dateiname': 'Filename', 'Datei erstellen': 'Create file', 'Dateien erstellt': 'Files created', 'Datei erstellt': 'File created', 'Ordner erstellt': 'Folder created', 'Mehrere Ordner erstellt': 'Folders created', 'umbenannt': 'renamed',
+    'Neue Textdatei': 'New text file', 'Dateiname': 'File Name', 'Datei erstellen': 'Create file', 'Dateien erstellt': 'Files created', 'Datei erstellt': 'File created', 'Ordner erstellt': 'Folder created', 'Mehrere Ordner erstellt': 'Folders created', 'umbenannt': 'renamed',
     'Ungültiger Name, Namenskonflikt oder Ziel außerhalb der bekannten Ordner.': 'Invalid name, name conflict or target outside the known folders.',
     'In den Papierkorb verschieben?': 'Move to Trash?', 'In den Papierkorb': 'Move to Trash', 'Einträge werden in den Papierkorb verschoben.': 'items will be moved to Trash.',
     'Ungültige Löschanfrage.': 'Invalid delete request.', 'Root-Ordner oder unbekannte Einträge dürfen nicht entfernt werden.': 'Root folders and unknown items cannot be removed.',

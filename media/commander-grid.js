@@ -169,6 +169,7 @@
       if (record && record.view !== options.view(p)) { record.addressHost?.remove(); record.api.destroy(); instances.delete(container); record = undefined; }
       const source = options.source(p);
       const currentSignature = signature(p);
+      const history = options.history(p);
       const changed = !record || record.signature !== currentSignature;
       const ready = options.ready(p);
       if (record) {
@@ -188,7 +189,9 @@
           record.api.setGridOption('rowData', [...(options.hasParent(p) ? [{ id: parentId }] : []), ...rows]);
           record.api.refreshCells({ force: true });
           record.api.applyColumnState({ state: p.columns.map(column => ({ colId: column.key, sort: column.key === p.sort ? p.descending ? 'desc' : 'asc' : null })) });
-          if (navigated) { record.api.refreshHeader(); if (rows.length || options.hasParent(p)) record.api.ensureIndexVisible(0, 'top'); }
+          if (navigated || record.history !== history) record.api.refreshHeader();
+          record.history = history;
+          if (navigated && (rows.length || options.hasParent(p))) record.api.ensureIndexVisible(0, 'top');
           if (focused?.isConnected) {
             focused.focus({ preventScroll: true });
             if (selection) focused.setSelectionRange(...selection);
@@ -200,7 +203,7 @@
         return;
       }
       record = { section, p, path: options.path(p), view: options.view(p), manual: new Set(), updating: true, ready, measurePending: true };
-      record.source = source; record.font = font(container);
+      record.source = source; record.font = font(container); record.history = history;
       record.count = rows.length; record.signature = currentSignature; marks(record);
       const nonce = document.querySelector('script[nonce]')?.nonce;
       record.api = library.createGrid(container, {

@@ -1914,11 +1914,12 @@
   const lister = window.CommanderListerView.create({ host, state: () => state, t, escape, modal, restore: render, edit: file => preview(file, true), notify: toast, report: reportStatus, remember: rememberScroll, task: statusTask });
   const previewManager = window.CommanderPreview.create();
   const quickDiff = window.CommanderQuickDiff.create({ host, t, state: () => state, currentPath, isArchive: isArchiveLocation, notify: toast, task: xrayTask, preview: previewManager, decorate: refreshFileColors, reveal: revealQuickDiffEntry, beforeStart: () => { document.querySelectorAll("[data-lister-close]").forEach(button => button.click()); }, icon: entry => entry.icon ? window.CommanderIcons.native(entry.icon) : baseIcon({ name: entry.name.split("/").pop(), type: "file", iconKey: entry.fsSource }, ""), });
-  function revealQuickDiffEntry({ entry, root, side }) {
+  function revealQuickDiffEntry({ entry, root, side, previewState }) {
     const target = join(root, entry.path), directory = parent(target);
     const finish = () => {
       state.active = side; rememberScroll(); const p = state.panes[side];
-      delete p.tabStates[p.tab].searchResult; tabs.navigate(p, directory);
+      const tab = p.tabStates[p.tab]; (tab.historyPreviews ||= {})[tab.historyIndex] = previewState;
+      delete tab.searchResult; tabs.navigate(p, directory, { forceHistory: true });
       const options = { platform: document.body.dataset.platform };
       const file = files(p).find(value => paths.identity(value.fsSource || join(directory, value.name), options) === paths.identity(target, options));
       p.cursor = file?.id || null; p.selected = file ? [file.id] : [];
@@ -2270,7 +2271,8 @@
     const tab = p.tabStates[p.tab];
     return '<span class="history-controls">' + ['back', 'forward'].map(direction => {
       const unavailable = direction === 'back' ? tab.historyIndex === 0 : tab.historyIndex === tab.history.length - 1;
-      const label = t(direction === 'back' ? 'Zurück' : 'Vorwärts');
+      const preview = tab.historyPreviews?.[tab.historyIndex + (direction === 'back' ? -1 : 1)];
+      const label = t(preview ? direction === 'back' ? 'Zurück zu Quick Diff' : 'Vorwärts zu Quick Diff' : direction === 'back' ? 'Zurück' : 'Vorwärts');
       return '<button type="button" data-history="' + direction + '" aria-label="' + escape(label) + '" aria-haspopup="menu" aria-disabled="' + unavailable + '" title="' + escape(label) + ' · ' + escape(t('Rechtsklick: Verlauf')) + '"><span class="history-outline">' + window.CommanderIcons.svg('status', 'forward') + '</span><span class="history-filled">' + window.CommanderIcons.svg('status', 'forward-fill') + '</span></button>';
     }).join('') + '</span>';
   }
@@ -3281,6 +3283,13 @@
     if (['new-tab', 'background-tab', 'close-tab', 'next-tab', 'previous-tab', 'open-dir-tab', 'open-dir-other-tab', 'back', 'forward', 'history-jump'].includes(command)) {
       rememberScroll(); const p = pane(), previousViews = state.panes.map(paneDisplayState), previousPath = currentPath(p), previousTab = p.tabStates[p.tab].id, previousSide = state.active;
       let navigationRollback;
+      const historyTravel = ['back', 'forward', 'history-jump'].includes(command);
+      if (historyTravel) {
+        const tab = p.tabStates[p.tab], target = command === 'history-jump' ? contextSelection?.historyIndex : tab.historyIndex + (command === 'back' ? -1 : 1);
+        if (!Number.isInteger(target) || target < 0 || target >= tab.history.length) return;
+        const saved = quickDiff.snapshot();
+        if (saved?.source === state.active) { (tab.historyPreviews ||= {})[tab.historyIndex] = saved; quickDiff.stop(); }
+      }
       if (command === 'new-tab' || command === 'background-tab') tabs.duplicate(p, { background: command === 'background-tab' });
       if (command === 'close-tab' && !tabs.close(p, contextSelection?.tabId ? p.tabStates.findIndex(tab => tab.id === contextSelection.tabId) : p.tab)) return toast(t('Der letzte Ordner-Tab bleibt geöffnet.'));
       if (command === 'next-tab' || command === 'previous-tab') tabs.step(p, command === 'next-tab' ? 1 : -1);
@@ -3301,11 +3310,18 @@
         navigationRollback = { closeTab: true };
         if (other) state.active = 1 - state.active;
       }
+      const historyTab = p.tabStates[p.tab], historyIndex = historyTab.historyIndex;
+      const restoreHistoryPreview = () => {
+        if (historyTravel && pane() === p && p.tabStates[p.tab].id === historyTab.id && historyTab.historyIndex === historyIndex) {
+          const saved = historyTab.historyPreviews?.[historyIndex];
+          if (saved) quickDiff.restore({ ...saved, source: state.active });
+        }
+      };
       if (host && state.realFilesystem && !resultView(pane()) && (state.unloadedFolders?.includes(currentPath(pane())) || currentPath(pane()) !== previousPath || pane().tabStates[pane().tab].id !== previousTab || state.active !== previousSide)) {
         render(true, previousViews, false);
-        requestFilesystem({ type: 'filesystem-navigate', path: currentPath(pane()), side: state.active }, () => { focusSelection(); toast(t('Ordner-Tab geändert.'), 'success'); }, navigationRollback); return;
+        requestFilesystem({ type: 'filesystem-navigate', path: currentPath(pane()), side: state.active }, () => { focusSelection(); restoreHistoryPreview(); toast(t('Ordner-Tab geändert.'), 'success'); }, navigationRollback); return;
       }
-      render(true, previousViews); toast(t('Ordner-Tab geändert.'), 'success'); return;
+      render(true, previousViews); restoreHistoryPreview(); toast(t('Ordner-Tab geändert.'), 'success'); return;
     }
     if (command === 'rename-one') { startRename(); return; }
     if (command === 'search-next' || command === 'search-previous') { applySearch(pane().filter, command === 'search-next' ? 1 : -1); return; }

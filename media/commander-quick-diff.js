@@ -7,6 +7,7 @@
     const instance = [...crypto.getRandomValues(new Uint8Array(8))].map(v => v.toString(16).padStart(2, '0')).join('');
     const pending = new Map(), activity = new Set(), requestedIcons = new Set(), icons = new Map(); let readRequest = null;
     let sortColumn = 'status', sortDirection = 'ascending';
+    let restoration = null;
     const rowHeight = 32, relativeFormat = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto', style: 'short' });
     function relativeTime(timestamp) {
       const seconds = (timestamp - Date.now()) / 1000, absolute = Math.abs(seconds);
@@ -49,7 +50,7 @@
     function focus() { sourceView?.querySelector('[role="grid"]')?.focus({ preventScroll: true }); }
     function stop(restore = false) {
       if (source === null) return;
-      const old = source; generation++; clear(); source = null; mode = 'off';
+      const old = source; generation++; clear(); source = null; mode = 'off'; restoration = null;
       clearInterval(clock); clock = null;
       if (sourceView) resize.unobserve(sourceView); sourceView?.remove(); sourceView = null; view?.remove(); view = null;
       container.querySelectorAll('.pane-metrics').forEach(node => { node.hidden = false; });
@@ -131,7 +132,7 @@
     function renderList() {
       sourceView.replaceChildren();
       const header = document.createElement('div'); header.className = 'quick-diff-header'; header.role = 'row';
-      for (const [column, text] of [['name', 'Datei / Pfad'], ['status', 'Status'], ['modifiedAt', 'Geändert']]) {
+      for (const [column, text] of [['name', 'Dateiname'], ['status', 'Status'], ['modifiedAt', 'Geändert']]) {
         const cell = document.createElement('span'); cell.role = 'columnheader';
         const button = document.createElement('button'); button.type = 'button'; button.dataset.diffSort = column; button.textContent = t(text); cell.append(button); header.append(cell);
         button.addEventListener('click', () => { sortDirection = sortColumn === column ? sortDirection === 'descending' ? 'ascending' : 'descending' : column === 'modifiedAt' ? 'descending' : 'ascending'; sortColumn = column; sortEntries(); rows(); });
@@ -143,7 +144,7 @@
         const row = event.target.closest('[data-diff-index]'), entry = row && entries[Number(row.dataset.diffIndex)];
         if (!entry) return;
         event.preventDefault(); event.stopImmediatePropagation();
-        const side = source, root = repositoryRoot; stop(); reveal({ entry, root, side });
+        const side = source, root = repositoryRoot, previewState = snapshot(); stop(); reveal({ entry, root, side, previewState });
       });
       grid.addEventListener('keydown', event => {
         let next = selected;
@@ -160,7 +161,7 @@
       readRequest = send('quick-diff-read', { listId, path: entries[index].path });
     }
     function load() {
-      const keep = entries[selected]?.path; generation++; clear(); mount(); sourceView.replaceChildren();
+      const keep = restoration?.selectedPath || entries[selected]?.path; generation++; clear(); mount(); sourceView.replaceChildren();
       loading = true; message(t('Änderungen werden geladen…'));
       send('quick-diff-list', { directory: currentPath(state().panes[source]), mode, selectedPath: keep });
     }
@@ -176,6 +177,17 @@
       mount(); if (source === null) return;
       const next = JSON.stringify([state().panes[source].tab, currentPath(state().panes[source])]);
       if (context !== next) stop();
+    }
+    function snapshot() {
+      return source === null ? null : { source, mode, selectedPath: entries[selected]?.path, sortColumn, sortDirection, scrollTop: sourceView?.querySelector('[role="grid"]')?.scrollTop || 0 };
+    }
+    function restore(saved) {
+      if (!saved || ![0, 1].includes(saved.source) || !['folder', 'repository'].includes(saved.mode)) return;
+      stop(); beforeStart(); preview.activate('quick-diff', () => stop());
+      source = saved.source; mode = saved.mode; restoration = saved;
+      sortColumn = ['name', 'status', 'modifiedAt'].includes(saved.sortColumn) ? saved.sortColumn : 'status';
+      sortDirection = saved.sortDirection === 'descending' ? 'descending' : 'ascending';
+      context = JSON.stringify([state().panes[source].tab, currentPath(state().panes[source])]); load();
     }
     function receive(event) {
       const data = event.data;
@@ -201,7 +213,8 @@
       if (!data.ok) { loading = false; message(data.error); if (request.type === 'quick-diff-list') { notify(data.error, 'info'); stop(true); } return; }
       if (request.type === 'quick-diff-list') {
         loading = false; listId = data.result.id; repositoryRoot = data.result.root || currentPath(state().panes[source]); entries = data.result.entries; renderList();
-        if (entries.length) { const index = entries.findIndex(e => e.path === data.selectedPath); choose(index < 0 ? 0 : index); } else message(t('Keine Änderungen vorhanden.'));
+        if (entries.length) { const index = entries.findIndex(e => e.path === (restoration?.selectedPath || data.selectedPath)); choose(index < 0 ? 0 : index); } else message(t('Keine Änderungen vorhanden.'));
+        if (restoration) { sourceView.querySelector('[role="grid"]').scrollTop = restoration.scrollTop || 0; rows(); restoration = null; }
         focus();
       } else if (request.type === 'quick-diff-read') {
         if (readRequest !== data.requestId) return;
@@ -228,6 +241,6 @@
     document.addEventListener('keydown', event => { if (source !== null && event.key === 'Escape' && event.target.closest('[data-quick-diff],[data-quick-diff-list]')) { event.preventDefault(); event.stopImmediatePropagation(); stop(true); } }, true);
     const theme = new MutationObserver(() => autoSize()); theme.observe(document.body, { attributes: true, attributeFilter: ['class', 'style'] });
     window.addEventListener('message', receive); window.addEventListener('pagehide', () => { stop(); clearInterval(clock); resize.disconnect(); theme.disconnect(); }, { once: true });
-    return { mount, sync, stop, refresh() { if (source === null) return false; load(); return true; } };
+    return { mount, sync, stop, snapshot, restore, refresh() { if (source === null) return false; load(); return true; } };
   }
 })(globalThis);
