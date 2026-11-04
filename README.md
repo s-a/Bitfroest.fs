@@ -24,7 +24,9 @@ The default shortcut is `Ctrl+Alt+Shift+F12` on Windows and Linux. Repeating the
 Windows examples with sample project files. Animations include a pointer highlight and keystroke hints. Drag-and-drop demonstrations stop at the confirmation dialog.
 
 <details>
-<summary><small>Copy the current folder path from the address bar.</small><br>Copy a folder path</summary>
+<summary>Copy a folder path</summary>
+
+<p><small>Copy the current folder path from the address bar.</small></p>
 
 Right-click the address bar and observe the actual clipboard confirmation.
 
@@ -33,7 +35,9 @@ Right-click the address bar and observe the actual clipboard confirmation.
 </details>
 
 <details>
-<summary><small>Select several files with a right-button drag.</small><br>Select files with the right mouse button</summary>
+<summary>Select files with the right mouse button</summary>
+
+<p><small>Select several files with a right-button drag.</small></p>
 
 Draw a selection with the right mouse button held down.
 
@@ -42,7 +46,9 @@ Draw a selection with the right mouse button held down.
 </details>
 
 <details>
-<summary><small>Drag selected files and review the destination before moving them.</small><br>Drag a selection with the right button held</summary>
+<summary>Drag a selection with the right button held</summary>
+
+<p><small>Drag selected files and review the destination before moving them.</small></p>
 
 Hold the right mouse button and drag selected files to a destination folder; review the move confirmation.
 
@@ -51,7 +57,9 @@ Hold the right mouse button and drag selected files to a destination folder; rev
 </details>
 
 <details>
-<summary><small>Jump to the folder path with Ctrl+L.</small><br>Focus the address bar with Ctrl+L</summary>
+<summary>Focus the address bar with Ctrl+L</summary>
+
+<p><small>Jump to the folder path with Ctrl+L.</small></p>
 
 Press Ctrl+L and edit the selected path in the active address bar.
 
@@ -60,7 +68,9 @@ Press Ctrl+L and edit the selected path in the active address bar.
 </details>
 
 <details>
-<summary><small>Find commands grouped by task.</small><br>Commands organized by task</summary>
+<summary>Commands organized by task</summary>
+
+<p><small>Find commands grouped by task.</small></p>
 
 Discover file actions, selection tools, navigation, view options, configuration and help.
 
@@ -79,7 +89,9 @@ Discover file actions, selection tools, navigation, view options, configuration 
 </details>
 
 <details>
-<summary><small>Open saved project folders from the favorites menu.</small><br>Choose a favorite location</summary>
+<summary>Choose a favorite location</summary>
+
+<p><small>Open saved project folders from the favorites menu.</small></p>
 
 Browse favorite project folders from the location menu.
 
@@ -88,7 +100,9 @@ Browse favorite project folders from the location menu.
 </details>
 
 <details>
-<summary><small>Select filenames with masks or regular expressions.</small><br>Select files by pattern</summary>
+<summary>Select files by pattern</summary>
+
+<p><small>Select filenames with masks or regular expressions.</small></p>
 
 Enter file masks or regular expressions without applying a selection.
 
@@ -97,7 +111,9 @@ Enter file masks or regular expressions without applying a selection.
 </details>
 
 <details>
-<summary><small>Remove matching filenames from the current selection.</small><br>Remove a group from the selection</summary>
+<summary>Remove a group from the selection</summary>
+
+<p><small>Remove matching filenames from the current selection.</small></p>
 
 Specify the file pattern to remove from the current selection.
 
@@ -142,7 +158,9 @@ Review the destination and transfer options before moving files.
 </details>
 
 <details>
-<summary><small>Edit a filename directly in the file list.</small><br>Rename a single entry</summary>
+<summary>Rename a single entry</summary>
+
+<p><small>Edit a filename directly in the file list.</small></p>
 
 Edit the filename in the file list without committing the rename.
 
@@ -151,7 +169,9 @@ Edit the filename in the file list without committing the rename.
 </details>
 
 <details>
-<summary><small>Preview generated names before applying a batch rename.</small><br>Preview multiple filenames</summary>
+<summary>Preview multiple filenames</summary>
+
+<p><small>Preview generated names before applying a batch rename.</small></p>
 
 Inspect naming masks, counters and replacement rules before applying changes.
 
@@ -160,7 +180,9 @@ Inspect naming masks, counters and replacement rules before applying changes.
 </details>
 
 <details>
-<summary><small>Review what will move to the recycle bin.</small><br>Review a recycle-bin deletion</summary>
+<summary>Review a recycle-bin deletion</summary>
+
+<p><small>Review what will move to the recycle bin.</small></p>
 
 Inspect the confirmation for moving selected entries to the recycle bin.
 
@@ -169,7 +191,9 @@ Inspect the confirmation for moving selected entries to the recycle bin.
 </details>
 
 <details>
-<summary><small>Review permanent deletion before confirming.</small><br>Review permanent deletion</summary>
+<summary>Review permanent deletion</summary>
+
+<p><small>Review permanent deletion before confirming.</small></p>
 
 Inspect the permanent-deletion warning without confirming it.
 
@@ -178,7 +202,9 @@ Inspect the permanent-deletion warning without confirming it.
 </details>
 
 <details>
-<summary><small>Search by filename, contents, or saved presets.</small><br>Find files</summary>
+<summary>Find files</summary>
+
+<p><small>Search by filename, contents, or saved presets.</small></p>
 
 Inspect basic criteria, advanced filters and saved searches before starting a search.
 
@@ -191,7 +217,9 @@ Inspect basic criteria, advanced filters and saved searches before starting a se
 </details>
 
 <details>
-<summary><small>Keep search open beside the file manager.</small><br>Keep a search window open</summary>
+<summary>Keep a search window open</summary>
+
+<p><small>Keep search open beside the file manager.</small></p>
 
 Open the nonmodal search variant alongside the file manager.
 
@@ -200,7 +228,9 @@ Open the nonmodal search variant alongside the file manager.
 </details>
 
 <details>
-<summary><small>Read text, inspect binary data, and switch encodings.</small><br>Inspect file contents</summary>
+<summary>Inspect file contents</summary>
+
+<p><small>Read text, inspect binary data, and switch encodings.</small></p>
 
 View a real file in text, binary, hexadecimal, HTML-text, Unicode and UTF-8 modes.
 
@@ -225,7 +255,9 @@ View a real file in text, binary, hexadecimal, HTML-text, Unicode and UTF-8 mode
 </details>
 
 <details>
-<summary><small>Find matching text in the current file.</small><br>Search inside the viewer</summary>
+<summary>Search inside the viewer</summary>
+
+<p><small>Find matching text in the current file.</small></p>
 
 Inspect text-search, direction and matching options.
 
@@ -234,7 +266,9 @@ Inspect text-search, direction and matching options.
 </details>
 
 <details>
-<summary><small>Choose an encoding for the current file.</small><br>Choose another codepage</summary>
+<summary>Choose another codepage</summary>
+
+<p><small>Choose an encoding for the current file.</small></p>
 
 Inspect the codepage input without saving an encoding preference.
 
@@ -243,7 +277,9 @@ Inspect the codepage input without saving an encoding preference.
 </details>
 
 <details>
-<summary><small>Prepare a ZIP archive with selected files.</small><br>Prepare a ZIP archive</summary>
+<summary>Prepare a ZIP archive</summary>
+
+<p><small>Prepare a ZIP archive with selected files.</small></p>
 
 Inspect compression, encryption and recursive packing options without creating an archive.
 
@@ -252,7 +288,9 @@ Inspect compression, encryption and recursive packing options without creating a
 </details>
 
 <details>
-<summary><small>Choose extraction options before writing files.</small><br>Prepare ZIP extraction</summary>
+<summary>Prepare ZIP extraction</summary>
+
+<p><small>Choose extraction options before writing files.</small></p>
 
 Inspect destination and extraction options without writing files.
 
@@ -261,7 +299,9 @@ Inspect destination and extraction options without writing files.
 </details>
 
 <details>
-<summary><small>Review changed files in the sample repository.</small><br>Inspect local Git changes</summary>
+<summary>Inspect local Git changes</summary>
+
+<p><small>Review changed files in the sample repository.</small></p>
 
 Show modified, staged and untracked entries in the demonstration repository.
 
@@ -270,7 +310,9 @@ Show modified, staged and untracked entries in the demonstration repository.
 </details>
 
 <details>
-<summary><small>Browse commits and their changed files.</small><br>Browse commit history</summary>
+<summary>Browse commit history</summary>
+
+<p><small>Browse commits and their changed files.</small></p>
 
 Inspect the commit graph, commit message and changed files.
 
@@ -279,7 +321,9 @@ Inspect the commit graph, commit message and changed files.
 </details>
 
 <details>
-<summary><small>Compare a file with its committed version.</small><br>Compare committed or working versions</summary>
+<summary>Compare committed or working versions</summary>
+
+<p><small>Compare a file with its committed version.</small></p>
 
 Open the actual VS Code diff editor for a selected Git file.
 
@@ -288,7 +332,9 @@ Open the actual VS Code diff editor for a selected Git file.
 </details>
 
 <details>
-<summary><small>Browse local branches without switching.</small><br>Inspect available local branches</summary>
+<summary>Inspect available local branches</summary>
+
+<p><small>Browse local branches without switching.</small></p>
 
 Open the read-only branch list for the active repository.
 
@@ -297,7 +343,9 @@ Open the read-only branch list for the active repository.
 </details>
 
 <details>
-<summary><small>Configure the file manager in VS Code settings.</small><br>Configure the file manager</summary>
+<summary>Configure the file manager</summary>
+
+<p><small>Configure the file manager in VS Code settings.</small></p>
 
 Inspect the native integration entry and extension configuration categories.
 
@@ -306,7 +354,9 @@ Inspect the native integration entry and extension configuration categories.
 </details>
 
 <details>
-<summary><small>Configure saved folders and groups.</small><br>Configure favorite locations</summary>
+<summary>Configure favorite locations</summary>
+
+<p><small>Configure saved folders and groups.</small></p>
 
 Manage favorite locations and groups.
 
@@ -315,7 +365,9 @@ Manage favorite locations and groups.
 </details>
 
 <details>
-<summary><small>Choose file-list columns and visible fields.</small><br>Configure file-list columns</summary>
+<summary>Configure file-list columns</summary>
+
+<p><small>Choose file-list columns and visible fields.</small></p>
 
 Inspect column sets, field choices and column visibility.
 
@@ -324,7 +376,9 @@ Inspect column sets, field choices and column visibility.
 </details>
 
 <details>
-<summary><small>Set key bindings for file manager commands.</small><br>Configure keyboard shortcuts</summary>
+<summary>Configure keyboard shortcuts</summary>
+
+<p><small>Set key bindings for file manager commands.</small></p>
 
 Inspect commands, editable bindings and conflict information.
 
@@ -333,7 +387,9 @@ Inspect commands, editable bindings and conflict information.
 </details>
 
 <details>
-<summary><small>See which processes reference files in a folder.</small><br>Inspect references to a folder</summary>
+<summary>Inspect references to a folder</summary>
+
+<p><small>See which processes reference files in a folder.</small></p>
 
 A preview build keeps Build.log open and loads Preview-Plugin.dll. Inspect its real process references and the scan's access limits without releasing locks.
 
@@ -342,7 +398,9 @@ A preview build keeps Build.log open and loads Preview-Plugin.dll. Inspect its r
 </details>
 
 <details>
-<summary><small>Review actions for detected folder locks.</small><br>Choose a folder-lock action</summary>
+<summary>Choose a folder-lock action</summary>
+
+<p><small>Review actions for detected folder locks.</small></p>
 
 Inspect available process and folder actions for a real scan result.
 
@@ -351,7 +409,9 @@ Inspect available process and folder actions for a real scan result.
 </details>
 
 <details>
-<summary><small>Check a destination before copying a locked folder.</small><br>Choose a destination for a locked folder</summary>
+<summary>Choose a destination for a locked folder</summary>
+
+<p><small>Check a destination before copying a locked folder.</small></p>
 
 Review the complete destination path for a folder copy. The example leaves the input unconfirmed.
 
@@ -360,7 +420,9 @@ Review the complete destination path for a folder copy. The example leaves the i
 </details>
 
 <details>
-<summary><small>Review the warning before closing handles or unloading modules.</small><br>Review a lock-management operation</summary>
+<summary>Review a lock-management operation</summary>
+
+<p><small>Review the warning before closing handles or unloading modules.</small></p>
 
 Review the warning before closing file handles or unloading modules. The example stops before Run.
 
@@ -369,7 +431,9 @@ Review the warning before closing file handles or unloading modules. The example
 </details>
 
 <details>
-<summary><small>Preview the selected file in the opposite pane.</small><br>X-Ray on click</summary>
+<summary>X-Ray on click</summary>
+
+<p><small>Preview the selected file in the opposite pane.</small></p>
 
 Inspect a text file in the opposite pane with syntax highlighting and a complete minimap. The preview uses 60% of the available width. Select files by clicking or using the keyboard. Right-click the eye to turn X-Ray off.
 
@@ -378,7 +442,9 @@ Inspect a text file in the opposite pane with syntax highlighting and a complete
 </details>
 
 <details>
-<summary><small>Preview files after pausing on them.</small><br>X-Ray Ultra</summary>
+<summary>X-Ray Ultra</summary>
+
+<p><small>Preview files after pausing on them.</small></p>
 
 X-Ray Ultra updates the opposite preview after pausing over a text file for 200 ms. Syntax highlighting and a complete minimap use 60% of the available width; the source list shows filenames and icons. Right-click the eye to turn X-Ray off.
 
@@ -387,7 +453,9 @@ X-Ray Ultra updates the opposite preview after pausing over a text file for 200 
 </details>
 
 <details>
-<summary><small>Compare changed files with HEAD in the current folder.</small><br>Quick Diff: current folder</summary>
+<summary>Quick Diff: current folder</summary>
+
+<p><small>Compare changed files with HEAD in the current folder.</small></p>
 
 Select a changed file to compare its saved content with HEAD in a read-only inline diff. Unchanged sections are collapsed with three context lines and can be expanded. The title shows separate added, changed and deleted line counts. Both modes show paths relative to the repository root with native separators. Full-width filenames appear above a compact status · relative time · root-relative directory line. Filenames use the normal theme foreground without file icons; only status labels use Git colors. Time, separators and paths use the readable theme foreground. Name, status and date remain sortable, with status then newest first as the default order. Exact-date tooltips show the local modification time. Filename and directory tooltips show the complete file path; Ctrl+Y copies it, and Ctrl+Shift+Y copies it with forward slashes. Double-click a file to leave Quick Diff and select it in its folder. History Back restores the previous Quick Diff scope, file selection, sort and scroll position. Ignored files are excluded. Double-click the preview to open the full VS Code diff editor.
 
@@ -396,7 +464,9 @@ Select a changed file to compare its saved content with HEAD in a read-only inli
 </details>
 
 <details>
-<summary><small>Review changes across the full repository.</small><br>Quick Diff: entire repository</summary>
+<summary>Quick Diff: entire repository</summary>
+
+<p><small>Review changes across the full repository.</small></p>
 
 Cycle the footer button to include the entire repository, including new files and excluding ignored files. Root-level files omit the redundant directory marker. New files appear as syntax-highlighted additions against an empty original; deleted files show the HEAD content as removed lines.
 

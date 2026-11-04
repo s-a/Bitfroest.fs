@@ -50,8 +50,9 @@ function renderGallery(manifest) {
   for (const section of manifest.sections.filter(item => item.status === 'rendered' && item.id !== 'main')) {
     if (!section.images.length) continue;
     const excerpt = summaryExcerpts[section.id];
-    const summary = `${excerpt ? `<small>${excerpt}</small><br>` : ''}${section.title}`;
-    lines.push(`<details>`, `<summary>${summary}</summary>`, '', section.description, '');
+    lines.push(`<details>`, `<summary>${section.title}</summary>`, '');
+    if (excerpt) lines.push(`<p><small>${excerpt}</small></p>`, '');
+    lines.push(section.description, '');
     for (const image of section.images) lines.push(`![${image.alt}](${mediaDirectory}/${mediaName(image.file)})`, '');
     lines.push('</details>', '');
   }
