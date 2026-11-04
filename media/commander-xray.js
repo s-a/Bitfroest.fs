@@ -22,6 +22,7 @@
     function mount() {
       if (source !== null) container.dataset.xraySource = String(source);
       for (const side of [0, 1]) compact(side, side === source);
+      document.querySelectorAll('.pane-metrics').forEach(metrics => { metrics.hidden = Number(metrics.closest('[data-pane]').dataset.pane) === source; });
       document.querySelectorAll('[data-xray-toggle]').forEach(button => {
         const active = Number(button.closest('[data-pane]').dataset.pane) === source ? mode : 'off';
         if (button.dataset.mode !== active) button.innerHTML = root.CommanderIcons.svg('xray', icons[active]);
@@ -33,7 +34,7 @@
       if (!element) { element = document.createElement('section'); element.dataset.xray = ''; element.tabIndex = 0; element.setAttribute('aria-label', 'X-Ray'); }
       if (!section.contains(element)) section.append(element);
       container.dataset.xraySource = String(source);
-      container.style.gridTemplateColumns = source === 0 ? 'minmax(0, 1fr) minmax(0, 4fr)' : 'minmax(0, 4fr) minmax(0, 1fr)';
+      container.style.gridTemplateColumns = source === 0 ? 'minmax(0, 2fr) minmax(0, 3fr)' : 'minmax(0, 3fr) minmax(0, 2fr)';
     }
     function stop(focus = false) {
       if (source === null) return;

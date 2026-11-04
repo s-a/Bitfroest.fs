@@ -182,6 +182,12 @@ async function main() {
   const catalog = numberCatalog(validateCatalog(JSON.parse(fs.readFileSync(path.join(__dirname, 'catalog.json'), 'utf8').replaceAll('${demo}', demo.replace(/\\/g, '/')))));
   const scenes = selected ? catalog.filter(scene => selected.split(',').includes(scene.id)) : catalog;
   if (!scenes.length) throw new Error(`Unknown showcase: ${selected}`);
+  if (scenes.some(scene => scene.id === 'xray-click')) {
+    const sample = path.join(demo, 'left', 'X-Ray-Sample.sql');
+    const content = "-- Active demonstration projects\nSELECT project_name, owner_name, updated_at\nFROM projects\nWHERE active = 1\n  AND area = 'Demo'\nORDER BY updated_at DESC;\n";
+    if (fs.existsSync(sample) && fs.readFileSync(sample, 'utf8') !== content) throw new Error('The X-Ray SQL fixture contains unexpected data.');
+    if (!fs.existsSync(sample)) fs.writeFileSync(sample, content);
+  }
   for (const scene of scenes.filter(item => !item.status)) for (const folder of scene.paths) if (!fs.statSync(folder).isDirectory()) throw new Error(`Missing demo directory: ${folder}`);
   if (scenes.some(scene => scene.id === 'xray-hover')) {
     const sample = path.join(demo, 'left', 'X-Ray-Sample.ps1');
@@ -343,6 +349,15 @@ async function main() {
           }, capture.expect);
           assertProductState(state, scene, capture); return true;
         });
+        if (capture.xrayMode) await waitFor(() => evaluate(() => {
+          const panes = document.querySelector('#panes'), side = panes.dataset.xraySource;
+          const source = panes.querySelector(`[data-pane="${side}"]`), preview = panes.querySelector('[data-xray]');
+          if (!source || !preview) return false;
+          const widths = [...panes.querySelectorAll(':scope > .pane')].map(pane => pane.getBoundingClientRect().width);
+          const ratio = source.getBoundingClientRect().width / widths.reduce((sum, width) => sum + width, 0);
+          const tokens = new Set([...preview.querySelectorAll('.view-line span')].flatMap(span => [...span.classList].filter(name => /^mtk\d+$/.test(name))));
+          return ratio > .39 && ratio < .41 && source.querySelector('.pane-metrics').getBoundingClientRect().width === 0 && source.querySelector('[data-xray-toggle]').getBoundingClientRect().width > 0 && tokens.size > 1;
+        }));
         await waitFor(async () => {
           const result = await page.call('Runtime.evaluate', { expression: 'JSON.stringify({status:[...document.querySelectorAll(".part.statusbar")].some(e=>e.getBoundingClientRect().height>0),sidebar:[...document.querySelectorAll(".part.sidebar")].some(e=>e.getBoundingClientRect().width>0)})', returnByValue: true });
           const chrome = JSON.parse(result.result.value); return !chrome.status && !chrome.sidebar;

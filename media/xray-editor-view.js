@@ -4,7 +4,7 @@ const monaco = window.CommanderMonaco;
 
 monaco.languages.register({ id: 'json' });
 monaco.languages.setMonarchTokensProvider('json', { tokenizer: { root: [[/"(?:[^"\\]|\\.)*"(?=\s*:)/, 'string.key.json'], [/"(?:[^"\\]|\\.)*"/, 'string.value.json'], [/\b(?:true|false|null)\b/, 'keyword.json'], [/-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/, 'number.json'], [/[{}[\]]/, '@brackets'], [/[,:]/, 'delimiter.json']] } });
-const names = { json: 'json', jsonc: 'json', ps1: 'powershell', psm1: 'powershell', psd1: 'powershell', js: 'javascript', cjs: 'javascript', mjs: 'javascript', ts: 'typescript', py: 'python', xml: 'xml', svg: 'xml', yaml: 'yaml', yml: 'yaml', sh: 'shell', md: 'markdown' };
+const names = { sql: 'sql', json: 'json', jsonc: 'json', ps1: 'powershell', psm1: 'powershell', psd1: 'powershell', js: 'javascript', cjs: 'javascript', mjs: 'javascript', ts: 'typescript', py: 'python', xml: 'xml', svg: 'xml', yaml: 'yaml', yml: 'yaml', sh: 'shell', md: 'markdown' };
 window.CommanderXrayEditor = {
   create(element, text, name, { onCopy, onOpenLine, copyLabel }) {
     const model = monaco.editor.createModel(text, names[name.split('.').pop().toLowerCase()] || 'plaintext');

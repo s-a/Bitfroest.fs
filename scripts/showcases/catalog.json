@@ -1479,7 +1479,7 @@
     "id": "xray-click",
     "parentId": "main",
     "title": "X-Ray on click",
-    "description": "Inspect a text file in the opposite pane with syntax highlighting and a complete minimap. The preview uses 80% of the available width. Select files by clicking or using the keyboard. Right-click the eye to turn X-Ray off.",
+    "description": "Inspect a text file in the opposite pane with syntax highlighting and a complete minimap. The preview uses 60% of the available width. Select files by clicking or using the keyboard. Right-click the eye to turn X-Ray off.",
     "paths": [
       "${demo}/left",
       "${demo}/right"
@@ -1497,8 +1497,8 @@
         },
         "xrayMode": "click",
         "expect": "[data-xray]:has(.monaco-editor .minimap)",
-        "text": "Colors.json",
-        "xrayFile": "Colors.json"
+        "text": "X-Ray-Sample.sql",
+        "xrayFile": "X-Ray-Sample.sql"
       }
     ]
   },
@@ -1506,7 +1506,7 @@
     "id": "xray-hover",
     "parentId": "main",
     "title": "X-Ray Ultra",
-    "description": "X-Ray Ultra updates the opposite preview after pausing over a text file for 200 ms. Syntax highlighting and a complete minimap use 80% of the available width; the source list shows filenames and icons. Right-click the eye to turn X-Ray off.",
+    "description": "X-Ray Ultra updates the opposite preview after pausing over a text file for 200 ms. Syntax highlighting and a complete minimap use 60% of the available width; the source list shows filenames and icons. Right-click the eye to turn X-Ray off.",
     "paths": [
       "${demo}/left",
       "${demo}/right"

@@ -12,6 +12,7 @@ import { language as xml, conf as xmlConfiguration } from 'monaco-editor/esm/vs/
 import { language as yaml, conf as yamlConfiguration } from 'monaco-editor/esm/vs/basic-languages/yaml/yaml.js';
 import { language as shell, conf as shellConfiguration } from 'monaco-editor/esm/vs/basic-languages/shell/shell.js';
 import { language as markdown, conf as markdownConfiguration } from 'monaco-editor/esm/vs/basic-languages/markdown/markdown.js';
+import { language as sql, conf as sqlConfiguration } from 'monaco-editor/esm/vs/basic-languages/sql/sql.js';
 register({ id: 'powershell' }); setMonarchTokensProvider('powershell', powershell); setLanguageConfiguration('powershell', powershellConfiguration);
 register({ id: 'javascript' }); setMonarchTokensProvider('javascript', javascript); setLanguageConfiguration('javascript', javascriptConfiguration);
 register({ id: 'typescript' }); setMonarchTokensProvider('typescript', typescript); setLanguageConfiguration('typescript', typescriptConfiguration);
@@ -20,4 +21,5 @@ register({ id: 'xml' }); setMonarchTokensProvider('xml', xml); setLanguageConfig
 register({ id: 'yaml' }); setMonarchTokensProvider('yaml', yaml); setLanguageConfiguration('yaml', yamlConfiguration);
 register({ id: 'shell' }); setMonarchTokensProvider('shell', shell); setLanguageConfiguration('shell', shellConfiguration);
 register({ id: 'markdown' }); setMonarchTokensProvider('markdown', markdown); setLanguageConfiguration('markdown', markdownConfiguration);
+register({ id: 'sql' }); setMonarchTokensProvider('sql', sql); setLanguageConfiguration('sql', sqlConfiguration);
 window.CommanderMonaco = { ...createMonacoBaseAPI(), editor: { create, createModel, setTheme }, languages: { register, setMonarchTokensProvider } };

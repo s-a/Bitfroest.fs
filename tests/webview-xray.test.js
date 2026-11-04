@@ -38,6 +38,22 @@ test('the X-Ray command uses the same mode control as the footer', t => {
   assert.ok(app.document.querySelector('[data-xray]'));
 });
 
+test('X-Ray gives its source 40 percent and hides footer metrics until disabled', t => {
+  const app = createApp(t);
+  const panes = app.document.querySelector('#panes');
+  const metrics = app.document.querySelector('[data-pane="0"] .pane-metrics');
+  const button = app.document.querySelector('[data-pane="0"] [data-xray-toggle]');
+  app.click(button);
+  assert.equal(panes.style.gridTemplateColumns, 'minmax(0, 2fr) minmax(0, 3fr)');
+  assert.equal(metrics.hidden, true);
+  assert.equal(button.hidden, false);
+  button.dispatchEvent(new app.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }));
+  assert.equal(metrics.hidden, false);
+  app.click(app.document.querySelector('[data-pane="1"] [data-xray-toggle]'));
+  assert.equal(panes.style.gridTemplateColumns, 'minmax(0, 3fr) minmax(0, 2fr)');
+  assert.equal(app.document.querySelector('[data-pane="1"] .pane-metrics').hidden, true);
+});
+
 test('a pointer click survives the focus change before mouseup on the eye button', t => {
   const app = createApp(t);
   app.document.querySelector('[data-pane="1"] .list').focus();
