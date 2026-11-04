@@ -1,4 +1,29 @@
 const { Linter } = require('eslint');
+const fs = require('node:fs');
+const path = require('node:path');
+
+function productFiles(root, directory = root) {
+  const excluded = new Set(['.git', '.vscode', '.nyc_output', 'node_modules', 'coverage', 'Docs', 'design', 'scripts', 'tests']);
+  const rules = fs.readFileSync(path.join(root, '.vscodeignore'), 'utf8').split(/\r?\n/).map(line => line.trim());
+  for (const name of ['.tmp', 'TMP']) {
+    const mayReinclude = rules.some(rule => {
+      if (!rule.startsWith('!')) return false;
+      const first = rule.slice(1).replace(/^\//, '').split('/')[0];
+      return first === name || ['*', '?', '{', '[', ']'].some(character => first.includes(character));
+    });
+    if (rules.includes(`${name}/**`) && !mayReinclude) excluded.add(name);
+  }
+  function walk(current, prefix = '') {
+    return fs.readdirSync(current, { withFileTypes: true }).flatMap(item => {
+      if (!prefix && current === root && excluded.has(item.name)) return [];
+      if (['build', 'out'].some(name => path.join(current, item.name) === path.join(root, 'native', name))) return [];
+      const relative = prefix ? `${prefix}/${item.name}` : item.name;
+      if (item.isDirectory()) return walk(path.join(current, item.name), relative);
+      return item.isFile() ? [relative] : [];
+    });
+  }
+  return walk(directory);
+}
 
 function staticString(node) {
   if (node?.type === 'Literal' && typeof node.value === 'string') return node.value;
@@ -68,4 +93,4 @@ function inspectRuntimeSource(source, filename) {
   }));
 }
 
-module.exports = { inspectRuntimeSource };
+module.exports = { inspectRuntimeSource, productFiles };

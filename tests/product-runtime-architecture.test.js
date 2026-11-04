@@ -3,20 +3,10 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
-const { inspectRuntimeSource } = require('./support/runtime-architecture.cjs');
+const { inspectRuntimeSource, productFiles } = require('./support/runtime-architecture.cjs');
 
 const root = path.resolve(__dirname, '..');
-const excluded = new Set(['.git', '.vscode', '.nyc_output', 'node_modules', 'coverage', 'Docs', 'design', 'scripts', 'tests']);
-
-function files(directory, prefix = '') {
-  return fs.readdirSync(directory, { withFileTypes: true }).flatMap(item => {
-    if (!prefix && excluded.has(item.name)) return [];
-    if (['build', 'out'].some(name => path.join(directory, item.name) === path.join(root, 'native', name))) return [];
-    const relative = prefix ? `${prefix}/${item.name}` : item.name;
-    if (item.isDirectory()) return files(path.join(directory, item.name), relative);
-    return item.isFile() ? [relative] : [];
-  });
-}
+const files = directory => productFiles(root, directory);
 
 test('product JavaScript has no external process execution or opaque loader paths', () => {
   const sourceFiles = files(root).filter(name => /\.(?:js|cjs|mjs)$/.test(name) && name !== 'eslint.config.js');
