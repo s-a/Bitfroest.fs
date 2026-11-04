@@ -120,15 +120,20 @@ async function connect(url) {
   const ws = new WebSocket(url);
   await new Promise((resolve, reject) => { ws.onopen = resolve; ws.onerror = reject; });
   let sequence = 0;
-  const pending = new Map(), contexts = [];
+  const pending = new Map(), contexts = [], listeners = new Map();
   ws.onmessage = event => {
     const message = JSON.parse(event.data);
     if (message.method === 'Runtime.executionContextCreated') contexts.push(message.params.context);
+    for (const listener of listeners.get(message.method) || []) listener(message.params);
     const request = pending.get(message.id);
     if (request) { clearTimeout(request.timer); pending.delete(message.id); message.error ? request.reject(new Error(message.error.message)) : request.resolve(message.result); }
   };
   ws.onclose = () => { for (const request of pending.values()) { clearTimeout(request.timer); request.reject(new Error('The render connection closed.')); } pending.clear(); };
-  return { contexts, close: () => ws.close(), call(method, params = {}) {
+  return { contexts, close: () => ws.close(), on(method, listener) {
+    if (!listeners.has(method)) listeners.set(method, new Set());
+    listeners.get(method).add(listener);
+    return () => listeners.get(method).delete(listener);
+  }, call(method, params = {}) {
     return new Promise((resolve, reject) => {
       const id = ++sequence;
       const timer = setTimeout(() => { pending.delete(id); reject(new Error(`Render command timed out: ${method}`)); }, 15000);

@@ -3,6 +3,30 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
+async function animatePointer({ start, end, duration, update, now = () => performance.now(), sleep = ms => new Promise(resolve => setTimeout(resolve, ms)) }) {
+  const began = now();
+  for (;;) {
+    const t = Math.min(1, (now() - began) / duration), eased = t * t * (3 - 2 * t);
+    await update({ x: start.x + (end.x - start.x) * eased, y: start.y + (end.y - start.y) * eased });
+    if (t === 1) return;
+    await sleep(Math.max(1, 1000 / 60 - (now() - began) % (1000 / 60)));
+  }
+}
+
+function pulsePointer(ring, now = performance.now()) {
+  const delay = Math.max(0, Number(ring.dataset.pulseUntil || 0) - now);
+  ring.dataset.pulseUntil = String(now + delay + 380);
+  ring.animate([{ transform: 'scale(.7)', opacity: 1 }, { transform: 'scale(2.2)', opacity: 0 }],
+    { duration: 380, delay, iterations: 1, easing: 'ease-out', fill: 'none' });
+}
+
+function frameList(records, endedAt) {
+  const lines = records.flatMap((record, index) => [`file '${record.name}'`, 'option framerate 1000',
+    `duration ${Math.max(.001, ((records[index + 1]?.timestamp || endedAt) - record.timestamp) / 1000)}`]);
+  lines.push(`file '${records.at(-1).name}'`, 'option framerate 1000');
+  return lines;
+}
+
 async function recordGesture({ capture, scene, page, target, evaluate, invoke, run, file, waitFor }) {
   const frames = path.join(run, path.parse(file).name);
   fs.mkdirSync(frames, { recursive: true });
@@ -35,7 +59,7 @@ async function recordGesture({ capture, scene, page, target, evaluate, invoke, r
     keyboard.style.borderColor = theme.getPropertyValue('--vscode-focusBorder') || '#007fd4';
     document.body.append(keyboard);
     const style = create('style'); style.id = 'showcase-pointer-style';
-    style.textContent = '.showcase-ring{display:block;position:absolute;width:24px;height:24px;left:-12px;top:-12px;border:2px solid #ffc857;border-radius:50%;background:#ffc85733;box-sizing:border-box}.showcase-key{position:absolute;left:18px;top:16px;background:#202020ed;color:#fff;border:1px solid #ffc857;border-radius:4px;padding:5px 9px;font:13px "Segoe UI",sans-serif;white-space:nowrap}#showcase-pointer[data-down="true"] .showcase-ring{animation:showcase-pulse .6s ease-out infinite}#showcase-keys kbd{min-width:28px;text-align:center;padding:8px 12px;border:1px solid #888;border-bottom-width:3px;border-radius:5px;font:600 18px "Segoe UI",sans-serif;background:#ffffff0a}.screencast-keyboard{visibility:hidden}@keyframes showcase-pulse{from{transform:scale(1);opacity:1}to{transform:scale(2.2);opacity:.3}}';
+    style.textContent = '.showcase-ring{opacity:0;display:block;position:absolute;width:24px;height:24px;left:-12px;top:-12px;border:2px solid #ffc857;border-radius:50%;background:#ffc85733;box-sizing:border-box}.showcase-key{position:absolute;left:18px;top:16px;background:#202020ed;color:#fff;border:1px solid #ffc857;border-radius:4px;padding:5px 9px;font:13px "Segoe UI",sans-serif;white-space:nowrap}#showcase-keys kbd{min-width:28px;text-align:center;padding:8px 12px;border:1px solid #888;border-bottom-width:3px;border-radius:5px;font:600 18px "Segoe UI",sans-serif;background:#ffffff0a}.screencast-keyboard{visibility:hidden}';
     document.head.append(style); document.body.append(pointer);
   });
   let position = { x: offset.x + 30, y: offset.y + 40 }, buttons = 0;
@@ -59,22 +83,31 @@ async function recordGesture({ capture, scene, page, target, evaluate, invoke, r
     const pointer = document.querySelector('#showcase-pointer'); pointer.style.left = `${position.x}px`; pointer.style.top = `${position.y}px`;
     pointer.dataset.down = String(down); pointer.querySelector('.showcase-key').textContent = label;
   }, position, label, down);
-  const frame = async () => {
-    const timestamp = Date.now();
-    const shot = await page.call('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
-    const name = `frame-${String(records.length).padStart(4, '0')}.png`;
-    const bytes = Buffer.from(shot.data, 'base64'); fs.writeFileSync(path.join(frames, name), bytes);
-    records.push({ name, timestamp, pointer: { ...position }, buttons, width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) });
-  };
-  const hold = async milliseconds => {
-    const deadline = Date.now() + milliseconds;
-    while (Date.now() < deadline) { await frame(); await new Promise(resolve => setTimeout(resolve, 50)); }
-  };
+  let recordingError;
+  const unsubscribe = page.on('Page.screencastFrame', event => {
+    try {
+      const name = `frame-${String(records.length).padStart(4, '0')}.png`;
+      fs.writeFileSync(path.join(frames, name), Buffer.from(event.data, 'base64'));
+      records.push({ name, timestamp: event.metadata.timestamp * 1000, pointer: { ...position }, buttons });
+    } catch (error) { recordingError = error; }
+    page.call('Page.screencastFrameAck', { sessionId: event.sessionId }).catch(error => { recordingError = error; });
+  });
+  const hold = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
+  const mouseEvents = [];
   const mouse = async (type, point = position, button = 'none', modifiers = 0) => {
     position = point;
     if (type === 'mousePressed') buttons |= button === 'right' ? 2 : 1;
     if (type === 'mouseReleased') buttons &= ~(button === 'right' ? 2 : 1);
     await page.call('Input.dispatchMouseEvent', { type, x: point.x, y: point.y, button, buttons, modifiers, clickCount: type === 'mouseMoved' ? 0 : 1 });
+    mouseEvents.push({ type, ...point, button, buttons, timestamp: Date.now() });
+    if (type === 'mousePressed') {
+      await pageEvaluate(point => {
+        const pointer = document.querySelector('#showcase-pointer');
+        pointer.style.left = `${point.x}px`; pointer.style.top = `${point.y}px`;
+      }, position);
+      const result = await page.call('Runtime.evaluate', { expression: `(${pulsePointer.toString()})(document.querySelector('.showcase-ring'))` });
+      if (result.exceptionDetails) throw new Error(result.exceptionDetails.text);
+    }
   };
   const point = async (selector, side, name, xFraction = .25) => {
     const rect = await evaluate(({ selector, side, name, xFraction }) => {
@@ -88,20 +121,21 @@ async function recordGesture({ capture, scene, page, target, evaluate, invoke, r
   const click = async (p, button = 'left', modifiers = 0) => {
     await mouse('mouseMoved', p); await mouse('mousePressed', p, button, modifiers); await mouse('mouseReleased', p, button, modifiers);
   };
-  const move = async (end, label, count = 12) => {
+  const move = async (end, label, duration = 660) => {
     const start = { ...position };
-    for (let i = 1; i <= count; i++) {
-      const next = { x: start.x + (end.x - start.x) * i / count, y: start.y + (end.y - start.y) * i / count };
-      await mouse('mouseMoved', next, buttons & 2 ? 'right' : 'none'); await annotation(label, Boolean(buttons)); await frame();
-    }
+    await animatePointer({ start, end, duration, update: async next => {
+      await mouse('mouseMoved', next, buttons & 2 ? 'right' : 'none'); await annotation(label, Boolean(buttons));
+    } });
   };
-  let result;
+  let result, recordingEndedAt;
   try {
     await invoke('showcase.screencast');
+    await page.call('Page.startScreencast', { format: 'png', maxWidth: 1280, maxHeight: 900, everyNthFrame: 1 });
+    await waitFor(() => records.length > 0);
     await invoke('bitfroest.clear');
     if (capture.gesture === 'path-copy') {
-      await annotation('Right click'); await hold(350); await move(await point('.path-breadcrumbs', 0), 'Right click', 12); await hold(350);
-      await mouse('mouseMoved'); await mouse('mousePressed', position, 'right'); await annotation('Right click', true); await frame();
+      await annotation('Right click'); await hold(350); await move(await point('.path-breadcrumbs', 0), 'Right click'); await hold(350);
+      await mouse('mouseMoved'); await mouse('mousePressed', position, 'right'); await annotation('Right click', true); await hold(20);
       await mouse('mouseReleased', position, 'right');
       await waitFor(async () => (await invoke('showcase.clipboard-check', [scene.paths[0].replace(/\//g, '\\')])).matched);
       result = { clipboardMatched: true }; await hold(1100);
@@ -126,7 +160,7 @@ async function recordGesture({ capture, scene, page, target, evaluate, invoke, r
       await annotation('Hold right button'); await hold(300); await move(first, 'Hold right button'); await hold(300); await mouse('mouseMoved'); await mouse('mousePressed', first, 'right');
       await annotation('Hold right button', true); await hold(650);
       await waitFor(() => evaluate(() => document.body.dataset.fileDragCursor === 'ready'));
-      await move(await point('.list', 1, 'inbox'), 'Drag to the target folder', 16); await hold(400);
+      await move(await point('.list', 1, 'inbox'), 'Drag to the target folder', 880); await hold(400);
       await mouse('mouseReleased', position, 'right');
       await waitFor(() => evaluate(() => document.querySelector('#modal[open] #modal-title')?.textContent === 'Move'));
       result = { moveDialog: true, destination: await evaluate(() => document.querySelector('#value').value) };
@@ -134,19 +168,21 @@ async function recordGesture({ capture, scene, page, target, evaluate, invoke, r
       await annotation('Review the move destination'); await hold(1300);
     } else throw new Error(`Unknown gesture: ${capture.gesture}`);
   } finally {
+    recordingEndedAt = Date.now();
+    await page.call('Page.stopScreencast'); unsubscribe();
     if (buttons) await mouse('mouseReleased', position, buttons & 2 ? 'right' : 'left');
     await pageEvaluate(() => { document.querySelector('#showcase-pointer')?.remove(); document.querySelector('#showcase-keys')?.remove(); document.querySelector('#showcase-pointer-style')?.remove(); });
     await evaluate(() => document.querySelector('dialog[open] #modal-cancel')?.click());
     await invoke('showcase.screencast');
   }
-  const list = records.flatMap((record, index) => [`file '${record.name}'`, `duration ${((records[index + 1]?.timestamp || record.timestamp + 500) - record.timestamp) / 1000}`]);
-  list.push(`file '${records.at(-1).name}'`); fs.writeFileSync(path.join(frames, 'frames.txt'), list.join('\n'));
-  const encoded = spawnSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'concat', '-safe', '0', '-i', 'frames.txt', '-vf', 'fps=8,scale=1280:-1:flags=lanczos,split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=3', '-loop', '0', path.join(run, file)], { cwd: frames, windowsHide: true, encoding: 'utf8', timeout: 60000 });
+  if (recordingError) throw recordingError;
+  fs.writeFileSync(path.join(frames, 'frames.txt'), frameList(records, recordingEndedAt).join('\n'));
+  const encoded = spawnSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'concat', '-safe', '0', '-i', 'frames.txt', '-vf', 'fps=30,scale=1280:-1:flags=lanczos,split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=3', '-t', String((recordingEndedAt - records[0].timestamp) / 1000), '-loop', '0', path.join(run, file)], { cwd: frames, windowsHide: true, encoding: 'utf8', timeout: 60000 });
   if (encoded.status !== 0) throw new Error(`GIF encoding failed: ${encoded.error?.message || encoded.stderr}`);
   const gif = fs.readFileSync(path.join(run, file));
-  fs.writeFileSync(path.join(frames, 'evidence.json'), JSON.stringify({ gesture: capture.gesture, frames: records.length, result, keyEvents,
+  fs.writeFileSync(path.join(frames, 'evidence.json'), JSON.stringify({ gesture: capture.gesture, frames: records.length, result, keyEvents, mouseEvents,
     framesRecordedAt: records.map(record => ({ timestamp: record.timestamp, pointer: record.pointer, buttons: record.buttons })) }, null, 2));
   return { width: gif.readUInt16LE(6), height: gif.readUInt16LE(8) };
 }
 
-module.exports = { recordGesture };
+module.exports = { recordGesture, animatePointer, pulsePointer, frameList };

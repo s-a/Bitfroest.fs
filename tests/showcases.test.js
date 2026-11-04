@@ -121,3 +121,44 @@ test('interaction inventory tracks every registered shortcut and distinguishes r
   assert.equal(result.shortcuts.find(item => item.command === 'bitfroest.path').status, 'recorded');
   assert.ok(result.gestures.some(item => item.kind === 'drag-and-drop' && item.status === 'pending'));
 });
+
+test('pointer movement follows elapsed time despite variable dispatch latency', async () => {
+  const { animatePointer } = require('../scripts/showcases/gestures.cjs');
+  let clock = 0;
+  const points = [];
+  await animatePointer({ start: { x: 0, y: 10 }, end: { x: 600, y: 70 }, duration: 600,
+    now: () => clock, sleep: async ms => { clock += ms; },
+    update: async point => { points.push({ ...point, time: clock }); clock += points.length % 3 ? 2 : 25; } });
+  assert.deepEqual({ x: points.at(-1).x, y: points.at(-1).y }, { x: 600, y: 70 });
+  assert.ok(points.length >= 25);
+  assert.ok(clock < 650);
+  for (const point of points) {
+    const t = Math.min(1, point.time / 600), eased = t * t * (3 - 2 * t);
+    assert.ok(Math.abs(point.x - 600 * eased) < .001);
+  }
+});
+
+test('each button press queues one finite pulse, including two distinct double-click presses', () => {
+  const { pulsePointer } = require('../scripts/showcases/gestures.cjs');
+  const animations = [], ring = { dataset: {}, animate: (frames, options) => animations.push({ frames, options }) };
+  pulsePointer(ring, 100);
+  assert.equal(animations.length, 1);
+  assert.equal(animations[0].options.iterations, 1);
+  assert.equal(animations[0].options.delay, 0);
+  pulsePointer(ring, 180);
+  assert.equal(animations.length, 2);
+  assert.equal(animations[1].options.iterations, 1);
+  assert.equal(animations[1].options.delay, 300);
+  pulsePointer(ring, 1500);
+  assert.equal(animations[2].options.delay, 0);
+});
+
+test('recording timing retains the final reading pause and a consistent image timebase', () => {
+  const { frameList } = require('../scripts/showcases/gestures.cjs');
+  const lines = frameList([{ name: 'first.png', timestamp: 1000 }, { name: 'last.png', timestamp: 1200 }], 2600);
+  const duration = lines.filter(line => line.startsWith('duration ')).reduce((sum, line) => sum + Number(line.slice(9)), 0);
+  assert.ok(Math.abs(duration - 1.6) < .000001);
+  for (const [index, line] of lines.entries()) {
+    if (line.startsWith('file ')) assert.equal(lines[index + 1], 'option framerate 1000');
+  }
+});
