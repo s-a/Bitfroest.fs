@@ -27,24 +27,13 @@ function frameList(records, endedAt) {
   return lines;
 }
 
-async function recordGesture({ capture, scene, page, target, evaluate, invoke, run, file, waitFor }) {
-  const frames = path.join(run, path.parse(file).name);
-  fs.mkdirSync(frames, { recursive: true });
-  const pageEvaluate = async (fn, ...args) => {
-    const result = await page.call('Runtime.evaluate', { returnByValue: true, awaitPromise: true,
-      expression: `(${fn.toString()})(${args.map(arg => JSON.stringify(arg)).join(',')})` });
-    if (result.exceptionDetails) throw new Error(result.exceptionDetails.exception?.description || result.exceptionDetails.text);
-    return result.result.value;
-  };
-  const owner = await page.call('DOM.getFrameOwner', { frameId: target.id });
-  const model = await page.call('DOM.getBoxModel', { backendNodeId: owner.backendNodeId });
-  const offset = { x: model.model.content[0], y: model.model.content[1] };
-  await pageEvaluate(() => {
+function installPointer() {
+    const position = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
     const create = name => document.createElementNS('http://www.w3.org/1999/xhtml', name);
     const pointer = create('div'); pointer.id = 'showcase-pointer'; pointer.dataset.documentationAnnotation = 'pointer';
-    pointer.style.cssText = 'position:fixed;z-index:2147483647;pointer-events:none;left:0;top:0';
+    pointer.style.cssText = `position:fixed;z-index:2147483647;pointer-events:none;left:${position.x}px;top:${position.y}px`;
     const ring = create('span'); ring.className = 'showcase-ring';
-    const key = create('span'); key.className = 'showcase-key'; pointer.append(ring, key);
+    const key = create('span'); key.className = 'showcase-key'; key.hidden = true; pointer.append(ring, key);
     const arrow = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     arrow.setAttribute('width', '24'); arrow.setAttribute('height', '30'); arrow.setAttribute('viewBox', '0 0 24 30');
     arrow.style.cssText = 'position:absolute;left:0;top:0;filter:drop-shadow(1px 1px 2px #0008)';
@@ -61,8 +50,23 @@ async function recordGesture({ capture, scene, page, target, evaluate, invoke, r
     const style = create('style'); style.id = 'showcase-pointer-style';
     style.textContent = '.showcase-ring{opacity:0;display:block;position:absolute;width:24px;height:24px;left:-12px;top:-12px;border:2px solid #ffc857;border-radius:50%;background:#ffc85733;box-sizing:border-box}.showcase-key{position:absolute;left:18px;top:16px;background:#202020ed;color:#fff;border:1px solid #ffc857;border-radius:4px;padding:5px 9px;font:13px "Segoe UI",sans-serif;white-space:nowrap}#showcase-keys kbd{min-width:28px;text-align:center;padding:8px 12px;border:1px solid #888;border-bottom-width:3px;border-radius:5px;font:600 18px "Segoe UI",sans-serif;background:#ffffff0a}.screencast-keyboard{visibility:hidden}';
     document.head.append(style); document.body.append(pointer);
-  });
-  let position = { x: offset.x + 30, y: offset.y + 40 }, buttons = 0;
+    return position;
+}
+
+async function recordGesture({ capture, scene, page, target, evaluate, invoke, run, file, waitFor }) {
+  const frames = path.join(run, path.parse(file).name);
+  fs.mkdirSync(frames, { recursive: true });
+  const pageEvaluate = async (fn, ...args) => {
+    const result = await page.call('Runtime.evaluate', { returnByValue: true, awaitPromise: true,
+      expression: `(${fn.toString()})(${args.map(arg => JSON.stringify(arg)).join(',')})` });
+    if (result.exceptionDetails) throw new Error(result.exceptionDetails.exception?.description || result.exceptionDetails.text);
+    return result.result.value;
+  };
+  const owner = await page.call('DOM.getFrameOwner', { frameId: target.id });
+  const model = await page.call('DOM.getBoxModel', { backendNodeId: owner.backendNodeId });
+  const offset = { x: model.model.content[0], y: model.model.content[1] };
+  let position = await pageEvaluate(installPointer), buttons = 0;
+  const origin = { ...position };
   const records = [];
   const keyEvents = [], pressedKeys = new Set();
   const keyEvent = async (type, key, code, windowsVirtualKeyCode, modifiers = 0) => {
@@ -81,7 +85,7 @@ async function recordGesture({ capture, scene, page, target, evaluate, invoke, r
   };
   const annotation = async (label, down = false) => pageEvaluate((position, label, down) => {
     const pointer = document.querySelector('#showcase-pointer'); pointer.style.left = `${position.x}px`; pointer.style.top = `${position.y}px`;
-    pointer.dataset.down = String(down); pointer.querySelector('.showcase-key').textContent = label;
+    pointer.dataset.down = String(down); const key = pointer.querySelector('.showcase-key'); key.textContent = label; key.hidden = !label;
   }, position, label, down);
   let recordingError;
   const unsubscribe = page.on('Page.screencastFrame', event => {
@@ -130,9 +134,17 @@ async function recordGesture({ capture, scene, page, target, evaluate, invoke, r
   let result, recordingEndedAt;
   try {
     await invoke('showcase.screencast');
+    await invoke('bitfroest.clear');
+    await waitFor(() => evaluate(() => { const state = window.CommanderHost.getState(); return state.panes[state.active].selected.length === 0; }));
+    if (capture.gesture === 'right-drag') {
+      await click(await point('.list', 0, 'Changes.txt'));
+      await click(await point('.list', 0, 'Colors.json'), 'left', 2);
+      await waitFor(() => evaluate(() => window.CommanderHost.getState().panes[0].selected.length === 2));
+    }
+    await mouse('mouseMoved', origin);
+    await annotation('');
     await page.call('Page.startScreencast', { format: 'png', maxWidth: 1280, maxHeight: 900, everyNthFrame: 1 });
     await waitFor(() => records.length > 0);
-    await invoke('bitfroest.clear');
     if (capture.gesture === 'path-copy') {
       await annotation('Right click'); await hold(350); await move(await point('.path-breadcrumbs', 0), 'Right click'); await hold(350);
       await mouse('mouseMoved'); await mouse('mousePressed', position, 'right'); await annotation('Right click', true); await hold(20);
@@ -154,9 +166,7 @@ async function recordGesture({ capture, scene, page, target, evaluate, invoke, r
       await waitFor(() => evaluate(() => window.CommanderHost.getState().panes[0].selected.length >= 2));
       result = { selectionCount: await evaluate(() => window.CommanderHost.getState().panes[0].selected.length) }; await hold(1100);
     } else if (capture.gesture === 'right-drag') {
-      const first = await point('.list', 0, 'Changes.txt'), second = await point('.list', 0, 'Colors.json');
-      await click(first); await click(second, 'left', 2);
-      await waitFor(() => evaluate(() => window.CommanderHost.getState().panes[0].selected.length === 2));
+      const first = await point('.list', 0, 'Changes.txt');
       await annotation('Hold right button'); await hold(300); await move(first, 'Hold right button'); await hold(300); await mouse('mouseMoved'); await mouse('mousePressed', first, 'right');
       await annotation('Hold right button', true); await hold(650);
       await waitFor(() => evaluate(() => document.body.dataset.fileDragCursor === 'ready'));
@@ -167,6 +177,8 @@ async function recordGesture({ capture, scene, page, target, evaluate, invoke, r
       if (result.destination.replace(/\\/g, '/').toLowerCase() !== `${scene.paths[1]}/inbox`.toLowerCase()) throw new Error('The actual drop target differs from the requested destination.');
       await annotation('Review the move destination'); await hold(1300);
     } else throw new Error(`Unknown gesture: ${capture.gesture}`);
+    await move(origin, '');
+    await hold(350);
   } finally {
     recordingEndedAt = Date.now();
     await page.call('Page.stopScreencast'); unsubscribe();
@@ -180,9 +192,9 @@ async function recordGesture({ capture, scene, page, target, evaluate, invoke, r
   const encoded = spawnSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'concat', '-safe', '0', '-i', 'frames.txt', '-vf', 'fps=30,scale=1280:-1:flags=lanczos,split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=3', '-t', String((recordingEndedAt - records[0].timestamp) / 1000), '-loop', '0', path.join(run, file)], { cwd: frames, windowsHide: true, encoding: 'utf8', timeout: 60000 });
   if (encoded.status !== 0) throw new Error(`GIF encoding failed: ${encoded.error?.message || encoded.stderr}`);
   const gif = fs.readFileSync(path.join(run, file));
-  fs.writeFileSync(path.join(frames, 'evidence.json'), JSON.stringify({ gesture: capture.gesture, frames: records.length, result, keyEvents, mouseEvents,
+  fs.writeFileSync(path.join(frames, 'evidence.json'), JSON.stringify({ gesture: capture.gesture, origin, frames: records.length, result, keyEvents, mouseEvents,
     framesRecordedAt: records.map(record => ({ timestamp: record.timestamp, pointer: record.pointer, buttons: record.buttons })) }, null, 2));
   return { width: gif.readUInt16LE(6), height: gif.readUInt16LE(8) };
 }
 
-module.exports = { recordGesture, animatePointer, pulsePointer, frameList };
+module.exports = { recordGesture, animatePointer, pulsePointer, frameList, installPointer };

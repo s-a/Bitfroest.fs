@@ -4,6 +4,27 @@ const { validateCatalog, filename, assertProductState, waitFor, buildManifest, p
 
 const scene = () => ({ id: 'new-folder', title: 'Create a folder', description: 'Open the folder dialog.', paths: ['C:/demo/left', 'C:/demo/right'], captures: [{ id: 'dialog', action: 'mkdir', expect: 'dialog[open]', text: 'New folder' }] });
 
+test('each gesture pointer is already centered when its first visible element is appended', () => {
+  const { JSDOM } = require('jsdom');
+  const { installPointer } = require('../scripts/showcases/gestures.cjs');
+  for (const [width, height] of [[1920, 1080], [1280, 768]]) {
+    const dom = new JSDOM('<html><head></head><body><div class="monaco-workbench"></div></body></html>', { runScripts: 'outside-only' });
+    try {
+      Object.assign(dom.window, { innerWidth: width, innerHeight: height });
+      const body = dom.window.document.body, append = body.append;
+      let first;
+      body.append = function (...nodes) {
+        const pointer = nodes.find(node => node.id === 'showcase-pointer');
+        if (pointer) first = { x: Number.parseFloat(pointer.style.left), y: Number.parseFloat(pointer.style.top) };
+        return append.apply(this, nodes);
+      };
+      const position = dom.window.eval(`(${installPointer.toString()})()`);
+      assert.deepEqual(first, { x: width / 2, y: height / 2 });
+      assert.deepEqual({ ...position }, first);
+    } finally { dom.window.close(); }
+  }
+});
+
 test('lock documentation permits only inspection and unconfirmed operation previews', () => {
   for (const lockAction of ['unlock', 'terminate', 'delete', 'schedule', 'run']) {
     const value = scene();
