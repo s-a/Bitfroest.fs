@@ -29,11 +29,14 @@ function below(value, directory) {
 function statSignature(stat) {
   return [stat.dev, stat.ino, stat.mode, stat.size, stat.mtimeNs, stat.ctimeNs].map(String).join(':');
 }
+function statIdentity(stat) {
+  return Object.fromEntries(['dev', 'ino', 'mode', 'size', 'mtimeNs', 'ctimeNs'].map(key => [key, String(stat[key])]));
+}
 function contentSignature(stat) {
   return [stat.dev, stat.ino, stat.mode, stat.size, stat.mtimeNs].map(String).join(':');
 }
 function matchesOwnedFile(stat, identity) {
-  return !stat.isSymbolicLink() && String(stat.dev) === String(identity.dev) && String(stat.ino) === String(identity.ino);
+  return (!stat.isSymbolicLink() || process.platform === 'linux') && String(stat.dev) === String(identity.dev) && String(stat.ino) === String(identity.ino);
 }
 function matchesOwnedSnapshot(stat, identity) {
   return matchesOwnedFile(stat, identity) && ['size', 'mtimeNs', 'ctimeNs'].every(key => String(stat[key]) === String(identity[key]));
@@ -105,12 +108,48 @@ function createProvider(options = {}) {
     } catch { return false; }
   }
 
+  function canNavigate(value, allowFinalLink = false) {
+    try {
+      const absolute = allowed(value);
+      for (const component of components(absolute)) {
+        let stat;
+        try { stat = nativeFs.lstatSync(component); } catch (error) { if (error.code === 'ENOENT') return true; throw error; }
+        if (stat.isSymbolicLink()) return allowFinalLink === true && process.platform === 'linux' && component === absolute && permittedRoots().some(root => below(absolute, root));
+      }
+      return true;
+    } catch { return false; }
+  }
+
+  async function resolveNavigation(value) {
+    const absolute = allowed(value);
+    if (process.platform !== 'linux') return { path: absolute, kind: 'directory' };
+    await assertComponents(absolute);
+    const linkBefore = await fs.lstat(absolute, { bigint: true });
+    let resolved = absolute, targetStat = linkBefore;
+    let linkText;
+    if (linkBefore.isSymbolicLink()) {
+      if (process.platform !== 'linux' || !permittedRoots().some(root => below(absolute, root))) throw new Error('Symbolische Verknüpfungen außerhalb des erlaubten Dateibaums sind nicht zulässig.');
+      linkText = (await fs.readlink(absolute, { encoding: 'buffer' })).toString('base64');
+      resolved = canonical(await fs.realpath(absolute));
+      if (!permittedRoots().some(root => below(resolved, root))) throw new Error('Das Verknüpfungsziel liegt außerhalb der erlaubten Root-Verzeichnisse.');
+      await assertComponents(resolved);
+      targetStat = await fs.lstat(resolved, { bigint: true });
+      const linkAfter = await fs.lstat(absolute, { bigint: true });
+      const linkTextAfter = (await fs.readlink(absolute, { encoding: 'buffer' })).toString('base64');
+      if (!linkAfter.isSymbolicLink() || statSignature(linkAfter) !== statSignature(linkBefore) || linkTextAfter !== linkText) throw Object.assign(new Error('Die symbolische Verknüpfung wurde während der Navigation geändert.'), { code: 'EntryChangedBeforeWrite', path: absolute });
+    } else await assertComponents(absolute);
+    const identities = { target: statIdentity(targetStat), ...(linkText !== undefined ? { link: { ...statIdentity(linkBefore), linkText } } : {}) };
+    if (targetStat.isDirectory()) return { path: resolved, kind: 'directory', identities };
+    if (targetStat.isFile()) return { path: resolved, kind: 'file', identities };
+    throw new Error('Das Verknüpfungsziel ist kein regulärer Datei- oder Ordnerpfad.');
+  }
+
   async function assertComponents(value, missing = false) {
     const absolute = allowed(value);
     for (const component of components(absolute)) {
       let stat;
       try { stat = await fs.lstat(component); } catch (error) { if (missing && error.code === 'ENOENT') return absolute; throw error; }
-      if (stat.isSymbolicLink()) throw new Error('Symbolische Verknüpfung oder Reparse-Link ist nicht erlaubt.');
+      if (stat.isSymbolicLink() && !(process.platform === 'linux' && component === absolute)) throw new Error('Symbolische Verknüpfung oder Reparse-Link ist nicht erlaubt.');
     }
     return absolute;
   }
@@ -230,7 +269,9 @@ function createProvider(options = {}) {
         if (typeof attributeFlags?.dosName === 'string' && attributeFlags.dosName) row.dosName = attributeFlags.dosName;
         if (versionInfo?.version) row.fileVersion = versionInfo.version;
         if (versionInfo?.versionString !== undefined) row.fileVersionString = versionInfo.versionString;
-        entries.set(identity(absolute), { path: absolute, type: child.isDirectory() ? 'folder' : 'file', signature: statSignature(child), contentSignature: contentSignature(child), row });
+        const linkText = child.isSymbolicLink() && process.platform === 'linux' ? (await fs.readlink(absolute, { encoding: 'buffer' })).toString('base64') : undefined;
+        if (linkText !== undefined && statSignature(await fs.lstat(absolute, { bigint: true })) !== statSignature(child)) throw new Error('Verknüpfung während der Bestandsaufnahme geändert.');
+        entries.set(identity(absolute), { path: absolute, type: child.isDirectory() ? 'folder' : 'file', signature: statSignature(child), contentSignature: contentSignature(child), ...(linkText !== undefined ? { linkText } : {}), row });
         folders[directory].push(row);
         settings.onProgress?.(Progress.event({ phase: settings.phase || 'preparing', filesScanned: count, path: absolute, overall: Progress.unknown('items', count, 'enumerating'), current: Progress.known('items', folders[directory].length, names.length) }));
         throwIfAborted(settings.signal);
@@ -418,6 +459,7 @@ function createProvider(options = {}) {
       if (entry.metadataError) throw entry.metadataError;
       await assertComponents(entry.path);
       const observed = await fs.lstat(entry.path, { bigint: true });
+      if (observed.isSymbolicLink() && entry.linkText === undefined) throw new Error('Eintrag vor dem Schreiben durch eine Verknüpfung ersetzt.');
       const signature = statSignature(observed);
       const matches = !recursive && entry.type === 'folder'
         ? signature.split(':').slice(0, 3).join(':') === entry.signature.split(':').slice(0, 3).join(':')
@@ -434,6 +476,7 @@ function createProvider(options = {}) {
         });
       }
       if (!recursive && entry.type === 'folder') return;
+      if (entry.linkText !== undefined && (!observed.isSymbolicLink() || (await fs.readlink(entry.path, { encoding: 'buffer' })).toString('base64') !== entry.linkText)) throw new Error('Verknüpfung vor dem Schreiben extern geändert.');
       if (entry.type === 'file' && entry.hash && hash(await fs.readFile(entry.path)) !== entry.hash) throw new Error('Datei vor dem Schreiben extern geändert.');
       if (!recursive || entry.type !== 'folder') return;
       const children = [...expected.entries.values()].filter(child => !child.root && identity(slash(path.dirname(child.path))) === identity(entry.path));
@@ -527,6 +570,7 @@ function createProvider(options = {}) {
       if (!source && typeof item.row.content !== 'string') throw new Error('Neue binäre Dateien oder Archivoperationen benötigen eine belegte Datei-Quelle.');
       let data = null;
       if (typeof item.row.content === 'string') {
+        if (source?.linkText !== undefined) throw new Error('Verknüpfungsziele dürfen nicht als Dateiinhalt ersetzt werden.');
         if (source) {
           const original = await fs.readFile(source.path);
           if (statSignature(await fs.lstat(source.path, { bigint: true })) !== source.signature || original.includes(0)) throw new Error('Binärdateien dürfen nicht durch Textinhalt ersetzt werden.');
@@ -557,6 +601,7 @@ function createProvider(options = {}) {
     const deferredSources = new Set(quarantine.filter(item => !desired.has(identity(item.path)) && sourcePaths.some(source => below(source, item.path))));
     const newDirectories = [...desired.values()].filter(item => item.type === 'folder' && baseline.entries.get(identity(item.path))?.type !== 'folder').sort((a, b) => a.path.split('/').length - b.path.split('/').length);
     const backups = new Map(), moved = [], createdFiles = [], createdDirectories = [], stages = [], renamedCases = [];
+    const createdDirectoryIdentities = new Map();
     const totalBytes = [...staged.values()].reduce((sum, file) => sum + (file.expectedSize ?? file.data?.length ?? file.source?.row.size ?? 0), 0);
     let publishedBytes = 0;
     /** @param {object} file @param {{phase: string, transferred?: number, [field: string]: unknown}} event */
@@ -676,6 +721,10 @@ function createProvider(options = {}) {
         throwIfAborted(operation.signal);
         await assertComponents(directory.path, true);
         await fs.mkdir(directory.path); createdDirectories.push(directory.path);
+        if (process.platform === 'linux' && !options.fs) {
+          const stat = await fs.lstat(directory.path, { bigint: true });
+          createdDirectoryIdentities.set(directory.path, { dev: String(stat.dev), ino: String(stat.ino) });
+        }
       }
       for (const file of staged.values()) {
         throwIfAborted(operation.signal);
@@ -696,7 +745,7 @@ function createProvider(options = {}) {
           const sourcePath = movedSource ? movedSource.backup + file.source.path.slice(movedSource.path.length) : file.source.path;
           const root = permittedRoots().find(root => below(file.path, root));
           const directory = `${root}/.bitfroest-copy-${crypto.randomUUID()}`;
-          await fs.mkdir(directory);
+          await fs.mkdir(directory, process.platform === 'linux' ? { mode: 0o700 } : undefined);
           const stage = { directory, path: `${directory}/${path.basename(file.path)}` }; stages.push(stage);
           await assertComponents(sourcePath);
           const sourceStat = await fs.lstat(sourcePath, { bigint: true });
@@ -706,7 +755,7 @@ function createProvider(options = {}) {
             : statSignature(sourceStat) !== file.source.signature) throw new Error('Datei vor dem Kopieren extern geändert.');
           const copyOptions = { signal: operation.signal, onProgress: event => report(file, { ...event, phase: 'copying' }), expectedSource: Object.fromEntries(['dev', 'ino', 'size', 'mtimeNs', 'ctimeNs'].map(key => [key, String(sourceStat[key])])) };
           if (options.copyFile) await options.copyFile(sourcePath, stage.path, copyOptions);
-          else if (operation.signal && !options.fs) {
+          else if ((operation.signal || process.platform === 'linux') && !options.fs) {
             const copied = await operation.copySession().copy({ roots: permittedRoots(), source: sourcePath, target: stage.path, expected: copyOptions.expectedSource }, copyOptions);
             if (copied?.ownedDestination) {
               const owned = copied.ownedDestination;
@@ -717,10 +766,24 @@ function createProvider(options = {}) {
               stage.nativeOwnedDestination = owned;
             }
           }
+          else if (file.source.linkText !== undefined) await fs.symlink(Buffer.from(file.source.linkText, 'base64'), stage.path);
           else await fs.copyFile(sourcePath, stage.path, nativeFs.constants.COPYFILE_EXCL);
           const copiedStage = await fs.lstat(stage.path, { bigint: true });
           if (stage.nativeOwnedDestination && !matchesOwnedSnapshot(copiedStage, stage.nativeOwnedDestination)) throw new Error('Die native Zielidentität hat sich geändert.');
           stage.signature = statSignature(copiedStage);
+          if (file.source.linkText !== undefined) {
+            if (!copiedStage.isSymbolicLink() || (await fs.readlink(stage.path, { encoding: 'buffer' })).toString('base64') !== file.source.linkText) throw new Error('Die Kopierprüfung der Verknüpfung ist fehlgeschlagen.');
+            throwIfAborted(operation.signal);
+            await validateEntries(baseline, [file.source], operation.signal, false);
+            await (options.renameNoReplace || renameNoReplace)({ source: stage.path, target: file.path, expected: { dev: String(copiedStage.dev), ino: String(copiedStage.ino) }, expectedSnapshot: Object.fromEntries(['size', 'mode', 'mtimeNs', 'ctimeNs'].map(key => [key, String(copiedStage[key])])), allowSymbolicLink: true }, { fs });
+            const published = await fs.lstat(file.path, { bigint: true });
+            if (!published.isSymbolicLink() || !matchesOwnedFile(published, copiedStage)) throw new Error('Die veröffentlichte Verknüpfung wurde extern verändert.');
+            file.createdIdentity = `${published.dev}:${published.ino}`;
+            file.createdContentSignature = contentSignature(published);
+            file.createdSignature = statSignature(published);
+            createdFiles.push(file);
+            await removeStage(stage);
+          } else {
           for (const source of file.appendSources || []) await appendToStage(source, stage, file);
           const input = await fs.open(stage.path, 'r');
           try {
@@ -738,7 +801,9 @@ function createProvider(options = {}) {
             await assertComponents(file.path, true);
             const stageStat = await fs.lstat(stage.path, { bigint: true });
             if (statSignature(stageStat) !== stage.signature || stage.nativeOwnedDestination && !matchesOwnedFile(stageStat, stage.nativeOwnedDestination)) throw new Error('Sicherungsdatei extern verändert.');
-            await fs.link(stage.path, file.path);
+            if (process.platform === 'linux' && (!options.fs || options.renameNoReplace)) {
+              await (options.renameNoReplace || renameNoReplace)({ source: stage.path, target: file.path, expected: { dev: String(stat.dev), ino: String(stat.ino) }, expectedSnapshot: Object.fromEntries(['size', 'mode', 'mtimeNs', 'ctimeNs'].map(key => [key, String(stat[key])])) }, { fs });
+            } else await fs.link(stage.path, file.path);
             const publishedStat = await fs.lstat(file.path, { bigint: true });
             if (stage.nativeOwnedDestination && !matchesOwnedFile(publishedStat, stage.nativeOwnedDestination)) throw new Error('Die native Zielidentität hat sich bei der Veröffentlichung geändert.');
             file.createdIdentity = `${stat.dev}:${stat.ino}`;
@@ -750,6 +815,7 @@ function createProvider(options = {}) {
             file.createdSignature = statSignature(await input.stat({ bigint: true }));
           } finally { await input.close(); }
           await removeStage(stage);
+          }
         }
         const createdStat = await fs.lstat(file.path, { bigint: true });
         if (`${createdStat.dev}:${createdStat.ino}` !== file.createdIdentity || (file.data ? statSignature(createdStat) !== file.createdSignature : contentSignature(createdStat) !== file.createdContentSignature)) throw new Error('Neue Datei extern verändert.');
@@ -765,6 +831,24 @@ function createProvider(options = {}) {
         file.completed = true;
         report(file, { phase: 'published', transferred: 0, total: file.expectedSize ?? file.data?.length ?? file.source?.row.size ?? 0, granular: process.platform === 'win32' });
         publishedBytes += file.expectedSize ?? file.data?.length ?? file.source?.row.size ?? 0;
+      }
+      if (process.platform === 'linux' && !options.fs) {
+        for (const directory of [...newDirectories].reverse()) {
+          if (!directory.row.fsSource) continue;
+          const source = baseline.entries.get(identity(directory.row.fsSource));
+          if (!source || source.type !== 'folder') throw new Error('Die Ordnerquelle gehört nicht zum ursprünglichen Snapshot.');
+          throwIfAborted(operation.signal);
+          await validateEntries(baseline, [source], operation.signal, false);
+          await assertComponents(directory.path);
+          const targetStat = await fs.lstat(directory.path, { bigint: true });
+          if (!targetStat.isDirectory() || !matchesOwnedFile(targetStat, createdDirectoryIdentities.get(directory.path))) throw new Error('Der neue Zielordner wurde extern verändert.');
+          const sourceStat = await fs.lstat(source.path, { bigint: true });
+          const describe = stat => Object.fromEntries(['dev', 'ino', 'size', 'mtimeNs', 'ctimeNs'].map(key => [key, String(stat[key])]));
+          operation.onProgress?.(Progress.event({ phase: 'metadata', path: directory.path, sourcePath: source.path, overall: Progress.unknown('items', 0, 'native-operation'), current: Progress.unknown('items', 0, 'native-operation') }));
+          const result = await operation.copySession().copy({ roots: permittedRoots(), source: source.path, target: directory.path, expected: describe(sourceStat), metadataOnly: true, expectedTarget: describe(targetStat) }, { signal: operation.signal });
+          const observed = await fs.lstat(directory.path, { bigint: true });
+          if (!result.ownedDestination || !matchesOwnedSnapshot(observed, result.ownedDestination)) throw new Error('Die native Ordner-Metadatenübernahme wurde nicht bestätigt.');
+        }
       }
       for (const item of deferredSources) {
         throwIfAborted(operation.signal);
@@ -875,7 +959,7 @@ function createProvider(options = {}) {
       const original = baseline.entries.get(identity(originalPath));
       const stat = await fs.lstat(backupPath, { bigint: true });
       if (original.type === 'file') {
-        if (!stat.isFile() || contentSignature(stat) !== original.contentSignature || original.hash && hash(await fs.readFile(backupPath)) !== original.hash) throw new Error('Sicherungsdatei extern verändert.');
+        if (!(original.linkText !== undefined ? stat.isSymbolicLink() && (await fs.readlink(backupPath, { encoding: 'buffer' })).toString('base64') === original.linkText : stat.isFile()) || contentSignature(stat) !== original.contentSignature || original.hash && hash(await fs.readFile(backupPath)) !== original.hash) throw new Error('Sicherungsdatei extern verändert.');
         await verifyPublications(originalPath);
         await fs.unlink(backupPath);
         return;
@@ -927,6 +1011,7 @@ function createProvider(options = {}) {
           const child = allowed(path.join(current, name));
           const stat = await fs.lstat(child, { bigint: true });
           settings.onProgress?.(Progress.event({ phase: 'folder-size', path: child, overall: Progress.unknown('items', ++scanned, 'enumerating'), current: Progress.known('items', ++processed, names.length) }));
+          if (stat.isSymbolicLink() && process.platform === 'linux') continue;
           if (stat.isSymbolicLink() || !stat.isDirectory() && !stat.isFile()) throw new Error('Nicht reguläre Dateisystemeinträge sind nicht erlaubt.');
           if (stat.isDirectory()) pending.push(child);
           else {
@@ -944,7 +1029,13 @@ function createProvider(options = {}) {
   async function prepare(before, settings = {}) {
     if (busy) throw new Error('Eine Dateisystemoperation läuft bereits.');
     if (!settings.navigation && (!snapshot || before?.snapshotId !== snapshot.state.snapshotId || filesystemDigest(before) !== snapshot.digest)) throw new Error('Der Dateisystem-Snapshot ist veraltet oder wurde verändert.');
-    const directories = (settings.directories || []).map(allowed);
+    const directories = settings.navigation
+      ? await Promise.all((settings.directories || []).map(async directory => {
+        const resolved = await resolveNavigation(directory);
+        if (resolved.kind !== 'directory') throw Object.assign(new Error('Der Navigationspfad ist kein Ordner.'), { code: 'NotDirectory', path: resolved.path });
+        return resolved.path;
+      }))
+      : (settings.directories || []).map(allowed);
     const fresh = await load({ directories: settings.navigation ? directories : [...(snapshot.visibleOnly ? activeDirectories(before) : snapshot.loadedDirectories), ...directories], ...(settings.navigation ? { baseline: snapshot, refreshDirectories: directories, visibleDirectories: settings.visibleDirectories, getVisibleDirectories: settings.getVisibleDirectories, onDirectory: settings.onDirectory } : {}), recursiveDirectories: settings.recursive ? directories : [], signal: settings.signal, onProgress: settings.onProgress });
     const state = inheritedPanes(fresh, before);
     if (snapshot.state.snapshotId === fresh.snapshotId) snapshot.state = clone(state);
@@ -995,7 +1086,7 @@ function createProvider(options = {}) {
       throw failure;
     } finally { busy = false; }
   }
-  return { contains, load, apply, prepare, remove, measureFolder };
+  return { contains, canNavigate, resolveNavigation, load, apply, prepare, remove, measureFolder };
 }
 
 module.exports = { createProvider };

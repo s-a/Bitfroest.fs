@@ -20,7 +20,9 @@ function validate(input, platform = 'win32') {
   const allowed = value => roots.some(root => fold(value).startsWith(fold(root.endsWith(paths.sep) ? root : root + paths.sep)));
   if (!allowed(source) || !allowed(target) || fold(source) === fold(target)) throw new Error('Der Kopierpfad liegt außerhalb der erlaubten Wurzeln oder Quelle und Ziel sind identisch.');
   if (!input.expected || !['dev', 'ino', 'size', 'mtimeNs', 'ctimeNs'].every(key => /^-?\d+$/.test(String(input.expected[key])))) throw new Error('Eine vollständige erwartete Dateiidentität ist erforderlich.');
-  return { roots, source, target, expected: input.expected };
+  if (input.metadataOnly !== undefined && typeof input.metadataOnly !== 'boolean') throw new Error('metadataOnly must be a boolean.');
+  if (input.metadataOnly && (platform !== 'linux' || !input.expectedTarget || !['dev', 'ino', 'size', 'mtimeNs', 'ctimeNs'].every(key => /^-?\d+$/.test(String(input.expectedTarget[key]))))) throw new Error('Linux directory metadata requires the complete destination identity.');
+  return { roots, source, target, expected: input.expected, ...(input.metadataOnly ? { metadataOnly: true, expectedTarget: input.expectedTarget } : {}) };
 }
 function nativeCopyError(error, outcome, request) {
   const status = outcome?.status;
@@ -44,6 +46,7 @@ function createCopySession(options = {}) {
     if (activeNative) throw new Error('In dieser Kopiersitzung ist bereits eine Datei aktiv.');
     nativeApi ||= loadNativeApi();
     const capability = nativeApi.capabilities?.['files.copy'];
+    if (request.metadataOnly && capability?.directoryMetadata !== true) throw Object.assign(new Error('The native module does not support directory metadata copying.'), { code: 'UnsupportedOperation' });
     if (typeof nativeApi.openSession !== 'function' || !['supported', 'conditional'].includes(capability?.status)) {
       const error = new Error(capability?.reason || 'The native file copy operation is unavailable.'); error.code = 'UnsupportedOperation'; throw error;
     }
@@ -61,7 +64,7 @@ function createCopySession(options = {}) {
         onProgress: event => {
           if (activeNative !== current || !Number.isSafeInteger(event?.transferred) || !Number.isSafeInteger(event?.total) || event.transferred < 0 || event.total < event.transferred || event.transferred < current.transferred) return;
           current.transferred = event.transferred;
-          perCopy.onProgress?.(Progress.event({ phase: 'copying', transferred: event.transferred, total: event.total, granular: true, overall: Progress.known('bytes', event.transferred, event.total), current: Progress.known('bytes', event.transferred, event.total) }));
+          perCopy.onProgress?.(Progress.event({ phase: 'copying', transferred: event.transferred, total: event.total, ...(event.measurementBasis ? { measurementBasis: event.measurementBasis, logicalProcessed: event.logicalProcessed, dataBytesWritten: event.dataBytesWritten } : {}), granular: true, overall: Progress.known('bytes', event.transferred, event.total), current: Progress.known('bytes', event.transferred, event.total) }));
         }
       });
       let outcome, operationError;

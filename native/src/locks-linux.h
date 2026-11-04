@@ -29,6 +29,13 @@ struct FileIdentity {
   uint64_t inode = 0;
 };
 
+struct FileSnapshot {
+  uint64_t size = 0;
+  uint64_t mode = 0;
+  int64_t modified_ns = 0;
+  int64_t changed_ns = 0;
+};
+
 struct RenameResult {
   bool changed = false;
   bool cancelled = false;
@@ -42,7 +49,10 @@ ProcessResult TerminateProcesses(const std::vector<ProcessIdentity>& rows, int64
 RenameResult RenameExclusive(const std::string& source, const std::string& destination,
                              const FileIdentity* expected_source,
                              const FileIdentity* expected_destination_parent,
-                             const std::atomic<bool>* closed = nullptr);
+                             const std::atomic<bool>* closed = nullptr,
+                             const FileIdentity* expected_source_parent = nullptr,
+                             const FileSnapshot* expected_snapshot = nullptr,
+                             bool allow_symbolic_link = false);
 
 #ifdef NATIVE_LOCKS_TESTING
 using TerminateSignalHookForTest = void (*)(int64_t, void*);

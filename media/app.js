@@ -1072,6 +1072,8 @@
     if (data.type !== 'filesystem-result') return false;
     if (request.type === 'zip-open' && data.resumeNavigation) request.archivePath = data.resumeNavigation.path;
     const success = data.ok && !data.cancelled;
+    const resolvedPath = data.resumeOpen?.path || data.resumeNavigation?.path || request.path;
+    const resolvedKind = data.resumeOpen ? 'file' : 'directory';
     rememberScroll(); const previousViews = state.panes.map(paneDisplayState), view = state.panes, active = state.active;
     navigationRequests.delete(request.navigationRequestId);
     if (latest) navigationByTab.delete(navigationKey(request));
@@ -1102,11 +1104,14 @@
     }
     if (request.pathNavigation) request.pathNavigation.valid = contextValid && request.pathNavigation.generation === pathRequestGeneration && document.activeElement === request.pathNavigation.input;
     if (contextValid && success) {
-      validatedNavigation = request.path;
+      validatedNavigation = resolvedPath;
       const active = state.active, focused = document.activeElement;
       backgroundNavigation = active !== request.activeAtStart;
       if (backgroundNavigation) state.active = request.activeAtStart;
-      try { if (request.resume) request.resume(); }
+      try {
+        if (request.resume) request.resume({ path: resolvedPath, kind: resolvedKind });
+        else if (request.type === 'filesystem-navigate' && resolvedKind === 'directory' && resolvedPath !== request.path) go(resolvedPath);
+      }
       finally {
         validatedNavigation = undefined;
         backgroundNavigation = false;
@@ -2306,6 +2311,14 @@
   }
   function openFile(file, doubleClick = false) {
     if (!file) return;
+    if (file.type === 'link' && document.body.dataset.platform === 'linux' && host && state.realFilesystem) {
+      const path = file.fsSource, side = state.active;
+      requestFilesystem({ type: 'filesystem-navigate', path, side }, resolution => {
+        if (resolution?.kind === 'directory') go(resolution.path);
+        else if (resolution?.kind === 'file') hostAction('open', { path: resolution.path });
+      }, undefined, doubleClick ? file.id : undefined);
+      return;
+    }
     if (file.type === 'folder') {
       if (resultView(pane())) {
         const path = file.fsSource, side = state.active;

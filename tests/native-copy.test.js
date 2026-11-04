@@ -12,6 +12,21 @@ test('portable copying without a known source size cannot report an empty determ
 });
 const input = { roots: ['C:/tmp', 'C:/temp'], source: 'C:/tmp/a.bin', target: 'C:/temp/.stage/content', expected: { dev: '1', ino: '2', size: '100', mtimeNs: '10', ctimeNs: '11' } };
 
+test('sparse native copying keeps logical progress separate from data written', async () => {
+  const events = [];
+  const nativeApi = { capabilities: { 'files.copy': { status: 'supported' } }, openSession: () => ({
+    invoke: async (_operation, _request, options) => {
+      options.onProgress({ transferred: 90, total: 100, logicalProcessed: 90, dataBytesWritten: 10, measurementBasis: 'logical' });
+      return { status: 'committed', copied: true, cancelled: false };
+    }, close() {}
+  }) };
+  await copyFileCancellable(input, { platform: 'win32', nativeApi, onProgress: event => events.push(event) });
+  assert.equal(events[0].measurementBasis, 'logical');
+  assert.equal(events[0].logicalProcessed, 90);
+  assert.equal(events[0].dataBytesWritten, 10);
+  assert.equal(events[0].overall.completed, 90);
+});
+
 test('already aborted jobs do not open a native session or copy any byte', async () => {
   const controller = new AbortController(); controller.abort();
   const nativeApi = { openSession: () => assert.fail('An aborted request must not start.') };

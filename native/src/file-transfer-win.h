@@ -24,12 +24,17 @@ struct FileTransferRequest {
   std::wstring target;
   std::vector<std::wstring> roots;
   FileTransferIdentity expected_source;
+  bool metadata_only = false;
+  std::optional<FileTransferIdentity> expected_target = std::nullopt;
 };
 
 struct FileTransferProgress {
   uint64_t transferred = 0;
   uint64_t total = 0;
   std::optional<FileTransferOwnedDestination> owned_destination;
+  std::optional<uint64_t> logical_processed = std::nullopt;
+  std::optional<uint64_t> data_bytes_written = std::nullopt;
+  std::string measurement_basis = {};
 };
 
 enum class FileTransferStatus {

@@ -72,6 +72,55 @@ test('real F7, inline rename, F4 and F8 roundtrip through refreshed snapshots', 
   app.click(app.row('renamed.md')); app.action('delete'); submit(); await commit();
   await assert.rejects(fs.stat(`${left}/renamed.md`), { code: 'ENOENT' });
 });
+
+test('opening a Windows reparse row keeps the existing associated-file command', async t => {
+  const { left, provider } = await fixture(t);
+  const initial = await provider.load();
+  initial.folders[left].push({ id: 'reparse', name: 'reparse', type: 'link', fsSource: `${left}/reparse` });
+  const app = createApp(t, clone(initial), { platform: 'win32' });
+  app.click(app.row('reparse').querySelector('[data-filename]')); app.key('Enter');
+  assert.equal(app.messages.findLast(message => message.type === 'open')?.path, `${left}/reparse`);
+  assert.equal(app.messages.some(message => message.type === 'filesystem-navigate'), false);
+});
+
+test('opening a Linux directory symlink navigates to the host canonical directory', async t => {
+  const { left, right, provider } = await fixture(t), target = `${left}/actual-directory`;
+  await fs.mkdir(target); await fs.writeFile(`${target}/visible.txt`, 'visible');
+  const initial = await provider.load();
+  initial.folders[left].push({ id: 'directory-link', name: 'directory-link', type: 'link', fsSource: `${left}/directory-link` });
+  const app = createApp(t, clone(initial), { platform: 'linux' });
+
+  app.click(app.row('directory-link').querySelector('[data-filename]')); app.key('Enter');
+  const request = app.messages.findLast(message => message.type === 'filesystem-navigate');
+  assert.ok(request, 'opening a link row requests host resolution');
+  const result = await provider.prepare(initial, { directories: [target], navigation: true, visibleDirectories: [target, right] });
+  app.window.dispatchEvent(new app.window.MessageEvent('message', { data: {
+    type: 'filesystem-result', navigationRequestId: request.navigationRequestId, ok: true, state: clone(result),
+    resumeNavigation: { path: target, side: 0 }
+  } }));
+
+  assert.equal(app.state().panes[0].tabs[0], target);
+  assert.ok(app.row('visible.txt'));
+});
+
+test('opening a Linux file symlink uses its host-resolved canonical in-root file path', async t => {
+  const { left, provider } = await fixture(t), target = `${left}/actual.txt`;
+  await fs.writeFile(target, 'file target');
+  const initial = await provider.load();
+  initial.folders[left].push({ id: 'file-link', name: 'file-link', type: 'link', fsSource: `${left}/file-link` });
+  const app = createApp(t, clone(initial), { platform: 'linux' });
+
+  app.click(app.row('file-link').querySelector('[data-filename]')); app.key('Enter');
+  const request = app.messages.findLast(message => message.type === 'filesystem-navigate');
+  assert.ok(request, 'opening a link row asks the host to resolve its target type');
+  app.window.dispatchEvent(new app.window.MessageEvent('message', { data: {
+    type: 'filesystem-result', navigationRequestId: request.navigationRequestId, ok: true, state: clone(initial),
+    resumeOpen: { path: target }
+  } }));
+
+  assert.equal(app.messages.findLast(message => message.type === 'open')?.path, target);
+});
+
 test('host failure response replaces optimistic state with the real directory snapshot', async t => {
   const { app, provider, right, submit } = await fixture(t);
   app.click(app.row('notes.md')); app.action('copy'); submit(); await tick();

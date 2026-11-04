@@ -356,9 +356,36 @@ function activate(context) {
   context.subscriptions.push({ dispose: closeDirectoryJobs });
   const searchCatalog = new Map();
   const extractedSearchFiles = new Set();
+  const resolvedFileLinks = new Map();
   context.subscriptions.push({ dispose() { for (const job of transferJobs.values()) job.controller.abort(); transferJobs.clear(); } });
-  function knownFilePath(value) {
-    return typeof value === 'string' && value.length <= 4096 && !value.includes('\0') && filesystemState && (extractedSearchFiles.has(value) || provider.contains(value) && (searchCatalog.has(value) || Object.values(filesystemState.folders).flat().some(file => file.type !== 'folder' && file.fsSource === value)));
+  const resolvedIdentityKeys = ['dev', 'ino', 'mode', 'size', 'mtimeNs', 'ctimeNs'];
+  function sameResolvedIdentity(expected, observed, includeLinkText = false) {
+    return expected && observed && resolvedIdentityKeys.every(key => String(expected[key]) === String(observed[key])) && (!includeLinkText || expected.linkText === observed.linkText);
+  }
+  async function validateResolvedFileLink(value) {
+    const authorization = resolvedFileLinks.get(value);
+    if (!authorization) return false;
+    if (authorization.expiresAt < Date.now() || !authorization.identities?.link || !authorization.identities?.target) {
+      resolvedFileLinks.delete(value);
+      return false;
+    }
+    try {
+      const current = await provider.resolveNavigation(authorization.linkPath);
+      if (current.kind !== 'file' || current.path !== value || !sameResolvedIdentity(authorization.identities.link, current.identities?.link, true) || !sameResolvedIdentity(authorization.identities.target, current.identities?.target)) {
+        resolvedFileLinks.delete(value);
+        return false;
+      }
+      return true;
+    } catch {
+      resolvedFileLinks.delete(value);
+      return false;
+    }
+  }
+  function knownFilePath(value, allowResolvedLink = false) {
+    const authorization = allowResolvedLink && typeof value === 'string' ? resolvedFileLinks.get(value) : undefined;
+    const allowedResolvedLink = Boolean(authorization && authorization.expiresAt >= Date.now());
+    if (typeof value === 'string' && resolvedFileLinks.has(value) && resolvedFileLinks.get(value).expiresAt < Date.now()) resolvedFileLinks.delete(value);
+    return typeof value === 'string' && value.length <= 4096 && !value.includes('\0') && filesystemState && (allowedResolvedLink || extractedSearchFiles.has(value) || provider.contains(value) && (searchCatalog.has(value) || Object.values(filesystemState.folders).flat().some(file => file.type !== 'folder' && file.fsSource === value)));
   }
   const gitFileActions = createGitFileActions();
   context.subscriptions.push(gitFileActions);
@@ -906,6 +933,7 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
       }
     }
     messagePanel.onDidDispose(() => provider.clear());
+    messagePanel.onDidDispose(() => resolvedFileLinks.clear());
     messagePanel.onDidDispose(closeDirectoryJobs);
     const searchRoots = [...fileRoots];
     const searchService = createSearchProvider({ roots: searchRoots });
@@ -1013,6 +1041,7 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
     }
     panel.webview.onDidReceiveMessage(async message => {
       if (panel !== messagePanel) return;
+      let resolvedFileLink = false;
       if (message?.type === 'status-log-copy') {
         if (typeof message.requestId !== 'string' || !/^status-log-\d{1,15}$/.test(message.requestId)) return;
         let result;
@@ -1668,6 +1697,8 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
           let operationError;
           let diagnostic;
           let updatedDirectories;
+          let navigationReplyPath;
+          let openReplyPath;
           try {
             if (directoryJob?.controller.signal.aborted) throw Object.assign(new Error('Navigation cancelled.'), { name: 'AbortError' });
             if (!filesystemState) throw new Error(t('Kein Dateisystem geladen.'));
@@ -1675,14 +1706,32 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
             if (message.type === 'filesystem-apply') fresh = await provider.apply(filesystemState, message.state, { verifyAfterCopy: typeof message.transfer?.verifyAfterCopy === 'boolean' ? message.transfer.verifyAfterCopy : fileSettings().verifyAfterCopy, ...(job ? { signal: job.controller.signal, transfer: message.transfer, onProgress } : {}) });
             else if (message.type === 'filesystem-delete') fresh = await provider.remove(filesystemState, { paths: message.paths, useTrash: message.useTrash, ...(typeof message.currentDirectory === 'string' ? { currentDirectory: message.currentDirectory } : {}), ...(Array.isArray(message.confirmedNetworkPaths) ? { confirmedNetworkPaths: message.confirmedNetworkPaths } : {}) }, { ...(job ? { signal: job.controller.signal } : {}), onProgress: progress => { if (panel === current) current.webview.postMessage({ type: 'filesystem-task-progress', operationId, taskRequestId: message.taskRequestId, progress: Progress.read(progress) }); } });
             else if (message.type === 'filesystem-navigate' || message.type === 'filesystem-prepare') {
-              const directories = message.type === 'filesystem-navigate' ? [message.path] : message.paths;
-              if (!Array.isArray(directories) || directories.length > 128 || directories.some(target => typeof target !== 'string' || target.length > 4096 || !provider.canNavigate(target))) throw new Error(t('Ungültiger Datei- oder Ordnername.'));
+              let directories = message.type === 'filesystem-navigate' ? [message.path] : message.paths;
+              if (!Array.isArray(directories) || directories.length > 128 || directories.some(target => typeof target !== 'string' || target.length > 4096 || !provider.canNavigate(target, message.type === 'filesystem-navigate'))) throw new Error(t('Ungültiger Datei- oder Ordnername.'));
               if (message.type === 'filesystem-navigate' && ![0, 1].includes(message.side)) throw new Error(t('Ungültiger Datei- oder Ordnername.'));
-              const visiblePaths = () => directoryView()?.panes?.map((pane, side) => side === message.side && (!message.navigationTabId || pane.tabStates?.[pane.tab]?.id === message.navigationTabId) ? message.path : pane.tabs[pane.tab]);
-              const visibleDirectories = visiblePaths();
-              fresh = isolatedNavigation ? await navigationProvider.load({ directories: visibleDirectories, visibleOnly: true, signal: directoryJob?.controller.signal, onDirectory: update => { if (panel === current) return current.webview.postMessage({ type: 'filesystem-directory', navigationRequestId: message.navigationRequestId, ...update }); } }) : await provider.prepare(filesystemState, { directories, recursive: message.type === 'filesystem-prepare' && message.recursive !== false, ...(message.type === 'filesystem-navigate' ? { navigation: true, visibleDirectories, onDirectory: update => {
-                if (message.navigationRequestId && panel === current) return current.webview.postMessage({ type: 'filesystem-directory', navigationRequestId: message.navigationRequestId, ...update });
-              }, getVisibleDirectories: visiblePaths, ...(directoryJob ? { signal: directoryJob.controller.signal } : {}) } : {}), ...(job ? { signal: job.controller.signal, onProgress } : {}) });
+              if (message.type === 'filesystem-navigate') {
+                const resolution = await provider.resolveNavigation(message.path);
+                if (!resolution || typeof resolution.path !== 'string' || !['directory', 'file'].includes(resolution.kind)) throw new Error(t('Ungültiger Datei- oder Ordnername.'));
+                if (resolution.kind === 'file') {
+                  if (!resolution.identities?.link || !resolution.identities?.target) throw new Error(t('Dateiverknüpfung konnte nicht sicher aufgelöst werden.'));
+                  openReplyPath = resolution.path;
+                  resolvedFileLinks.set(openReplyPath, { expiresAt: Date.now() + 30000, linkPath: message.path, identities: resolution.identities });
+                  while (resolvedFileLinks.size > 128) resolvedFileLinks.delete(resolvedFileLinks.keys().next().value);
+                  fresh = filesystemState;
+                } else {
+                  navigationReplyPath = resolution.path;
+                  directories = [navigationReplyPath];
+                }
+              }
+              if (!fresh) {
+                const visiblePaths = () => directoryView()?.panes?.map((pane, side) => side === message.side && (!message.navigationTabId || pane.tabStates?.[pane.tab]?.id === message.navigationTabId) ? navigationReplyPath || message.path : pane.tabs[pane.tab]);
+                const visibleDirectories = visiblePaths();
+                const onNavigationDirectory = update => {
+                  if (!message.navigationRequestId || panel !== current) return;
+                  return current.webview.postMessage({ type: 'filesystem-directory', navigationRequestId: message.navigationRequestId, ...update, path: update.path === navigationReplyPath ? message.path : update.path });
+                };
+                fresh = isolatedNavigation ? await navigationProvider.load({ directories: visibleDirectories, visibleOnly: true, signal: directoryJob?.controller.signal, onDirectory: onNavigationDirectory }) : await provider.prepare(filesystemState, { directories, recursive: message.type === 'filesystem-prepare' && message.recursive !== false, ...(message.type === 'filesystem-navigate' ? { navigation: true, visibleDirectories, onDirectory: onNavigationDirectory, getVisibleDirectories: visiblePaths, ...(directoryJob ? { signal: directoryJob.controller.signal } : {}) } : {}), ...(job ? { signal: job.controller.signal, onProgress } : {}) });
+              }
             } else {
               const refreshView = message.state || savedState;
               const refreshPath = [0, 1].includes(message.side) ? refreshView?.panes?.[message.side]?.tabs?.[refreshView.panes[message.side].tab] : undefined;
@@ -1719,12 +1768,12 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
               if (message.type === 'filesystem-refresh' && typeof message.refreshRequestId === 'string' && panel === current) current.webview.postMessage({ type: 'filesystem-refresh-step', emittedAt: Date.now(), refreshRequestId: message.refreshRequestId, phase: 'state-save' });
               await saveState(filesystemState);
             };
-            if (isolatedNavigation && !transferJobs.size) {
+            if (isolatedNavigation && !transferJobs.size && !openReplyPath) {
               const rebase = filesystemQueue.then(async () => {
                 if (directoryJob.controller.signal.aborted) throw Object.assign(new Error('Navigation cancelled.'), { name: 'AbortError' });
                 const view = structuredClone(directoryView());
                 const pane = view.panes[message.side];
-                if (!message.navigationTabId || pane.tabStates?.[pane.tab]?.id === message.navigationTabId) pane.tabs[pane.tab] = message.path;
+                if (!message.navigationTabId || pane.tabStates?.[pane.tab]?.id === message.navigationTabId) pane.tabs[pane.tab] = navigationReplyPath || message.path;
                 const fresh = await loadView(view, { signal: directoryJob.controller.signal });
                 await publishState(fresh, true);
               });
@@ -1746,7 +1795,7 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
           if (job) transferJobs.delete(operationId);
           if (directoryJob && directoryJobs.get(directoryKey) === directoryJob) directoryJobs.delete(directoryKey);
           if (refreshController && refreshRead === refreshController) refreshRead = null;
-          if (current && panel === current) await current.webview.postMessage({ type: 'filesystem-result', ok, state: filesystemState, ...(typeof message.refreshRequestId === 'string' ? { refreshRequestId: message.refreshRequestId } : {}), ...(message.taskRequestId ? { taskRequestId: message.taskRequestId } : {}), ...(message.navigationRequestId ? { navigationRequestId: message.navigationRequestId } : {}), ...(updatedDirectories?.length ? { refreshGitDirectories: updatedDirectories } : {}), ...(cancelled ? { cancelled: true } : {}), ...(operationId ? { operationId, operationOutcome: filesystemState?.operationOutcome } : {}), ...(!ok ? { error: operationError, diagnostic } : {}), ...(ok && !cancelled && message.type === 'filesystem-navigate' ? { resumeNavigation: { path: message.path, side: message.side } } : {}), ...(ok && !cancelled && message.type === 'filesystem-prepare' ? { resumeAction: message.action } : {}) });
+          if (current && panel === current) await current.webview.postMessage({ type: 'filesystem-result', ok, state: filesystemState, ...(typeof message.refreshRequestId === 'string' ? { refreshRequestId: message.refreshRequestId } : {}), ...(message.taskRequestId ? { taskRequestId: message.taskRequestId } : {}), ...(message.navigationRequestId ? { navigationRequestId: message.navigationRequestId } : {}), ...(updatedDirectories?.length ? { refreshGitDirectories: updatedDirectories } : {}), ...(cancelled ? { cancelled: true } : {}), ...(operationId ? { operationId, operationOutcome: filesystemState?.operationOutcome } : {}), ...(!ok ? { error: operationError, diagnostic } : {}), ...(ok && !cancelled && message.type === 'filesystem-navigate' && navigationReplyPath ? { resumeNavigation: { path: navigationReplyPath, side: message.side } } : {}), ...(ok && !cancelled && message.type === 'filesystem-navigate' && openReplyPath ? { resumeOpen: { path: openReplyPath } } : {}), ...(ok && !cancelled && message.type === 'filesystem-prepare' ? { resumeAction: message.action } : {}) });
         }).finally(() => { filesystemRequests--; });
         if (!isolatedNavigation) {
           filesystemQueue = Promise.all([filesystemQueue, execution]).then(() => {}, () => {});
@@ -1833,7 +1882,8 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
         return;
       }
       if (message?.type === 'open') {
-        if (!knownFilePath(message.path)) { await replyUiAction(message, { ok: false, error: t('Ungültiger Dateipfad.') }); return; }
+        resolvedFileLink = await validateResolvedFileLink(message.path);
+        if (!knownFilePath(message.path, resolvedFileLink)) { await replyUiAction(message, { ok: false, error: t('Ungültiger Dateipfad.') }); return; }
         try {
           const result = await openAssociatedFile(message.path);
           if (!result.editor) { await replyUiAction(message, { ok: true }); return; }
@@ -1851,7 +1901,7 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
       }
       if (searchCatalog.get(message.path)?.archive || filesystemState?.panes.some(p => (p.tabStates || []).some(tab => tab.searchResult?.archiveRows?.some(row => row.fsSource === message.path)))) { const error = t('Bearbeiten von Archivtreffern ist nicht verfügbar. F3 zeigt den Inhalt schreibgeschützt an.'); await replyUiAction(message, { ok: false, error }); vscode.window.showErrorMessage(error); return; }
       const column = message.type === 'edit' ? vscode.ViewColumn.One : panel?.viewColumn || vscode.ViewColumn.Active;
-      const localPath = knownFilePath(message.path) ? message.path : null;
+      const localPath = knownFilePath(message.path, resolvedFileLink) ? message.path : null;
       if (filesystemState && !localPath) { await replyUiAction(message, { ok: false, error: t('Ungültiger Dateipfad.') }); return; }
       if (!localPath && (typeof message.content !== 'string' || message.content.length > 100000)) { await replyUiAction(message, { ok: false, error: t('Ungültiger Dateipfad.') }); return; }
       try {

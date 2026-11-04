@@ -4,14 +4,31 @@ async function renameNoReplace(input, options = {}) {
   const io = options.fs || require('node:fs/promises');
   const expected = input.expected, source = path.resolve(input.source), target = path.resolve(input.target);
   if (!expected || !['dev', 'ino'].every(key => /^\d+$/.test(String(expected[key]))) || source === target) throw new Error('Eine erwartete Dateiidentität und verschiedene Pfade sind erforderlich.');
+  const sourceParent = await io.lstat(path.dirname(source), { bigint: true });
+  if (!sourceParent.isDirectory() || sourceParent.isSymbolicLink()) throw new Error('Ein echter Quellordner ist erforderlich.');
   const parent = await io.lstat(path.dirname(target), { bigint: true });
   if (!parent.isDirectory() || parent.isSymbolicLink()) throw new Error('Ein echter Zielordner ist erforderlich.');
   const api = options.nativeApi || loadNativeApi();
   if (!['supported', 'conditional'].includes(api.capabilities?.['locks.rename']?.status)) throw new Error('Die sichere Wiederherstellung ist auf diesem Dateisystem nicht verfügbar.');
+  const expectedSnapshotInput = input.expectedSnapshot || (['size', 'mode', 'mtimeNs', 'ctimeNs'].every(key => input.expected?.[key] !== undefined)
+    ? Object.fromEntries(['size', 'mode', 'mtimeNs', 'ctimeNs'].map(key => [key, String(input.expected[key])]))
+    : undefined);
+  if (expectedSnapshotInput && (!['size', 'mode'].every(key => /^\d+$/.test(String(expectedSnapshotInput[key]))) ||
+      !['mtimeNs', 'ctimeNs'].every(key => /^-?\d+$/.test(String(expectedSnapshotInput[key]))))) throw new Error('Eine vollständige erwartete Dateiaufnahme ist erforderlich.');
+  const expectedSnapshot = expectedSnapshotInput && Object.fromEntries(['size', 'mode', 'mtimeNs', 'ctimeNs'].map(key => [key, String(expectedSnapshotInput[key])]));
+  const request = {
+    path: source,
+    destination: target,
+    expected: { dev: String(expected.dev), ino: String(expected.ino) },
+    expectedSourceParent: { dev: String(sourceParent.dev), ino: String(sourceParent.ino) },
+    expectedParent: { dev: String(parent.dev), ino: String(parent.ino) },
+    ...(expectedSnapshot ? { expectedSnapshot } : {}),
+    ...(input.allowSymbolicLink === true ? { allowSymbolicLink: true } : {})
+  };
   const session = api.openSession();
   try {
     let outcome;
-    try { outcome = await session.invoke('locks.rename', { path: source, destination: target, expected, expectedParent: { dev: String(parent.dev), ino: String(parent.ino) } }); }
+    try { outcome = await session.invoke('locks.rename', request); }
     catch (error) { if (error.outcome?.status === 'committed' && error.outcome.changed === 1) return; throw error; }
     if (outcome?.changed !== 1 || outcome.errors?.length) throw new Error('Die sichere Wiederherstellung wurde nicht bestätigt.');
   } finally { if (session.closeAsync) await session.closeAsync(); else await session.close(); }

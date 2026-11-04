@@ -24,8 +24,13 @@ struct LinuxLockJob {
   std::string destination;
   native_linux::FileIdentity expected_source{};
   native_linux::FileIdentity expected_parent{};
+  native_linux::FileIdentity expected_source_parent{};
+  native_linux::FileSnapshot expected_snapshot{};
   bool has_expected_source = false;
   bool has_expected_parent = false;
+  bool has_expected_source_parent = false;
+  bool has_expected_snapshot = false;
+  bool allow_symbolic_link = false;
   int64_t host_pid = 0;
   std::vector<native_linux::ProcessIdentity> processes;
   native_linux::ProcessResult process_result;
@@ -125,6 +130,44 @@ bool ReadIdentity(napi_env env, napi_value object, native_linux::FileIdentity* o
   return ReadIdentityPart(env, object, "dev", &output->device) && ReadIdentityPart(env, object, "ino", &output->inode);
 }
 
+bool ReadSignedIntegerProperty(napi_env env, napi_value object, const char* name, int64_t* output) {
+  napi_value value = nullptr;
+  if (napi_get_named_property(env, object, name, &value) != napi_ok) return false;
+  napi_valuetype type;
+  if (napi_typeof(env, value, &type) != napi_ok || type != napi_string) return false;
+  size_t length = 0;
+  if (napi_get_value_string_utf8(env, value, nullptr, 0, &length) != napi_ok || length == 0 || length > 20) return false;
+  std::vector<char> buffer(length + 1, '\0');
+  size_t written = 0;
+  if (napi_get_value_string_utf8(env, value, buffer.data(), buffer.size(), &written) != napi_ok || written != length) return false;
+  const std::string text(buffer.data(), written);
+  const auto parsed = std::from_chars(text.data(), text.data() + text.size(), *output, 10);
+  return parsed.ec == std::errc{} && parsed.ptr == text.data() + text.size();
+}
+
+bool ReadOptionalSnapshot(napi_env env, napi_value request, LinuxLockJob* job) {
+  napi_value value = nullptr;
+  if (napi_get_named_property(env, request, "expectedSnapshot", &value) != napi_ok) return false;
+  napi_valuetype type;
+  if (napi_typeof(env, value, &type) != napi_ok) return false;
+  if (type == napi_undefined) return true;
+  if (type != napi_object || !ReadIdentityPart(env, value, "size", &job->expected_snapshot.size) ||
+      !ReadIdentityPart(env, value, "mode", &job->expected_snapshot.mode) ||
+      !ReadSignedIntegerProperty(env, value, "mtimeNs", &job->expected_snapshot.modified_ns) ||
+      !ReadSignedIntegerProperty(env, value, "ctimeNs", &job->expected_snapshot.changed_ns)) return false;
+  job->has_expected_snapshot = true;
+  return true;
+}
+
+bool ReadOptionalBoolean(napi_env env, napi_value request, const char* name, bool* output) {
+  napi_value value = nullptr;
+  if (napi_get_named_property(env, request, name, &value) != napi_ok) return false;
+  napi_valuetype type;
+  if (napi_typeof(env, value, &type) != napi_ok) return false;
+  if (type == napi_undefined) { *output = false; return true; }
+  return type == napi_boolean && napi_get_value_bool(env, value, output) == napi_ok;
+}
+
 bool IsAbsolutePath(const std::string& path) { return !path.empty() && path.front() == '/' && path.find('\0') == std::string::npos; }
 
 bool IsInsidePath(const std::string& path, const std::string& root) {
@@ -169,12 +212,20 @@ bool ReadRequest(napi_env env, const char* operation, napi_value request, LinuxL
   if (napi_is_array(env, request, &is_array) != napi_ok || is_array) return false;
   job->operation = operation;
   if (job->operation == "locks.rename") {
-    napi_value expected = nullptr, parent = nullptr;
+    napi_value expected = nullptr, parent = nullptr, source_parent = nullptr;
     if (!ReadString(env, request, "path", &job->path) || !IsAbsolutePath(job->path) ||
         !ReadString(env, request, "destination", &job->destination) || !IsAbsolutePath(job->destination) ||
         napi_get_named_property(env, request, "expected", &expected) != napi_ok ||
         napi_get_named_property(env, request, "expectedParent", &parent) != napi_ok ||
-        !ReadIdentity(env, expected, &job->expected_source) || !ReadIdentity(env, parent, &job->expected_parent)) return false;
+        !ReadIdentity(env, expected, &job->expected_source) || !ReadIdentity(env, parent, &job->expected_parent) ||
+        napi_get_named_property(env, request, "expectedSourceParent", &source_parent) != napi_ok ||
+        !ReadOptionalSnapshot(env, request, job) || !ReadOptionalBoolean(env, request, "allowSymbolicLink", &job->allow_symbolic_link)) return false;
+    napi_valuetype source_parent_type;
+    if (napi_typeof(env, source_parent, &source_parent_type) != napi_ok) return false;
+    if (source_parent_type != napi_undefined) {
+      if (!ReadIdentity(env, source_parent, &job->expected_source_parent)) return false;
+      job->has_expected_source_parent = true;
+    }
     job->has_expected_source = true;
     job->has_expected_parent = true;
     return true;
@@ -249,7 +300,9 @@ void ExecuteLinuxLocks(void* data) {
     if (job->operation == "locks.rename") {
       job->rename_result = native_linux::RenameExclusive(job->path, job->destination,
           job->has_expected_source ? &job->expected_source : nullptr,
-          job->has_expected_parent ? &job->expected_parent : nullptr, &job->session->closed);
+          job->has_expected_parent ? &job->expected_parent : nullptr, &job->session->closed,
+          job->has_expected_source_parent ? &job->expected_source_parent : nullptr,
+          job->has_expected_snapshot ? &job->expected_snapshot : nullptr, job->allow_symbolic_link);
       job->native_error = job->rename_result.error_number;
       job->success = job->rename_result.changed;
     } else {

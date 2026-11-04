@@ -36,7 +36,8 @@ function createZipFilesystem(base, options = {}) {
   return {
     ...base,
     load,
-    canNavigate: value => Boolean(archivePath(value) ? base.contains(archivePath(value)) : base.contains(value)),
+    canNavigate: (value, allowFinalLink = false) => Boolean(archivePath(value) ? base.contains(archivePath(value)) : typeof base.canNavigate === 'function' ? base.canNavigate(value, allowFinalLink) : base.contains(value)),
+    resolveNavigation: value => archivePath(value) ? Promise.resolve({ path: value, kind: 'directory' }) : typeof base.resolveNavigation === 'function' ? base.resolveNavigation(value) : Promise.resolve({ path: value, kind: 'directory' }),
     async openArchive(state, archive) { const view = await archives.open(archive); views.set(view.path, view); return { state: overlay(real(state)), path: view.path }; },
     copyArchive: (request, settings) => archives.copy({ ...request, target: request.target || path.dirname(archivePath(request.path)) }, settings),
     async unpackArchives(state, request, settings = {}) {

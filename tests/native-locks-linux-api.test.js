@@ -49,6 +49,86 @@ test('Linux native lock rename checks source and destination-parent identity and
   await assert.rejects(fs.stat(source), { code: 'ENOENT' });
 });
 
+test('Linux native no-replace rename checks the source parent before publishing a staged file', linux, async t => {
+  const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'native-locks-linux-source-parent-')));
+  const sourceParent = path.join(root, 'stage'), source = path.join(sourceParent, 'payload'), destination = path.join(root, 'published');
+  const { api, session } = nativeSession();
+  t.after(async () => { await api.shutdownAsync(); await fs.rm(root, { recursive: true, force: true }); });
+  await fs.mkdir(sourceParent);
+  await fs.writeFile(source, 'staged bytes');
+  const request = {
+    path: source,
+    destination,
+    expected: identity(await fs.stat(source, { bigint: true })),
+    expectedParent: identity(await fs.stat(root, { bigint: true })),
+    expectedSourceParent: identity(await fs.stat(sourceParent, { bigint: true }))
+  };
+  const staleParent = { ...request, expectedSourceParent: { ...request.expectedSourceParent, ino: String(BigInt(request.expectedSourceParent.ino) + 1n) } };
+
+  await assert.rejects(session.invoke('locks.rename', staleParent));
+  assert.equal(await fs.readFile(source, 'utf8'), 'staged bytes');
+  await assert.rejects(fs.lstat(destination), { code: 'ENOENT' });
+
+  const result = await session.invoke('locks.rename', request);
+  assert.equal(result.changed, 1);
+  assert.equal(await fs.readFile(destination, 'utf8'), 'staged bytes');
+  await assert.rejects(fs.lstat(source), { code: 'ENOENT' });
+});
+
+test('Linux native no-replace rename rejects a changed source snapshot even when its inode is unchanged', linux, async t => {
+  const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'native-locks-linux-source-snapshot-')));
+  const source = path.join(root, 'staged-payload'), destination = path.join(root, 'published');
+  const { api, session } = nativeSession();
+  t.after(async () => { await api.shutdownAsync(); await fs.rm(root, { recursive: true, force: true }); });
+  await fs.writeFile(source, 'before');
+  const initial = await fs.lstat(source, { bigint: true });
+  const request = {
+    path: source,
+    destination,
+    expected: identity(initial),
+    expectedParent: identity(await fs.stat(root, { bigint: true })),
+    expectedSourceParent: identity(await fs.stat(root, { bigint: true })),
+    expectedSnapshot: {
+      size: String(initial.size),
+      mode: String(initial.mode),
+      mtimeNs: String(initial.mtimeNs),
+      ctimeNs: String(initial.ctimeNs)
+    }
+  };
+  await fs.writeFile(source, 'different-size-content');
+
+  await assert.rejects(session.invoke('locks.rename', request));
+
+  assert.equal(await fs.readFile(source, 'utf8'), 'different-size-content');
+  await assert.rejects(fs.lstat(destination), { code: 'ENOENT' });
+});
+
+test('Linux native no-replace rename explicitly moves a symlink leaf without following it', linux, async t => {
+  const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'native-locks-linux-symlink-')));
+  const stage = path.join(root, 'stage'), outside = path.join(root, 'outside'), source = path.join(stage, 'link'), destination = path.join(root, 'published-link');
+  const { api, session } = nativeSession();
+  t.after(async () => { await api.shutdownAsync(); await fs.rm(root, { recursive: true, force: true }); });
+  await fs.mkdir(stage); await fs.mkdir(outside);
+  await fs.writeFile(path.join(outside, 'target'), 'outside data');
+  await fs.symlink('../outside/target', source);
+  const request = {
+    path: source,
+    destination,
+    expected: identity(await fs.lstat(source, { bigint: true })),
+    expectedParent: identity(await fs.stat(root, { bigint: true })),
+    expectedSourceParent: identity(await fs.stat(stage, { bigint: true })),
+    allowSymbolicLink: true
+  };
+
+  const result = await session.invoke('locks.rename', request);
+
+  assert.equal(result.changed, 1);
+  assert.equal((await fs.lstat(destination)).isSymbolicLink(), true);
+  assert.equal(await fs.readlink(destination), '../outside/target');
+  assert.equal(await fs.readFile(path.join(outside, 'target'), 'utf8'), 'outside data');
+  await assert.rejects(fs.lstat(source), { code: 'ENOENT' });
+});
+
 test('Linux native lock rename rejects malformed identities before mutation', linux, async t => {
   const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'native-locks-linux-invalid-')));
   const source = path.join(root, 'source'), destination = path.join(root, 'destination');

@@ -372,7 +372,7 @@ test('generated host HTML suppresses file-action context menus while retaining n
   view.window.dispatchEvent(new view.window.MessageEvent('message', { data: confirmation }));
   assert.match(view.document.querySelector('#status-message').textContent, /Pfad in Zwischenablage kopiert/);
   for (const pane of view.document.querySelectorAll('.pane')) {
-    assert.equal(pane.querySelector('[data-parent] .filename').textContent, '…');
+    assert.equal(pane.querySelector('[data-parent] .filename').textContent, '..');
     assert.equal(pane.querySelector('[data-parent] [data-icon-reviewed]'), null);
   }
   panel.dispose();
@@ -1137,6 +1137,163 @@ test('Git host never queues navigation behind a pending status calculation', asy
   assert.equal(panel.messages.find(message => message.type === 'filesystem-result')?.resumeNavigation.path, 'C:/tmp/next');
   work.resolve({}); await pending;
   assert.deepEqual(panel.messages.find(message => message.type === 'git-status-result')?.directories, {}); panel.dispose();
+});
+
+test('Linux symbolic navigation resolves the provider alias before preparing and returns the canonical directory', async t => {
+  const alias = 'C:/tmp/linked-directory', canonical = 'C:/tmp/real-directory';
+  const initial = clipboardFixture();
+  initial.folders['C:/tmp'].push({ id: 'linked-directory', name: 'linked-directory', type: 'link', fsSource: alias });
+  let preparedDirectories;
+  const providerFactory = () => ({
+    contains: value => ['C:/tmp', 'C:/temp', alias, canonical].includes(value),
+    canNavigate: value => [alias, canonical, 'C:/tmp', 'C:/temp'].includes(value),
+    resolveNavigation: async value => ({ path: value === alias ? canonical : value, kind: 'directory' }),
+    load: async () => initial,
+    prepare: async (before, settings) => {
+      preparedDirectories = settings.directories;
+      return { ...before, folders: { ...before.folders, [canonical]: [{ id: 'inside-link-target', name: 'inside.txt', type: 'text' }] } };
+    },
+    apply: async (_before, after) => after,
+    remove: async before => before,
+    measureFolder: async () => 0,
+    dispose() {}
+  });
+  const app = harness(t, { providerFactory });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+
+  await panel.receive({ type: 'filesystem-navigate', navigationRequestId: 'directory-201', path: alias, side: 0, state: initial });
+
+  const reply = panel.messages.findLast(message => message.type === 'filesystem-result' && message.navigationRequestId === 'directory-201');
+  assert.deepEqual(preparedDirectories, [canonical]);
+  assert.equal(reply.ok, true);
+  assert.deepEqual(reply.resumeNavigation, { path: canonical, side: 0 });
+  assert.ok(reply.state.folders[canonical].some(item => item.name === 'inside.txt'));
+  panel.dispose();
+});
+
+test('Linux symbolic file navigation returns and authorizes only its canonical in-root file', async t => {
+  const alias = 'C:/tmp/linked-file', canonical = 'C:/tmp/real-file.txt';
+  const initial = clipboardFixture();
+  initial.folders['C:/tmp'].push({ id: 'linked-file', name: 'linked-file', type: 'link', fsSource: alias });
+  const identities = {
+    link: { dev: '4', ino: '12', size: '8', mode: '40960', mtimeNs: '100', ctimeNs: '200', linkText: 'cmVhbC1maWxlLnR4dA==' },
+    target: { dev: '4', ino: '30', size: '16', mode: '33188', mtimeNs: '300', ctimeNs: '400' }
+  };
+  let prepares = 0;
+  const providerFactory = () => ({
+    contains: value => ['C:/tmp', 'C:/temp', alias, canonical].includes(value),
+    canNavigate: value => [alias, canonical, 'C:/tmp', 'C:/temp'].includes(value),
+    resolveNavigation: async value => ({ path: value === alias ? canonical : value, kind: 'file', identities }),
+    load: async () => initial,
+    prepare: async () => { prepares++; throw new Error('A file link must not be prepared as a directory.'); },
+    apply: async (_before, after) => after,
+    remove: async before => before,
+    measureFolder: async () => 0,
+    dispose() {}
+  });
+  const app = harness(t, { providerFactory });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+
+  await panel.receive({ type: 'filesystem-navigate', navigationRequestId: 'directory-202', path: alias, side: 0, state: initial });
+
+  const reply = panel.messages.findLast(message => message.type === 'filesystem-result' && message.navigationRequestId === 'directory-202');
+  assert.equal(reply.ok, true);
+  assert.deepEqual(reply.resumeOpen, { path: canonical });
+  assert.equal(prepares, 0);
+  await panel.receive({ type: 'open', path: canonical });
+  assert.deepEqual(app.openCalls, [canonical]);
+  panel.dispose();
+});
+
+test('Linux resolved file-link open is rejected when the captured target identity changes', async t => {
+  const alias = 'C:/tmp/linked-file', canonical = 'C:/tmp/real-file.txt';
+  const initial = clipboardFixture();
+  initial.folders['C:/tmp'].push({ id: 'linked-file', name: 'linked-file', type: 'link', fsSource: alias });
+  const linkIdentity = { dev: '4', ino: '12', size: '8', mode: '40960', mtimeNs: '100', ctimeNs: '200' };
+  let targetIdentity = { dev: '4', ino: '30', size: '16', mode: '33188', mtimeNs: '300', ctimeNs: '400' };
+  const providerFactory = () => ({
+    contains: value => ['C:/tmp', 'C:/temp', alias, canonical].includes(value),
+    canNavigate: value => [alias, canonical, 'C:/tmp', 'C:/temp'].includes(value),
+    resolveNavigation: async value => ({ path: value === alias ? canonical : value, kind: 'file', identities: { link: linkIdentity, target: targetIdentity } }),
+    load: async () => initial,
+    prepare: async (_before, settings) => settings,
+    apply: async (_before, after) => after,
+    remove: async before => before,
+    measureFolder: async () => 0,
+    dispose() {}
+  });
+  const app = harness(t, { providerFactory });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  await panel.receive({ type: 'filesystem-navigate', navigationRequestId: 'directory-203', path: alias, side: 0, state: initial });
+  targetIdentity = { ...targetIdentity, ino: '31' };
+
+  await panel.receive({ type: 'open', requestId: 'ui-action-203', path: canonical });
+
+  assert.deepEqual(app.openCalls, []);
+  assert.equal(panel.messages.findLast(message => message.type === 'ui-action-result' && message.requestId === 'ui-action-203')?.ok, false);
+  panel.dispose();
+});
+
+test('resolved file-link authorization ends when its panel closes', async t => {
+  const alias = 'C:/tmp/linked-file', canonical = 'C:/tmp/real-file.txt';
+  const initial = clipboardFixture();
+  const providerFactory = () => ({
+    contains: value => ['C:/tmp', 'C:/temp', alias].includes(value),
+    canNavigate: () => true,
+    resolveNavigation: async () => ({ path: canonical, kind: 'file', identities: {
+      link: { dev: '1', ino: '2', mode: '40960', size: '10', mtimeNs: '1', ctimeNs: '1', linkText: 'ZmlsZQ==' },
+      target: { dev: '1', ino: '3', mode: '33188', size: '4', mtimeNs: '1', ctimeNs: '1' }
+    } }),
+    load: async () => initial, prepare: async before => before, apply: async (_before, after) => after,
+    remove: async before => before, measureFolder: async () => 0, dispose() {}
+  });
+  const app = harness(t, { providerFactory });
+  await app.command('bitfroest.openPrototype');
+  await app.panels[0].receive({ type: 'filesystem-navigate', navigationRequestId: 'directory-204', path: alias, side: 0, state: initial });
+  app.panels[0].dispose();
+  await app.command('bitfroest.openPrototype');
+  const panel = app.panels.at(-1);
+  await panel.receive({ type: 'open', requestId: 'ui-action-204', path: canonical });
+  assert.deepEqual(app.openCalls, []);
+  assert.equal(panel.messages.findLast(message => message.type === 'ui-action-result' && message.requestId === 'ui-action-204')?.ok, false);
+  panel.dispose();
+});
+
+test('generated host HTML double-click resolves a link through CSP-protected navigation and replies canonically', async t => {
+  const alias = 'C:/tmp/linked-directory', canonical = 'C:/tmp/real-directory';
+  const initial = clipboardFixture();
+  initial.panes.forEach(pane => { pane.filter = ''; pane.sort = 'name'; });
+  initial.folders['C:/tmp'].push({ id: 'linked-directory', name: 'linked-directory', type: 'link', fsSource: alias });
+  const providerFactory = () => ({
+    contains: value => ['C:/tmp', 'C:/temp', alias, canonical].includes(value),
+    canNavigate: value => [alias, canonical, 'C:/tmp', 'C:/temp'].includes(value),
+    resolveNavigation: async value => ({ path: value === alias ? canonical : value, kind: 'directory' }),
+    load: async () => initial,
+    prepare: async before => ({ ...before, folders: { ...before.folders, [canonical]: [{ id: 'canonical-child', name: 'inside.txt', type: 'text' }] } }),
+    apply: async (_before, after) => after,
+    remove: async before => before,
+    measureFolder: async () => 0,
+    dispose() {}
+  });
+  const app = harness(t, { providerFactory });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  assert.match(panel.webview.html, /Content-Security-Policy/);
+  assert.match(panel.webview.html, /script-src 'nonce-[^']+'/);
+  const view = require('./support/webview.cjs').createApp(t, initial, { html: panel.webview.html, platform: 'linux' });
+
+  view.click(view.row('linked-directory').querySelector('[data-filename]'));
+  view.key('Enter');
+  const request = view.messages.findLast(message => message.type === 'filesystem-navigate');
+  assert.ok(request);
+  await panel.receive(request);
+  for (const message of panel.messages.filter(message => message.navigationRequestId === request.navigationRequestId)) {
+    view.window.dispatchEvent(new view.window.MessageEvent('message', { data: message }));
+  }
+
+  assert.equal(view.state().panes[0].tabs[0], canonical);
+  assert.ok(view.row('inside.txt'));
+  assert.equal(panel.messages.findLast(message => message.type === 'filesystem-result').resumeNavigation.path, canonical);
+  panel.dispose();
 });
 
 test('generated host HTML clears a cold directory immediately and keeps navigation bound through streamed completion', async t => {

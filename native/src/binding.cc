@@ -493,7 +493,7 @@ napi_value Init(napi_env env, napi_value exports) {
   napi_value version, major, minor, capabilities;
   CHECK(napi_create_object(env, &version));
   CHECK(napi_create_uint32(env, 1, &major));
-  CHECK(napi_create_uint32(env, 8, &minor));
+  CHECK(napi_create_uint32(env, 9, &minor));
   CHECK(napi_set_named_property(env, version, "major", major));
   CHECK(napi_set_named_property(env, version, "minor", minor));
   CHECK(napi_object_freeze(env, version));
@@ -551,6 +551,13 @@ napi_value Init(napi_env env, napi_value exports) {
       CHECK(napi_get_boolean(env, true, &dirty_summary));
       CHECK(napi_set_named_property(env, entry, "dirtySummary", dirty_summary));
     }
+#ifdef __linux__
+    if (std::strcmp(operation, "files.copy") == 0) {
+      napi_value directory_metadata;
+      CHECK(napi_get_boolean(env, true, &directory_metadata));
+      CHECK(napi_set_named_property(env, entry, "directoryMetadata", directory_metadata));
+    }
+#endif
     if (!supported) {
       const char* reason = "NotImplemented";
 #ifdef _WIN32

@@ -13,6 +13,7 @@ async function request(root, source, target) {
   const stat = await fs.lstat(source, { bigint: true });
   return { roots: [root], source, target, expected: { dev: String(stat.dev), ino: String(stat.ino), size: String(stat.size), mtimeNs: String(stat.mtimeNs), ctimeNs: String(stat.ctimeNs) } };
 }
+function identity(stat) { return { dev: String(stat.dev), ino: String(stat.ino) }; }
 
 test('native restoration never replaces occupied file or directory targets', { skip: process.platform !== 'win32' }, async t => {
   const root = await fixture(t);
@@ -48,6 +49,38 @@ test('restoration closes its native session for success, rejection and committed
     else await renameNoReplace(input, { nativeApi });
     assert.equal(closed, true);
   }
+});
+
+test('Linux no-replace adapter binds both parent identities and forwards explicit symlink-leaf permission', { skip: process.platform !== 'linux' }, async t => {
+  const root = await fixture(t), sourceParent = path.join(root, 'stage'), source = path.join(sourceParent, 'link'), target = path.join(root, 'published-link');
+  await fs.mkdir(sourceParent);
+  await fs.symlink('../target-that-must-not-be-followed', source);
+  const linkStat = await fs.lstat(source, { bigint: true });
+  const expectedSourceParent = await fs.stat(sourceParent, { bigint: true });
+  const expectedParent = await fs.stat(root, { bigint: true });
+  const expectedSnapshot = Object.fromEntries(['size', 'mode', 'mtimeNs', 'ctimeNs'].map(key => [key, String(linkStat[key])]));
+  let observed;
+  const nativeApi = { capabilities: { 'locks.rename': { status: 'conditional' } }, openSession: () => ({
+    async invoke(operation, request) {
+      observed = { operation, request };
+      return { changed: 1, errors: [] };
+    },
+    async closeAsync() {}
+  }) };
+
+  await renameNoReplace({
+    source,
+    target,
+    expected: identity(linkStat),
+    expectedSnapshot,
+    allowSymbolicLink: true
+  }, { fs, nativeApi });
+
+  assert.equal(observed.operation, 'locks.rename');
+  assert.deepEqual(observed.request.expectedSourceParent, identity(expectedSourceParent));
+  assert.deepEqual(observed.request.expectedParent, identity(expectedParent));
+  assert.deepEqual(observed.request.expectedSnapshot, expectedSnapshot);
+  assert.equal(observed.request.allowSymbolicLink, true);
 });
 test('a file case rename preserves its bytes without a temporary rename', { skip: process.platform !== 'win32' }, async t => {
   const root = await fixture(t), source = path.join(root, 'lower.txt'), target = path.join(root, 'LOWER.txt');

@@ -130,6 +130,41 @@ bool SplitPath(const std::string& path, std::string* parent, std::string* name) 
 bool SameFileIdentity(const struct stat& value, const FileIdentity& expected) {
   return static_cast<uint64_t>(value.st_dev) == expected.device && static_cast<uint64_t>(value.st_ino) == expected.inode;
 }
+
+int OpenDirectoryNoSymlink(const std::string& path) {
+  if (path.empty() || path.front() != '/') { errno = EINVAL; return -1; }
+  int current = open("/", O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+  if (current < 0) return -1;
+  size_t offset = 1;
+  while (offset < path.size()) {
+    const size_t end = path.find('/', offset);
+    const size_t length = (end == std::string::npos ? path.size() : end) - offset;
+    if (length == 0) { offset = end == std::string::npos ? path.size() : end + 1; continue; }
+    const std::string component = path.substr(offset, length);
+    if (component == "." || component == "..") { close(current); errno = EINVAL; return -1; }
+    const int next = openat(current, component.c_str(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+    const int open_error = errno;
+    close(current);
+    if (next < 0) { errno = open_error; return -1; }
+    current = next;
+    offset = end == std::string::npos ? path.size() : end + 1;
+  }
+  return current;
+}
+
+bool MatchesNanoseconds(int64_t expected, time_t seconds, long nanoseconds) {
+  int64_t expected_seconds = expected / 1000000000;
+  int64_t expected_nanoseconds = expected % 1000000000;
+  if (expected_nanoseconds < 0) { --expected_seconds; expected_nanoseconds += 1000000000; }
+  return static_cast<int64_t>(seconds) == expected_seconds && nanoseconds == expected_nanoseconds;
+}
+
+bool SameFileSnapshot(const struct stat& value, const FileSnapshot& expected) {
+  return value.st_size >= 0 && static_cast<uint64_t>(value.st_size) == expected.size &&
+      static_cast<uint64_t>(value.st_mode) == expected.mode &&
+      MatchesNanoseconds(expected.modified_ns, value.st_mtim.tv_sec, value.st_mtim.tv_nsec) &&
+      MatchesNanoseconds(expected.changed_ns, value.st_ctim.tv_sec, value.st_ctim.tv_nsec);
+}
 }
 
 LockCapabilities ProbeCapabilities() {
@@ -218,7 +253,10 @@ ProcessResult TerminateProcesses(const std::vector<ProcessIdentity>& rows, int64
 RenameResult RenameExclusive(const std::string& source, const std::string& destination,
                              const FileIdentity* expected_source,
                              const FileIdentity* expected_destination_parent,
-                             const std::atomic<bool>* closed) {
+                             const std::atomic<bool>* closed,
+                             const FileIdentity* expected_source_parent,
+                             const FileSnapshot* expected_snapshot,
+                             bool allow_symbolic_link) {
   RenameResult result;
   if (closed && closed->load()) { result.cancelled = true; result.error_number = ECANCELED; result.error = ErrorText(ECANCELED); return result; }
   std::string source_directory, source_name, destination_directory, destination_name;
@@ -227,22 +265,33 @@ RenameResult RenameExclusive(const std::string& source, const std::string& desti
     result.error = "Absolute Pfade sind erforderlich.";
     return result;
   }
-  FileDescriptor source_parent(open(source_directory.c_str(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC));
+  FileDescriptor source_parent(OpenDirectoryNoSymlink(source_directory));
   if (!source_parent) { result.error_number = errno; result.error = ErrorText(errno); return result; }
-  FileDescriptor destination_parent(open(destination_directory.c_str(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC));
+  FileDescriptor destination_parent(OpenDirectoryNoSymlink(destination_directory));
   if (!destination_parent) { result.error_number = errno; result.error = ErrorText(errno); return result; }
 
-  struct stat parent_stat{};
-  if (fstat(destination_parent.get(), &parent_stat) != 0) { result.error_number = errno; result.error = ErrorText(errno); return result; }
-  if (expected_destination_parent && !SameFileIdentity(parent_stat, *expected_destination_parent)) {
+  struct stat destination_parent_stat{};
+  if (fstat(destination_parent.get(), &destination_parent_stat) != 0) { result.error_number = errno; result.error = ErrorText(errno); return result; }
+  if (expected_destination_parent && !SameFileIdentity(destination_parent_stat, *expected_destination_parent)) {
     result.error_number = ESTALE;
     result.error = "Der Zielordner hat sich geändert.";
     return result;
   }
+  struct stat source_parent_stat{};
+  if (expected_source_parent) {
+    if (fstat(source_parent.get(), &source_parent_stat) != 0) { result.error_number = errno; result.error = ErrorText(errno); return result; }
+    if (!SameFileIdentity(source_parent_stat, *expected_source_parent)) {
+      result.error_number = ESTALE;
+      result.error = "Der Quellordner hat sich geändert.";
+      return result;
+    }
+  }
 
   struct stat source_stat{};
   if (fstatat(source_parent.get(), source_name.c_str(), &source_stat, AT_SYMLINK_NOFOLLOW) != 0) { result.error_number = errno; result.error = ErrorText(errno); return result; }
-  if (S_ISLNK(source_stat.st_mode) || (expected_source && !SameFileIdentity(source_stat, *expected_source))) {
+  if ((!allow_symbolic_link && S_ISLNK(source_stat.st_mode)) ||
+      (expected_source && !SameFileIdentity(source_stat, *expected_source)) ||
+      (expected_snapshot && !SameFileSnapshot(source_stat, *expected_snapshot))) {
     result.error_number = ESTALE;
     result.error = "Der Quellordner hat sich geändert.";
     return result;

@@ -12,6 +12,7 @@ export type NativeOperation =
   | 'git.status' | 'git.info' | 'git.untrack';
 
 export interface NativeCapability {
+  readonly directoryMetadata?: boolean;
   readonly dirtySummary?: boolean;
   readonly status: 'supported' | 'conditional' | 'unsupported';
   readonly reason?: string;
@@ -90,6 +91,7 @@ export interface NativeClipboardSelection {
   readonly paths: readonly string[];
   readonly mode: NativeClipboardMode;
   readonly token: string;
+  readonly transport?: 'x11' | 'xwayland' | 'wayland-data-control';
 }
 
 export interface NativeClipboardWriteRequest {
@@ -185,6 +187,8 @@ export interface NativeCopyRequest {
   readonly target: string;
   readonly roots: readonly string[];
   readonly expected: NativeFileIdentity;
+  readonly metadataOnly?: boolean;
+  readonly expectedTarget?: NativeFileIdentity;
 }
 
 export interface NativeCopyOutcome {
@@ -198,6 +202,9 @@ export interface NativeCopyProgress {
   readonly transferred: number;
   readonly total: number;
   readonly ownedDestination?: NativeFileIdentity;
+  readonly measurementBasis?: 'logical';
+  readonly logicalProcessed?: number;
+  readonly dataBytesWritten?: number;
 }
 
 export interface NativeCopyOptions {

@@ -3,6 +3,8 @@
 
 #include <atomic>
 #include <cstdint>
+#include <condition_variable>
+#include <chrono>
 #include <memory>
 #include <mutex>
 #include <new>
@@ -13,6 +15,8 @@
 namespace {
 struct ProgressChannel {
   std::mutex mutex;
+  std::condition_variable delivered;
+  uint64_t pending = 0;
   std::optional<FileTransferProgress> latest;
   bool queued = false;
   std::atomic<bool> closing{false};
@@ -113,7 +117,16 @@ napi_value Outcome(napi_env env, const CopyJob& job) {
 }
 void Progress(napi_env env, napi_value callback, void* context, void*) {
   auto* channel = static_cast<ProgressChannel*>(context);
-  if (!env || !callback || !channel) return;
+  if (!channel) return;
+  struct Acknowledge {
+    ProgressChannel* channel;
+    ~Acknowledge() {
+      std::lock_guard<std::mutex> lock(channel->mutex);
+      if (channel->pending) --channel->pending;
+      channel->delivered.notify_all();
+    }
+  } acknowledge{channel};
+  if (!env || !callback || channel->closing.load()) return;
   std::optional<FileTransferProgress> event;
   {
     std::lock_guard<std::mutex> lock(channel->mutex);
@@ -126,6 +139,15 @@ void Progress(napi_env env, napi_value callback, void* context, void*) {
       napi_create_double(env, static_cast<double>(event->total), &total) != napi_ok) return;
   napi_set_named_property(env, value, "transferred", transferred);
   napi_set_named_property(env, value, "total", total);
+  if (!event->measurement_basis.empty()) napi_set_named_property(env, value, "measurementBasis", Text(env, event->measurement_basis));
+  if (event->logical_processed) {
+    napi_value logical;
+    if (napi_create_double(env, static_cast<double>(*event->logical_processed), &logical) == napi_ok) napi_set_named_property(env, value, "logicalProcessed", logical);
+  }
+  if (event->data_bytes_written) {
+    napi_value written;
+    if (napi_create_double(env, static_cast<double>(*event->data_bytes_written), &written) == napi_ok) napi_set_named_property(env, value, "dataBytesWritten", written);
+  }
   if (event->owned_destination) napi_set_named_property(env, value, "ownedDestination", Identity(env, event->owned_destination->identity));
   napi_get_undefined(env, &receiver);
   if (napi_call_function(env, receiver, callback, 1, &value, &ignored) != napi_ok) {
@@ -141,12 +163,14 @@ void QueueProgress(CopyJob* job, const FileTransferProgress& event) {
     std::lock_guard<std::mutex> lock(job->channel->mutex);
     if (job->channel->closing.load()) return;
     job->channel->latest = event;
-    if (!job->channel->queued) { job->channel->queued = true; schedule = true; }
+    if (!job->channel->queued) { job->channel->queued = true; ++job->channel->pending; schedule = true; }
   }
   if (!schedule) return;
   const napi_status status = napi_call_threadsafe_function(job->progress, nullptr, napi_tsfn_blocking);
   if (status == napi_closing || (status != napi_ok && status != napi_queue_full)) {
     std::lock_guard<std::mutex> lock(job->channel->mutex);
+    if (job->channel->pending) --job->channel->pending;
+    job->channel->delivered.notify_all();
     job->channel->closing.store(true); job->channel->queued = false; job->channel->latest.reset();
   }
 }
@@ -162,8 +186,15 @@ void ExecuteCopy(napi_env, void* data) {
   } catch (const std::bad_alloc&) { job->result.status = FileTransferStatus::kUnknown; job->result.code = "ResourceExhausted"; }
   catch (...) { job->result.status = FileTransferStatus::kUnknown; job->result.code = "NativeFailure"; }
   if (!job->entered) job->session->CancelQueuedCopy();
+  if (job->progress) {
+    std::unique_lock<std::mutex> lock(job->channel->mutex);
+    while (job->channel->pending && !job->cancelled->load() && !job->state->closed.load()) {
+      job->channel->delivered.wait_for(lock, std::chrono::milliseconds(50));
+    }
+    if (job->channel->pending) job->channel->closing.store(true);
+  }
   job->finished->store(true);
-  if (job->progress && !job->channel->closing.load()) napi_release_threadsafe_function(job->progress, napi_tsfn_release);
+  if (job->progress) napi_release_threadsafe_function(job->progress, napi_tsfn_release);
 }
 void CompleteCopy(napi_env env, napi_status status, void* data) {
   std::unique_ptr<CopyJob> job(static_cast<CopyJob*>(data));
@@ -256,6 +287,23 @@ napi_value StartLinuxCopy(napi_env env, const std::shared_ptr<SessionState>& sta
       !ReadIdentityField(env, expected, "mtimeNs", &job->request.expected_source.mtime_ns, true) ||
       !ReadIdentityField(env, expected, "ctimeNs", &job->request.expected_source.ctime_ns, true))
     return Fail(env, "InvalidRequest", "A complete decimal source identity is required.");
+  napi_value metadata_only;
+  bool has_metadata_only = false;
+  CHECK(napi_has_named_property(env, request, "metadataOnly", &has_metadata_only));
+  if (has_metadata_only) {
+    CHECK(napi_get_named_property(env, request, "metadataOnly", &metadata_only));
+    if (napi_get_value_bool(env, metadata_only, &job->request.metadata_only) != napi_ok) return Fail(env, "InvalidRequest", "metadataOnly must be a boolean.");
+  }
+  if (job->request.metadata_only) {
+    napi_value target;
+    CHECK(napi_get_named_property(env, request, "expectedTarget", &target));
+    job->request.expected_target.emplace();
+    auto& identity = *job->request.expected_target;
+    if (!Object(env, target) || !ReadIdentityField(env, target, "dev", &identity.dev, false) ||
+        !ReadIdentityField(env, target, "ino", &identity.ino, false) || !ReadIdentityField(env, target, "size", &identity.size, false) ||
+        !ReadIdentityField(env, target, "mtimeNs", &identity.mtime_ns, true) || !ReadIdentityField(env, target, "ctimeNs", &identity.ctime_ns, true))
+      return Fail(env, "InvalidRequest", "Metadata copying requires a complete expected destination identity.");
+  }
   if (!state->copy_session) state->copy_session = CreateNativeFileTransferSession();
   job->session = state->copy_session;
   job->io_ticket = NextCopyTicket();

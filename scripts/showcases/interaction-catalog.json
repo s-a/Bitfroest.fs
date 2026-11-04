@@ -20,7 +20,7 @@
   {
     "id": "open-entry",
     "kind": "keyboard",
-    "title": "Open the selected file, folder or archive",
+    "title": "Open the selected file, folder, symbolic link or archive",
     "sources": [
       "media/app.js"
     ],
