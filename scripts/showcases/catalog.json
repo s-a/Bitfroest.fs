@@ -2893,8 +2893,8 @@
   {
     "id": "settings",
     "parentId": "main",
-    "title": "File manager settings",
-    "description": "Inspect the native integration entry and extension configuration categories.",
+    "title": "Set up a project view",
+    "description": "Review project favorites, enable the Attributes column and find the Copy shortcut.",
     "paths": [
       "${demo}/left",
       "${demo}/right"
@@ -2914,96 +2914,14 @@
         "format": "gif",
         "steps": [
           {
-            "type": "check",
-            "selector": "#settings-search"
-          },
-          {
             "type": "move",
             "target": {
-              "selector": "#settings-search"
+              "selector": "[data-section=\"favorites\"]"
             }
           },
           {
             "type": "click",
-            "effect": "Focus settings search"
-          },
-          {
-            "type": "type",
-            "selector": "#settings-search",
-            "text": "favorites",
-            "value": "favorites"
-          },
-          {
-            "type": "check",
-            "selector": "#settings-results",
-            "text": "Favorites"
-          },
-          {
-            "type": "pause",
-            "duration": 1400
-          }
-        ]
-      }
-    ],
-    "category": "Settings & Shortcuts"
-  },
-  {
-    "id": "settings-favorites",
-    "parentId": "settings",
-    "title": "Favorite folder settings",
-    "description": "Manage favorite locations and groups.",
-    "paths": [
-      "${demo}/left",
-      "${demo}/right"
-    ],
-    "sources": [
-      "configuration-editor.js",
-      "media/configuration-view.js"
-    ],
-    "captures": [
-      {
-        "id": "editor",
-        "command": "bitfroest.configureFavorites",
-        "surface": "configuration",
-        "expect": "#favorites-section",
-        "text": "Add favorite",
-        "ready": "#favorites-section [data-add-favorite]",
-        "format": "gif",
-        "steps": [
-          {
-            "type": "move",
-            "target": {
-              "selector": "[data-add-group]"
-            }
-          },
-          {
-            "type": "click",
-            "effect": "Add a favorite group"
-          },
-          {
-            "type": "check",
-            "selector": "#favorite-name",
-            "value": "New group",
-            "focused": true
-          },
-          {
-            "type": "check",
-            "selector": "#configuration-status",
-            "text": "Unsaved changes"
-          },
-          {
-            "type": "pause",
-            "duration": 1100
-          },
-          {
-            "type": "move",
-            "target": {
-              "selector": "[data-discard]"
-            }
-          },
-          {
-            "type": "click",
-            "effect": "Discard the unsaved group"
+            "effect": "Open project favorites"
           },
           {
             "type": "check",
@@ -3012,36 +2930,22 @@
           },
           {
             "type": "pause",
-            "duration": 1100
-          }
-        ]
-      }
-    ],
-    "category": "Settings & Shortcuts"
-  },
-  {
-    "id": "settings-columns",
-    "parentId": "settings",
-    "title": "File column settings",
-    "description": "Inspect column sets, field choices and column visibility.",
-    "paths": [
-      "${demo}/left",
-      "${demo}/right"
-    ],
-    "sources": [
-      "configuration-editor.js",
-      "media/configuration-view.js"
-    ],
-    "captures": [
-      {
-        "id": "editor",
-        "command": "bitfroest.configureColumns",
-        "surface": "configuration",
-        "expect": "#columns-section",
-        "text": "Alignment",
-        "ready": "#columns-section table",
-        "format": "gif",
-        "steps": [
+            "duration": 900
+          },
+          {
+            "type": "move",
+            "target": {
+              "selector": "[data-section=\"columns\"]"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Customize file columns"
+          },
+          {
+            "type": "check",
+            "selector": "[data-column-row=\"attributes\"] [data-visible]:not(:checked)"
+          },
           {
             "type": "move",
             "target": {
@@ -3050,109 +2954,83 @@
           },
           {
             "type": "click",
-            "effect": "Show the Attributes column"
+            "effect": "Show file attributes"
+          },
+          {
+            "type": "check",
+            "selector": "[data-column-row=\"attributes\"] [data-visible]:checked"
+          },
+          {
+            "type": "move",
+            "target": {
+              "selector": "[data-save]"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Save the column layout"
+          },
+          {
+            "type": "pause",
+            "duration": 1200
           },
           {
             "type": "check",
             "selector": "#configuration-status",
-            "text": "Unsaved changes"
+            "text": "Saved"
+          },
+          {
+            "type": "check",
+            "selector": "[data-column-row=\"attributes\"] [data-visible]:checked"
           },
           {
             "type": "pause",
-            "duration": 1100
+            "duration": 1500
           },
           {
             "type": "move",
             "target": {
-              "selector": "[data-discard]"
+              "selector": "[data-section=\"shortcuts\"]"
             }
           },
           {
             "type": "click",
-            "effect": "Discard the column change"
+            "effect": "Find the Copy shortcut"
           },
-          {
-            "type": "check",
-            "selector": "[data-column-row=\"attributes\"] [data-visible]"
-          },
-          {
-            "type": "pause",
-            "duration": 1100
-          }
-        ]
-      }
-    ],
-    "category": "Settings & Shortcuts"
-  },
-  {
-    "id": "settings-shortcuts",
-    "parentId": "settings",
-    "title": "Keyboard shortcut settings",
-    "description": "Inspect commands, editable bindings and conflict information.",
-    "paths": [
-      "${demo}/left",
-      "${demo}/right"
-    ],
-    "sources": [
-      "configuration-editor.js",
-      "media/configuration-view.js"
-    ],
-    "captures": [
-      {
-        "id": "editor",
-        "command": "bitfroest.configureShortcuts",
-        "surface": "configuration",
-        "expect": "#shortcuts-section",
-        "text": "Keyboard shortcuts",
-        "ready": "[data-shortcut-row]",
-        "format": "gif",
-        "steps": [
           {
             "type": "move",
             "target": {
-              "selector": "[data-shortcut-row] [data-shortcut-edit]:not(:disabled)"
+              "selector": "#shortcut-search"
             }
           },
           {
             "type": "click",
-            "effect": "Open shortcut editor"
+            "effect": "Search keyboard shortcuts"
+          },
+          {
+            "type": "type",
+            "selector": "#shortcut-search",
+            "text": "copy",
+            "value": "copy"
           },
           {
             "type": "check",
-            "selector": "#shortcut-dialog[open]"
+            "selector": "#shortcut-rows",
+            "text": "Copy"
           },
           {
             "type": "pause",
-            "duration": 1300
-          },
-          {
-            "type": "move",
-            "target": {
-              "selector": "[data-shortcut-cancel]"
-            },
-            "allowDialogContent": true
-          },
-          {
-            "type": "click",
-            "effect": "Cancel shortcut editing"
-          },
-          {
-            "type": "check",
-            "selector": "#shortcut-dialog[open]",
-            "absent": true
-          },
-          {
-            "type": "pause",
-            "duration": 1000
+            "duration": 1700
           }
-        ]
+        ],
+        "intro": "Set up a view for project files"
       }
     ],
     "category": "Settings & Shortcuts"
   },
   {
     "id": "shortcut-capture",
-    "parentId": "settings-shortcuts",
+    "parentId": "settings",
     "title": "Record a keyboard binding",
     "description": "Inspect the shortcut recorder and local conflict states.",
     "paths": [
@@ -3203,7 +3081,7 @@
   },
   {
     "id": "favorite-name",
-    "parentId": "settings-favorites",
+    "parentId": "settings",
     "title": "Name a favorite location",
     "description": "Inspect the native favorite-name input without saving a location.",
     "paths": [

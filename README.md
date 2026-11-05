@@ -172,7 +172,7 @@ Windows examples with sample files. File operations stop before confirmation.
 <details>
 <summary>Preview files by click and hover</summary>
 
-![Preview files by click and hover](media/marketplace/showcases/0035-windows-en-dark-xray-click-preview.gif)
+![Preview files by click and hover](media/marketplace/showcases/0032-windows-en-dark-xray-click-preview.gif)
 
 </details>
 
@@ -218,37 +218,16 @@ Windows examples with sample files. File operations stop before confirmation.
 <details>
 <summary>Review changes across a repository</summary>
 
-![Review changes across a repository](media/marketplace/showcases/0036-windows-en-dark-quick-diff-folder-preview.gif)
+![Review changes across a repository](media/marketplace/showcases/0033-windows-en-dark-quick-diff-folder-preview.gif)
 
 </details>
 
 ### Settings &amp; Shortcuts
 
 <details>
-<summary>File manager settings</summary>
+<summary>Set up a project view</summary>
 
-![File manager settings](media/marketplace/showcases/0027-windows-en-dark-settings-editor.gif)
-
-</details>
-
-<details>
-<summary>Favorite folder settings</summary>
-
-![Favorite folder settings](media/marketplace/showcases/0028-windows-en-dark-settings-favorites-editor.gif)
-
-</details>
-
-<details>
-<summary>File column settings</summary>
-
-![File column settings](media/marketplace/showcases/0029-windows-en-dark-settings-columns-editor.gif)
-
-</details>
-
-<details>
-<summary>Keyboard shortcut settings</summary>
-
-![Keyboard shortcut settings](media/marketplace/showcases/0030-windows-en-dark-settings-shortcuts-editor.gif)
+![Set up a project view](media/marketplace/showcases/0027-windows-en-dark-settings-editor.gif)
 
 </details>
 
@@ -257,28 +236,28 @@ Windows examples with sample files. File operations stop before confirmation.
 <details>
 <summary><kbd>F5</kbd> Find processes holding files and folders open</summary>
 
-![Find processes holding files and folders open](media/marketplace/showcases/0031-windows-en-dark-folder-locks-processes.gif)
+![Find processes holding files and folders open](media/marketplace/showcases/0028-windows-en-dark-folder-locks-processes.gif)
 
 </details>
 
 <details>
 <summary>Review actions for files held open</summary>
 
-![Review actions for files held open](media/marketplace/showcases/0032-windows-en-dark-folder-lock-actions-quickpick.gif)
+![Review actions for files held open](media/marketplace/showcases/0029-windows-en-dark-folder-lock-actions-quickpick.gif)
 
 </details>
 
 <details>
 <summary>Choose a destination for a locked-folder copy</summary>
 
-![Choose a destination for a locked-folder copy](media/marketplace/showcases/0033-windows-en-dark-folder-lock-target-destination.gif)
+![Choose a destination for a locked-folder copy](media/marketplace/showcases/0030-windows-en-dark-folder-lock-target-destination.gif)
 
 </details>
 
 <details>
 <summary>Review the file-lock release warning</summary>
 
-![Review the file-lock release warning](media/marketplace/showcases/0034-windows-en-dark-folder-lock-confirmation-warning.gif)
+![Review the file-lock release warning](media/marketplace/showcases/0031-windows-en-dark-folder-lock-confirmation-warning.gif)
 
 </details>
 
