@@ -3,6 +3,7 @@ const path = require('node:path');
 
 const begin = '<!-- showcase-gallery:start -->', end = '<!-- showcase-gallery:end -->';
 const mediaDirectory = 'media/marketplace/showcases';
+const galleryScenes = new Set(['new-folder', 'new-file', 'delete-confirmations']);
 function escapeHtml(value) { return String(value).replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]); }
 function mediaName(value) {
   if (!/^\d{4}-windows-en-dark-[a-z0-9-]+\.(png|gif|webm)$/.test(value)) throw new Error('Invalid showcase media filename.');
@@ -17,7 +18,7 @@ function renderGallery(manifest, catalog = []) {
   const lines = [begin, '## Feature walkthrough', '',
     'Windows examples with isolated sample files.', ''];
   const groups = new Map();
-  for (const section of manifest.sections.filter(item => item.status === 'rendered' && item.id !== 'main' && item.images.length)) {
+  for (const section of manifest.sections.filter(item => item.status === 'rendered' && galleryScenes.has(item.id) && item.images.length)) {
     const scene = catalog.find(item => item.id === section.id);
     const category = scene?.category || 'Other';
     if (!groups.has(category)) groups.set(category, []);
@@ -48,15 +49,19 @@ function updateReadme(text, manifest, catalog = []) {
     text = text.slice(0, at) + gallery + '\n\n' + text.slice(at);
   }
   const overview = manifest.sections.find(section => section.id === 'main' && section.status === 'rendered')?.images[0];
-  if (overview) text = text.replace(/!\[[^\]]*\]\(media\/marketplace\/(?:product-overview\.png|showcases\/\d{4}-windows-en-dark-main-overview\.png)\)/,
-    `![Bitfroest.fs with two folders, native Windows icons and file colors](${mediaDirectory}/${mediaName(overview.file)})`);
+  if (overview) {
+    const image = `![Bitfroest.fs with two folders, native Windows icons and file colors](${mediaDirectory}/${galleryFile(overview)})`;
+    const pattern = /!\[[^\]]*\]\(media\/marketplace\/(?:product-overview\.png|showcases\/\d{4}-windows-en-dark-main-overview\.(?:png|gif))\)/;
+    if (pattern.test(text)) text = text.replace(pattern, image);
+    else text = text.replace(/(\*\*A two-panel file manager[^\n]*\n)/, `$1\n${image}\n`);
+  }
   if (!text.includes('| Ctrl+L |')) text = text.replace('| Ctrl+T / Ctrl+W |', '| Ctrl+L | Edit the active folder path |\n| Ctrl+T / Ctrl+W |');
   return text;
 }
 function publish(root = path.resolve(__dirname, '../..')) {
   const input = path.join(root, '.tmp/showcases'), output = path.join(root, mediaDirectory);
   const manifest = JSON.parse(fs.readFileSync(path.join(input, 'showcases.json'), 'utf8'));
-  const images = manifest.sections.filter(section => section.status === 'rendered').flatMap(section => section.images).map(image => ({ file: galleryFile(image) }));
+  const images = manifest.sections.filter(section => section.status === 'rendered' && (section.id === 'main' || galleryScenes.has(section.id))).flatMap(section => section.images).map(image => ({ file: galleryFile(image) }));
   if (!images.length) throw new Error('No recorded media are available to publish.');
   for (const image of images) {
     const bytes = fs.readFileSync(path.join(input, mediaName(image.file)));
@@ -78,5 +83,5 @@ function publish(root = path.resolve(__dirname, '../..')) {
   console.log(`Updated README with ${images.length} recorded images and animations in ${mediaDirectory}.`);
 }
 
-module.exports = { mediaName, renderGallery, updateReadme, publish };
+module.exports = { mediaName, renderGallery, updateReadme, publish, galleryScenes };
 if (require.main === module) { try { publish(); } catch (error) { console.error(error.message); process.exitCode = 1; } }

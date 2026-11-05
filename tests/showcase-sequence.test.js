@@ -52,7 +52,7 @@ test('WebM uses VP9 live-frame encoding and publishes a GIF fallback instead of 
   const { renderGallery, mediaName } = require('../scripts/showcases/publish.cjs');
   const file = '0001-windows-en-dark-rename-editor.webm';
   assert.equal(mediaName(file), file);
-  const text = renderGallery({ sections: [{ id: 'rename', title: 'Rename', description: 'Cancel edits.', status: 'rendered', images: [{ file, fallback: file.replace('.webm', '.gif'), alt: 'Rename' }] }] });
+  const text = renderGallery({ sections: [{ id: 'new-folder', title: 'Rename', description: 'Cancel edits.', status: 'rendered', images: [{ file, fallback: file.replace('.webm', '.gif'), alt: 'Rename' }] }] });
   assert.match(text, /!\[Rename\]\([^\n]+\.gif\)/);
   assert.doesNotMatch(text, /webm/i);
 });
@@ -65,7 +65,7 @@ test('gallery publication copies only the GIF and removes the formerly linked vi
   try {
     const input = path.join(root, '.tmp/showcases'), output = path.join(root, 'media/marketplace/showcases');
     fs.mkdirSync(input, { recursive: true }); fs.mkdirSync(output, { recursive: true });
-    const manifest = { sections: [{ id: 'rename', title: 'Rename', description: 'Cancel edits.', status: 'rendered', images: [{ file: video, fallback: gif, alt: 'Rename' }] }] };
+    const manifest = { sections: [{ id: 'new-folder', title: 'Rename', description: 'Cancel edits.', status: 'rendered', images: [{ file: video, fallback: gif, alt: 'Rename' }] }] };
     fs.writeFileSync(path.join(input, 'showcases.json'), JSON.stringify(manifest));
     fs.writeFileSync(path.join(input, gif), 'GIF89a');
     fs.writeFileSync(path.join(output, video), 'previous recording');

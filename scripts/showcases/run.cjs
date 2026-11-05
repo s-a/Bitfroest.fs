@@ -9,6 +9,10 @@ const output = path.join(repository, '.tmp/showcases');
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 const normalize = value => value.replace(/\\/g, '/').replace(/\/$/, '').toLowerCase();
 const filename = (scene, capture) => `${String(capture?.sequence || 1).padStart(4, '0')}-windows-en-dark-${scene.id}${capture ? `-${capture.id}` : ''}.${capture?.format || 'png'}`;
+function selectScenes(catalog, selected) {
+  const ids = selected ? new Set(selected.split(',')) : new Set(['main', ...require('./publish.cjs').galleryScenes]);
+  return catalog.filter(scene => ids.has(scene.id));
+}
 function numberCatalog(catalog) {
   let sequence = 0;
   for (const scene of catalog) for (const capture of scene.captures) capture.sequence = ++sequence;
@@ -195,7 +199,7 @@ async function main() {
   const { code, demo, selected } = parseOptions(process.argv.slice(2), findCode());
   if (!code || !fs.existsSync(code) || !demo) throw new Error('Specify --code and --demo.');
   const catalog = numberCatalog(validateCatalog(JSON.parse(fs.readFileSync(path.join(__dirname, 'catalog.json'), 'utf8').replaceAll('${demo}', demo.replace(/\\/g, '/')))));
-  const scenes = selected ? catalog.filter(scene => selected.split(',').includes(scene.id)) : catalog;
+  const scenes = selectScenes(catalog, selected);
   if (!scenes.length) throw new Error(`Unknown showcase: ${selected}`);
   if (scenes.some(scene => scene.id.startsWith('quick-diff-'))) require('./quick-diff-fixture.cjs').prepareQuickDiff(demo);
   if (scenes.some(scene => scene.id === 'xray-click')) {
@@ -524,5 +528,5 @@ async function main() {
   console.log(`Showcase manifest: ${path.join(output, 'showcases.json')}`);
 }
 
-module.exports = { validateCatalog, filename, numberCatalog, assertSurfaceState, assertProductState, waitFor, buildManifest, parseOptions, safeActions, safeListerActions, profileSettings, renumberManifest, clickControl };
+module.exports = { validateCatalog, filename, numberCatalog, selectScenes, assertSurfaceState, assertProductState, waitFor, buildManifest, parseOptions, safeActions, safeListerActions, profileSettings, renumberManifest, clickControl };
 if (require.main === module) main().catch(error => { console.error(error.message); process.exitCode = 1; });
