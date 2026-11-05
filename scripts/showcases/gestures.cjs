@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const { executeSequence, inspectState, assertSafePointer, keys } = require('./sequence.cjs');
+const { installPresentation, createPacing, presentationTiming } = require('./presentation.cjs');
 
 async function animatePointer({ start, end, duration, update, now = () => performance.now(), sleep = ms => new Promise(resolve => setTimeout(resolve, ms)) }) {
   const began = now();
@@ -61,7 +62,7 @@ function installPointer() {
     return position;
 }
 
-async function recordGesture({ capture, scene, page, target, evaluate, invoke, run, file, waitFor }) {
+async function recordGesture({ capture, scene, page, target, evaluate, invoke, run, file, waitFor: poll }) {
   const frames = path.join(run, path.parse(file).name);
   fs.mkdirSync(frames, { recursive: true });
   const pageEvaluate = async (fn, ...args) => {
@@ -74,27 +75,33 @@ async function recordGesture({ capture, scene, page, target, evaluate, invoke, r
   const model = await page.call('DOM.getBoxModel', { backendNodeId: owner.backendNodeId });
   const offset = { x: model.model.content[0], y: model.model.content[1] };
   let position = await pageEvaluate(installPointer), buttons = 0;
+  await pageEvaluate(installPresentation, presentationTiming);
   const origin = { ...position };
   const records = [];
-  const keyEvents = [], pressedKeys = new Set();
+  const pacing = createPacing();
+  let recording = false;
+  const refreshProtection = async () => {
+    const rectangles = await evaluate(() => [...new Set([document.activeElement, ...document.querySelectorAll('.inline-rename, dialog[open] input:focus')])]
+      .filter(element => element?.matches('input,textarea,select,[contenteditable="true"]'))
+      .map(element => { const r = element.getBoundingClientRect(); return { left: r.left, top: r.top, right: r.right, bottom: r.bottom }; }));
+    await pageEvaluate((rectangles, offset) => window.__showcasePresentation.protect(rectangles.map(r => ({
+      left: r.left + offset.x, right: r.right + offset.x, top: r.top + offset.y, bottom: r.bottom + offset.y
+    }))), rectangles, offset);
+  };
+  const waitFor = async read => {
+    const value = await poll(read);
+    await refreshProtection();
+    if (recording && !buttons) pacing.verified();
+    return value;
+  };
+  const keyEvents = [];
   const keyEvent = async (type, key, code, windowsVirtualKeyCode, modifiers = 0) => {
+    if (type === 'keyDown' && !buttons) await pacing.beforeInput();
     await page.call('Input.dispatchKeyEvent', { type, key, code, windowsVirtualKeyCode, modifiers });
     keyEvents.push({ type, key, code, modifiers, timestamp: Date.now() });
-    if (type === 'keyDown') {
-      pressedKeys.add(key === 'Control' ? 'Ctrl' : key.toUpperCase());
-      await pageEvaluate(keys => {
-        const panel = document.querySelector('#showcase-keys'); panel.replaceChildren(); panel.style.display = 'flex'; panel.style.opacity = '1';
-        for (const [index, key] of keys.entries()) {
-          if (index) { const plus = document.createElementNS('http://www.w3.org/1999/xhtml', 'span'); plus.textContent = '+'; panel.append(plus); }
-          const cap = document.createElementNS('http://www.w3.org/1999/xhtml', 'kbd'); cap.textContent = key; panel.append(cap);
-        }
-      }, [...pressedKeys]);
-    } else pressedKeys.delete(key === 'Control' ? 'Ctrl' : key.toUpperCase());
+    await refreshProtection();
+    await pageEvaluate((type, key) => window.__showcasePresentation.key(type, key), type, key);
   };
-  const annotation = async (label, down = false) => pageEvaluate((position, label, down) => {
-    const pointer = document.querySelector('#showcase-pointer'); pointer.style.left = `${position.x}px`; pointer.style.top = `${position.y}px`;
-    pointer.dataset.down = String(down); const key = pointer.querySelector('.showcase-key'); key.textContent = label; key.hidden = !label;
-  }, position, label, down);
   let recordingError;
   const unsubscribe = page.on('Page.screencastFrame', event => {
     try {
@@ -107,10 +114,14 @@ async function recordGesture({ capture, scene, page, target, evaluate, invoke, r
   const hold = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
   const mouseEvents = [];
   const mouse = async (type, point = position, button = 'none', modifiers = 0) => {
+    if (type === 'mousePressed' && !buttons) await pacing.beforeInput();
     position = point;
     if (type === 'mousePressed') buttons |= button === 'right' ? 2 : 1;
     if (type === 'mouseReleased') buttons &= ~(button === 'right' ? 2 : 1);
-    await dispatchMouseInput({ type, x: point.x, y: point.y, button, buttons, modifiers, clickCount: type === 'mouseMoved' ? 0 : 1 }, event => page.call('Input.dispatchMouseEvent', event), annotation);
+    const update = () => pageEvaluate((type, point, button) => window.__showcasePresentation.pointer(type, point, button), type, point, button);
+    await dispatchMouseInput({ type, x: point.x, y: point.y, button, buttons, modifiers, clickCount: type === 'mouseMoved' ? 0 : 1 }, event => page.call('Input.dispatchMouseEvent', event), update);
+    if (type === 'mouseMoved') await update();
+    else await refreshProtection();
     mouseEvents.push({ type, ...point, button, buttons, timestamp: Date.now() });
     if (type === 'mousePressed') {
       await pageEvaluate(point => {
@@ -133,10 +144,12 @@ async function recordGesture({ capture, scene, page, target, evaluate, invoke, r
   const click = async (p, button = 'left', modifiers = 0) => {
     await mouse('mouseMoved', p); await mouse('mousePressed', p, button, modifiers); await mouse('mouseReleased', p, button, modifiers);
   };
-  const move = async (end, label, duration = 660) => {
+  const move = async (end, duration = 660) => {
+    if (!buttons) await pacing.beforeInput();
+    await refreshProtection();
     const start = { ...position };
     await animatePointer({ start, end, duration, update: async next => {
-      await mouse('mouseMoved', next, buttons & 2 ? 'right' : 'none'); await annotation(label, Boolean(buttons));
+      await mouse('mouseMoved', next, buttons & 2 ? 'right' : buttons & 1 ? 'left' : 'none');
     } });
   };
   let result, recordingEndedAt;
@@ -150,14 +163,16 @@ async function recordGesture({ capture, scene, page, target, evaluate, invoke, r
       await waitFor(() => evaluate(() => window.CommanderHost.getState().panes[0].selected.length === 2));
     }
     await mouse('mouseMoved', origin);
-    await annotation('');
+    await pageEvaluate(() => window.__showcasePresentation.reset());
     await page.call('Page.startScreencast', { format: 'png', maxWidth: 1280, maxHeight: 900, everyNthFrame: 1 });
     await waitFor(() => records.length > 0);
+    recording = true;
+    await pacing.begin();
     if (capture.steps) {
       result = { steps: await executeSequence(capture.steps, {
         move: async step => {
           const t = step.target;
-          await move(await point(t.selector || '[data-filename]', t.side ?? 0, t.name, t.xFraction ?? .25), '', step.duration || 660);
+          await move(await point(t.selector || '[data-filename]', t.side ?? 0, t.name, t.xFraction ?? .25), step.duration || 660);
         },
         mouse: async (type, button) => {
           if (type === 'press') await evaluate(new Function('p', `(${assertSafePointer.toString()})(document.elementFromPoint(p.x, p.y));`), { x: position.x - offset.x, y: position.y - offset.y });
@@ -183,44 +198,43 @@ async function recordGesture({ capture, scene, page, target, evaluate, invoke, r
         })
       }) };
     } else if (capture.gesture === 'path-copy') {
-      await hold(350); await move(await point('.path-breadcrumbs', 0), ''); await hold(350);
+      await move(await point('.path-breadcrumbs', 0)); await hold(350);
       await mouse('mouseMoved'); await mouse('mousePressed', position, 'right'); await hold(20);
       await mouse('mouseReleased', position, 'right');
       await waitFor(async () => (await invoke('showcase.clipboard-check', [scene.paths[0].replace(/\//g, '\\')])).matched);
-      result = { clipboardMatched: true }; await hold(1100);
+      result = { clipboardMatched: true };
     } else if (capture.gesture === 'ctrl-l') {
-      await annotation('Focus the file list'); await hold(300); await move(await point('.list', 0, 'Notes.txt'), 'Focus the file list'); await click(position); await annotation('Focus the address bar'); await hold(600);
+      await move(await point('.list', 0, 'Notes.txt')); await click(position); await hold(600);
       await keyEvent('keyDown', 'Control', 'ControlLeft', 17, 2);
       await keyEvent('keyDown', 'l', 'KeyL', 76, 2);
       await keyEvent('keyUp', 'l', 'KeyL', 76, 2);
       await keyEvent('keyUp', 'Control', 'ControlLeft', 17);
       await waitFor(() => evaluate(() => { const input = document.activeElement; return input.matches('.path-input') && input.selectionStart === 0 && input.selectionEnd === input.value.length; }));
-      result = { addressFocused: true, pathSelected: true }; await annotation('Keyboard shortcut'); await hold(1400);
+      result = { addressFocused: true, pathSelected: true };
     } else if (capture.gesture === 'right-selection') {
       const start = await point('.list', 0, 'Changes.txt', .15), end = await point('.list', 0, 'Colors.json', .65);
-      await annotation(''); await hold(300); await move(start, ''); await hold(300); await mouse('mouseMoved'); await mouse('mousePressed', position, 'right');
-      await move(end, 'Right button + drag'); await mouse('mouseReleased', position, 'right');
+      await move(start); await hold(300); await mouse('mouseMoved'); await mouse('mousePressed', position, 'right');
+      await move(end); await mouse('mouseReleased', position, 'right');
       await waitFor(() => evaluate(() => window.CommanderHost.getState().panes[0].selected.length >= 2));
-      result = { selectionCount: await evaluate(() => window.CommanderHost.getState().panes[0].selected.length) }; await hold(1100);
+      result = { selectionCount: await evaluate(() => window.CommanderHost.getState().panes[0].selected.length) };
     } else if (capture.gesture === 'right-drag') {
       const first = await point('.list', 0, 'Changes.txt');
-      await annotation(''); await hold(300); await move(first, ''); await hold(300); await mouse('mouseMoved'); await mouse('mousePressed', first, 'right');
-      await annotation('Hold right button', true); await hold(650);
+      await move(first); await hold(300); await mouse('mouseMoved'); await mouse('mousePressed', first, 'right');
+      await hold(650);
       await waitFor(() => evaluate(() => document.body.dataset.fileDragCursor === 'ready'));
-      await move(await point('.list', 1, 'inbox'), 'Drag to the target folder', 880); await hold(400);
+      await move(await point('.list', 1, 'inbox'), 880); await hold(400);
       await mouse('mouseReleased', position, 'right');
       await waitFor(() => evaluate(() => document.querySelector('#modal[open] #modal-title')?.textContent === 'Move'));
       result = { moveDialog: true, destination: await evaluate(() => document.querySelector('#value').value) };
       if (result.destination.replace(/\\/g, '/').toLowerCase() !== `${scene.paths[1]}/inbox`.toLowerCase()) throw new Error('The actual drop target differs from the requested destination.');
-      await annotation('Review the move destination'); await hold(1300);
     } else throw new Error(`Unknown gesture: ${capture.gesture}`);
-    await move(origin, '');
-    await hold(350);
+    await move(origin);
+    await pacing.end();
   } finally {
     recordingEndedAt = Date.now();
     await page.call('Page.stopScreencast'); unsubscribe();
     if (buttons) await mouse('mouseReleased', position, buttons & 2 ? 'right' : 'left');
-    await pageEvaluate(() => { document.querySelector('#showcase-pointer')?.remove(); document.querySelector('#showcase-keys')?.remove(); document.querySelector('#showcase-pointer-style')?.remove(); });
+    await pageEvaluate(() => { window.__showcasePresentation?.dispose(); document.querySelector('#showcase-pointer')?.remove(); document.querySelector('#showcase-keys')?.remove(); document.querySelector('#showcase-pointer-style')?.remove(); });
     await evaluate(() => document.querySelector('dialog[open] #modal-cancel')?.click());
     await invoke('showcase.screencast');
   }
@@ -236,7 +250,7 @@ async function recordGesture({ capture, scene, page, target, evaluate, invoke, r
     if (fallback.status !== 0) throw new Error(`GIF fallback encoding failed: ${fallback.error?.message || fallback.stderr}`);
   }
   const gif = fs.readFileSync(path.join(run, video ? file.replace(/\.webm$/, '.gif') : file));
-  fs.writeFileSync(path.join(frames, 'evidence.json'), JSON.stringify({ format: capture.format, codec: video ? 'vp9' : 'gif', gesture: capture.gesture, origin, frames: records.length, result, keyEvents, mouseEvents,
+  fs.writeFileSync(path.join(frames, 'evidence.json'), JSON.stringify({ presentation: { version: 1, timing: presentationTiming }, format: capture.format, codec: video ? 'vp9' : 'gif', gesture: capture.gesture, origin, frames: records.length, result, keyEvents, mouseEvents,
     framesRecordedAt: records.map(record => ({ timestamp: record.timestamp, pointer: record.pointer, buttons: record.buttons })) }, null, 2));
   return { width: gif.readUInt16LE(6), height: gif.readUInt16LE(8), ...(video ? { fallback: file.replace(/\.webm$/, '.gif') } : {}) };
 }

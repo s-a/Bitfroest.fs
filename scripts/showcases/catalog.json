@@ -470,23 +470,18 @@
         "expect": ".pane",
         "text": "Project-Plan",
         "steps": [
-          { "type": "pause", "duration": 500 },
           { "type": "move", "target": { "name": "Project-Plan.md" } },
           { "type": "click" },
           { "type": "pause", "duration": 900 },
           { "type": "click" },
           { "type": "check", "selector": "input.inline-rename", "value": "Project-Plan.md", "focused": true },
-          { "type": "pause", "duration": 1100 },
           { "type": "key", "key": "Escape" },
           { "type": "check", "selector": "input.inline-rename", "absent": true },
-          { "type": "pause", "duration": 650 },
           { "type": "key", "key": "F2" },
           { "type": "check", "selector": "input.inline-rename", "value": "Project-Plan.md", "focused": true },
-          { "type": "pause", "duration": 1300 },
           { "type": "key", "key": "Escape" },
           { "type": "check", "selector": "input.inline-rename", "absent": true },
-          { "type": "check", "selector": "[data-pane=\"0\"]", "text": "Project-Plan" },
-          { "type": "pause", "duration": 900 }
+          { "type": "check", "selector": "[data-pane=\"0\"]", "text": "Project-Plan" }
         ]
       }
     ]

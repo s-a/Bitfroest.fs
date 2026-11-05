@@ -51,7 +51,7 @@ function galleryFile(image) {
 }
 function renderGallery(manifest) {
   const lines = [begin, '## Feature walkthrough', '',
-    'Windows examples with sample project files. Animations include a pointer highlight and keystroke hints. Drag-and-drop demonstrations stop at the confirmation dialog.', ''];
+    'Windows examples with sample project files. Animations show click pulses, held mouse buttons and keyboard shortcuts. Hints fade after use, and verified responses pause briefly for reading. Drag-and-drop demonstrations stop at the confirmation dialog.', ''];
   for (const section of manifest.sections.filter(item => item.status === 'rendered' && item.id !== 'main')) {
     if (!section.images.length) continue;
     const excerpt = summaryExcerpts[section.id];

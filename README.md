@@ -21,7 +21,7 @@ The default shortcut is `Ctrl+Alt+Shift+F12` on Windows and Linux. Repeating the
 <!-- showcase-gallery:start -->
 ## Feature walkthrough
 
-Windows examples with sample project files. Animations include a pointer highlight and keystroke hints. Drag-and-drop demonstrations stop at the confirmation dialog.
+Windows examples with sample project files. Animations show click pulses, held mouse buttons and keyboard shortcuts. Hints fade after use, and verified responses pause briefly for reading. Drag-and-drop demonstrations stop at the confirmation dialog.
 
 <details>
 <summary>Copy a folder path</summary>
