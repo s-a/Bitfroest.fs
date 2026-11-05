@@ -1169,111 +1169,137 @@
   {
     "id": "delete-confirmations",
     "parentId": "main",
-    "title": "Review deletion confirmations",
-    "description": "Compare recycle-bin and permanent-deletion confirmations without deleting the selected file.",
+    "title": "Remove temporary files",
+    "description": "Move one temporary file to Trash and permanently delete another, then verify the remaining files.",
+    "fixture": "deletion",
     "paths": [
       "${demo}/left",
       "${demo}/right"
     ],
     "sources": [
-      "media/app.js"
+      "media/app.js",
+      "filesystem-provider.js"
     ],
-    "captures": [
-      {
-        "id": "options",
-        "format": "gif",
-        "expect": ".pane",
-        "text": "Project-Plan",
-        "steps": [
-          {
-            "type": "move",
-            "target": {
-              "name": "Project-Plan.md"
-            }
-          },
-          {
-            "type": "click",
-            "effect": "Select Project-Plan.md"
-          },
-          {
-            "type": "pause",
-            "duration": 400
-          },
-          {
-            "type": "key",
-            "key": "F8",
-            "effect": "Open Recycle Bin confirmation"
-          },
-          {
-            "type": "check",
-            "selector": "dialog[open]",
-            "text": "Trash"
-          },
-          {
-            "type": "check",
-            "selector": "dialog[open]",
-            "text": "Project-Plan.md"
-          },
-          {
-            "type": "pause",
-            "duration": 1300
-          },
-          {
-            "type": "key",
-            "key": "Escape",
-            "effect": "Cancel Recycle Bin deletion"
-          },
-          {
-            "type": "check",
-            "selector": "dialog[open]",
-            "absent": true
-          },
-          {
-            "type": "pause",
-            "duration": 400
-          },
-          {
-            "type": "key",
-            "key": "Shift+F8",
-            "effect": "Open permanent deletion confirmation"
-          },
-          {
-            "type": "check",
-            "selector": "dialog[open]",
-            "text": "Delete permanently"
-          },
-          {
-            "type": "check",
-            "selector": "dialog[open]",
-            "text": "Project-Plan.md"
-          },
-          {
-            "type": "pause",
-            "duration": 1300
-          },
-          {
-            "type": "key",
-            "key": "Escape",
-            "effect": "Cancel permanent deletion"
-          },
-          {
-            "type": "check",
-            "selector": "dialog[open]",
-            "absent": true
-          },
-          {
-            "type": "check",
-            "selector": "[data-pane=\"0\"]",
-            "text": "Project-Plan"
-          }
-        ]
-      }
-    ],
+    "category": "Basic File Operations",
     "shortcuts": [
       "F8",
       "Shift+F8"
     ],
-    "category": "Basic File Operations"
+    "captures": [
+      {
+        "id": "cleanup",
+        "format": "gif",
+        "intro": "Clean up two temporary files",
+        "expect": ".pane",
+        "text": "Discard",
+        "steps": [
+          {
+            "type": "check",
+            "selector": "[data-pane=\"0\"] [data-cell][title=\"Recycle.tmp\"]"
+          },
+          {
+            "type": "move",
+            "target": {
+              "name": "Recycle.tmp",
+              "side": 0
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Select the file for Trash"
+          },
+          {
+            "type": "key",
+            "key": "F8",
+            "effect": "Move the file to Trash"
+          },
+          {
+            "type": "check",
+            "selector": "dialog[open] #modal-title",
+            "text": "Move to Trash?"
+          },
+          {
+            "type": "check",
+            "selector": "dialog[open] #modal-body",
+            "text": "Recycle.tmp"
+          },
+          {
+            "type": "pause",
+            "duration": 1200
+          },
+          {
+            "type": "confirm",
+            "action": "trash",
+            "effect": "Move the file to Trash"
+          },
+          {
+            "type": "check",
+            "selector": "[data-pane=\"0\"] [data-cell][title=\"Recycle.tmp\"]",
+            "absent": true
+          },
+          {
+            "type": "pause",
+            "duration": 1000
+          },
+          {
+            "type": "check",
+            "selector": "[data-pane=\"0\"] [data-cell][title=\"Discard.tmp\"]"
+          },
+          {
+            "type": "move",
+            "target": {
+              "name": "Discard.tmp",
+              "side": 0
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Select the temporary file"
+          },
+          {
+            "type": "key",
+            "key": "Shift+F8",
+            "effect": "Delete permanently"
+          },
+          {
+            "type": "check",
+            "selector": "dialog[open] #modal-title",
+            "text": "Delete permanently?"
+          },
+          {
+            "type": "check",
+            "selector": "dialog[open] #modal-body",
+            "text": "Discard.tmp"
+          },
+          {
+            "type": "pause",
+            "duration": 1400
+          },
+          {
+            "type": "confirm",
+            "action": "delete-permanent",
+            "effect": "Delete the temporary file"
+          },
+          {
+            "type": "check",
+            "selector": "[data-pane=\"0\"] [data-cell][title=\"Discard.tmp\"]",
+            "absent": true
+          },
+          {
+            "type": "check",
+            "selector": "[data-pane=\"0\"] [data-cell][title=\"Keep.txt\"]"
+          },
+          {
+            "type": "check",
+            "selector": "[data-pane=\"0\"] [data-cell][title=\"Other.txt\"]"
+          },
+          {
+            "type": "pause",
+            "duration": 1800
+          }
+        ]
+      }
+    ]
   },
   {
     "id": "delete-network",

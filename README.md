@@ -105,9 +105,9 @@ Windows examples with isolated sample files.
 </details>
 
 <details>
-<summary><kbd>F8</kbd> <kbd>Shift+F8</kbd> Review deletion confirmations</summary>
+<summary><kbd>F8</kbd> <kbd>Shift+F8</kbd> Remove temporary files</summary>
 
-![Review deletion confirmations](media/marketplace/showcases/0013-windows-en-dark-delete-confirmations-options.gif)
+![Remove temporary files](media/marketplace/showcases/0013-windows-en-dark-delete-confirmations-cleanup.gif)
 
 </details>
 

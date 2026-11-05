@@ -83,7 +83,7 @@ function validateCatalog(catalog) {
     if (scene.parentId && !ids.has(scene.parentId)) throw new Error('A parent must precede its subsections.');
     ids.add(scene.id);
     if (!scene.title?.trim() || !scene.description?.trim()) throw new Error('A title and description are required.');
-    if (scene.fixture !== undefined && scene.fixture !== 'handover') throw new Error('Unsupported showcase fixture.');
+    if (scene.fixture !== undefined && !['handover', 'deletion'].includes(scene.fixture)) throw new Error('Unsupported showcase fixture.');
     if (scene.paths?.length !== 2 || scene.paths.some(p => !path.win32.isAbsolute(p))) throw new Error('Two absolute demo paths are required.');
     if (scene.status && !['pending', 'excluded'].includes(scene.status)) throw new Error('Invalid inventory status.');
     if (scene.status && !scene.reason?.trim()) throw new Error('An inventory status requires a reason.');
@@ -102,7 +102,8 @@ function validateCatalog(catalog) {
           (!surfacePreparation && (capture.select || capture.command));
         if (!['gif', 'webm'].includes(capture.format) || unsupportedSetup) throw new Error('A recording sequence requires an animation capture with only supported surface preparation.');
         require('./sequence.cjs').validateSequence(capture.steps);
-        if (capture.steps.some(step => step.type === 'confirm') && (scene.fixture !== 'handover' || capture.surface)) throw new Error('Fixture confirmations require the handover fixture.');
+        const confirmations = capture.steps.filter(step => step.type === 'confirm');
+        if (confirmations.length && (capture.surface || confirmations.some(step => scene.fixture === 'handover' ? ['trash', 'delete-permanent'].includes(step.action) : scene.fixture !== 'deletion' || !['trash', 'delete-permanent'].includes(step.action)))) throw new Error('Fixture confirmations require the matching showcase fixture.');
       }
       if (['gif', 'webm'].includes(capture.format) && !capture.steps && !['path-copy', 'ctrl-l', 'right-selection', 'right-drag'].includes(capture.gesture)) throw new Error('An animation requires a sequence or known gesture.');
       if (!capture.expect || !capture.text) throw new Error('Capture readiness criteria are required.');
@@ -226,6 +227,7 @@ async function main() {
   const exited = new Promise((resolve, reject) => { child.once('exit', resolve); child.once('error', reject); });
   const connections = [];
   let lockFixture;
+  const deletionFixtures = [];
   let manifest, failure, diagnostic, stage = 'startup';
   try {
     const host = await waitFor(() => fs.existsSync(path.join(run, 'ready.json')) && JSON.parse(fs.readFileSync(path.join(run, 'ready.json'), 'utf8')), 90000);
@@ -284,7 +286,9 @@ async function main() {
     if (scenes.some(scene => scene.captures.some(capture => capture.lockAction))) lockFixture = await require('./locks.cjs').createLockFixture(demo);
     for (const scene of scenes) {
       if (scene.status) continue;
-      const fixture = scene.fixture === 'handover' ? await require('./story-fixture.cjs').createStoryFixture(run) : undefined;
+      const fixture = scene.fixture === 'handover' ? await require('./story-fixture.cjs').createStoryFixture(run)
+        : scene.fixture === 'deletion' ? await require('./deletion-story-fixture.cjs').createDeletionStoryFixture(run) : undefined;
+      if (scene.fixture === 'deletion') deletionFixtures.push(fixture);
       if (fixture) scene.paths = [fixture.left, fixture.right];
       stage = `${scene.id}: navigation`;
       if (lockFixture) await invoke('showcase.close-locks');
@@ -478,6 +482,9 @@ async function main() {
     fs.closeSync(log);
     if (exitCode !== 0) failure = new Error(`Showcase desktop cleanup failed (${exitCode}); inspect ${run}`, { cause: failure });
     if (lockFixture) await lockFixture.dispose();
+    for (const fixture of deletionFixtures) {
+      try { await fixture.cleanup(); } catch (error) { failure = new Error(`Showcase fixture cleanup failed: ${error.message}; inspect ${run}`, { cause: failure || error }); }
+    }
   }
   if (failure) throw failure;
   if (original) for (const [index, section] of original.sections.entries()) for (const [imageIndex, image] of section.images.entries()) {

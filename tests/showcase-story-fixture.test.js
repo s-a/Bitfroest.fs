@@ -6,6 +6,65 @@ const path = require('node:path');
 const { createStoryFixture } = require('../scripts/showcases/story-fixture.cjs');
 const { fixtureSnapshot, installFixtureCompletion, inspectFixtureCompletion } = require('../scripts/showcases/gestures.cjs');
 const { JSDOM } = require('jsdom');
+const { validateCatalog } = require('../scripts/showcases/run.cjs');
+
+test('permanent deletion needs its own fixture and cannot use the handover fixture', () => {
+  const capture = { id: 'action', format: 'gif', expect: '.pane', text: 'Discard', steps: [{ type: 'confirm', action: 'delete-permanent', effect: 'Delete demo file' }] };
+  const scene = { id: 'delete-story', title: 'Delete', description: 'Delete an isolated file.', paths: ['C:/demo/left', 'C:/demo/right'], captures: [capture] };
+  assert.throws(() => validateCatalog([scene]), /fixture/i);
+  assert.throws(() => validateCatalog([{ ...scene, fixture: 'handover' }]), /fixture/i);
+  assert.doesNotThrow(() => validateCatalog([{ ...scene, fixture: 'deletion' }]));
+  const recycle = { ...scene, captures: [{ ...capture, steps: [{ type: 'confirm', action: 'trash', effect: 'Move to Trash' }] }] };
+  assert.throws(() => validateCatalog([{ ...recycle, fixture: 'handover' }]), /fixture/i);
+  assert.doesNotThrow(() => validateCatalog([{ ...recycle, fixture: 'deletion' }]));
+});
+
+test('deletion snapshot derives its file list from the actual confirmation dialog', () => {
+  const dom = new JSDOM('<dialog id="modal" open><h1 id="modal-title">Delete permanently?</h1><div id="modal-body"><p>1 entry will be permanently deleted.</p><p id="modal-description">Warning</p><p>Discard.tmp</p></div><button id="modal-confirm">Delete permanently</button></dialog>');
+  try {
+    dom.window.CommanderHost = { getState: () => ({ active: 0, panes: [{ tabs: ['C:/demo/left'], tab: 0, selected: ['id-1'] }, { tabs: ['C:/demo/right'], tab: 0 }], folders: { 'C:/demo/left': [{ id: 'id-1', fsSource: 'C:/demo/left/Discard.tmp' }] } }) };
+    assert.deepEqual(fixtureSnapshot('delete-permanent', dom.window.document).dialogFiles, ['Discard.tmp']);
+    dom.window.document.querySelector('#modal-title').textContent = 'Move to Trash?';
+    dom.window.document.querySelector('#modal-body p:last-child').textContent = 'Recycle.tmp';
+    assert.deepEqual(fixtureSnapshot('trash', dom.window.document).dialogFiles, ['Recycle.tmp']);
+    dom.window.document.querySelector('#modal-body p:last-child').innerHTML = 'Discard.tmp<br>Keep.txt';
+    assert.deepEqual(fixtureSnapshot('delete-permanent', dom.window.document).dialogFiles, []);
+  } finally { dom.window.close(); }
+});
+
+test('deletion requires its own successful host response, intact survivors and visible completion', () => {
+  const dom = new JSDOM('<div id="panes"></div><div id="functionbar"></div><div id="status-progress-area" class="is-idle"></div><div id="status-activity" hidden></div><div id="status-message" data-outcome="success">File operation completed</div>');
+  try {
+    const doc = dom.window.document, left = 'C:/demo/left', fixture = { left, remainingNames: ['Keep.txt', 'Other.txt'] };
+    const state = rows => ({ realFilesystem: true, folders: { [left]: rows.map(name => ({ name, type: 'text' })) } });
+    installFixtureCompletion(doc);
+    const send = event => dom.window.dispatchEvent(new dom.window.MessageEvent('message', { data: event }));
+    send({ type: 'filesystem-result', ok: true, operationId: 'transfer-1', state: state(['Keep.txt', 'Other.txt']) });
+    assert.equal(inspectFixtureCompletion('delete-permanent', fixture, doc).complete, false);
+    send({ type: 'filesystem-result', ok: true, operationId: 'delete-1', state: state(['Keep.txt', 'Other.txt', 'Discard.tmp']) });
+    assert.equal(inspectFixtureCompletion('delete-permanent', fixture, doc).complete, false);
+    send({ type: 'filesystem-result', ok: true, operationId: 'delete-2', state: state(['Keep.txt', 'Other.txt']) });
+    assert.equal(inspectFixtureCompletion('delete-permanent', fixture, doc).complete, true);
+    doc.querySelector('#status-message').dataset.outcome = 'info';
+    assert.equal(inspectFixtureCompletion('delete-permanent', fixture, doc).complete, false);
+    dom.window.__showcaseCompletion.dispose();
+  } finally { dom.window.close(); }
+});
+
+test('trash confirmation requires the trash file absent and the permanent-deletion file still present', () => {
+  const dom = new JSDOM('<div id="panes"></div><div id="functionbar"></div><div id="status-progress-area" class="is-idle"></div><div id="status-activity" hidden></div><div id="status-message" data-outcome="success">File operation completed</div>');
+  try {
+    const doc = dom.window.document, left = 'C:/demo/left', fixture = { left, remainingNames: ['Discard.tmp', 'Keep.txt', 'Other.txt'] };
+    const state = rows => ({ realFilesystem: true, folders: { [left]: rows.map(name => ({ name, type: 'text' })) } });
+    installFixtureCompletion(doc);
+    const send = rows => dom.window.dispatchEvent(new dom.window.MessageEvent('message', { data: { type: 'filesystem-result', ok: true, operationId: 'delete-1', state: state(rows) } }));
+    send(['Discard.tmp', 'Keep.txt', 'Other.txt', 'Recycle.tmp']);
+    assert.equal(inspectFixtureCompletion('trash', fixture, doc).complete, false);
+    send(['Discard.tmp', 'Keep.txt', 'Other.txt']);
+    assert.equal(inspectFixtureCompletion('trash', fixture, doc).complete, true);
+    dom.window.__showcaseCompletion.dispose();
+  } finally { dom.window.close(); }
+});
 
 test('fixture completion waits for a matching successful host reply and idle product state', () => {
   const dom = new JSDOM('<div id="panes"></div><div id="functionbar"></div><div id="status-progress-area"></div><div id="status-activity"></div><div id="status-message" data-outcome="info">File operation in progress…</div>');

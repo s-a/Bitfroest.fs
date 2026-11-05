@@ -91,9 +91,11 @@ function fixtureSnapshot(action, root = document) {
   }
   const modal = root.querySelector('dialog[open]#modal'), field = action === 'rename' ? root.querySelector('.inline-rename') : modal?.querySelector('#value');
   const control = action === 'rename' ? field : modal?.querySelector('#modal-confirm');
+  const deleteList = ['trash', 'delete-permanent'].includes(action) ? modal?.querySelector('#modal-body > p:last-child') : null;
   return { activeDirectory, otherDirectory, selected, dialog: action === 'rename' && !modal ? 'inline-rename' : modal?.querySelector('#modal-title')?.textContent,
     input: field?.value, controlReady: Boolean(control && !control.disabled && !control.hidden && (action !== 'rename' || root.activeElement === field)),
     ...(action === 'mkdir' ? { targetDirectory: modal?.querySelector('#modal-body strong')?.textContent } : {}),
+    ...(['trash', 'delete-permanent'].includes(action) ? { dialogFiles: deleteList && deleteList.children.length === 0 ? [deleteList.textContent.trim()] : [] } : {}),
     ...(action === 'copy' ? { filter: modal?.querySelector('#transfer-filter')?.value, policy: modal?.querySelector('#transfer-policy')?.value,
       transferSource: modal?.querySelector('[data-transfer-source]')?.textContent, individualNames: modal?.querySelector('#transfer-individual')?.checked } : {}) };
 }
@@ -117,18 +119,22 @@ function inspectFixtureCompletion(action, fixture, root = document) {
   for (const event of events) {
     if (event.ok === false || event.cancelled || event.operationOutcome?.cancelled || event.operationOutcome?.errors?.length) return { error: String(event.error || event.operationOutcome?.errors?.join(', ') || 'Fixture operation failed or was cancelled.') };
   }
-  const directory = action === 'mkdir' ? fixture.right : fixture.folder;
+  const deletion = ['trash', 'delete-permanent'].includes(action);
+  const directory = action === 'mkdir' ? fixture.right : deletion ? fixture.left : fixture.folder;
   const expected = action === 'mkdir' ? 'Handover' : action === 'copy' ? 'Project-Plan.md' : 'Handover-Plan.md';
   const success = events.some(event => {
     if (event.ok !== true || event.state?.realFilesystem !== true || !event.state.folders) return false;
     const rows = Object.entries(event.state.folders).find(([name]) => same(name, directory))?.[1];
+    if (deletion) return /^delete-/.test(event.operationId || '') && Array.isArray(rows) && Array.isArray(fixture.remainingNames) &&
+      !rows.some(row => row.name === (action === 'trash' ? 'Recycle.tmp' : 'Discard.tmp')) &&
+      rows.length === fixture.remainingNames.length && fixture.remainingNames.every(name => rows.some(row => row.name === name && row.type === 'text'));
     return Array.isArray(rows) && rows.some(row => row.name === expected && row.type === (action === 'mkdir' ? 'folder' : 'markdown')) &&
       (action !== 'rename' || !rows.some(row => row.name === 'Project-Plan.md'));
   });
   const idle = root.querySelector('#status-progress-area')?.classList.contains('is-idle') && root.querySelector('#status-activity')?.hidden &&
     !root.querySelector('#panes')?.inert && !root.querySelector('#functionbar')?.inert;
   const message = root.querySelector('#status-message');
-  const expectedStatus = action === 'mkdir' ? /^Folder created$/ : action === 'copy' ? /^1 file copied, 0 skipped$/ : /^Entry renamed\.$/;
+  const expectedStatus = action === 'mkdir' ? /^Folder created$/ : action === 'copy' ? /^1 file copied, 0 skipped$/ : deletion ? /^File operation completed$/ : /^Entry renamed\.$/;
   const visibleSuccess = message?.dataset.outcome === 'success' && expectedStatus.test(message.textContent.trim());
   return { complete: Boolean(success && idle && visibleSuccess) };
 }
@@ -274,7 +280,7 @@ async function recordGesture({ capture, scene, page, target, evaluate, invoke, r
           });
           if (action !== 'open') {
             const completion = await waitFor(async () => {
-              const observed = await evaluate(new Function('action', 'fixture', `return (${inspectFixtureCompletion.toString()})(action, fixture, document);`), action, { right: fixture.right, folder: fixture.folder });
+              const observed = await evaluate(new Function('action', 'fixture', `return (${inspectFixtureCompletion.toString()})(action, fixture, document);`), action, { left: fixture.left, right: fixture.right, folder: fixture.folder, remainingNames: fixture.remainingNames });
               return (observed.complete || observed.error) && observed;
             });
             if (completion.error) throw new Error(completion.error);

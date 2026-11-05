@@ -17,7 +17,7 @@ function validateSequence(steps) {
   let held;
   for (const step of steps) {
     if (!step || !['move', 'click', 'press', 'release', 'key', 'pause', 'check', 'type', 'confirm'].includes(step.type)) throw new Error('Unknown recording step.');
-    if (step.type === 'confirm' && (!['mkdir', 'open', 'copy', 'rename'].includes(step.action) || typeof step.effect !== 'string' || !step.effect.trim() || step.target)) throw new Error('Invalid fixture confirmation.');
+    if (step.type === 'confirm' && (!['mkdir', 'open', 'copy', 'rename', 'trash', 'delete-permanent'].includes(step.action) || typeof step.effect !== 'string' || !step.effect.trim() || step.target)) throw new Error('Invalid fixture confirmation.');
     if (step.duration !== undefined && (!Number.isFinite(step.duration) || step.duration < 1 || step.duration > 30000)) throw new Error('Invalid recording duration.');
     if (step.type === 'pause' && step.duration === undefined) throw new Error('A pause requires a duration.');
     if (step.type === 'move' || step.target) {
