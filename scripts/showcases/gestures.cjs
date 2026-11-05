@@ -101,10 +101,13 @@ function fixtureSnapshot(action, root = document) {
   const deleteList = ['trash', 'delete-permanent'].includes(action) ? modal?.querySelector('#modal-body > p:last-child') : null;
   return { activeDirectory, otherDirectory, selected, dialog: action === 'rename' && !modal ? 'inline-rename' : modal?.querySelector('#modal-title')?.textContent,
     input: field?.value, controlReady: Boolean(control && !control.disabled && !control.hidden && (action !== 'rename' || root.activeElement === field)),
-    ...(action === 'mkdir' ? { targetDirectory: modal?.querySelector('#modal-body strong')?.textContent } : {}),
+    ...(['mkdir', 'create-notes'].includes(action) ? { targetDirectory: modal?.querySelector('#modal-body strong')?.textContent } : {}),
     ...(['trash', 'delete-permanent'].includes(action) ? { dialogFiles: deleteList && deleteList.children.length === 0 ? [deleteList.textContent.trim()] : [] } : {}),
-    ...(action === 'copy' ? { filter: modal?.querySelector('#transfer-filter')?.value, policy: modal?.querySelector('#transfer-policy')?.value,
-      transferSource: modal?.querySelector('[data-transfer-source]')?.textContent, individualNames: modal?.querySelector('#transfer-individual')?.checked } : {}) };
+    ...(['copy', 'move-notes'].includes(action) ? { filter: modal?.querySelector('#transfer-filter')?.value, policy: modal?.querySelector('#transfer-policy')?.value,
+      transferSource: modal?.querySelector('[data-transfer-source]')?.textContent, individualNames: modal?.querySelector('#transfer-individual')?.checked } : {}),
+    ...(action === 'batch-rename' ? { mask: modal?.querySelector('#mask')?.value, counter: modal?.querySelector('#counter')?.value,
+      search: modal?.querySelector('#search')?.value, replacement: modal?.querySelector('#replacement')?.value, casing: modal?.querySelector('#casing')?.value,
+      preview: [...(modal?.querySelectorAll('#rename-preview tr') || [])].map(row => [...row.querySelectorAll('td')].map(cell => cell.textContent)) } : {}) };
 }
 
 function installLockObservation(kind, root = document) {
@@ -174,6 +177,22 @@ function inspectFixtureCompletion(action, fixture, root = document) {
   const expectedStatus = action === 'mkdir' ? /^Folder created$/ : action === 'copy' ? /^1 file copied, 0 skipped$/ : deletion ? /^File operation completed$/ : /^Entry renamed\.$/;
   const visibleSuccess = message?.dataset.outcome === 'success' && expectedStatus.test(message.textContent.trim());
   return { complete: Boolean(success && idle && visibleSuccess) };
+}
+
+function inspectNotesCompletion(action, fixture, root = document) {
+  const events = root.defaultView.__showcaseCompletion?.events;
+  if (!events) return { error: 'Fixture completion observer is unavailable.' };
+  for (const event of events) if (event.ok === false || event.cancelled || event.operationOutcome?.cancelled || event.operationOutcome?.errors?.length) return { error: String(event.error || 'The notes operation failed or was cancelled.') };
+  const same = (a, b) => typeof a === 'string' && typeof b === 'string' && a.replace(/\\/g, '/').replace(/\/$/, '').toLowerCase() === b.replace(/\\/g, '/').replace(/\/$/, '').toLowerCase();
+  const names = action === 'batch-rename' ? ['Draft-A_1.txt', 'Draft-B_2.txt'] : ['Draft-A.txt', 'Draft-B.txt'];
+  const left = action === 'create-notes' ? names : [], right = action === 'create-notes' ? [] : names;
+  const matches = (folders, directory, expected) => { const rows = Object.entries(folders || {}).find(([key]) => same(key, directory))?.[1];
+    return Array.isArray(rows) && rows.length === expected.length && expected.every(name => rows.some(row => row.name === name && row.type === 'text')); };
+  const success = events.some(event => event.ok === true && event.state?.realFilesystem === true &&
+    (action !== 'move-notes' || /^transfer-\d+-\d+$/.test(event.operationId || '')) && matches(event.state.folders, fixture.left, left) && matches(event.state.folders, fixture.right, right));
+  const idle = root.querySelector('#status-progress-area')?.classList.contains('is-idle') && root.querySelector('#status-activity')?.hidden && !root.querySelector('#panes')?.inert && !root.querySelector('#functionbar')?.inert;
+  const message = root.querySelector('#status-message'), expected = action === 'create-notes' ? /^Files created$/ : action === 'move-notes' ? /^2 files moved, 0 skipped$/ : /^2 entries renamed$/;
+  return { complete: Boolean(success && idle && message?.dataset.outcome === 'success' && expected.test(message.textContent.trim())) };
 }
 
 async function recordGesture({ capture, scene, page, target, evaluate, invoke, run, file, fixture, waitFor: poll, targets, connect, connections }) {
@@ -445,7 +464,8 @@ async function recordGesture({ capture, scene, page, target, evaluate, invoke, r
           });
           if (action !== 'open') {
             const completion = await waitFor(async () => {
-              const observed = await evaluate(new Function('action', 'fixture', `return (${inspectFixtureCompletion.toString()})(action, fixture, document);`), action, { left: fixture.left, right: fixture.right, folder: fixture.folder, remainingNames: fixture.remainingNames });
+              const inspect = scene.fixture === 'organize-notes' ? inspectNotesCompletion : inspectFixtureCompletion;
+              const observed = await evaluate(new Function('action', 'fixture', `return (${inspect.toString()})(action, fixture, document);`), action, { left: fixture.left, right: fixture.right, folder: fixture.folder, remainingNames: fixture.remainingNames });
               return (observed.complete || observed.error) && observed;
             });
             if (completion.error) throw new Error(completion.error);
@@ -582,4 +602,4 @@ function encodingArgs(destination, webm, duration, input) {
     webm ? 'fps=30,scale=1280:-2:flags=lanczos' : 'fps=30,scale=1280:-1:flags=lanczos,split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=3',
     '-t', String(duration), ...(webm ? ['-an', '-c:v', 'libvpx-vp9', '-crf', '32', '-b:v', '0', '-pix_fmt', 'yuv420p'] : ['-loop', '0']), destination];
 }
-module.exports = { recordGesture, animatePointer, pulsePointer, frameList, installPointer, findTargetPoint, fixtureSnapshot, installFixtureCompletion, inspectFixtureCompletion, installLockObservation, inspectLockProgress, inspectLockResult, inspectLockScan, inspectLockFailureView, encodingArgs, dispatchMouseInput };
+module.exports = { recordGesture, animatePointer, pulsePointer, frameList, installPointer, findTargetPoint, fixtureSnapshot, installFixtureCompletion, inspectFixtureCompletion, inspectNotesCompletion, installLockObservation, inspectLockProgress, inspectLockResult, inspectLockScan, inspectLockFailureView, encodingArgs, dispatchMouseInput };

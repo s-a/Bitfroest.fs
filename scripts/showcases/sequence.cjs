@@ -9,7 +9,7 @@ const keys = {
   ArrowDown: ['ArrowDown', 'ArrowDown', 40], ArrowLeft: ['ArrowLeft', 'ArrowLeft', 37],
   ArrowRight: ['ArrowRight', 'ArrowRight', 39], NumpadAdd: ['+', 'NumpadAdd', 107],
   NumpadSubtract: ['-', 'NumpadSubtract', 109], 'Ctrl+NumpadSubtract': ['-', 'NumpadSubtract', 109],
-  'Ctrl+F': ['f', 'KeyF', 70], 'Ctrl+L': ['l', 'KeyL', 76]
+  'Ctrl+F': ['f', 'KeyF', 70], 'Ctrl+L': ['l', 'KeyL', 76], 'Ctrl+A': ['a', 'KeyA', 65], 'Ctrl+M': ['m', 'KeyM', 77]
 };
 
 function validateSequence(steps) {
@@ -17,7 +17,7 @@ function validateSequence(steps) {
   let held;
   for (const step of steps) {
     if (!step || !['move', 'click', 'press', 'release', 'key', 'pause', 'check', 'type', 'confirm', 'fixture-path'].includes(step.type)) throw new Error('Unknown recording step.');
-    if (step.type === 'confirm' && (!['mkdir', 'open', 'copy', 'rename', 'trash', 'delete-permanent', 'archive-pack', 'archive-unpack', 'open-archive', 'leave-archive', 'show-unpacked-folder', 'lock-delete', 'lock-inspect', 'lock-refresh'].includes(step.action) || typeof step.effect !== 'string' || !step.effect.trim() || step.target)) throw new Error('Invalid fixture confirmation.');
+    if (step.type === 'confirm' && (!['mkdir', 'open', 'copy', 'rename', 'trash', 'delete-permanent', 'archive-pack', 'archive-unpack', 'open-archive', 'leave-archive', 'show-unpacked-folder', 'lock-delete', 'lock-inspect', 'lock-refresh', 'create-notes', 'move-notes', 'batch-rename'].includes(step.action) || typeof step.effect !== 'string' || !step.effect.trim() || step.target)) throw new Error('Invalid fixture confirmation.');
     if (step.type === 'fixture-path' && (step.path !== 'unpacked' || !['dialog[open] #value', '[data-pane="0"] .path-input'].includes(step.selector))) throw new Error('Invalid fixture path.');
     if (step.duration !== undefined && (!Number.isFinite(step.duration) || step.duration < 1 || step.duration > 30000)) throw new Error('Invalid recording duration.');
     if (step.type === 'pause' && step.duration === undefined) throw new Error('A pause requires a duration.');

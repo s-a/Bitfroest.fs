@@ -934,220 +934,200 @@
   {
     "id": "new-file",
     "parentId": "main",
-    "title": "New text file dialog",
-    "description": "Inspect the new text-file dialog without creating a file.",
+    "title": "Create and organize handover notes",
+    "description": "Create two notes, move them to a handover folder, and rename them together.",
+    "category": "Basic File Operations",
+    "fixture": "organize-notes",
     "paths": [
       "${demo}/left",
       "${demo}/right"
     ],
     "sources": [
-      "media/app.js"
+      "media/app.js",
+      "media/commander-file-names.js",
+      "filesystem-provider.js"
+    ],
+    "shortcuts": [
+      "Shift+F4",
+      "Ctrl+A",
+      "F6",
+      "Ctrl+M",
+      "Ctrl+Numpad-"
     ],
     "captures": [
       {
-        "id": "dialog",
-        "expect": "dialog[open]",
-        "text": "New text file",
+        "id": "story",
         "format": "gif",
+        "expect": ".pane",
+        "text": "Drafts",
+        "intro": "Prepare two notes for the handover.",
         "steps": [
+          {
+            "type": "move",
+            "target": {
+              "selector": "[data-pane=\"0\"] .list"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Choose the drafts folder"
+          },
           {
             "type": "key",
             "key": "Shift+F4",
-            "effect": "Open New text file dialog"
+            "effect": "Create handover notes"
           },
           {
             "type": "check",
-            "selector": "dialog[open]",
+            "selector": "dialog[open] #modal-title",
             "text": "New text file"
-          },
-          {
-            "type": "check",
-            "selector": "#value",
-            "focused": true
           },
           {
             "type": "type",
             "selector": "#value",
-            "text": "Showcase-Note.txt",
-            "value": "Showcase-Note.txt"
+            "text": "Draft-A.txt|Draft-B.txt",
+            "value": "Draft-A.txt|Draft-B.txt"
           },
           {
-            "type": "pause",
-            "duration": 1300
-          },
-          {
-            "type": "key",
-            "key": "Escape",
-            "effect": "Cancel new file"
+            "type": "confirm",
+            "action": "create-notes",
+            "effect": "Create both notes"
           },
           {
             "type": "check",
-            "selector": "dialog[open]",
-            "absent": true
-          }
-        ]
-      }
-    ],
-    "shortcuts": [
-      "Shift+F4"
-    ],
-    "category": "Basic File Operations"
-  },
-  {
-    "id": "move",
-    "parentId": "main",
-    "title": "Move files dialog",
-    "description": "Review the destination and transfer options before moving files.",
-    "paths": [
-      "${demo}/left",
-      "${demo}/right"
-    ],
-    "sources": [
-      "media/app.js"
-    ],
-    "captures": [
-      {
-        "id": "dialog",
-        "expect": "dialog[open]",
-        "text": "Move",
-        "format": "gif",
-        "steps": [
+            "selector": "[data-pane=\"0\"]",
+            "text": "Draft-A"
+          },
+          {
+            "type": "check",
+            "selector": "[data-pane=\"0\"]",
+            "text": "Draft-B"
+          },
+          {
+            "type": "pause",
+            "duration": 1100
+          },
           {
             "type": "move",
             "target": {
-              "name": "Project-Plan.md"
+              "name": "Draft-A.txt",
+              "side": 0
             }
           },
           {
             "type": "click",
-            "effect": "Select Project-Plan.md"
+            "effect": "Focus the notes"
           },
           {
-            "type": "pause",
-            "duration": 400
+            "type": "key",
+            "key": "Ctrl+A",
+            "effect": "Select both notes"
           },
           {
             "type": "key",
             "key": "F6",
-            "effect": "Move selected file"
+            "effect": "Move notes to handover"
           },
           {
             "type": "check",
-            "selector": "dialog[open]",
+            "selector": "dialog[open] #modal-title",
             "text": "Move"
           },
           {
+            "type": "confirm",
+            "action": "move-notes",
+            "effect": "Move both notes"
+          },
+          {
             "type": "check",
-            "selector": "#value",
-            "focused": true
+            "selector": "[data-pane=\"1\"]",
+            "text": "Draft-A"
+          },
+          {
+            "type": "check",
+            "selector": "[data-pane=\"1\"]",
+            "text": "Draft-B"
           },
           {
             "type": "pause",
-            "duration": 1300
+            "duration": 1100
+          },
+          {
+            "type": "move",
+            "target": {
+              "name": "Draft-A.txt",
+              "side": 1
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Focus the moved notes"
           },
           {
             "type": "key",
-            "key": "Escape",
-            "effect": "Cancel Move dialog"
-          },
-          {
-            "type": "check",
-            "selector": "dialog[open]",
-            "absent": true
-          }
-        ]
-      }
-    ],
-    "shortcuts": [
-      "F6"
-    ],
-    "category": "Basic File Operations"
-  },
-  {
-    "id": "rename-multiple",
-    "parentId": "main",
-    "title": "Batch rename preview",
-    "description": "Inspect naming masks, counters and replacement rules before applying changes.",
-    "paths": [
-      "${demo}/left",
-      "${demo}/right"
-    ],
-    "sources": [
-      "media/app.js"
-    ],
-    "captures": [
-      {
-        "id": "dialog",
-        "expect": "dialog[open]",
-        "text": "Multi-rename",
-        "format": "gif",
-        "steps": [
-          {
-            "type": "move",
-            "target": {
-              "name": "Project-Plan.md"
-            }
-          },
-          {
-            "type": "click",
-            "effect": "Select Project-Plan.md"
-          },
-          {
-            "type": "pause",
-            "duration": 400
-          },
-          {
-            "type": "move",
-            "target": {
-              "selector": "[data-main-menu] > button:nth-of-type(1)"
-            }
-          },
-          {
-            "type": "click",
-            "effect": "Open File menu"
-          },
-          {
-            "type": "check",
-            "selector": "#main-menu-popup",
-            "text": "Multi-rename"
-          },
-          {
-            "type": "pause",
-            "duration": 300
-          },
-          {
-            "type": "move",
-            "target": {
-              "selector": "[data-menu-action=\"rename\"]"
-            }
-          },
-          {
-            "type": "click",
-            "effect": "Open batch rename dialog"
-          },
-          {
-            "type": "check",
-            "selector": "dialog[open]",
-            "text": "Multi-rename"
-          },
-          {
-            "type": "pause",
-            "duration": 1300
+            "key": "Ctrl+A",
+            "effect": "Select both notes"
           },
           {
             "type": "key",
-            "key": "Escape",
-            "effect": "Cancel batch rename"
+            "key": "Ctrl+M",
+            "effect": "Rename both notes"
           },
           {
             "type": "check",
-            "selector": "dialog[open]",
+            "selector": "dialog[open] #modal-title",
+            "text": "Multi-rename"
+          },
+          {
+            "type": "check",
+            "selector": "#rename-preview",
+            "text": "Draft-A_1.txt"
+          },
+          {
+            "type": "check",
+            "selector": "#rename-preview",
+            "text": "Draft-B_2.txt"
+          },
+          {
+            "type": "pause",
+            "duration": 1400
+          },
+          {
+            "type": "confirm",
+            "action": "batch-rename",
+            "effect": "Apply the shown names"
+          },
+          {
+            "type": "check",
+            "selector": "[data-pane=\"1\"]",
+            "text": "Draft-A_1"
+          },
+          {
+            "type": "check",
+            "selector": "[data-pane=\"1\"]",
+            "text": "Draft-B_2"
+          },
+          {
+            "type": "pause",
+            "duration": 2000
+          },
+          {
+            "type": "key",
+            "key": "Ctrl+NumpadSubtract",
+            "effect": "Clear the selection"
+          },
+          {
+            "type": "check",
+            "selector": "[data-pane=\"1\"] [data-file-row][aria-selected=\"true\"]",
             "absent": true
+          },
+          {
+            "type": "pause",
+            "duration": 800
           }
         ]
       }
-    ],
-    "category": "Basic File Operations"
+    ]
   },
   {
     "id": "transfer-individual-name",
