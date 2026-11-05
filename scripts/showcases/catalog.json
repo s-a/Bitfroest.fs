@@ -3723,8 +3723,8 @@
   {
     "id": "quick-diff-folder",
     "parentId": "main",
-    "title": "Git diff: current folder",
-    "description": "Select a changed file to compare its saved content with HEAD in a read-only inline diff. Unchanged sections are collapsed with three context lines and can be expanded. The title shows separate added, changed and deleted line counts. Both modes show paths relative to the repository root with native separators. Full-width filenames appear above a compact status · relative time · root-relative directory line. Filenames use the normal theme foreground without file icons; only status labels use Git colors. Time, separators and paths use the readable theme foreground. Name, status and date remain sortable, with status then newest first as the default order. Exact-date tooltips show the local modification time. Filename and directory tooltips show the complete file path; Ctrl+Y copies it, and Ctrl+Shift+Y copies it with forward slashes. Double-click a file to leave Quick Diff and select it in its folder. History Back restores the previous Quick Diff scope, file selection, sort and scroll position. Ignored files are excluded. Double-click the preview to open the full VS Code diff editor.",
+    "title": "Review changes across a repository",
+    "description": "Compare a changed file in the current folder, then extend the comparison to the entire repository.",
     "paths": [
       "${demo}/quick-diff-list/src",
       "${demo}/right"
@@ -3742,6 +3742,10 @@
         "text": "Orders.sql",
         "steps": [
           {
+            "type": "pause",
+            "duration": 900
+          },
+          {
             "type": "move",
             "target": {
               "selector": "[data-pane=\"0\"] [data-quick-diff-toggle]"
@@ -3749,7 +3753,7 @@
           },
           {
             "type": "click",
-            "effect": "Open current-folder diff"
+            "effect": "Review changes in this folder"
           },
           {
             "type": "check",
@@ -3768,79 +3772,16 @@
           },
           {
             "type": "click",
-            "effect": "Open Orders.sql diff"
-          },
-          {
-            "type": "pause",
-            "duration": 1700
-          },
-          {
-            "type": "move",
-            "target": {
-              "selector": "[data-quick-diff]",
-              "side": 1
-            }
-          },
-          {
-            "type": "click",
-            "effect": "Focus the read-only diff preview"
-          },
-          {
-            "type": "key",
-            "key": "Escape",
-            "effect": "Close Quick Diff"
+            "effect": "Inspect the order report"
           },
           {
             "type": "check",
-            "selector": "[data-quick-diff]",
-            "absent": true
+            "selector": "[data-quick-diff] .xray-title",
+            "text": "Orders.sql"
           },
           {
             "type": "pause",
-            "duration": 500
-          }
-        ]
-      }
-    ],
-    "shortcuts": [
-      "Escape"
-    ],
-    "category": "Git Operations"
-  },
-  {
-    "id": "quick-diff-repository",
-    "parentId": "main",
-    "title": "Git diff: entire repository",
-    "description": "Cycle the footer button to include the entire repository, including new files and excluding ignored files. Root-level files omit the redundant directory marker. New files appear as syntax-highlighted additions against an empty original; deleted files show the HEAD content as removed lines.",
-    "paths": [
-      "${demo}/quick-diff-list/src",
-      "${demo}/right"
-    ],
-    "sources": [
-      "media/commander-quick-diff.js",
-      "quick-diff.js"
-    ],
-    "captures": [
-      {
-        "id": "preview",
-        "quickDiffMode": "repository",
-        "format": "gif",
-        "expect": "[data-quick-diff]",
-        "text": "Orders.sql",
-        "steps": [
-          {
-            "type": "move",
-            "target": {
-              "selector": "[data-pane=\"0\"] [data-quick-diff-toggle]"
-            }
-          },
-          {
-            "type": "click",
-            "effect": "Open current-folder diff"
-          },
-          {
-            "type": "check",
-            "selector": "[data-quick-diff-toggle][data-mode=\"folder\"]"
+            "duration": 1800
           },
           {
             "type": "move",
@@ -3869,42 +3810,20 @@
           },
           {
             "type": "click",
-            "effect": "Open root-level Overview.md diff"
-          },
-          {
-            "type": "pause",
-            "duration": 1700
-          },
-          {
-            "type": "move",
-            "target": {
-              "selector": "[data-quick-diff]",
-              "side": 1
-            }
-          },
-          {
-            "type": "click",
-            "effect": "Focus the read-only diff preview"
-          },
-          {
-            "type": "key",
-            "key": "Escape",
-            "effect": "Close Quick Diff"
+            "effect": "Inspect the project overview"
           },
           {
             "type": "check",
-            "selector": "[data-quick-diff]",
-            "absent": true
+            "selector": "[data-quick-diff] .xray-title",
+            "text": "Overview.md"
           },
           {
             "type": "pause",
-            "duration": 500
+            "duration": 2200
           }
-        ]
+        ],
+        "intro": "Which changes affect this project?"
       }
-    ],
-    "shortcuts": [
-      "Escape"
     ],
     "category": "Git Operations"
   }

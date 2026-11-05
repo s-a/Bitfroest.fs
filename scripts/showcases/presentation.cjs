@@ -18,6 +18,9 @@ function installPresentation(timing) {
   const panel = document.querySelector('#showcase-keys');
   const create = tag => document.createElementNS('http://www.w3.org/1999/xhtml', tag);
   const held = create('span'); held.className = 'showcase-held'; pointer.append(held);
+  const intro = create('div'); intro.dataset.showcaseIntro = ''; intro.hidden = true;
+  intro.style.cssText = 'position:fixed;z-index:2147483646;left:50%;top:12%;transform:translateX(-50%);max-width:75%;padding:14px 22px;border:1px solid var(--vscode-widget-border,#666);border-radius:6px;background:var(--vscode-editorWidget-background,#252526);color:var(--vscode-foreground,#ddd);box-shadow:0 3px 14px #0008;font:600 20px "Segoe UI",sans-serif;text-align:center;pointer-events:none';
+  document.body.append(intro);
   const style = create('style'); style.id = 'showcase-presentation-style';
   style.textContent = `
     .showcase-held{position:absolute;left:-9px;top:-9px;width:18px;height:18px;border:2px solid currentColor;border-radius:50%;opacity:0;box-sizing:border-box}
@@ -95,6 +98,7 @@ function installPresentation(timing) {
     delete ring.dataset.pulseUntil;
   };
   window.__showcasePresentation = {
+    intro(text) { intro.textContent = text; intro.hidden = !text; },
     pointer(type, point, button, effect) {
       position = point; pointer.style.left = `${point.x}px`; pointer.style.top = `${point.y}px`;
       if (type === 'mousePressed') {
@@ -128,7 +132,7 @@ function installPresentation(timing) {
     },
     protect(rects) { protectedRects = rects; layout(); },
     reset,
-    dispose() { reset(); held.remove(); style.remove(); delete window.__showcasePresentation; }
+    dispose() { reset(); intro.remove(); held.remove(); style.remove(); delete window.__showcasePresentation; }
   };
   reset();
 }

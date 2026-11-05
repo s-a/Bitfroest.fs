@@ -191,6 +191,11 @@ async function recordGesture({ capture, scene, page, target, evaluate, invoke, r
     await waitFor(() => records.length > 0);
     recording = true;
     await pacing.begin();
+    if (capture.intro) {
+      await pageEvaluate(text => window.__showcasePresentation.intro(text), capture.intro);
+      await hold(2200);
+      await pageEvaluate(() => window.__showcasePresentation.intro(''));
+    }
     if (capture.steps) {
       result = { steps: await executeSequence(capture.steps, {
         move: async step => {

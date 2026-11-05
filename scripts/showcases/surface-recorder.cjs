@@ -179,6 +179,11 @@ async function createSurfaceRecorder({
   }
 
   async function verified() { pacing.verified(); }
+  async function intro(text) {
+    await evalPage(text => window.__showcasePresentation.intro(text), text);
+    await sleep(2200);
+    await evalPage(() => window.__showcasePresentation.intro(''));
+  }
   async function pause(milliseconds) {
     if (!Number.isFinite(milliseconds) || milliseconds < 1 || milliseconds > 30000) throw new Error('Invalid surface recording pause.');
     await sleep(milliseconds);
@@ -225,7 +230,7 @@ async function createSurfaceRecorder({
     finally { unsubscribe(); await cleanOverlay(); }
   }
 
-  return { origin, offset, moveTo, click, key, typeText, verified, pause, finish, cancel };
+  return { origin, offset, moveTo, click, key, typeText, verified, intro, pause, finish, cancel };
 }
 
 module.exports = { createSurfaceRecorder, assertSafeSurfaceTarget, targetRect, focusedTextInput };

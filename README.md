@@ -223,16 +223,9 @@ Windows examples with sample files. File operations stop before confirmation.
 </details>
 
 <details>
-<summary><kbd>Escape</kbd> Git diff: current folder</summary>
+<summary>Review changes across a repository</summary>
 
-![Git diff: current folder](media/marketplace/showcases/0037-windows-en-dark-quick-diff-folder-preview.gif)
-
-</details>
-
-<details>
-<summary><kbd>Escape</kbd> Git diff: entire repository</summary>
-
-![Git diff: entire repository](media/marketplace/showcases/0038-windows-en-dark-quick-diff-repository-preview.gif)
+![Review changes across a repository](media/marketplace/showcases/0037-windows-en-dark-quick-diff-folder-preview.gif)
 
 </details>
 

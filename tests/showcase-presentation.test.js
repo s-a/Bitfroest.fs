@@ -24,6 +24,20 @@ function harness() {
     }, timers };
 }
 
+test('story introduction shows the goal and can be removed before interaction', () => {
+  const h = harness();
+  try {
+    h.ui.intro('Find the file used by the build');
+    const intro = h.doc.querySelector('[data-showcase-intro]');
+    assert.equal(intro.textContent, 'Find the file used by the build');
+    assert.equal(intro.hidden, false);
+    h.ui.intro('');
+    assert.equal(intro.hidden, true);
+    h.ui.dispose();
+    assert.equal(h.doc.querySelector('[data-showcase-intro]'), null);
+  } finally { h.dom.window.close(); }
+});
+
 test('click hints remain visible during a drag and expire after the button is released', () => {
   const h = harness();
   try {

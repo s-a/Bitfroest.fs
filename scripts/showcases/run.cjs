@@ -94,6 +94,7 @@ function validateCatalog(catalog) {
       if (captures.has(capture.id)) throw new Error('Duplicate capture identifier.');
       captures.add(capture.id);
       if (capture.format && !['png', 'gif', 'webm'].includes(capture.format)) throw new Error('Unsupported recording format.');
+      if (capture.intro !== undefined && (typeof capture.intro !== 'string' || !capture.intro.trim() || capture.intro.length > 120 || /[\u0000-\u001f\u007f]/.test(capture.intro))) throw new Error('Invalid showcase introduction.');
       if (capture.steps) {
         const surfacePreparation = Boolean(capture.surface);
         const unsupportedSetup = capture.gesture || capture.action || capture.click ||

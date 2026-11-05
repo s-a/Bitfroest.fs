@@ -69,6 +69,7 @@ async function captureSurface({ capture, targets, connect, connections, invoke, 
     const recorder = await createSurfaceRecorder({ page, target: found.target, targetClient: found.client, contextId: found.context.id,
       frameDirectory, outputFile, format: capture.format, encode });
     try {
+      if (capture.intro) await recorder.intro(capture.intro);
       let lastTarget, lastAllowDialogContent = false;
       const refreshProtection = async () => {
         const inspected = await found.client.call('Runtime.evaluate', { contextId: found.context.id, returnByValue: true,
