@@ -55,7 +55,7 @@
   {
     "id": "path-copy",
     "parentId": "main",
-    "title": "Copy a folder path",
+    "title": "Copy folder path to clipboard (right-click address bar)",
     "description": "Right-click the address bar and observe the actual clipboard confirmation.",
     "paths": [
       "${demo}/left",
@@ -79,7 +79,7 @@
   {
     "id": "right-selection",
     "parentId": "main",
-    "title": "Select files with the right mouse button",
+    "title": "Select files (right-button drag)",
     "description": "Draw a selection with the right mouse button held down.",
     "paths": [
       "${demo}/left",
@@ -103,7 +103,7 @@
   {
     "id": "right-drag",
     "parentId": "main",
-    "title": "Drag a selection with the right button held",
+    "title": "Drag files (hold right button)",
     "description": "Hold the right mouse button and drag selected files to a destination folder; review the move confirmation.",
     "paths": [
       "${demo}/left",
@@ -127,7 +127,7 @@
   {
     "id": "shortcut-ctrl-l",
     "parentId": "main",
-    "title": "Focus the address bar with Ctrl+L",
+    "title": "Edit folder path (Ctrl+L)",
     "description": "Press Ctrl+L and edit the selected path in the active address bar.",
     "paths": [
       "${demo}/left",
@@ -151,7 +151,7 @@
   {
     "id": "main-menus",
     "parentId": "main",
-    "title": "Commands organized by task",
+    "title": "File manager menus",
     "description": "Discover file actions, selection tools, navigation, view options, configuration and help.",
     "paths": [
       "${demo}/left",
@@ -215,7 +215,7 @@
   {
     "id": "location-menu",
     "parentId": "main",
-    "title": "Choose a favorite location",
+    "title": "Open favorite folders",
     "description": "Browse favorite project folders from the location menu.",
     "paths": [
       "${demo}/left",
@@ -304,7 +304,7 @@
   {
     "id": "select-group",
     "parentId": "main",
-    "title": "Select files by pattern",
+    "title": "Select files by name pattern",
     "description": "Enter file masks or regular expressions without applying a selection.",
     "paths": [
       "${demo}/left",
@@ -325,7 +325,7 @@
   {
     "id": "unselect-group",
     "parentId": "main",
-    "title": "Remove a group from the selection",
+    "title": "Deselect files by name pattern",
     "description": "Specify the file pattern to remove from the current selection.",
     "paths": [
       "${demo}/left",
@@ -362,7 +362,7 @@
   {
     "id": "new-folder",
     "parentId": "main",
-    "title": "Create a folder",
+    "title": "New folder dialog",
     "description": "Inspect the folder name and destination before creating anything.",
     "paths": [
       "${demo}/left",
@@ -383,7 +383,7 @@
   {
     "id": "new-file",
     "parentId": "main",
-    "title": "Create a text file",
+    "title": "New text file dialog",
     "description": "Inspect the new text-file dialog without creating a file.",
     "paths": [
       "${demo}/left",
@@ -404,7 +404,7 @@
   {
     "id": "copy",
     "parentId": "main",
-    "title": "Copy files",
+    "title": "Copy files dialog",
     "description": "Review the destination, overwrite policy and verification options before copying.",
     "paths": [
       "${demo}/left",
@@ -429,7 +429,7 @@
   {
     "id": "move",
     "parentId": "main",
-    "title": "Move files",
+    "title": "Move files dialog",
     "description": "Review the destination and transfer options before moving files.",
     "paths": [
       "${demo}/left",
@@ -454,7 +454,7 @@
   {
     "id": "rename-inline",
     "parentId": "main",
-    "title": "Rename a single entry",
+    "title": "Rename a file (delayed click or F2)",
     "description": "Open inline rename with a delayed second click, cancel it, then use F2 and cancel again without changing the file.",
     "paths": [
       "${demo}/left",
@@ -489,7 +489,7 @@
   {
     "id": "rename-multiple",
     "parentId": "main",
-    "title": "Preview multiple filenames",
+    "title": "Batch rename preview",
     "description": "Inspect naming masks, counters and replacement rules before applying changes.",
     "paths": [
       "${demo}/left",
@@ -530,7 +530,7 @@
   {
     "id": "delete-trash",
     "parentId": "main",
-    "title": "Review a recycle-bin deletion",
+    "title": "Recycle bin confirmation",
     "description": "Inspect the confirmation for moving selected entries to the recycle bin.",
     "paths": [
       "${demo}/left",
@@ -555,7 +555,7 @@
   {
     "id": "delete-permanently",
     "parentId": "main",
-    "title": "Review permanent deletion",
+    "title": "Permanent deletion confirmation",
     "description": "Inspect the permanent-deletion warning without confirming it.",
     "paths": [
       "${demo}/left",
@@ -662,7 +662,7 @@
   {
     "id": "file-search",
     "parentId": "main",
-    "title": "Find files",
+    "title": "File search options",
     "description": "Inspect basic criteria, advanced filters and saved searches before starting a search.",
     "paths": [
       "${demo}/left",
@@ -699,7 +699,7 @@
   {
     "id": "file-search-separate",
     "parentId": "main",
-    "title": "Keep a search window open",
+    "title": "File search in a separate window",
     "description": "Open the nonmodal search variant alongside the file manager.",
     "paths": [
       "${demo}/left",
@@ -768,7 +768,7 @@
   {
     "id": "file-viewer",
     "parentId": "main",
-    "title": "Inspect file contents",
+    "title": "View file contents",
     "description": "View a real file in text, binary, hexadecimal, HTML-text, Unicode and UTF-8 modes.",
     "paths": [
       "${demo}/left",
@@ -847,7 +847,7 @@
   {
     "id": "viewer-search",
     "parentId": "file-viewer",
-    "title": "Search inside the viewer",
+    "title": "Search file contents",
     "description": "Inspect text-search, direction and matching options.",
     "paths": [
       "${demo}/left",
@@ -873,7 +873,7 @@
   {
     "id": "viewer-codepage",
     "parentId": "file-viewer",
-    "title": "Choose another codepage",
+    "title": "Choose text encoding",
     "description": "Inspect the codepage input without saving an encoding preference.",
     "paths": [
       "${demo}/left",
@@ -915,7 +915,7 @@
   {
     "id": "archive-pack",
     "parentId": "archive-browser",
-    "title": "Prepare a ZIP archive",
+    "title": "ZIP archive options",
     "description": "Inspect compression, encryption and recursive packing options without creating an archive.",
     "paths": [
       "${demo}/left",
@@ -940,7 +940,7 @@
   {
     "id": "archive-unpack",
     "parentId": "archive-browser",
-    "title": "Prepare ZIP extraction",
+    "title": "ZIP extraction options",
     "description": "Inspect destination and extraction options without writing files.",
     "paths": [
       "${demo}/left",
@@ -1061,7 +1061,7 @@
   {
     "id": "git-status",
     "parentId": "main",
-    "title": "Inspect local Git changes",
+    "title": "Git file status",
     "description": "Show modified, staged and untracked entries in the demonstration repository.",
     "paths": [
       "${demo}/left/bitfroest.fs",
@@ -1082,7 +1082,7 @@
   {
     "id": "git-history",
     "parentId": "git-status",
-    "title": "Browse commit history",
+    "title": "Git commit history",
     "description": "Inspect the commit graph, commit message and changed files.",
     "paths": [
       "${demo}/left/bitfroest.fs",
@@ -1110,7 +1110,7 @@
   {
     "id": "git-diff",
     "parentId": "git-status",
-    "title": "Compare committed or working versions",
+    "title": "Git diff: selected file",
     "description": "Open the actual VS Code diff editor for a selected Git file.",
     "paths": [
       "${demo}/left/bitfroest.fs",
@@ -1138,7 +1138,7 @@
   {
     "id": "git-branches",
     "parentId": "git-status",
-    "title": "Inspect available local branches",
+    "title": "Local Git branches",
     "description": "Open the read-only branch list for the active repository.",
     "paths": [
       "${demo}/left/bitfroest.fs",
@@ -1166,7 +1166,7 @@
   {
     "id": "settings",
     "parentId": "main",
-    "title": "Configure the file manager",
+    "title": "File manager settings",
     "description": "Inspect the native integration entry and extension configuration categories.",
     "paths": [
       "${demo}/left",
@@ -1190,7 +1190,7 @@
   {
     "id": "settings-favorites",
     "parentId": "settings",
-    "title": "Configure favorite locations",
+    "title": "Favorite folder settings",
     "description": "Manage favorite locations and groups.",
     "paths": [
       "${demo}/left",
@@ -1214,7 +1214,7 @@
   {
     "id": "settings-columns",
     "parentId": "settings",
-    "title": "Configure file-list columns",
+    "title": "File column settings",
     "description": "Inspect column sets, field choices and column visibility.",
     "paths": [
       "${demo}/left",
@@ -1238,7 +1238,7 @@
   {
     "id": "settings-shortcuts",
     "parentId": "settings",
-    "title": "Configure keyboard shortcuts",
+    "title": "Keyboard shortcut settings",
     "description": "Inspect commands, editable bindings and conflict information.",
     "paths": [
       "${demo}/left",
@@ -1326,7 +1326,7 @@
   {
     "id": "folder-locks",
     "parentId": "main",
-    "title": "Inspect references to a folder",
+    "title": "Inspect folder locks",
     "description": "A preview build keeps Build.log open and loads Preview-Plugin.dll. Inspect its real process references and the scan's access limits without releasing locks.",
     "paths": [
       "${demo}/left",
@@ -1355,7 +1355,7 @@
   {
     "id": "folder-lock-actions",
     "parentId": "folder-locks",
-    "title": "Choose a folder-lock action",
+    "title": "Folder lock actions",
     "description": "Inspect available process and folder actions for a real scan result.",
     "paths": [
       "${demo}/left",
@@ -1383,7 +1383,7 @@
   {
     "id": "folder-lock-target",
     "parentId": "folder-locks",
-    "title": "Choose a destination for a locked folder",
+    "title": "Copy locked folder: destination",
     "description": "Review the complete destination path for a folder copy. The example leaves the input unconfirmed.",
     "paths": [
       "${demo}/left",
@@ -1411,7 +1411,7 @@
   {
     "id": "folder-lock-confirmation",
     "parentId": "folder-locks",
-    "title": "Review a lock-management operation",
+    "title": "Lock release warning",
     "description": "Review the warning before closing file handles or unloading modules. The example stops before Run.",
     "paths": [
       "${demo}/left",
@@ -1488,7 +1488,7 @@
   {
     "id": "xray-click",
     "parentId": "main",
-    "title": "X-Ray on click",
+    "title": "Preview files on selection (X-Ray)",
     "description": "Inspect a text file in the opposite pane with syntax highlighting and a complete minimap. The preview uses 60% of the available width. Select files by clicking or using the keyboard. Right-click the eye to turn X-Ray off.",
     "paths": [
       "${demo}/left",
@@ -1515,7 +1515,7 @@
   {
     "id": "xray-hover",
     "parentId": "main",
-    "title": "X-Ray Ultra",
+    "title": "Preview files on hover (X-Ray Ultra)",
     "description": "X-Ray Ultra updates the opposite preview after pausing over a text file for 200 ms. Syntax highlighting and a complete minimap use 60% of the available width; the source list shows filenames and icons. Right-click the eye to turn X-Ray off.",
     "paths": [
       "${demo}/left",
@@ -1542,7 +1542,7 @@
   {
     "id": "quick-diff-folder",
     "parentId": "main",
-    "title": "Quick Diff: current folder",
+    "title": "Git diff: current folder",
     "description": "Select a changed file to compare its saved content with HEAD in a read-only inline diff. Unchanged sections are collapsed with three context lines and can be expanded. The title shows separate added, changed and deleted line counts. Both modes show paths relative to the repository root with native separators. Full-width filenames appear above a compact status · relative time · root-relative directory line. Filenames use the normal theme foreground without file icons; only status labels use Git colors. Time, separators and paths use the readable theme foreground. Name, status and date remain sortable, with status then newest first as the default order. Exact-date tooltips show the local modification time. Filename and directory tooltips show the complete file path; Ctrl+Y copies it, and Ctrl+Shift+Y copies it with forward slashes. Double-click a file to leave Quick Diff and select it in its folder. History Back restores the previous Quick Diff scope, file selection, sort and scroll position. Ignored files are excluded. Double-click the preview to open the full VS Code diff editor.",
     "paths": [
       "${demo}/quick-diff-list/src",
@@ -1568,7 +1568,7 @@
   {
     "id": "quick-diff-repository",
     "parentId": "main",
-    "title": "Quick Diff: entire repository",
+    "title": "Git diff: entire repository",
     "description": "Cycle the footer button to include the entire repository, including new files and excluding ignored files. Root-level files omit the redundant directory marker. New files appear as syntax-highlighted additions against an empty original; deleted files show the HEAD content as removed lines.",
     "paths": [
       "${demo}/quick-diff-list/src",

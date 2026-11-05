@@ -4,6 +4,17 @@ const { validateCatalog, filename, assertProductState, waitFor, buildManifest, p
 
 const scene = () => ({ id: 'new-folder', title: 'Create a folder', description: 'Open the folder dialog.', paths: ['C:/demo/left', 'C:/demo/right'], captures: [{ id: 'dialog', action: 'mkdir', expect: 'dialog[open]', text: 'New folder' }] });
 
+test('gallery entries show current catalog headings and media without duplicate explanations', () => {
+  const { renderGallery } = require('../scripts/showcases/publish.cjs');
+  const manifest = { sections: [{ id: 'path-copy', title: 'Copy a folder path', description: 'Old capture description.', status: 'rendered',
+    host: { commit: 'recorded' }, images: [{ file: '0002-windows-en-dark-path-copy-gesture.gif', alt: 'Copy a folder path' }] }] };
+  const original = JSON.stringify(manifest);
+  const text = renderGallery(manifest, [{ id: 'path-copy', title: 'Copy folder path to clipboard' }]);
+  assert.match(text, /<summary>Copy folder path to clipboard<\/summary>\n\n!\[Copy folder path to clipboard\]/);
+  assert.doesNotMatch(text, /<small>|Old capture description|Copy the current folder path/);
+  assert.equal(JSON.stringify(manifest), original);
+});
+
 test('X-Ray captures require switching away from the file selected before activation', () => {
   const scenes = require('../scripts/showcases/catalog.json').filter(scene => ['xray-click', 'xray-hover'].includes(scene.id));
   assert.equal(scenes.length, 2);
@@ -280,10 +291,13 @@ test('publishing renumbered media removes previous gallery references and preser
     const earlier = { sections: [{ ...manifest.sections[0], images: [{ file: old, alt: 'Old' }] }] };
     fs.writeFileSync(path.join(root, 'README.md'), updateReadme('# Product\n\n## Configuration\n', earlier));
     fs.writeFileSync(path.join(root, '.tmp/showcases/showcases.json'), JSON.stringify(manifest));
+    fs.mkdirSync(path.join(root, 'scripts/showcases'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'scripts/showcases/catalog.json'), JSON.stringify([{ id: 'next', title: 'Current catalog title' }]));
     fs.writeFileSync(path.join(root, '.tmp/showcases', current), Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
     fs.writeFileSync(path.join(root, 'media/marketplace/showcases', old), 'old');
     fs.writeFileSync(path.join(root, 'media/marketplace/showcases/keep.png'), 'unrelated');
     publish(root);
+    assert.match(fs.readFileSync(path.join(root, 'README.md'), 'utf8'), /<summary>Current catalog title<\/summary>/);
     assert.equal(fs.existsSync(path.join(root, 'media/marketplace/showcases', old)), false);
     assert.equal(fs.existsSync(path.join(root, 'media/marketplace/showcases', current)), true);
     assert.equal(fs.readFileSync(path.join(root, 'media/marketplace/showcases/keep.png'), 'utf8'), 'unrelated');

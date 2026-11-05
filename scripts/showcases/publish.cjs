@@ -3,43 +3,6 @@ const path = require('node:path');
 
 const begin = '<!-- showcase-gallery:start -->', end = '<!-- showcase-gallery:end -->';
 const mediaDirectory = 'media/marketplace/showcases';
-const summaryExcerpts = {
-  'path-copy': 'Copy the current folder path from the address bar.',
-  'right-selection': 'Select several files with a right-button drag.',
-  'right-drag': 'Drag selected files and review the destination before moving them.',
-  'shortcut-ctrl-l': 'Jump to the folder path with Ctrl+L.',
-  'main-menus': 'Find commands grouped by task.',
-  'location-menu': 'Open saved project folders from the favorites menu.',
-  'select-group': 'Select filenames with masks or regular expressions.',
-  'unselect-group': 'Remove matching filenames from the current selection.',
-  'rename-inline': 'Edit a filename directly in the file list.',
-  'rename-multiple': 'Preview generated names before applying a batch rename.',
-  'delete-trash': 'Review what will move to the recycle bin.',
-  'delete-permanently': 'Review permanent deletion before confirming.',
-  'file-search': 'Search by filename, contents, or saved presets.',
-  'file-search-separate': 'Keep search open beside the file manager.',
-  'file-viewer': 'Read text, inspect binary data, and switch encodings.',
-  'viewer-search': 'Find matching text in the current file.',
-  'viewer-codepage': 'Choose an encoding for the current file.',
-  'archive-pack': 'Prepare a ZIP archive with selected files.',
-  'archive-unpack': 'Choose extraction options before writing files.',
-  'git-status': 'Review changed files in the sample repository.',
-  'git-history': 'Browse commits and their changed files.',
-  'git-diff': 'Compare a file with its committed version.',
-  'git-branches': 'Browse local branches without switching.',
-  settings: 'Configure the file manager in VS Code settings.',
-  'settings-favorites': 'Configure saved folders and groups.',
-  'settings-columns': 'Choose file-list columns and visible fields.',
-  'settings-shortcuts': 'Set key bindings for file manager commands.',
-  'folder-locks': 'See which processes reference files in a folder.',
-  'folder-lock-actions': 'Review actions for detected folder locks.',
-  'folder-lock-target': 'Check a destination before copying a locked folder.',
-  'folder-lock-confirmation': 'Review the warning before closing handles or unloading modules.',
-  'xray-click': 'Preview the selected file in the opposite pane.',
-  'xray-hover': 'Preview files after pausing on them.',
-  'quick-diff-folder': 'Compare changed files with HEAD in the current folder.',
-  'quick-diff-repository': 'Review changes across the full repository.'
-};
 function mediaName(value) {
   if (!/^\d{4}-windows-en-dark-[a-z0-9-]+\.(png|gif|webm)$/.test(value)) throw new Error('Invalid showcase media filename.');
   return value;
@@ -49,24 +12,23 @@ function galleryFile(image) {
   if (!/\.(png|gif)$/.test(file)) throw new Error('The gallery requires a PNG or GIF capture.');
   return file;
 }
-function renderGallery(manifest) {
+function renderGallery(manifest, catalog = []) {
   const lines = [begin, '## Feature walkthrough', '',
-    'Windows examples with sample project files. Animations show click pulses, held mouse buttons and keyboard shortcuts. Hints fade after use, and verified responses pause briefly for reading. Drag-and-drop demonstrations stop at the confirmation dialog.', ''];
+    'Windows examples with sample files. File operations stop before confirmation.', ''];
   for (const section of manifest.sections.filter(item => item.status === 'rendered' && item.id !== 'main')) {
     if (!section.images.length) continue;
-    const excerpt = summaryExcerpts[section.id];
-    lines.push(`<details>`, `<summary>${section.title}</summary>`, '');
-    if (excerpt) lines.push(`<p><small>${excerpt}</small></p>`, '');
-    lines.push(section.description, '');
+    const title = catalog.find(scene => scene.id === section.id)?.title || section.title;
+    lines.push(`<details>`, `<summary>${title}</summary>`, '');
     for (const image of section.images) {
-      lines.push(`![${image.alt}](${mediaDirectory}/${galleryFile(image)})`, '');
+      const alt = image.alt === section.title ? title : image.alt;
+      lines.push(`![${alt}](${mediaDirectory}/${galleryFile(image)})`, '');
     }
     lines.push('</details>', '');
   }
   lines.push(end); return lines.join('\n');
 }
-function updateReadme(text, manifest) {
-  const gallery = renderGallery(manifest), start = text.indexOf(begin), finish = text.indexOf(end);
+function updateReadme(text, manifest, catalog = []) {
+  const gallery = renderGallery(manifest, catalog), start = text.indexOf(begin), finish = text.indexOf(end);
   if ((start < 0) !== (finish < 0)) throw new Error('The README gallery markers are incomplete.');
   if (start >= 0) text = text.slice(0, start) + gallery + text.slice(finish + end.length);
   else {
@@ -90,7 +52,9 @@ function publish(root = path.resolve(__dirname, '../..')) {
     if (image.file.endsWith('.gif') ? bytes.toString('ascii', 0, 3) !== 'GIF' : bytes.toString('ascii', 1, 4) !== 'PNG') throw new Error(`Invalid media: ${image.file}`);
   }
   const readmePath = path.join(root, 'README.md');
-  const before = fs.readFileSync(readmePath, 'utf8'), readme = updateReadme(before, manifest);
+  const catalogFile = path.join(root, 'scripts/showcases/catalog.json');
+  const catalog = fs.existsSync(catalogFile) ? JSON.parse(fs.readFileSync(catalogFile, 'utf8')) : [];
+  const before = fs.readFileSync(readmePath, 'utf8'), readme = updateReadme(before, manifest, catalog);
   const references = text => [...text.matchAll(/media\/marketplace\/showcases\/(\d{4}-windows-en-dark-[a-z0-9-]+\.(?:png|gif|webm))/g)].map(match => mediaName(match[1]));
   const retained = new Set([...images.map(image => image.file), ...references(readme)]);
   fs.mkdirSync(output, { recursive: true });

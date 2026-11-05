@@ -21,456 +21,308 @@ The default shortcut is `Ctrl+Alt+Shift+F12` on Windows and Linux. Repeating the
 <!-- showcase-gallery:start -->
 ## Feature walkthrough
 
-Windows examples with sample project files. Animations show click pulses, held mouse buttons and keyboard shortcuts. Hints fade after use, and verified responses pause briefly for reading. Drag-and-drop demonstrations stop at the confirmation dialog.
+Windows examples with sample files. File operations stop before confirmation.
 
 <details>
-<summary>Copy a folder path</summary>
+<summary>Copy folder path to clipboard (right-click address bar)</summary>
 
-<p><small>Copy the current folder path from the address bar.</small></p>
-
-Right-click the address bar and observe the actual clipboard confirmation.
-
-![Copy a folder path](media/marketplace/showcases/0002-windows-en-dark-path-copy-gesture.gif)
+![Copy folder path to clipboard (right-click address bar)](media/marketplace/showcases/0002-windows-en-dark-path-copy-gesture.gif)
 
 </details>
 
 <details>
-<summary>Select files with the right mouse button</summary>
+<summary>Select files (right-button drag)</summary>
 
-<p><small>Select several files with a right-button drag.</small></p>
-
-Draw a selection with the right mouse button held down.
-
-![Select files with the right mouse button](media/marketplace/showcases/0003-windows-en-dark-right-selection-gesture.gif)
+![Select files (right-button drag)](media/marketplace/showcases/0003-windows-en-dark-right-selection-gesture.gif)
 
 </details>
 
 <details>
-<summary>Drag a selection with the right button held</summary>
+<summary>Drag files (hold right button)</summary>
 
-<p><small>Drag selected files and review the destination before moving them.</small></p>
-
-Hold the right mouse button and drag selected files to a destination folder; review the move confirmation.
-
-![Drag a selection with the right button held](media/marketplace/showcases/0004-windows-en-dark-right-drag-gesture.gif)
+![Drag files (hold right button)](media/marketplace/showcases/0004-windows-en-dark-right-drag-gesture.gif)
 
 </details>
 
 <details>
-<summary>Focus the address bar with Ctrl+L</summary>
+<summary>Edit folder path (Ctrl+L)</summary>
 
-<p><small>Jump to the folder path with Ctrl+L.</small></p>
-
-Press Ctrl+L and edit the selected path in the active address bar.
-
-![Focus the address bar with Ctrl+L](media/marketplace/showcases/0005-windows-en-dark-shortcut-ctrl-l-gesture.gif)
+![Edit folder path (Ctrl+L)](media/marketplace/showcases/0005-windows-en-dark-shortcut-ctrl-l-gesture.gif)
 
 </details>
 
 <details>
-<summary>Commands organized by task</summary>
+<summary>File manager menus</summary>
 
-<p><small>Find commands grouped by task.</small></p>
+![File manager menus](media/marketplace/showcases/0006-windows-en-dark-main-menus-files.png)
 
-Discover file actions, selection tools, navigation, view options, configuration and help.
+![File manager menus](media/marketplace/showcases/0007-windows-en-dark-main-menus-selection.png)
 
-![Commands organized by task](media/marketplace/showcases/0006-windows-en-dark-main-menus-files.png)
+![File manager menus](media/marketplace/showcases/0008-windows-en-dark-main-menus-commands.png)
 
-![Commands organized by task](media/marketplace/showcases/0007-windows-en-dark-main-menus-selection.png)
+![File manager menus](media/marketplace/showcases/0009-windows-en-dark-main-menus-view.png)
 
-![Commands organized by task](media/marketplace/showcases/0008-windows-en-dark-main-menus-commands.png)
+![File manager menus](media/marketplace/showcases/0010-windows-en-dark-main-menus-configuration.png)
 
-![Commands organized by task](media/marketplace/showcases/0009-windows-en-dark-main-menus-view.png)
-
-![Commands organized by task](media/marketplace/showcases/0010-windows-en-dark-main-menus-configuration.png)
-
-![Commands organized by task](media/marketplace/showcases/0011-windows-en-dark-main-menus-help.png)
+![File manager menus](media/marketplace/showcases/0011-windows-en-dark-main-menus-help.png)
 
 </details>
 
 <details>
-<summary>Choose a favorite location</summary>
-
-<p><small>Open saved project folders from the favorites menu.</small></p>
-
-Browse favorite project folders from the location menu.
+<summary>Open favorite folders</summary>
 
 ![Favorite locations containing only sample project folders](media/marketplace/showcases/0012-windows-en-dark-location-menu-favorites.png)
 
 </details>
 
 <details>
-<summary>Select files by pattern</summary>
+<summary>Select files by name pattern</summary>
 
-<p><small>Select filenames with masks or regular expressions.</small></p>
-
-Enter file masks or regular expressions without applying a selection.
-
-![Select files by pattern](media/marketplace/showcases/0013-windows-en-dark-select-group-dialog.png)
+![Select files by name pattern](media/marketplace/showcases/0013-windows-en-dark-select-group-dialog.png)
 
 </details>
 
 <details>
-<summary>Remove a group from the selection</summary>
+<summary>Deselect files by name pattern</summary>
 
-<p><small>Remove matching filenames from the current selection.</small></p>
-
-Specify the file pattern to remove from the current selection.
-
-![Remove a group from the selection](media/marketplace/showcases/0014-windows-en-dark-unselect-group-dialog.png)
+![Deselect files by name pattern](media/marketplace/showcases/0014-windows-en-dark-unselect-group-dialog.png)
 
 </details>
 
 <details>
-<summary>Create a folder</summary>
+<summary>New folder dialog</summary>
 
-Inspect the folder name and destination before creating anything.
-
-![Create a folder](media/marketplace/showcases/0015-windows-en-dark-new-folder-dialog.png)
+![New folder dialog](media/marketplace/showcases/0015-windows-en-dark-new-folder-dialog.png)
 
 </details>
 
 <details>
-<summary>Create a text file</summary>
+<summary>New text file dialog</summary>
 
-Inspect the new text-file dialog without creating a file.
-
-![Create a text file](media/marketplace/showcases/0016-windows-en-dark-new-file-dialog.png)
+![New text file dialog](media/marketplace/showcases/0016-windows-en-dark-new-file-dialog.png)
 
 </details>
 
 <details>
-<summary>Copy files</summary>
+<summary>Copy files dialog</summary>
 
-Review the destination, overwrite policy and verification options before copying.
-
-![Copy files](media/marketplace/showcases/0017-windows-en-dark-copy-dialog.png)
+![Copy files dialog](media/marketplace/showcases/0017-windows-en-dark-copy-dialog.png)
 
 </details>
 
 <details>
-<summary>Move files</summary>
+<summary>Move files dialog</summary>
 
-Review the destination and transfer options before moving files.
-
-![Move files](media/marketplace/showcases/0018-windows-en-dark-move-dialog.png)
+![Move files dialog](media/marketplace/showcases/0018-windows-en-dark-move-dialog.png)
 
 </details>
 
 <details>
-<summary>Rename a single entry</summary>
+<summary>Rename a file (delayed click or F2)</summary>
 
-<p><small>Edit a filename directly in the file list.</small></p>
-
-Open inline rename with a delayed second click, cancel it, then use F2 and cancel again without changing the file.
-
-![Rename a single entry](media/marketplace/showcases/0019-windows-en-dark-rename-inline-editor.gif)
+![Rename a file (delayed click or F2)](media/marketplace/showcases/0019-windows-en-dark-rename-inline-editor.gif)
 
 </details>
 
 <details>
-<summary>Preview multiple filenames</summary>
+<summary>Batch rename preview</summary>
 
-<p><small>Preview generated names before applying a batch rename.</small></p>
-
-Inspect naming masks, counters and replacement rules before applying changes.
-
-![Preview multiple filenames](media/marketplace/showcases/0020-windows-en-dark-rename-multiple-dialog.png)
+![Batch rename preview](media/marketplace/showcases/0020-windows-en-dark-rename-multiple-dialog.png)
 
 </details>
 
 <details>
-<summary>Review a recycle-bin deletion</summary>
+<summary>Recycle bin confirmation</summary>
 
-<p><small>Review what will move to the recycle bin.</small></p>
-
-Inspect the confirmation for moving selected entries to the recycle bin.
-
-![Review a recycle-bin deletion](media/marketplace/showcases/0021-windows-en-dark-delete-trash-confirmation.png)
+![Recycle bin confirmation](media/marketplace/showcases/0021-windows-en-dark-delete-trash-confirmation.png)
 
 </details>
 
 <details>
-<summary>Review permanent deletion</summary>
+<summary>Permanent deletion confirmation</summary>
 
-<p><small>Review permanent deletion before confirming.</small></p>
-
-Inspect the permanent-deletion warning without confirming it.
-
-![Review permanent deletion](media/marketplace/showcases/0022-windows-en-dark-delete-permanently-confirmation.png)
+![Permanent deletion confirmation](media/marketplace/showcases/0022-windows-en-dark-delete-permanently-confirmation.png)
 
 </details>
 
 <details>
-<summary>Find files</summary>
+<summary>File search options</summary>
 
-<p><small>Search by filename, contents, or saved presets.</small></p>
+![File search options](media/marketplace/showcases/0023-windows-en-dark-file-search-general.png)
 
-Inspect basic criteria, advanced filters and saved searches before starting a search.
+![File search options](media/marketplace/showcases/0024-windows-en-dark-file-search-advanced.png)
 
-![Find files](media/marketplace/showcases/0023-windows-en-dark-file-search-general.png)
-
-![Find files](media/marketplace/showcases/0024-windows-en-dark-file-search-advanced.png)
-
-![Find files](media/marketplace/showcases/0025-windows-en-dark-file-search-presets.png)
+![File search options](media/marketplace/showcases/0025-windows-en-dark-file-search-presets.png)
 
 </details>
 
 <details>
-<summary>Keep a search window open</summary>
+<summary>File search in a separate window</summary>
 
-<p><small>Keep search open beside the file manager.</small></p>
-
-Open the nonmodal search variant alongside the file manager.
-
-![Keep a search window open](media/marketplace/showcases/0026-windows-en-dark-file-search-separate-dialog.png)
+![File search in a separate window](media/marketplace/showcases/0026-windows-en-dark-file-search-separate-dialog.png)
 
 </details>
 
 <details>
-<summary>Inspect file contents</summary>
+<summary>View file contents</summary>
 
-<p><small>Read text, inspect binary data, and switch encodings.</small></p>
+![View file contents](media/marketplace/showcases/0027-windows-en-dark-file-viewer-text.png)
 
-View a real file in text, binary, hexadecimal, HTML-text, Unicode and UTF-8 modes.
+![View file contents](media/marketplace/showcases/0028-windows-en-dark-file-viewer-binary.png)
 
-![Inspect file contents](media/marketplace/showcases/0027-windows-en-dark-file-viewer-text.png)
+![View file contents](media/marketplace/showcases/0029-windows-en-dark-file-viewer-hex.png)
 
-![Inspect file contents](media/marketplace/showcases/0028-windows-en-dark-file-viewer-binary.png)
+![View file contents](media/marketplace/showcases/0030-windows-en-dark-file-viewer-html.png)
 
-![Inspect file contents](media/marketplace/showcases/0029-windows-en-dark-file-viewer-hex.png)
+![View file contents](media/marketplace/showcases/0031-windows-en-dark-file-viewer-unicode.png)
 
-![Inspect file contents](media/marketplace/showcases/0030-windows-en-dark-file-viewer-html.png)
+![View file contents](media/marketplace/showcases/0032-windows-en-dark-file-viewer-utf8.png)
 
-![Inspect file contents](media/marketplace/showcases/0031-windows-en-dark-file-viewer-unicode.png)
+![View file contents](media/marketplace/showcases/0033-windows-en-dark-file-viewer-edit-menu.png)
 
-![Inspect file contents](media/marketplace/showcases/0032-windows-en-dark-file-viewer-utf8.png)
+![View file contents](media/marketplace/showcases/0034-windows-en-dark-file-viewer-options-menu.png)
 
-![Inspect file contents](media/marketplace/showcases/0033-windows-en-dark-file-viewer-edit-menu.png)
-
-![Inspect file contents](media/marketplace/showcases/0034-windows-en-dark-file-viewer-options-menu.png)
-
-![Inspect file contents](media/marketplace/showcases/0035-windows-en-dark-file-viewer-encoding-menu.png)
+![View file contents](media/marketplace/showcases/0035-windows-en-dark-file-viewer-encoding-menu.png)
 
 </details>
 
 <details>
-<summary>Search inside the viewer</summary>
+<summary>Search file contents</summary>
 
-<p><small>Find matching text in the current file.</small></p>
-
-Inspect text-search, direction and matching options.
-
-![Search inside the viewer](media/marketplace/showcases/0036-windows-en-dark-viewer-search-dialog.png)
+![Search file contents](media/marketplace/showcases/0036-windows-en-dark-viewer-search-dialog.png)
 
 </details>
 
 <details>
-<summary>Choose another codepage</summary>
+<summary>Choose text encoding</summary>
 
-<p><small>Choose an encoding for the current file.</small></p>
-
-Inspect the codepage input without saving an encoding preference.
-
-![Choose another codepage](media/marketplace/showcases/0037-windows-en-dark-viewer-codepage-dialog.png)
+![Choose text encoding](media/marketplace/showcases/0037-windows-en-dark-viewer-codepage-dialog.png)
 
 </details>
 
 <details>
-<summary>Prepare a ZIP archive</summary>
+<summary>ZIP archive options</summary>
 
-<p><small>Prepare a ZIP archive with selected files.</small></p>
-
-Inspect compression, encryption and recursive packing options without creating an archive.
-
-![Prepare a ZIP archive](media/marketplace/showcases/0038-windows-en-dark-archive-pack-dialog.png)
+![ZIP archive options](media/marketplace/showcases/0038-windows-en-dark-archive-pack-dialog.png)
 
 </details>
 
 <details>
-<summary>Prepare ZIP extraction</summary>
+<summary>ZIP extraction options</summary>
 
-<p><small>Choose extraction options before writing files.</small></p>
-
-Inspect destination and extraction options without writing files.
-
-![Prepare ZIP extraction](media/marketplace/showcases/0039-windows-en-dark-archive-unpack-dialog.png)
+![ZIP extraction options](media/marketplace/showcases/0039-windows-en-dark-archive-unpack-dialog.png)
 
 </details>
 
 <details>
-<summary>Inspect local Git changes</summary>
+<summary>Git file status</summary>
 
-<p><small>Review changed files in the sample repository.</small></p>
-
-Show modified, staged and untracked entries in the demonstration repository.
-
-![Inspect local Git changes](media/marketplace/showcases/0040-windows-en-dark-git-status-overview.png)
+![Git file status](media/marketplace/showcases/0040-windows-en-dark-git-status-overview.png)
 
 </details>
 
 <details>
-<summary>Browse commit history</summary>
+<summary>Git commit history</summary>
 
-<p><small>Browse commits and their changed files.</small></p>
-
-Inspect the commit graph, commit message and changed files.
-
-![Browse commit history](media/marketplace/showcases/0041-windows-en-dark-git-history-log.png)
+![Git commit history](media/marketplace/showcases/0041-windows-en-dark-git-history-log.png)
 
 </details>
 
 <details>
-<summary>Compare committed or working versions</summary>
+<summary>Git diff: selected file</summary>
 
-<p><small>Compare a file with its committed version.</small></p>
-
-Open the actual VS Code diff editor for a selected Git file.
-
-![Compare committed or working versions](media/marketplace/showcases/0042-windows-en-dark-git-diff-working-tree.png)
+![Git diff: selected file](media/marketplace/showcases/0042-windows-en-dark-git-diff-working-tree.png)
 
 </details>
 
 <details>
-<summary>Inspect available local branches</summary>
-
-<p><small>Browse local branches without switching.</small></p>
-
-Open the read-only branch list for the active repository.
+<summary>Local Git branches</summary>
 
 ![Native Visual Studio Code list of branches from the sample repository](media/marketplace/showcases/0043-windows-en-dark-git-branches-quickpick.png)
 
 </details>
 
 <details>
-<summary>Configure the file manager</summary>
+<summary>File manager settings</summary>
 
-<p><small>Configure the file manager in VS Code settings.</small></p>
-
-Inspect the native integration entry and extension configuration categories.
-
-![Configure the file manager](media/marketplace/showcases/0044-windows-en-dark-settings-editor.png)
+![File manager settings](media/marketplace/showcases/0044-windows-en-dark-settings-editor.png)
 
 </details>
 
 <details>
-<summary>Configure favorite locations</summary>
+<summary>Favorite folder settings</summary>
 
-<p><small>Configure saved folders and groups.</small></p>
-
-Manage favorite locations and groups.
-
-![Configure favorite locations](media/marketplace/showcases/0045-windows-en-dark-settings-favorites-editor.png)
+![Favorite folder settings](media/marketplace/showcases/0045-windows-en-dark-settings-favorites-editor.png)
 
 </details>
 
 <details>
-<summary>Configure file-list columns</summary>
+<summary>File column settings</summary>
 
-<p><small>Choose file-list columns and visible fields.</small></p>
-
-Inspect column sets, field choices and column visibility.
-
-![Configure file-list columns](media/marketplace/showcases/0046-windows-en-dark-settings-columns-editor.png)
+![File column settings](media/marketplace/showcases/0046-windows-en-dark-settings-columns-editor.png)
 
 </details>
 
 <details>
-<summary>Configure keyboard shortcuts</summary>
+<summary>Keyboard shortcut settings</summary>
 
-<p><small>Set key bindings for file manager commands.</small></p>
-
-Inspect commands, editable bindings and conflict information.
-
-![Configure keyboard shortcuts](media/marketplace/showcases/0047-windows-en-dark-settings-shortcuts-editor.png)
+![Keyboard shortcut settings](media/marketplace/showcases/0047-windows-en-dark-settings-shortcuts-editor.png)
 
 </details>
 
 <details>
-<summary>Inspect references to a folder</summary>
+<summary>Inspect folder locks</summary>
 
-<p><small>See which processes reference files in a folder.</small></p>
-
-A preview build keeps Build.log open and loads Preview-Plugin.dll. Inspect its real process references and the scan's access limits without releasing locks.
-
-![Inspect references to a folder](media/marketplace/showcases/0048-windows-en-dark-folder-locks-processes.png)
+![Inspect folder locks](media/marketplace/showcases/0048-windows-en-dark-folder-locks-processes.png)
 
 </details>
 
 <details>
-<summary>Choose a folder-lock action</summary>
+<summary>Folder lock actions</summary>
 
-<p><small>Review actions for detected folder locks.</small></p>
-
-Inspect available process and folder actions for a real scan result.
-
-![Choose a folder-lock action](media/marketplace/showcases/0049-windows-en-dark-folder-lock-actions-quickpick.png)
+![Folder lock actions](media/marketplace/showcases/0049-windows-en-dark-folder-lock-actions-quickpick.png)
 
 </details>
 
 <details>
-<summary>Choose a destination for a locked folder</summary>
+<summary>Copy locked folder: destination</summary>
 
-<p><small>Check a destination before copying a locked folder.</small></p>
-
-Review the complete destination path for a folder copy. The example leaves the input unconfirmed.
-
-![Choose a destination for a locked folder](media/marketplace/showcases/0050-windows-en-dark-folder-lock-target-destination.png)
+![Copy locked folder: destination](media/marketplace/showcases/0050-windows-en-dark-folder-lock-target-destination.png)
 
 </details>
 
 <details>
-<summary>Review a lock-management operation</summary>
+<summary>Lock release warning</summary>
 
-<p><small>Review the warning before closing handles or unloading modules.</small></p>
-
-Review the warning before closing file handles or unloading modules. The example stops before Run.
-
-![Review a lock-management operation](media/marketplace/showcases/0051-windows-en-dark-folder-lock-confirmation-warning.png)
+![Lock release warning](media/marketplace/showcases/0051-windows-en-dark-folder-lock-confirmation-warning.png)
 
 </details>
 
 <details>
-<summary>X-Ray on click</summary>
+<summary>Preview files on selection (X-Ray)</summary>
 
-<p><small>Preview the selected file in the opposite pane.</small></p>
-
-Inspect a text file in the opposite pane with syntax highlighting and a complete minimap. The preview uses 60% of the available width. Select files by clicking or using the keyboard. Right-click the eye to turn X-Ray off.
-
-![X-Ray on click](media/marketplace/showcases/0052-windows-en-dark-xray-click-preview.png)
+![Preview files on selection (X-Ray)](media/marketplace/showcases/0052-windows-en-dark-xray-click-preview.png)
 
 </details>
 
 <details>
-<summary>X-Ray Ultra</summary>
+<summary>Preview files on hover (X-Ray Ultra)</summary>
 
-<p><small>Preview files after pausing on them.</small></p>
-
-X-Ray Ultra updates the opposite preview after pausing over a text file for 200 ms. Syntax highlighting and a complete minimap use 60% of the available width; the source list shows filenames and icons. Right-click the eye to turn X-Ray off.
-
-![X-Ray Ultra](media/marketplace/showcases/0053-windows-en-dark-xray-hover-preview.png)
+![Preview files on hover (X-Ray Ultra)](media/marketplace/showcases/0053-windows-en-dark-xray-hover-preview.png)
 
 </details>
 
 <details>
-<summary>Quick Diff: current folder</summary>
+<summary>Git diff: current folder</summary>
 
-<p><small>Compare changed files with HEAD in the current folder.</small></p>
-
-Select a changed file to compare its saved content with HEAD in a read-only inline diff. Unchanged sections are collapsed with three context lines and can be expanded. The title shows separate added, changed and deleted line counts. Both modes show paths relative to the repository root with native separators. Full-width filenames appear above a compact status · relative time · root-relative directory line. Filenames use the normal theme foreground without file icons; only status labels use Git colors. Time, separators and paths use the readable theme foreground. Name, status and date remain sortable, with status then newest first as the default order. Exact-date tooltips show the local modification time. Filename and directory tooltips show the complete file path; Ctrl+Y copies it, and Ctrl+Shift+Y copies it with forward slashes. Double-click a file to leave Quick Diff and select it in its folder. History Back restores the previous Quick Diff scope, file selection, sort and scroll position. Ignored files are excluded. Double-click the preview to open the full VS Code diff editor.
-
-![Quick Diff: current folder](media/marketplace/showcases/0054-windows-en-dark-quick-diff-folder-preview.png)
+![Git diff: current folder](media/marketplace/showcases/0054-windows-en-dark-quick-diff-folder-preview.png)
 
 </details>
 
 <details>
-<summary>Quick Diff: entire repository</summary>
+<summary>Git diff: entire repository</summary>
 
-<p><small>Review changes across the full repository.</small></p>
-
-Cycle the footer button to include the entire repository, including new files and excluding ignored files. Root-level files omit the redundant directory marker. New files appear as syntax-highlighted additions against an empty original; deleted files show the HEAD content as removed lines.
-
-![Quick Diff: entire repository](media/marketplace/showcases/0055-windows-en-dark-quick-diff-repository-preview.png)
+![Git diff: entire repository](media/marketplace/showcases/0055-windows-en-dark-quick-diff-repository-preview.png)
 
 </details>
 
