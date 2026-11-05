@@ -1,7 +1,7 @@
 (function (root, factory) {
   const api = factory();
   if (typeof module === 'object' && module.exports) module.exports = api;
-  if (root) root.CommanderShortcuts = api;
+  if (root) root.BitfroestShortcuts = api;
 })(typeof globalThis === 'object' ? globalThis : this, function () {
   'use strict';
   const guard = / && !bitfroest\.shortcutOverride\.[a-z0-9]+/g;

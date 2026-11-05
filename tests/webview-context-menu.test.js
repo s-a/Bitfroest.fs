@@ -129,7 +129,7 @@ test('context popup supports keyboard dismissal, background paste, columns and n
 
 test('context shortcut hints follow overrides and retain keycaps', t => {
   const app = createApp(t, fixture());
-  const catalog = require('../media/commander-shortcuts').createCatalog(require('../package.json'));
+  const catalog = require('../media/bitfroest-shortcuts').createCatalog(require('../package.json'));
   const entry = catalog.find(item => item.command === 'bitfroest.clipboard-copy');
   app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'shortcut-settings', catalog, bindings: { [entry.id]: 'ctrl+shift+k' } } }));
   context(app, app.row('one.txt'));

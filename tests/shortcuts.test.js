@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const model = require('../media/commander-shortcuts');
+const model = require('../media/bitfroest-shortcuts');
 
 test('search filtering has an editable Ctrl Shift F binding restricted to file list focus', () => {
   const manifest = require('../package.json');
@@ -121,12 +121,12 @@ test('dispatch changes only overridden bindings and suppresses the replaced defa
 });
 
 test('system menu setting preserves the existing shortcut identity and limits the default binding', () => {
-  const { createCatalog } = require('../media/commander-shortcuts');
+  const { createCatalog } = require('../media/bitfroest-shortcuts');
   const manifest = require('../package.json');
   const entry = createCatalog(manifest).find(item => item.command === 'bitfroest.shell-context-menu');
   assert.equal(entry.id, 'k1opszch');
   assert.match(manifest.contributes.keybindings.find(item => item.command === entry.command).when, /config\.bitfroest\.files\.useSystemContextMenu/);
-  assert.equal(require('../media/commander-shortcuts').active(entry, { listFocus: true }, 'win32'), true);
+  assert.equal(require('../media/bitfroest-shortcuts').active(entry, { listFocus: true }, 'win32'), true);
 });
 
 test('folder tab shortcuts retain their stored identities and accept only pane navigation focus', () => {

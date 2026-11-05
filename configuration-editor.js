@@ -2,7 +2,7 @@ const fs = require('node:fs');
 const crypto = require('node:crypto');
 const { validateFavorites, validateColumns } = require('./media/configuration-model');
 const { localizedCatalog, catalog } = require('./shortcut-settings');
-const { validate: validateShortcuts } = require('./media/commander-shortcuts');
+const { validate: validateShortcuts } = require('./media/bitfroest-shortcuts');
 
 function createConfigurationEditor(vscode, context, options) {
   let panel, section = 'favorites', scope = 'user', saving = false;
@@ -22,7 +22,7 @@ function createConfigurationEditor(vscode, context, options) {
     const uri = name => current.webview.asWebviewUri(vscode.Uri.joinPath(media, name)).toString();
     let html = fs.readFileSync(vscode.Uri.joinPath(media, 'configuration.html').fsPath, 'utf8');
     html = html.replace('<!--POLICY-->', `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${current.webview.cspSource}; font-src ${current.webview.cspSource}; script-src 'nonce-${nonce}';">`);
-    for (const name of ['configuration.css', 'codicons.css', 'icon-font-metrics.js', 'commander-icons.js', 'commander-paths.js', 'commander-i18n.js', 'commander-column-settings.js', 'commander-shortcuts.js', 'shortcut-configuration.js', 'configuration-model.js', 'configuration-view.js']) html = html.replaceAll(`"${name}"`, `"${uri(name)}"`);
+    for (const name of ['configuration.css', 'codicons.css', 'icon-font-metrics.js', 'commander-icons.js', 'commander-paths.js', 'commander-i18n.js', 'commander-column-settings.js', 'bitfroest-shortcuts.js', 'shortcut-configuration.js', 'configuration-model.js', 'configuration-view.js']) html = html.replaceAll(`"${name}"`, `"${uri(name)}"`);
     html = html.replaceAll('<script ', `<script nonce="${nonce}" `);
     current.webview.html = html;
     current.onDidDispose(() => { if (panel === current) panel = undefined; });

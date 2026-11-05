@@ -4418,7 +4418,7 @@
     host.postMessage({ type: 'inputFocus', tabs: value.tabFocus, search: value.searchFocus, searchResults: value.searchResultsFocus, resultTab: value.searchResults, lister: value.listerFocus, value: value.textInput, list: value.listFocus, conflict: value.conflictDialog, inlineRename: value.inlineRenameInput, dialog: value.fileDialog, transferName: value.transferNameInput, paste: clipboardAvailable && !state.archiveLocations?.[currentPath(pane())] && !currentPath(pane()).startsWith('zip:') });
   }
   window.CommanderStartupResource?.step('controls');
-  const shortcutRuntime = window.installCommanderShortcuts({ host, focus: shortcutFocus, enabled: () => startupReady, decorate: decorateShortcut });
+  const shortcutRuntime = window.installBitfroestShortcuts({ host, focus: shortcutFocus, enabled: () => startupReady, decorate: decorateShortcut });
   document.addEventListener('focusin', event => {
     reportFocus();
     if (startupReady && event.target.closest('.list') && !event.relatedTarget?.closest('.list')) refreshClipboardAvailability();

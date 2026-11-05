@@ -10,7 +10,7 @@ function interactionInventory(manifest) {
   };
   const shortcuts = localizedCatalog('en').map(item => describe({ id: item.id, kind: 'keyboard', title: item.title, detail: item.detail,
     command: item.command, keys: item.key, macKeys: item.mac, when: item.when, args: item.args,
-    sources: ['shortcut-settings.js', 'package.json', 'media/commander-shortcuts.js'] }, item.command === 'bitfroest.path' && item.key === 'ctrl+l' ? 'shortcut-ctrl-l' : undefined));
+    sources: ['shortcut-settings.js', 'package.json', 'media/bitfroest-shortcuts.js'] }, item.command === 'bitfroest.path' && item.key === 'ctrl+l' ? 'shortcut-ctrl-l' : undefined));
   return { shortcuts, gestures: definitions.map(item => describe(item, item.sceneId)) };
 }
 

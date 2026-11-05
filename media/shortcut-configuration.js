@@ -1,7 +1,7 @@
 (function (root) {
   'use strict';
   root.createShortcutConfiguration = function ({ t, changed, blocked }) {
-    const model = root.CommanderShortcuts, $ = selector => document.querySelector(selector);
+    const model = root.BitfroestShortcuts, $ = selector => document.querySelector(selector);
     let catalog = [], data = {}, base = {}, platform = 'win32', editing, candidate = '', returnFocus;
     const effective = () => ({ ...base, ...data });
     const format = key => key.split('+').map(part => ({ ctrl: t('Strg'), cmd: '⌘', alt: 'Alt', shift: t('Umschalt'), up: '↑', down: '↓', left: '←', right: '→', numpad_add: 'Num +', numpad_subtract: 'Num −', numpad_multiply: 'Num *', numpad_divide: 'Num /' })[part] || part.toUpperCase()).join('+');

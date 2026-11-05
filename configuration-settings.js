@@ -1,7 +1,7 @@
 const { catalog, columnSetFromPreferences, normalizeColumnSets, columnSetsFromTables } = require('./media/commander-column-settings');
 const { favoritesFromTables, validateFavorites, validateColumns } = require('./media/configuration-model');
 const { catalog: shortcutCatalog } = require('./shortcut-settings');
-const { validate: validateShortcuts } = require('./media/commander-shortcuts');
+const { validate: validateShortcuts } = require('./media/bitfroest-shortcuts');
 
 function createConfigurationSettings(vscode, options) {
   let saving = false;

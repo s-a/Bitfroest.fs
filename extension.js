@@ -80,7 +80,7 @@ function operationDiagnostic(error, request, state) {
   return { request: requestContext, panelPaths, timestamp: new Date().toISOString(), platform: process.platform, architecture: process.arch, osRelease: os.release(), extensionVersion, vscodeVersion: vscode.version, runtimeVersion: process.version, failure: serialize(error) };
 }
 const { catalog: shortcutCatalog, localizedCatalog, effectiveBindings } = require('./shortcut-settings');
-const { resolve: resolveShortcut } = require('./media/commander-shortcuts');
+const { resolve: resolveShortcut } = require('./media/bitfroest-shortcuts');
 const { favoritesToTables, validateColumns } = require('./media/configuration-model');
 const { archiveEntries } = require('./search-archives');
 const { createShellMenuProvider } = require('./native-shell-menu');

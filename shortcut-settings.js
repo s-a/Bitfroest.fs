@@ -1,4 +1,4 @@
-const { createCatalog, validate } = require('./media/commander-shortcuts');
+const { createCatalog, validate } = require('./media/bitfroest-shortcuts');
 const catalog = createCatalog(require('./package.json'));
 function localizedCatalog(language) {
   const de = /^de/.test(language);

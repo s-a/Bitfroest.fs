@@ -1,7 +1,7 @@
 (function (root) {
   'use strict';
-  root.installCommanderShortcuts = function ({ host, focus, enabled, decorate }) {
-    const model = root.CommanderShortcuts, platform = document.body.dataset.platform || 'win32';
+  root.installBitfroestShortcuts = function ({ host, focus, enabled, decorate }) {
+    const model = root.BitfroestShortcuts, platform = document.body.dataset.platform || 'win32';
     let catalog = [], bindings = {};
     const synthetic = new WeakSet();
     const originals = [...document.querySelectorAll('[data-menu-action]')].map(item => ({ item, aria: item.getAttribute('aria-keyshortcuts'), title: item.getAttribute('title'), hints: item.querySelector('.menu-shortcuts')?.cloneNode(true) }));
