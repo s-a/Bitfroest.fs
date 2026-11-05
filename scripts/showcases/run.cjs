@@ -1,4 +1,4 @@
-/* global document, KeyboardEvent, window */
+/* global document, KeyboardEvent, window, getComputedStyle */
 const fs = require('node:fs');
 const path = require('node:path');
 const net = require('node:net');
@@ -8,7 +8,7 @@ const repository = path.resolve(__dirname, '../..');
 const output = path.join(repository, '.tmp/showcases');
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 const normalize = value => value.replace(/\\/g, '/').replace(/\/$/, '').toLowerCase();
-const filename = (scene, capture) => `${String(capture?.sequence || 1).padStart(4, '0')}-windows-en-dark-${scene.id}${capture ? `-${capture.id}` : ''}.${capture?.format === 'gif' ? 'gif' : 'png'}`;
+const filename = (scene, capture) => `${String(capture?.sequence || 1).padStart(4, '0')}-windows-en-dark-${scene.id}${capture ? `-${capture.id}` : ''}.${capture?.format || 'png'}`;
 function numberCatalog(catalog) {
   let sequence = 0;
   for (const scene of catalog) for (const capture of scene.captures) capture.sequence = ++sequence;
@@ -31,8 +31,8 @@ function renumberManifest(catalog, previous) {
   return { ...previous, sections: previous.sections.map(section => {
     const scene = catalog.find(scene => scene.id === section.id);
     return { ...section, images: section.images.map(image => {
-      const capture = scene?.captures.find(capture => image.file.endsWith(`-${scene.id}-${capture.id}.${capture.format === 'gif' ? 'gif' : 'png'}`));
-      return capture ? { ...image, file: filename(scene, capture) } : image;
+      const capture = scene?.captures.find(capture => image.file.endsWith(`-${scene.id}-${capture.id}.${capture.format || 'png'}`));
+      return capture ? { ...image, file: filename(scene, capture), ...(image.fallback ? { fallback: filename(scene, capture).replace(/\.webm$/, '.gif') } : {}) } : image;
     }) };
   }) };
 }
@@ -93,6 +93,12 @@ function validateCatalog(catalog) {
       identifier(capture.id);
       if (captures.has(capture.id)) throw new Error('Duplicate capture identifier.');
       captures.add(capture.id);
+      if (capture.format && !['png', 'gif', 'webm'].includes(capture.format)) throw new Error('Unsupported recording format.');
+      if (capture.steps) {
+        if (!['gif', 'webm'].includes(capture.format) || capture.gesture || capture.action || capture.surface || capture.click || capture.select || capture.command) throw new Error('A recording sequence requires an exclusive animation capture.');
+        require('./sequence.cjs').validateSequence(capture.steps);
+      }
+      if (['gif', 'webm'].includes(capture.format) && !capture.steps && !['path-copy', 'ctrl-l', 'right-selection', 'right-drag'].includes(capture.gesture)) throw new Error('An animation requires a sequence or known gesture.');
       if (!capture.expect || !capture.text) throw new Error('Capture readiness criteria are required.');
       if (capture.action && !safeActions.includes(capture.action)) throw new Error('Unsupported showcase action.');
       if (capture.lockAction && !['inspect', 'actions', 'destination', 'confirmation'].includes(capture.lockAction)) throw new Error('Unsupported lock documentation preview.');
@@ -141,8 +147,8 @@ function buildManifest(catalog, images, host, previous) {
       images: scene.captures.map(capture => {
         const image = images.find(item => item.scene === scene.id && item.capture === capture.id);
         if (!image) throw new Error(`Missing capture: ${scene.id}/${capture.id}`);
-        return { file: image.file, alt: capture.alt || scene.title, width: image.width, height: image.height,
-          ...(capture.format === 'gif' ? { format: 'gif', annotation: 'Documentation pointer; product response recorded live.' } : {}),
+        return { file: image.file, ...(image.fallback ? { fallback: image.fallback } : {}), alt: capture.alt || scene.title, width: image.width, height: image.height,
+          ...(['gif', 'webm'].includes(capture.format) ? { format: capture.format, annotation: 'Documentation pointer; product response recorded live.' } : {}),
           ...(capture.surface ? { surface: capture.surface, layout: 'native-editor' } : { layout: 'compact' }) };
       }) };
     })
@@ -415,7 +421,7 @@ async function main() {
           const chrome = JSON.parse(result.result.value); return !chrome.status && !chrome.sidebar;
         });
         await evaluate(async () => { await document.fonts.ready; await new Promise(resolve => window.requestAnimationFrame(() => window.requestAnimationFrame(resolve))); });
-        if (capture.format === 'gif') {
+        if (['gif', 'webm'].includes(capture.format)) {
           const { recordGesture } = require('./gestures.cjs');
           const file = filename(scene, capture);
           const size = await recordGesture({ capture, scene, view, page, target, evaluate, invoke, run, file, waitFor });
@@ -450,16 +456,17 @@ async function main() {
   }
   if (failure) throw failure;
   if (original) for (const [index, section] of original.sections.entries()) for (const [imageIndex, image] of section.images.entries()) {
-    const renamed = previous.sections[index].images[imageIndex].file;
-    if (renamed !== image.file) fs.copyFileSync(path.join(output, image.file), path.join(output, renamed));
+    const renamed = previous.sections[index].images[imageIndex];
+    for (const key of ['file', 'fallback']) if (image[key] && renamed[key] !== image[key]) fs.copyFileSync(path.join(output, image[key]), path.join(output, renamed[key]));
   }
   for (const section of manifest.sections) for (const image of section.images) {
     const fresh = path.join(run, image.file); if (fs.existsSync(fresh)) fs.copyFileSync(fresh, path.join(output, image.file));
+    if (image.fallback && fs.existsSync(path.join(run, image.fallback))) fs.copyFileSync(path.join(run, image.fallback), path.join(output, image.fallback));
   }
   fs.copyFileSync(path.join(run, 'showcases.json'), path.join(output, 'showcases.json'));
   if (original) {
-    const retained = new Set(manifest.sections.flatMap(section => section.images.map(image => image.file)));
-    for (const section of original.sections) for (const image of section.images) if (!retained.has(image.file)) fs.unlinkSync(path.join(output, image.file));
+    const retained = new Set(manifest.sections.flatMap(section => section.images.flatMap(image => [image.file, image.fallback].filter(Boolean))));
+    for (const section of original.sections) for (const image of section.images) for (const file of [image.file, image.fallback].filter(Boolean)) if (!retained.has(file)) fs.unlinkSync(path.join(output, file));
   }
   console.log(`Showcase manifest: ${path.join(output, 'showcases.json')}`);
 }

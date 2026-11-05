@@ -41,7 +41,7 @@ const summaryExcerpts = {
   'quick-diff-repository': 'Review changes across the full repository.'
 };
 function mediaName(value) {
-  if (!/^\d{4}-windows-en-dark-[a-z0-9-]+\.(png|gif)$/.test(value)) throw new Error('Invalid showcase media filename.');
+  if (!/^\d{4}-windows-en-dark-[a-z0-9-]+\.(png|gif|webm)$/.test(value)) throw new Error('Invalid showcase media filename.');
   return value;
 }
 function renderGallery(manifest) {
@@ -53,7 +53,12 @@ function renderGallery(manifest) {
     lines.push(`<details>`, `<summary>${section.title}</summary>`, '');
     if (excerpt) lines.push(`<p><small>${excerpt}</small></p>`, '');
     lines.push(section.description, '');
-    for (const image of section.images) lines.push(`![${image.alt}](${mediaDirectory}/${mediaName(image.file)})`, '');
+    for (const image of section.images) {
+      if (image.file.endsWith('.webm')) {
+        if (image.fallback) lines.push(`![${image.alt}](${mediaDirectory}/${mediaName(image.fallback)})`, '');
+        lines.push(`[Watch WebM](${mediaDirectory}/${mediaName(image.file)})`, '');
+      } else lines.push(`![${image.alt}](${mediaDirectory}/${mediaName(image.file)})`, '');
+    }
     lines.push('</details>', '');
   }
   lines.push(end); return lines.join('\n');
@@ -76,15 +81,15 @@ function updateReadme(text, manifest) {
 function publish(root = path.resolve(__dirname, '../..')) {
   const input = path.join(root, '.tmp/showcases'), output = path.join(root, mediaDirectory);
   const manifest = JSON.parse(fs.readFileSync(path.join(input, 'showcases.json'), 'utf8'));
-  const images = manifest.sections.filter(section => section.status === 'rendered').flatMap(section => section.images);
+  const images = manifest.sections.filter(section => section.status === 'rendered').flatMap(section => section.images).flatMap(image => [image, ...(image.fallback ? [{ file: image.fallback }] : [])]);
   if (!images.length) throw new Error('No recorded media are available to publish.');
   for (const image of images) {
     const bytes = fs.readFileSync(path.join(input, mediaName(image.file)));
-    if (image.file.endsWith('.gif') ? bytes.toString('ascii', 0, 3) !== 'GIF' : bytes.toString('ascii', 1, 4) !== 'PNG') throw new Error(`Invalid media: ${image.file}`);
+    if (image.file.endsWith('.webm') ? bytes.readUInt32BE(0) !== 0x1a45dfa3 : image.file.endsWith('.gif') ? bytes.toString('ascii', 0, 3) !== 'GIF' : bytes.toString('ascii', 1, 4) !== 'PNG') throw new Error(`Invalid media: ${image.file}`);
   }
   const readmePath = path.join(root, 'README.md');
   const before = fs.readFileSync(readmePath, 'utf8'), readme = updateReadme(before, manifest);
-  const references = text => [...text.matchAll(/media\/marketplace\/showcases\/(\d{4}-windows-en-dark-[a-z0-9-]+\.(?:png|gif))/g)].map(match => mediaName(match[1]));
+  const references = text => [...text.matchAll(/media\/marketplace\/showcases\/(\d{4}-windows-en-dark-[a-z0-9-]+\.(?:png|gif|webm))/g)].map(match => mediaName(match[1]));
   const retained = new Set([...images.map(image => image.file), ...references(readme)]);
   fs.mkdirSync(output, { recursive: true });
   for (const image of images) fs.copyFileSync(path.join(input, image.file), path.join(output, image.file));

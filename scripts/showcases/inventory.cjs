@@ -2,7 +2,7 @@ const definitions = require('./interaction-catalog.json');
 const { localizedCatalog } = require('../../shortcut-settings');
 
 function interactionInventory(manifest) {
-  const recorded = id => manifest.sections.find(section => section.id === id && section.status === 'rendered')?.images.filter(image => image.format === 'gif') || [];
+  const recorded = id => manifest.sections.find(section => section.id === id && section.status === 'rendered')?.images.filter(image => ['gif', 'webm'].includes(image.format)) || [];
   const describe = (item, sceneId) => {
     const images = sceneId ? recorded(sceneId) : [];
     return { ...item, status: images.length ? 'recorded' : 'pending', images: images.map(image => image.file),

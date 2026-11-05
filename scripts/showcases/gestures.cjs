@@ -2,6 +2,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
+const { executeSequence, inspectState, assertSafePointer, keys } = require('./sequence.cjs');
 
 async function animatePointer({ start, end, duration, update, now = () => performance.now(), sleep = ms => new Promise(resolve => setTimeout(resolve, ms)) }) {
   const began = now();
@@ -25,6 +26,13 @@ function frameList(records, endedAt) {
     `duration ${Math.max(.001, ((records[index + 1]?.timestamp || endedAt) - record.timestamp) / 1000)}`]);
   lines.push(`file '${records.at(-1).name}'`, 'option framerate 1000');
   return lines;
+}
+
+async function dispatchMouseInput(event, dispatch, annotate) {
+  await dispatch(event);
+  if (event.type === 'mousePressed' || event.type === 'mouseReleased') {
+    await annotate(event.button === 'right' ? 'Right click' : 'Left click', event.type === 'mousePressed');
+  }
 }
 
 function installPointer() {
@@ -102,10 +110,8 @@ async function recordGesture({ capture, scene, page, target, evaluate, invoke, r
     position = point;
     if (type === 'mousePressed') buttons |= button === 'right' ? 2 : 1;
     if (type === 'mouseReleased') buttons &= ~(button === 'right' ? 2 : 1);
-    await page.call('Input.dispatchMouseEvent', { type, x: point.x, y: point.y, button, buttons, modifiers, clickCount: type === 'mouseMoved' ? 0 : 1 });
+    await dispatchMouseInput({ type, x: point.x, y: point.y, button, buttons, modifiers, clickCount: type === 'mouseMoved' ? 0 : 1 }, event => page.call('Input.dispatchMouseEvent', event), annotation);
     mouseEvents.push({ type, ...point, button, buttons, timestamp: Date.now() });
-    if (type === 'mousePressed') await annotation(button === 'right' ? 'Right click' : 'Left click', true);
-    else if (type === 'mouseReleased') await annotation(button === 'right' ? 'Right click' : 'Left click');
     if (type === 'mousePressed') {
       await pageEvaluate(point => {
         const pointer = document.querySelector('#showcase-pointer');
@@ -120,7 +126,7 @@ async function recordGesture({ capture, scene, page, target, evaluate, invoke, r
       const pane = document.querySelector(`[data-pane="${side}"]`);
       const element = name ? [...pane.querySelectorAll('[data-file-row][data-id]')].find(row => row.title === name || row.querySelector('[data-cell]')?.title === name) : pane.querySelector(selector);
       if (!element) throw new Error(`Gesture target missing: ${name || selector}`);
-      const r = element.getBoundingClientRect(); return { x: r.left + r.width * xFraction, y: r.top + r.height / 2 };
+      const r = (name && selector === '[data-filename]' ? element.querySelector('[data-filename]') || element : element).getBoundingClientRect(); return { x: r.left + r.width * xFraction, y: r.top + r.height / 2 };
     }, { selector, side, name, xFraction });
     return { x: offset.x + rect.x, y: offset.y + rect.y };
   };
@@ -147,7 +153,36 @@ async function recordGesture({ capture, scene, page, target, evaluate, invoke, r
     await annotation('');
     await page.call('Page.startScreencast', { format: 'png', maxWidth: 1280, maxHeight: 900, everyNthFrame: 1 });
     await waitFor(() => records.length > 0);
-    if (capture.gesture === 'path-copy') {
+    if (capture.steps) {
+      result = { steps: await executeSequence(capture.steps, {
+        move: async step => {
+          const t = step.target;
+          await move(await point(t.selector || '[data-filename]', t.side ?? 0, t.name, t.xFraction ?? .25), '', step.duration || 660);
+        },
+        mouse: async (type, button) => {
+          if (type === 'press') await evaluate(new Function('p', `(${assertSafePointer.toString()})(document.elementFromPoint(p.x, p.y));`), { x: position.x - offset.x, y: position.y - offset.y });
+          await mouse(type === 'press' ? 'mousePressed' : 'mouseReleased', position, button);
+        },
+        pause: hold,
+        key: async name => {
+          if (name !== 'Escape') await evaluate(() => {
+            if (document.querySelector('dialog[open], [role="dialog"]')) throw new Error('Only cancellation keys are allowed in dialogs.');
+          });
+          const [key, code, vk] = keys[name], control = name.startsWith('Ctrl+');
+          if (control) await keyEvent('keyDown', 'Control', 'ControlLeft', 17, 2);
+          try {
+            await keyEvent('keyDown', key, code, vk, control ? 2 : 0);
+          } finally {
+            await keyEvent('keyUp', key, code, vk, control ? 2 : 0);
+            if (control) await keyEvent('keyUp', 'Control', 'ControlLeft', 17);
+          }
+        },
+        check: step => waitFor(async () => {
+          const state = await evaluate(new Function('step', `return (${inspectState.toString()})(step);`), step);
+          return state.matched && state;
+        })
+      }) };
+    } else if (capture.gesture === 'path-copy') {
       await hold(350); await move(await point('.path-breadcrumbs', 0), ''); await hold(350);
       await mouse('mouseMoved'); await mouse('mousePressed', position, 'right'); await hold(20);
       await mouse('mouseReleased', position, 'right');
@@ -163,13 +198,13 @@ async function recordGesture({ capture, scene, page, target, evaluate, invoke, r
       result = { addressFocused: true, pathSelected: true }; await annotation('Keyboard shortcut'); await hold(1400);
     } else if (capture.gesture === 'right-selection') {
       const start = await point('.list', 0, 'Changes.txt', .15), end = await point('.list', 0, 'Colors.json', .65);
-      await annotation('Right button + drag'); await hold(300); await move(start, 'Right button + drag'); await hold(300); await mouse('mouseMoved'); await mouse('mousePressed', position, 'right');
+      await annotation(''); await hold(300); await move(start, ''); await hold(300); await mouse('mouseMoved'); await mouse('mousePressed', position, 'right');
       await move(end, 'Right button + drag'); await mouse('mouseReleased', position, 'right');
       await waitFor(() => evaluate(() => window.CommanderHost.getState().panes[0].selected.length >= 2));
       result = { selectionCount: await evaluate(() => window.CommanderHost.getState().panes[0].selected.length) }; await hold(1100);
     } else if (capture.gesture === 'right-drag') {
       const first = await point('.list', 0, 'Changes.txt');
-      await annotation('Hold right button'); await hold(300); await move(first, 'Hold right button'); await hold(300); await mouse('mouseMoved'); await mouse('mousePressed', first, 'right');
+      await annotation(''); await hold(300); await move(first, ''); await hold(300); await mouse('mouseMoved'); await mouse('mousePressed', first, 'right');
       await annotation('Hold right button', true); await hold(650);
       await waitFor(() => evaluate(() => document.body.dataset.fileDragCursor === 'ready'));
       await move(await point('.list', 1, 'inbox'), 'Drag to the target folder', 880); await hold(400);
@@ -191,12 +226,24 @@ async function recordGesture({ capture, scene, page, target, evaluate, invoke, r
   }
   if (recordingError) throw recordingError;
   fs.writeFileSync(path.join(frames, 'frames.txt'), frameList(records, recordingEndedAt).join('\n'));
-  const encoded = spawnSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'concat', '-safe', '0', '-i', 'frames.txt', '-vf', 'fps=30,scale=1280:-1:flags=lanczos,split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=3', '-t', String((recordingEndedAt - records[0].timestamp) / 1000), '-loop', '0', path.join(run, file)], { cwd: frames, windowsHide: true, encoding: 'utf8', timeout: 60000 });
+  if (!records.length) throw new Error('No live frames were recorded.');
+  const video = capture.format === 'webm';
+  const encode = (destination, webm, input) => spawnSync('ffmpeg', encodingArgs(destination, webm, (recordingEndedAt - records[0].timestamp) / 1000, input), { cwd: frames, windowsHide: true, encoding: 'utf8', timeout: 60000 });
+  const encoded = encode(path.join(run, file), video);
   if (encoded.status !== 0) throw new Error(`GIF encoding failed: ${encoded.error?.message || encoded.stderr}`);
-  const gif = fs.readFileSync(path.join(run, file));
-  fs.writeFileSync(path.join(frames, 'evidence.json'), JSON.stringify({ gesture: capture.gesture, origin, frames: records.length, result, keyEvents, mouseEvents,
+  if (video) {
+    const fallback = encode(path.join(run, file.replace(/\.webm$/, '.gif')), false, path.join(run, file));
+    if (fallback.status !== 0) throw new Error(`GIF fallback encoding failed: ${fallback.error?.message || fallback.stderr}`);
+  }
+  const gif = fs.readFileSync(path.join(run, video ? file.replace(/\.webm$/, '.gif') : file));
+  fs.writeFileSync(path.join(frames, 'evidence.json'), JSON.stringify({ format: capture.format, codec: video ? 'vp9' : 'gif', gesture: capture.gesture, origin, frames: records.length, result, keyEvents, mouseEvents,
     framesRecordedAt: records.map(record => ({ timestamp: record.timestamp, pointer: record.pointer, buttons: record.buttons })) }, null, 2));
-  return { width: gif.readUInt16LE(6), height: gif.readUInt16LE(8) };
+  return { width: gif.readUInt16LE(6), height: gif.readUInt16LE(8), ...(video ? { fallback: file.replace(/\.webm$/, '.gif') } : {}) };
 }
 
-module.exports = { recordGesture, animatePointer, pulsePointer, frameList, installPointer };
+function encodingArgs(destination, webm, duration, input) {
+  return ['-hide_banner', '-loglevel', 'error', '-y', ...(input ? ['-i', input] : ['-f', 'concat', '-safe', '0', '-i', 'frames.txt']), '-vf',
+    webm ? 'fps=30,scale=1280:-2:flags=lanczos' : 'fps=30,scale=1280:-1:flags=lanczos,split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=3',
+    '-t', String(duration), ...(webm ? ['-an', '-c:v', 'libvpx-vp9', '-crf', '32', '-b:v', '0', '-pix_fmt', 'yuv420p'] : ['-loop', '0']), destination];
+}
+module.exports = { recordGesture, animatePointer, pulsePointer, frameList, installPointer, encodingArgs, dispatchMouseInput };

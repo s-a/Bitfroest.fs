@@ -162,9 +162,11 @@ Review the destination and transfer options before moving files.
 
 <p><small>Edit a filename directly in the file list.</small></p>
 
-Edit the filename in the file list without committing the rename.
+Open inline rename with a delayed second click, cancel it, then use F2 and cancel again without changing the file.
 
-![Rename a single entry](media/marketplace/showcases/0019-windows-en-dark-rename-inline-editor.png)
+![Rename a single entry](media/marketplace/showcases/0019-windows-en-dark-rename-inline-editor.gif)
+
+[Watch WebM](media/marketplace/showcases/0019-windows-en-dark-rename-inline-editor.webm)
 
 </details>
 
