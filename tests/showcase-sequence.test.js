@@ -36,8 +36,30 @@ test('WebM uses VP9 live-frame encoding and publishes a GIF fallback instead of 
   assert.equal(mediaName(file), file);
   const text = renderGallery({ sections: [{ id: 'rename', title: 'Rename', description: 'Cancel edits.', status: 'rendered', images: [{ file, fallback: file.replace('.webm', '.gif'), alt: 'Rename' }] }] });
   assert.match(text, /!\[Rename\]\([^\n]+\.gif\)/);
-  assert.match(text, /\[Watch WebM\]\([^\n]+\.webm\)/);
-  assert.doesNotMatch(text, /!\[[^\n]+\.webm\)/);
+  assert.doesNotMatch(text, /webm/i);
+});
+
+test('gallery publication copies only the GIF and removes the formerly linked video', () => {
+  const fs = require('node:fs'), path = require('node:path'), os = require('node:os');
+  const { publish } = require('../scripts/showcases/publish.cjs');
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'showcase-gif-only-'));
+  const video = '0001-windows-en-dark-rename-editor.webm', gif = video.replace('.webm', '.gif');
+  try {
+    const input = path.join(root, '.tmp/showcases'), output = path.join(root, 'media/marketplace/showcases');
+    fs.mkdirSync(input, { recursive: true }); fs.mkdirSync(output, { recursive: true });
+    const manifest = { sections: [{ id: 'rename', title: 'Rename', description: 'Cancel edits.', status: 'rendered', images: [{ file: video, fallback: gif, alt: 'Rename' }] }] };
+    fs.writeFileSync(path.join(input, 'showcases.json'), JSON.stringify(manifest));
+    fs.writeFileSync(path.join(input, gif), 'GIF89a');
+    fs.writeFileSync(path.join(output, video), 'previous recording');
+    fs.writeFileSync(path.join(root, 'README.md'), `# Product\n<!-- showcase-gallery:start -->\n[Watch WebM](media/marketplace/showcases/${video})\n<!-- showcase-gallery:end -->\n`);
+    publish(root);
+    assert.equal(fs.existsSync(path.join(output, video)), false);
+    assert.equal(fs.readFileSync(path.join(output, gif), 'utf8'), 'GIF89a');
+    assert.doesNotMatch(fs.readFileSync(path.join(root, 'README.md'), 'utf8'), /webm/i);
+  } finally {
+    assert.ok(path.resolve(root).startsWith(path.resolve(os.tmpdir()) + path.sep));
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('catalog sequences execute ordered real inputs and retain observed checks', async () => {

@@ -166,8 +166,6 @@ Open inline rename with a delayed second click, cancel it, then use F2 and cance
 
 ![Rename a single entry](media/marketplace/showcases/0019-windows-en-dark-rename-inline-editor.gif)
 
-[Watch WebM](media/marketplace/showcases/0019-windows-en-dark-rename-inline-editor.webm)
-
 </details>
 
 <details>

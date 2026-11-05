@@ -44,6 +44,11 @@ function mediaName(value) {
   if (!/^\d{4}-windows-en-dark-[a-z0-9-]+\.(png|gif|webm)$/.test(value)) throw new Error('Invalid showcase media filename.');
   return value;
 }
+function galleryFile(image) {
+  const file = mediaName(image.file.endsWith('.webm') ? image.fallback || '' : image.file);
+  if (!/\.(png|gif)$/.test(file)) throw new Error('The gallery requires a PNG or GIF capture.');
+  return file;
+}
 function renderGallery(manifest) {
   const lines = [begin, '## Feature walkthrough', '',
     'Windows examples with sample project files. Animations include a pointer highlight and keystroke hints. Drag-and-drop demonstrations stop at the confirmation dialog.', ''];
@@ -54,10 +59,7 @@ function renderGallery(manifest) {
     if (excerpt) lines.push(`<p><small>${excerpt}</small></p>`, '');
     lines.push(section.description, '');
     for (const image of section.images) {
-      if (image.file.endsWith('.webm')) {
-        if (image.fallback) lines.push(`![${image.alt}](${mediaDirectory}/${mediaName(image.fallback)})`, '');
-        lines.push(`[Watch WebM](${mediaDirectory}/${mediaName(image.file)})`, '');
-      } else lines.push(`![${image.alt}](${mediaDirectory}/${mediaName(image.file)})`, '');
+      lines.push(`![${image.alt}](${mediaDirectory}/${galleryFile(image)})`, '');
     }
     lines.push('</details>', '');
   }
@@ -81,11 +83,11 @@ function updateReadme(text, manifest) {
 function publish(root = path.resolve(__dirname, '../..')) {
   const input = path.join(root, '.tmp/showcases'), output = path.join(root, mediaDirectory);
   const manifest = JSON.parse(fs.readFileSync(path.join(input, 'showcases.json'), 'utf8'));
-  const images = manifest.sections.filter(section => section.status === 'rendered').flatMap(section => section.images).flatMap(image => [image, ...(image.fallback ? [{ file: image.fallback }] : [])]);
+  const images = manifest.sections.filter(section => section.status === 'rendered').flatMap(section => section.images).map(image => ({ file: galleryFile(image) }));
   if (!images.length) throw new Error('No recorded media are available to publish.');
   for (const image of images) {
     const bytes = fs.readFileSync(path.join(input, mediaName(image.file)));
-    if (image.file.endsWith('.webm') ? bytes.readUInt32BE(0) !== 0x1a45dfa3 : image.file.endsWith('.gif') ? bytes.toString('ascii', 0, 3) !== 'GIF' : bytes.toString('ascii', 1, 4) !== 'PNG') throw new Error(`Invalid media: ${image.file}`);
+    if (image.file.endsWith('.gif') ? bytes.toString('ascii', 0, 3) !== 'GIF' : bytes.toString('ascii', 1, 4) !== 'PNG') throw new Error(`Invalid media: ${image.file}`);
   }
   const readmePath = path.join(root, 'README.md');
   const before = fs.readFileSync(readmePath, 'utf8'), readme = updateReadme(before, manifest);
