@@ -51,11 +51,15 @@ test('keyboard chords distinguish releases, expire only after release and surviv
     const panel = h.doc.querySelector('#showcase-keys');
     h.ui.key('keyDown', 'Control'); h.ui.key('keyDown', 'l');
     assert.deepEqual([...panel.querySelectorAll('kbd')].map(e => e.textContent), ['Ctrl', 'L']);
+    assert.deepEqual([...panel.querySelectorAll('kbd')].map(e => e.dataset.state), ['pressed', 'pressed']);
     h.advance(5000);
     assert.equal(panel.style.opacity, '1');
     h.ui.key('keyUp', 'l');
     assert.equal(panel.querySelectorAll('kbd[data-pressed="true"]').length, 1);
+    assert.equal(panel.querySelector('kbd:last-child').dataset.state, 'released');
+    assert.equal(panel.querySelector('kbd:first-child').dataset.state, 'pressed');
     h.ui.key('keyUp', 'Control');
+    assert.deepEqual([...panel.querySelectorAll('kbd')].map(e => e.dataset.state), ['released', 'released']);
     h.advance(presentationTiming.hint);
     assert.equal(panel.style.opacity, '0');
     h.ui.key('keyDown', 'F2');
@@ -98,4 +102,9 @@ test('reading time follows verified states, counts existing pauses and uses shar
   const count = waits.length;
   await pacing.beforeInput(); assert.equal(waits.length, count);
   await pacing.end(); assert.equal(waits.at(-1), presentationTiming.ending);
+});
+
+test('key press and release states have enough time to appear in recorded frames', () => {
+  assert.ok(presentationTiming.keyHold >= 150);
+  assert.ok(presentationTiming.keyRelease >= 150);
 });

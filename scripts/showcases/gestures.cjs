@@ -101,6 +101,7 @@ async function recordGesture({ capture, scene, page, target, evaluate, invoke, r
     keyEvents.push({ type, key, code, modifiers, timestamp: Date.now() });
     await refreshProtection();
     await pageEvaluate((type, key) => window.__showcasePresentation.key(type, key), type, key);
+    await hold(type === 'keyDown' ? presentationTiming.keyHold : presentationTiming.keyRelease);
   };
   let recordingError;
   const unsubscribe = page.on('Page.screencastFrame', event => {

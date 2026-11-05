@@ -1,5 +1,5 @@
 /* global window, document */
-const presentationTiming = Object.freeze({ hint: 1000, fade: 180, reading: 1100, opening: 650, ending: 900 });
+const presentationTiming = Object.freeze({ hint: 1000, fade: 180, reading: 1100, opening: 650, ending: 900, keyHold: 180, keyRelease: 180 });
 
 function createPacing({ now = Date.now, sleep = ms => new Promise(resolve => setTimeout(resolve, ms)) } = {}) {
   let readUntil = 0;
@@ -25,8 +25,9 @@ function installPresentation(timing) {
     #showcase-pointer .showcase-ring{border-color:currentColor;background:transparent}
     #showcase-pointer .showcase-key{border-color:var(--vscode-widget-border,#666);background:var(--vscode-editorWidget-background,#252526);color:var(--vscode-foreground,#ddd);border-radius:5px;box-shadow:0 2px 8px #0004;transition:opacity ${timing.fade}ms}
     #showcase-keys{transition:opacity ${timing.fade}ms;border-radius:5px;gap:8px;padding:10px 14px;box-shadow:0 2px 8px #0004}
-    #showcase-keys kbd{font-size:16px;border-radius:4px;transition:background-color 100ms}
-    #showcase-keys kbd[data-pressed="true"]{background:var(--vscode-toolbar-activeBackground,#ffffff18);border-color:var(--vscode-focusBorder,#007fd4)}
+    #showcase-keys kbd{font-size:16px;border-radius:4px;transition:background-color 100ms,transform 100ms,box-shadow 100ms}
+    #showcase-keys kbd[data-state="pressed"]{background:var(--vscode-toolbar-activeBackground,#ffffff18);border-color:var(--vscode-focusBorder,#007fd4);transform:translateY(2px);box-shadow:inset 0 1px 3px #0005}
+    #showcase-keys kbd[data-state="released"]{background:transparent;border-color:var(--vscode-widget-border,#666);transform:translateY(0);box-shadow:0 1px 1px #0003}
   `;
   document.head.append(style);
   pointer.style.color = 'var(--vscode-focusBorder,#007fd4)';
@@ -107,11 +108,14 @@ function installPresentation(timing) {
         pressed.add(name); show(panel); panel.replaceChildren();
         for (const [index, value] of [...pressed].entries()) {
           if (index) { const plus = create('span'); plus.textContent = '+'; panel.append(plus); }
-          const cap = create('kbd'); cap.textContent = value; cap.dataset.pressed = 'true'; panel.append(cap);
+          const cap = create('kbd'); cap.textContent = value; cap.dataset.pressed = 'true'; cap.dataset.state = 'pressed'; panel.append(cap);
         }
       } else {
         pressed.delete(name);
-        for (const cap of panel.querySelectorAll('kbd')) cap.dataset.pressed = String(pressed.has(cap.textContent));
+        for (const cap of panel.querySelectorAll('kbd')) {
+          cap.dataset.pressed = String(pressed.has(cap.textContent));
+          cap.dataset.state = pressed.has(cap.textContent) ? 'pressed' : 'released';
+        }
         if (!pressed.size) expire(panel);
       }
       layout();
