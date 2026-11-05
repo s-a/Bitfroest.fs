@@ -1,4 +1,4 @@
-const Progress = require('./media/commander-progress');
+const Progress = require('./media/bitfroest-progress');
 const OPERATIONS = Object.freeze([
   'files.copy', 'files.rename', 'files.readDirectory', 'clipboard.readFiles', 'clipboard.writeFiles',
   'clipboard.acknowledge', 'clipboard.cancelFiles', 'shell.showContextMenu', 'shell.openAssociated',

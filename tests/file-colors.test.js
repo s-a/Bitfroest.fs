@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const colors = require('../media/commander-file-colors');
+const colors = require('../media/bitfroest-file-colors');
 
 test('text colors retain adequate colors and correct background-identical and translucent colors', () => {
   for (const background of ['#ffffff', '#181818', '#789abc']) {
@@ -32,7 +32,7 @@ test('contrast uses linear sRGB and rejects unresolved or invalid backgrounds', 
 
 test('repeated wildcards cannot block matching ordinary long file names', async () => {
   const { Worker } = require('node:worker_threads');
-  const worker = new Worker(`const {parentPort}=require('node:worker_threads'); const colors=require(${JSON.stringify(require.resolve('../media/commander-file-colors'))}); parentPort.postMessage(colors.match('a'.repeat(120), {'*a*a*a*a*a*a*a*a*a*a*a*a*b':'#ffffff'}));`, { eval: true });
+  const worker = new Worker(`const {parentPort}=require('node:worker_threads'); const colors=require(${JSON.stringify(require.resolve('../media/bitfroest-file-colors'))}); parentPort.postMessage(colors.match('a'.repeat(120), {'*a*a*a*a*a*a*a*a*a*a*a*a*b':'#ffffff'}));`, { eval: true });
   let timer;
   try {
     const result = await Promise.race([

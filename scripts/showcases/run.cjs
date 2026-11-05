@@ -277,7 +277,7 @@ async function main() {
       fs.writeFileSync(path.join(run, 'pointer-events.json'), JSON.stringify(observed, null, 2));
     }
     diagnostic = async () => {
-      const state = await evaluate(() => ({ saved: window.CommanderHost?.getState?.(), contexts: [...document.querySelectorAll('.pane .list')].map(item => item.dataset.vscodeContext), names: [...document.querySelectorAll('[data-file-row][data-id]')].map(item => item.title || item.querySelector('[data-cell]')?.title) }));
+      const state = await evaluate(() => ({ saved: window.BitfroestHost?.getState?.(), contexts: [...document.querySelectorAll('.pane .list')].map(item => item.dataset.vscodeContext), names: [...document.querySelectorAll('[data-file-row][data-id]')].map(item => item.title || item.querySelector('[data-cell]')?.title) }));
       fs.writeFileSync(path.join(run, 'failure-state.json'), JSON.stringify({ stage, state }, null, 2));
       const shot = await page.call('Page.captureScreenshot', { format: 'png' }); fs.writeFileSync(path.join(run, 'failure.png'), Buffer.from(shot.data, 'base64'));
     };
@@ -412,7 +412,7 @@ async function main() {
         await waitFor(async () => {
           const state = await evaluate(selector => {
             const element = document.querySelector(selector), rect = element?.getBoundingClientRect();
-            const saved = window.CommanderHost?.getState?.();
+            const saved = window.BitfroestHost?.getState?.();
             return { platform: document.body.dataset.platform, realFilesystem: JSON.parse(document.body.dataset.initialState || 'null')?.realFilesystem,
               paths: saved?.panes?.map(pane => pane.tabs[pane.tab]) || [...document.querySelectorAll('.pane .path-breadcrumbs')].map(item => item.title.split('\n')[0]),
               visible: Boolean(rect?.width && rect?.height), text: selector === '.pane' ? document.body.innerText : element?.value || element?.textContent,

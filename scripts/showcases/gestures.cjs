@@ -82,7 +82,7 @@ function findTargetPoint({ selector, side = 0, name, xFraction }, root = documen
 }
 
 function fixtureSnapshot(action, root = document) {
-  const state = root.defaultView.CommanderHost.getState(), pane = state.panes[state.active];
+  const state = root.defaultView.BitfroestHost.getState(), pane = state.panes[state.active];
   const activeDirectory = pane.tabs[pane.tab], other = state.panes[1 - state.active], otherDirectory = other.tabs[other.tab], rows = state.folders[activeDirectory] || [];
   const selected = pane.selected.map(id => rows.find(row => row.id === id)?.fsSource || '');
   if (action === 'lock-inspect') {
@@ -281,7 +281,7 @@ async function recordGesture({ capture, scene, page, target, evaluate, invoke, r
     await waitFor(() => evaluate(() => Boolean(document.querySelector('#main-menu-popup [data-menu-action="clear"]'))));
     await move(await point('[data-menu-action="clear"]', 0));
     await click(position, 'left', 0, 'Clear current selection');
-    await waitFor(() => evaluate(() => window.CommanderHost.getState().panes[0].selected.length === 0));
+    await waitFor(() => evaluate(() => window.BitfroestHost.getState().panes[0].selected.length === 0));
   };
   const move = async (end, duration = 660) => {
     if (!buttons) await pacing.beforeInput();
@@ -295,11 +295,11 @@ async function recordGesture({ capture, scene, page, target, evaluate, invoke, r
   try {
     await invoke('showcase.screencast');
     await invoke('bitfroest.clear');
-    await waitFor(() => evaluate(() => { const state = window.CommanderHost.getState(); return state.panes[state.active].selected.length === 0; }));
+    await waitFor(() => evaluate(() => { const state = window.BitfroestHost.getState(); return state.panes[state.active].selected.length === 0; }));
     if (capture.gesture === 'right-drag') {
       await click(await point('.list', 0, 'Changes.txt'));
       await click(await point('.list', 0, 'Colors.json'), 'left', 2);
-      await waitFor(() => evaluate(() => window.CommanderHost.getState().panes[0].selected.length === 2));
+      await waitFor(() => evaluate(() => window.BitfroestHost.getState().panes[0].selected.length === 2));
     }
     await mouse('mouseMoved', origin);
     await pageEvaluate(() => window.__showcasePresentation.reset());
@@ -602,8 +602,8 @@ async function recordGesture({ capture, scene, page, target, evaluate, invoke, r
       const start = await point('.list', 0, 'Changes.txt', .15), end = await point('.list', 0, 'Colors.json', .65);
       await move(start); await hold(300); await mouse('mouseMoved'); await mouse('mousePressed', position, 'right', 0, 'Select files');
       await move(end); await mouse('mouseReleased', position, 'right');
-      await waitFor(() => evaluate(() => window.CommanderHost.getState().panes[0].selected.length >= 2));
-      result = { selectionCount: await evaluate(() => window.CommanderHost.getState().panes[0].selected.length) };
+      await waitFor(() => evaluate(() => window.BitfroestHost.getState().panes[0].selected.length >= 2));
+      result = { selectionCount: await evaluate(() => window.BitfroestHost.getState().panes[0].selected.length) };
       await clearSelection();
       result.selectionCleared = true;
     } else if (capture.gesture === 'right-drag') {

@@ -18,7 +18,7 @@ test('notes actions require their own fixture', () => {
 test('reads the actual multi-rename preview and configuration', () => {
   const dom = new JSDOM('<dialog id="modal" open><span id="modal-title">Multi-rename</span><button id="modal-confirm"></button><input id="mask" value="[N]_[C]"><input id="counter" value="1"><input id="search"><input id="replacement"><select id="casing"><option value="keep">Keep</option></select><table><tbody id="rename-preview"><tr><td>Draft-A.txt</td><td>Draft-A_1.txt</td></tr></tbody></table></dialog>');
   const root = dom.window.document;
-  dom.window.CommanderHost = { getState: () => ({ active: 1, panes: [{ tabs: ['C:/demo/left'], tab: 0 }, { tabs: ['C:/demo/right'], tab: 0, selected: ['a'] }], folders: { 'C:/demo/right': [{ id: 'a', fsSource: 'C:/demo/right/Draft-A.txt' }] } }) };
+  dom.window.BitfroestHost = { getState: () => ({ active: 1, panes: [{ tabs: ['C:/demo/left'], tab: 0 }, { tabs: ['C:/demo/right'], tab: 0, selected: ['a'] }], folders: { 'C:/demo/right': [{ id: 'a', fsSource: 'C:/demo/right/Draft-A.txt' }] } }) };
   const snapshot = fixtureSnapshot('batch-rename', root);
   assert.deepEqual(snapshot.preview, [['Draft-A.txt', 'Draft-A_1.txt']]);
   assert.equal(snapshot.mask, '[N]_[C]'); assert.equal(snapshot.counter, '1'); assert.equal(snapshot.casing, 'keep');

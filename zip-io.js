@@ -1,6 +1,6 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
-const Progress = require('./media/commander-progress');
+const Progress = require('./media/bitfroest-progress');
 
 const signature = stat => [stat.dev, stat.ino, stat.size, stat.mtimeNs, stat.ctimeNs].join(':');
 const stop = signal => { if (signal?.aborted) throw new DOMException('Entpacken abgebrochen.', 'AbortError'); };

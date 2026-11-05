@@ -1,6 +1,6 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
-const Progress = require('./media/commander-progress');
+const Progress = require('./media/bitfroest-progress');
 const crypto = require('node:crypto');
 const { createCodepageDecoder } = require('./lister-codepages');
 const { archiveEntries, officeText } = require('./search-archives');
@@ -161,7 +161,7 @@ async function searchFiles(options, input) {
   const nativeDecoder = createCodepageDecoder(), decoder = { text: (bytes, encoding) => process.platform !== 'win32' && ['0', '1'].includes(encoding) ? Promise.resolve(new TextDecoder(encoding === '0' ? 'windows-1252' : 'ibm866').decode(bytes)) : nativeDecoder.text(bytes, encoding) };
   const results = [], errors = [], seen = new Set(), found = new Set();
   let duplicateTotal, duplicateCompleted = 0;
-  /** @param {import('./media/commander-progress').Measurement} current */
+  /** @param {import('./media/bitfroest-progress').Measurement} current */
   const report = (target, current = Progress.unknown('items', 0, 'enumerating')) => options.onProgress?.(Progress.event({ phase: duplicateTotal === undefined ? 'searching' : 'duplicates', path: target, count: results.length, overall: duplicateTotal === undefined ? Progress.unknown('items', seen.size, 'enumerating') : Progress.known('items', duplicateCompleted, duplicateTotal), current }));
   async function* measured(chunks, target, total) {
     let completed = 0;

@@ -20,7 +20,7 @@ const resize = (app, key, value, side = 0) => app.grid(side).setColumnWidths([{ 
 test('standard date headers sort complete dates and retain folder ordering', t => {
   const pane = () => ({ tabs: ['/left'], tab: 0, selected: [], cursor: null, filter: '', sort: 'name' });
   const files = [{ id: 'nov', name: 'November', type: 'folder', date: '02.11.2026 16:15:40' }, { id: 'aug', name: 'August', type: 'folder', date: '31.08.2026 19:09:55' }, { id: 'oct', name: 'October', type: 'folder', date: '30.10.2026 16:33:26' }];
-  const catalog = require('../media/commander-column-settings').catalog;
+  const catalog = require('../media/bitfroest-column-settings').catalog;
   const app = createApp(t, { version: 1, active: 0, panes: [pane(), pane()], folders: { '/left': files } }, { columnSettings: { sets: [{ id: 'standard', name: 'Standard', columns: catalog }], activeSet: 'standard' } });
   const order = () => { const ids = []; app.grid().forEachNodeAfterFilterAndSort(node => { if (files.some(file => file.id === node.id)) ids.push(node.id); }); return ids; };
   app.click(app.document.querySelector('[data-sort="date"]'));
@@ -30,7 +30,7 @@ test('standard date headers sort complete dates and retain folder ordering', t =
 });
 
 test('Linux masks Windows-only fields in restored column preferences', t => {
-  const catalog = require('../media/commander-column-settings').catalog;
+  const catalog = require('../media/bitfroest-column-settings').catalog;
   const columns = catalog.map(column => ({ ...column, visible: ['name', 'archive', 'versionString'].includes(column.id) }));
   const app = createApp(t, null, { platform: 'linux', columnSettings: { sets: [{ id: 'standard', name: 'Standard', columns }], activeSet: 'standard' } });
   assert.equal(app.document.querySelector('.ag-header [data-column="archive"]'), null);

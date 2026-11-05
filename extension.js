@@ -1,6 +1,6 @@
 const vscode = require('vscode');
 const moduleStartedAt = performance.now();
-const Progress = require('./media/commander-progress');
+const Progress = require('./media/bitfroest-progress');
 const { productIcon } = require('./product-icons');
 const extensionVersion = require('./package.json').version;
 const helpLinks = Object.freeze({
@@ -19,7 +19,7 @@ const { createGitStatusProvider } = require('./git-status-provider');
 const { allowedGitPath } = require('./git-status-paths');
 const fs = require('node:fs');
 const path = require('node:path');
-const { normalizePath, displayPath, identity: pathIdentity } = require('./media/commander-paths');
+const { normalizePath, displayPath, identity: pathIdentity } = require('./media/bitfroest-paths');
 const crypto = require('node:crypto');
 const { loadIconTheme } = require('./icon-theme');
 const { getFilesystemIcons, clearFilesystemIconCache } = require('./filesystem-icons');
@@ -30,8 +30,8 @@ const { createZipFilesystem } = require('./zip-filesystem');
 const { createZipEditor } = require('./zip-editor');
 const { createReadonlyResources } = require('./readonly-files');
 const { createClipboardProvider } = require('./clipboard-provider');
-const { create } = require('./media/commander-i18n');
-const { columnSetsFromTables, columnSetFromPreferences, catalog, normalizeColumnSets, columnTitle, isColumnAvailable } = require('./media/commander-column-settings');
+const { create } = require('./media/bitfroest-i18n');
+const { columnSetsFromTables, columnSetFromPreferences, catalog, normalizeColumnSets, columnTitle, isColumnAvailable } = require('./media/bitfroest-column-settings');
 const { renderOperationError } = require('./operation-errors');
 const { openTrash } = require('./open-trash');
 const { openTerminal } = require('./open-terminal');
@@ -653,7 +653,7 @@ function activate(context) {
       });
       logStartup('document-assigned', { documentId, stage: 'loading' });
       loadingPanel.webview.html = `<!DOCTYPE html><html data-startup-id="${currentStartup.id}" data-document-id="${documentId}"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}'"><style nonce="${nonce}">body{font-family:var(--vscode-font-family);font-size:var(--vscode-font-size);color:var(--vscode-foreground);background:var(--vscode-editor-background);padding:24px}ol{padding-left:24px}li{margin:8px 0}button{font:inherit;color:var(--vscode-button-foreground);background:var(--vscode-button-background);border:1px solid var(--vscode-button-border,transparent);padding:6px 10px}button:focus-visible{outline:1px solid var(--vscode-focusBorder);outline-offset:2px}</style></head><body><main id="host-startup"><h1>${escapeStartup(t('Dateiverwaltung wird geladen…'))}</h1><p id="host-startup-current" role="status">${escapeStartup(t('Tastaturkonfiguration wird übernommen'))}</p><button id="host-startup-copy" type="button">${escapeStartup(t('Startprotokoll kopieren'))}</button><ol id="host-startup-log" role="log"></ol></main><script nonce="${nonce}">${diagnosticsScript}
-window.addEventListener('message',event=>{const update=event.data;if(update?.type!=='host-startup')return;document.getElementById('host-startup-current').textContent=update.message;const row=document.createElement('li');row.textContent='['+(update.elapsed/1000).toFixed(3)+' s] '+update.message;document.getElementById('host-startup-log').append(row);});const host=window.CommanderHost;document.getElementById('host-startup-copy').onclick=()=>host.postMessage({type:'startup-log-copy'});host.postMessage({type:'host-startup-ready'});</script></body></html>`;
+window.addEventListener('message',event=>{const update=event.data;if(update?.type!=='host-startup')return;document.getElementById('host-startup-current').textContent=update.message;const row=document.createElement('li');row.textContent='['+(update.elapsed/1000).toFixed(3)+' s] '+update.message;document.getElementById('host-startup-log').append(row);});const host=window.BitfroestHost;document.getElementById('host-startup-copy').onclick=()=>host.postMessage({type:'startup-log-copy'});host.postMessage({type:'host-startup-ready'});</script></body></html>`;
     }
     if (!restoredPanel || (loadingPanel.visible && loadingPanel.active !== false)) {
       const token = crypto.randomUUID();
@@ -679,7 +679,7 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
             requestId: error.requestId, generation: error.generation, details: diagnosticTree(error.details),
             titleToken: token, panelDisposed: restoredDisposed, visible: loadingPanel.visible,
             active: loadingPanel.active, viewColumn: loadingPanel.viewColumn });
-          void vscode.window.showErrorMessage(t('Das Commander-Fenster konnte nicht vollständig eingerichtet werden: {error}', { error: t(error.message) }));
+          void vscode.window.showErrorMessage(t('Das Bitfroest-Fenster konnte nicht vollständig eingerichtet werden: {error}', { error: t(error.message) }));
         } finally {
           windowSetupPending = false;
           if (!restoredDisposed) loadingPanel.title = title();
@@ -798,7 +798,7 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
         .replace('<script src="../node_modules/notyf/notyf.min.js"></script>', () => `<script nonce="${nonce}" src="${resource('../node_modules/notyf/notyf.min.js')}"></script>`)
         .replace('<script src="../node_modules/ag-grid-community/dist/ag-grid-community.min.noStyle.js"></script>', () => `<script nonce="${nonce}" src="${resource('../node_modules/ag-grid-community/dist/ag-grid-community.min.noStyle.js')}"></script>`)
         .replace('<script src="webview-bootstrap.js"></script>', () => `<script nonce="${nonce}">${diagnosticsScript}\n${bootstrap.replace(/<\/script/gi, '<\\/script')}</script>`)
-        .replace(/<script src="([a-z0-9-]+\.js)"><\/script>/g, (_, name) => `<script nonce="${nonce}">window.CommanderStartupResource.start(${JSON.stringify(name)});</script><script src="${name}"></script>`)
+        .replace(/<script src="([a-z0-9-]+\.js)"><\/script>/g, (_, name) => `<script nonce="${nonce}">window.BitfroestStartupResource.start(${JSON.stringify(name)});</script><script src="${name}"></script>`)
         .replace(/src="([a-z0-9-]+\.js)"/g, (_, name) => `nonce="${nonce}" src="${resource(name)}"`);
     };
     panel.onDidDispose(() => { shellMenu.dispose(); for (const job of transferJobs.values()) job.controller.abort(); panel = undefined; setReady(false); vscode.commands.executeCommand('setContext', 'bitfroest.textInput', false); vscode.commands.executeCommand('setContext', 'bitfroest.listFocus', false); vscode.commands.executeCommand('setContext', 'bitfroest.conflictDialog', false); vscode.commands.executeCommand('setContext', 'bitfroest.transferNameInput', false); vscode.commands.executeCommand('setContext', 'bitfroest.fileDialog', false); vscode.commands.executeCommand('setContext', 'bitfroest.inlineRenameInput', false); updateStatus(); }, null, context.subscriptions);

@@ -1,13 +1,13 @@
 (() => {
   'use strict';
-  const host = acquireVsCodeApi(), model = window.ConfigurationModel, paths = window.CommanderPaths;
+  const host = acquireVsCodeApi(), model = window.ConfigurationModel, paths = window.BitfroestPaths;
   const $ = selector => document.querySelector(selector);
-  let t = window.CommanderI18n.create('de').t;
+  let t = window.BitfroestI18n.create('de').t;
   let data = null, scope = 'user', revision, section = 'favorites', selected = null, dirty = false, saving = false, pendingBrowse = null;
   const expanded = new Set();
   const clone = value => JSON.parse(JSON.stringify(value));
   let draggedColumn = null;
-  const columnDragType = 'application/x-commander-column';
+  const columnDragType = 'application/x-bitfroest-column';
   function clearColumnDrag() {
     draggedColumn = null;
     for (const row of document.querySelectorAll('[data-drop-position]')) delete row.dataset.dropPosition;
@@ -63,7 +63,7 @@
         const item = document.createElement('li'); item.dataset.node = node.id; item.setAttribute('role', 'treeitem'); item.setAttribute('aria-selected', String(selected === node.id)); item.tabIndex = selected === node.id ? 0 : -1; item.draggable = true;
         const row = document.createElement('span'); row.className = 'tree-row';
         const label = document.createElement('span'); label.textContent = node.name;
-        row.append(window.CommanderIcons.element(node.type === 'group' ? expanded.has(node.id) ? 'chevron-down' : 'chevron-right' : 'star-empty'), label); item.append(row);
+        row.append(window.BitfroestIcons.element(node.type === 'group' ? expanded.has(node.id) ? 'chevron-down' : 'chevron-right' : 'star-empty'), label); item.append(row);
         if (node.type === 'group') {
           item.setAttribute('aria-expanded', String(expanded.has(node.id)));
           if (expanded.has(node.id)) { const children = document.createElement('ul'); children.setAttribute('role', 'group'); append(node.id, children); item.append(children); }
@@ -94,7 +94,7 @@
     clearColumnDrag();
     const body = $('#column-rows'); body.replaceChildren();
     data.columns.forEach((column, index) => {
-      const definition = window.CommanderColumnSettings.catalog.find(item => item.id === column.id);
+      const definition = window.BitfroestColumnSettings.catalog.find(item => item.id === column.id);
       const row = document.createElement('tr'); row.dataset.columnRow = column.id; row.draggable = true; row.tabIndex = 0;
       row.setAttribute('aria-label', t(definition.title)); row.setAttribute('aria-describedby', 'column-reorder-help');
       row.onkeydown = event => {
@@ -107,7 +107,7 @@
         modified(); renderColumns(); $(`[data-column-row="${column.id}"]`).focus();
       };
       const cell = element => { const td = document.createElement('td'); if (typeof element === 'string') td.textContent = element; else td.append(element); row.append(td); };
-      const available = window.CommanderColumnSettings.isColumnAvailable(definition, platform);
+      const available = window.BitfroestColumnSettings.isColumnAvailable(definition, platform);
       const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.dataset.visible = ''; checkbox.checked = available && column.visible; checkbox.disabled = !available; checkbox.setAttribute('aria-label', `${t('Sichtbar')}: ${t(definition.title)}`); checkbox.onchange = () => { if (!available) { checkbox.checked = false; return; } column.visible = checkbox.checked; modified(); }; cell(checkbox);
       if (!available) row.title = t('Auf diesem Betriebssystem nicht verfügbar.');
       cell(t(definition.title));
@@ -209,7 +209,7 @@
     const message = event.data;
     if (message?.type === 'configuration-state') {
       platform = message.platform;
-      data = clone(message.data); scope = message.scope; revision = message.revision; t = window.CommanderI18n.create(message.language).t; section = message.section; dirty = false; pendingBrowse = null; setSaving(false);
+      data = clone(message.data); scope = message.scope; revision = message.revision; t = window.BitfroestI18n.create(message.language).t; section = message.section; dirty = false; pendingBrowse = null; setSaving(false);
       settings = message.settings || []; shortcuts.setState(message, data); renderSettings();
       for (const element of document.querySelectorAll('[data-text]')) element.textContent = t(element.dataset.text);
       document.documentElement.lang = /^de/.test(message.language) ? 'de' : 'en';

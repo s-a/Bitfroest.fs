@@ -1,7 +1,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const Progress = require('./media/commander-progress');
+const Progress = require('./media/bitfroest-progress');
 
 const validHash = value => typeof value === 'string' && /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/i.test(value);
 function createGitHistory(vscode, context) {

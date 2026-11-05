@@ -1,7 +1,7 @@
 (function (root, factory) {
   const api = factory();
   if (typeof module === 'object' && module.exports) module.exports = api;
-  else root.CommanderIconLayout = api;
+  else root.BitfroestIconLayout = api;
 })(typeof window === 'object' ? window : globalThis, function () {
   'use strict';
   const defaults = Object.freeze({ size: 16, gapRatio: 0.25, badgeRatio: 0.5, minimumRow: 22 });

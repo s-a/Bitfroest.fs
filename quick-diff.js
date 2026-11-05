@@ -1,7 +1,7 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const Progress = require('./media/commander-progress');
+const Progress = require('./media/bitfroest-progress');
 const { createGitStatusEngine } = require('./git-status-engine');
 
 const aborted = () => Object.assign(new Error('Quick Diff cancelled.'), { name: 'AbortError' });

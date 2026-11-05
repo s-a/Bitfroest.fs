@@ -12,10 +12,10 @@ test('one base size determines icon frames, badges, gaps and required control sp
 test('icons share a fixed frame across text fonts and update from live settings', t => {
   const app = createApp(t);
   assert.equal(app.document.body.style.getPropertyValue('--icon-base-size'), '16px');
-  assert.equal(app.window.CommanderIcons.observeText, undefined);
-  assert.equal(app.window.CommanderIcons.referenceText, undefined);
+  assert.equal(app.window.BitfroestIcons.observeText, undefined);
+  assert.equal(app.window.BitfroestIcons.referenceText, undefined);
   const refresh = app.document.querySelector('[data-refresh-icon]');
-  app.window.CommanderIcons.setFont(refresh, 'loading', true);
+  app.window.BitfroestIcons.setFont(refresh, 'loading', true);
   const frame = refresh.querySelector('svg').getAttribute('viewBox');
   app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'file-settings', settings: { iconSize: 28 } } }));
   assert.equal(app.document.body.style.getPropertyValue('--icon-base-size'), '28px');
@@ -24,7 +24,7 @@ test('icons share a fixed frame across text fonts and update from live settings'
   assert.equal(refresh.querySelector('svg').getAttribute('viewBox'), frame);
   assert.equal(frame, '2 2 12 12');
   app.document.body.style.fontSize = '32px';
-  assert.equal(app.window.CommanderIcons.layout().size, 28);
+  assert.equal(app.window.BitfroestIcons.layout().size, 28);
   const fs = require('node:fs'), path = require('node:path');
   const css = fs.readFileSync(path.join(__dirname, '../media/app.css'), 'utf8');
   assert.doesNotMatch(css, /\b1cap\b|icon-baseline-offset/);

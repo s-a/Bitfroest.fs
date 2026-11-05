@@ -369,7 +369,7 @@ test('loading an older preset drops removed plugin filters and restores custom d
 
 test('duplicate marking through older saved searches drops removed filters too', async t => {
   const app = createApp(t, fixture()), messages = [], row = { id: 'a', fsSource: 'C:/tmp/a.txt' };
-  const search = app.window.CommanderFileSearch.create({ host: { postMessage: message => messages.push(message) }, context: () => ({ path: 'C:/tmp' }), t: value => value });
+  const search = app.window.BitfroestFileSearch.create({ host: { postMessage: message => messages.push(message) }, context: () => ({ path: 'C:/tmp' }), t: value => value });
   t.after(() => search.dispose());
   const result = search.evaluatePreset('Saved', [row]);
   respond(app, { type: 'search-presets', values: { Saved: { name: '*', pluginsEnabled: true, rules: [{ field: 'size', operator: '>', value: 1 }], sameFields: ['name'] } } });

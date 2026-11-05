@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createApp } = require('./support/webview.cjs');
-const Progress = require('../media/commander-progress');
+const Progress = require('../media/bitfroest-progress');
 const send = (app, data) => app.window.dispatchEvent(new app.window.MessageEvent('message', { data }));
 function fixture() {
   const pane = path => ({ tabs: [path], tab: 0, selected: [], cursor: 'docs', filter: '', sort: 'name' });

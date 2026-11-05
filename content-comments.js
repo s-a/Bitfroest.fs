@@ -1,7 +1,7 @@
 const nativeFs = require('node:fs');
 const fsPromises = require('node:fs/promises');
 const path = require('node:path');
-const Progress = require('./media/commander-progress');
+const Progress = require('./media/bitfroest-progress');
 const { throwIfAborted } = require('./native-copy');
 
 async function readDirectoryComments(directory, names, options = {}) {

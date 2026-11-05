@@ -463,7 +463,7 @@ test('column catalog receives creation, access and modification timestamps from 
   const provider = createProvider({ roots: [left, right] });
   const state = await provider.load(), file = row(state, slash(left), 'plain.txt');
   const stat = await fs.stat(path.join(left, 'plain.txt'));
-  const evaluate = require('../media/commander-column-settings').evaluateColumnTemplate;
+  const evaluate = require('../media/bitfroest-column-settings').evaluateColumnTemplate;
   for (const family of ['write', 'creation', 'access']) {
     assert.equal(evaluate(file, `[=tc.${family}date] [=tc.${family}time]`).missingFields.length, 0);
   }

@@ -2,7 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const ts = require('typescript');
 const root = path.resolve(__dirname, '..');
-const contract = path.join(root, 'media/commander-jobs.d.ts');
+const contract = path.join(root, 'media/bitfroest-jobs.d.ts');
 
 function check(files, overrides = new Map()) {
   const options = { allowJs: true, checkJs: true, noEmit: true, target: ts.ScriptTarget.ESNext, module: ts.ModuleKind.CommonJS, skipLibCheck: true, types: [] };
@@ -22,7 +22,7 @@ function check(files, overrides = new Map()) {
       for (const diagnostic of diagnostics) if (diagnostic.start >= node.getStart() && diagnostic.start < node.end) fail(node, ts.flattenDiagnosticMessageText(diagnostic.messageText, ' '));
     }
     function visit(node) {
-      if (ts.isVariableDeclaration(node) && path.resolve(file) === path.join(root, 'media/commander-jobs.js')) {
+      if (ts.isVariableDeclaration(node) && path.resolve(file) === path.join(root, 'media/bitfroest-jobs.js')) {
         if (node.name.getText(source) === 'definitions') validate(node.initializer, registry);
         if (node.name.getText(source) === 'actionDefinitions') validate(node.initializer, actions);
       }

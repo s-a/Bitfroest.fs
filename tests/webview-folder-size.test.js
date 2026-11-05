@@ -100,14 +100,14 @@ test('Space marks keep readable theme colors on active and inactive selection ba
   await new Promise(resolve => setImmediate(resolve));
   const table = app.document.querySelector('.file-table');
   for (const state of ['active', 'inactive']) {
-    assert.ok(app.window.CommanderFileColors.ratio(table.style.getPropertyValue(`--${state}-space-mark-text`), '#333333') >= 4.5);
+    assert.ok(app.window.BitfroestFileColors.ratio(table.style.getPropertyValue(`--${state}-space-mark-text`), '#333333') >= 4.5);
   }
   for (const theme of ['vscode-high-contrast', 'vscode-high-contrast-light']) {
     app.document.body.className = theme;
     await new Promise(resolve => setImmediate(resolve));
     for (const state of ['active', 'inactive']) {
       assert.equal(table.style.getPropertyValue(`--${state}-space-mark-text`), '');
-      assert.ok(app.window.CommanderFileColors.ratio(table.style.getPropertyValue(`--${state}-selection-text`), '#333333') >= 4.5);
+      assert.ok(app.window.BitfroestFileColors.ratio(table.style.getPropertyValue(`--${state}-selection-text`), '#333333') >= 4.5);
     }
   }
 });

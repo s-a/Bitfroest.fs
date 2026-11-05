@@ -4,7 +4,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
 const { createProvider } = require('../filesystem-provider');
-const transfer = require('../media/commander-transfer');
+const transfer = require('../media/bitfroest-transfer');
 
 async function fixture(t) {
   const temporary = process.platform === 'win32' ? 'C:/tmp' : os.tmpdir();

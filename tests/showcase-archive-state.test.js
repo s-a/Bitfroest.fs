@@ -41,7 +41,7 @@ test('archive operation identity comes from matching real progress and rejects a
 function harness() {
   const dom = new JSDOM('<body><section class="pane active"><div class="list" tabindex="0"></div></section><div id="panes"></div><div id="functionbar"></div><div id="status-progress-area" class="is-idle"></div><span id="status-activity" hidden></span><span id="status-message" data-outcome="success">File operation completed</span><dialog id="modal" open><div id="modal-title">Pack selection</div><input id="value" value="C:/demo/right/Project-Plan.zip"><button id="modal-confirm">Pack</button><input id="zip-paths" type="checkbox" checked><input id="zip-recursive" type="checkbox" checked><input id="zip-move" type="checkbox"><select id="zip-encryption"><option value="none">None</option></select></dialog></body>', { url: 'https://example.invalid' });
   const state = { realFilesystem: true, active: 0, panes: [{ tabs: ['C:/demo/left'], tab: 0, selected: ['file'] }, { tabs: ['C:/demo/right'], tab: 0, selected: [] }], folders: { 'C:/demo/left': [{ id: 'file', fsSource: 'C:/demo/left/Project-Plan.md' }] } };
-  dom.window.CommanderHost = { getState: () => state };
+  dom.window.BitfroestHost = { getState: () => state };
   return { dom, state, root: dom.window.document };
 }
 

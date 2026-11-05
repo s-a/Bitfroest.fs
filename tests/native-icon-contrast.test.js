@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const contrast = require('../media/commander-contrast');
+const contrast = require('../media/bitfroest-contrast');
 const { createApp } = require('./support/webview.cjs');
 
 test('native icon contrast adds an opposite outline only for low contrast visible pixels', () => {
@@ -30,8 +30,8 @@ test('loaded native icons adapt to base, hover and selection backgrounds without
   } };
   let reads = 0, analyses = 0;
   const app = createApp(t, state, { beforeApp({ window, document }) {
-    const outline = window.CommanderContrast.nativeIconOutline;
-    window.CommanderContrast.nativeIconOutline = (...args) => { analyses++; return outline(...args); };
+    const outline = window.BitfroestContrast.nativeIconOutline;
+    window.BitfroestContrast.nativeIconOutline = (...args) => { analyses++; return outline(...args); };
     for (const [name, value] of Object.entries({ 'sideBar-background': '#101010', 'list-hoverBackground': '#ffffff', 'list-activeSelectionBackground': '#ffffff', 'list-inactiveSelectionBackground': '#111111' })) document.body.style.setProperty(`--vscode-${name}`, value);
     window.HTMLCanvasElement.prototype.getContext = () => ({
       measureText: () => ({ width: 8 }), drawImage() {},

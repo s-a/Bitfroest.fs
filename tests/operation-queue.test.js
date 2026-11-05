@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 test('one immutable selection is one serial job and duplicate completions cannot advance the queue', () => {
-  const { createQueue } = require('../media/commander-jobs');
+  const { createQueue } = require('../media/bitfroest-jobs');
   const starts = [], ends = [];
   const queue = createQueue({ start: job => starts.push(job), finish: (job, result) => ends.push([job, result]) });
   const input = { command: 'copy', title: 'Copy', target: 'C:/target', sources: ['a', 'b', 'c'] };
@@ -17,7 +17,7 @@ test('one immutable selection is one serial job and duplicate completions cannot
   assert.equal(ends.length, 2);
 });
 test('removing a waiting job never executes it and emits one terminal result', () => {
-  const { createQueue } = require('../media/commander-jobs');
+  const { createQueue } = require('../media/bitfroest-jobs');
   const starts = [], ends = [];
   const queue = createQueue({ start: job => starts.push(job), finish: (job, result) => ends.push(result) });
   queue.add({ command: 'copy', title: 'Copy', target: 'one', sources: ['a'] }); const waiting = queue.add({ command: 'copy', title: 'Copy', target: 'two', sources: ['b'] });
@@ -27,7 +27,7 @@ test('removing a waiting job never executes it and emits one terminal result', (
 });
 
 test('every background request requires a registered operation contract', () => {
-  const Jobs = require('../media/commander-jobs');
+  const Jobs = require('../media/bitfroest-jobs');
   const queue = Jobs.createQueue({ start() {}, finish() {} });
   const request = { title: 'Copy', target: '/target', sources: ['/source'] };
   assert.throws(() => queue.add(request), /command/i);
@@ -38,7 +38,7 @@ test('every background request requires a registered operation contract', () => 
 });
 
 test('command capabilities describe progress, cancellation and placement independently from scheduling', () => {
-  const Jobs = require('../media/commander-jobs');
+  const Jobs = require('../media/bitfroest-jobs');
   const deletion = Jobs.getCommand('delete').supportsBackgroundOperation;
   assert.equal(deletion.enabled, false);
   assert.equal(deletion.reason, 'foreground-only');
@@ -55,7 +55,7 @@ test('command capabilities describe progress, cancellation and placement indepen
   assert.throws(() => Jobs.operation({ command: 'delete', title: 'Delete', target: '/target', sources: ['/source'] }), /background/i);
 });
 test('untrusted labels and embedded NUL cannot enter an operation request', () => {
-  const Jobs = require('../media/commander-jobs');
+  const Jobs = require('../media/bitfroest-jobs');
   const input = { command: 'copy', title: 'Copy', target: '/target', sources: ['/source'] };
   for (const invalid of [{ label: {} }, { title: 'Copy\0' }, { target: '/bad\0' }, { sources: ['/bad\0'] }]) assert.throws(() => Jobs.operation({ ...input, ...invalid }), TypeError);
   for (const targetLocation of [{ pane: 2, tabId: 'tab' }, { pane: 1, tabId: '' }, { pane: 0, tabId: 'bad\0tab' }]) assert.throws(() => Jobs.operation({ ...input, targetLocation }), TypeError);
@@ -65,8 +65,8 @@ test('untrusted labels and embedded NUL cannot enter an operation request', () =
   assert.ok(Object.isFrozen(request.targetLocation));
 });
 test('queue summary adds comparable measured work and never weights unknown jobs by their count', () => {
-  const { summarize } = require('../media/commander-jobs');
-  const Progress = require('../media/commander-progress');
+  const { summarize } = require('../media/bitfroest-jobs');
+  const Progress = require('../media/bitfroest-progress');
   const job = (unit, completed, total, state = 'running') => ({ state, progress: { overall: Progress.known(unit, completed, total) } });
   assert.deepEqual(summarize([job('bytes', 10, 100), job('bytes', 0, 900, 'waiting')]), { current: .1, overall: .01 });
   assert.deepEqual(summarize([job('bytes', 10, 100), { state: 'waiting' }]), { current: .1, overall: null });

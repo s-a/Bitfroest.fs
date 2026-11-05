@@ -3,7 +3,7 @@ const path = require('node:path');
 const ts = require('typescript');
 
 const root = path.resolve(__dirname, '..');
-const contract = path.join(root, 'media/commander-progress.d.ts');
+const contract = path.join(root, 'media/bitfroest-progress.d.ts');
 function check(files, overrides = new Map()) {
   const options = { allowJs: true, checkJs: true, strictNullChecks: true, noEmit: true, target: ts.ScriptTarget.ESNext, module: ts.ModuleKind.CommonJS, skipLibCheck: true, types: [] };
   const host = ts.createCompilerHost(options), readFile = host.readFile;

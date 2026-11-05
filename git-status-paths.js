@@ -1,5 +1,5 @@
 const path = require('node:path');
-const { identity: pathIdentity } = require('./media/commander-paths');
+const { identity: pathIdentity } = require('./media/bitfroest-paths');
 
 function allowedGitPath(directory, settings = {}) {
   const identity = value => {

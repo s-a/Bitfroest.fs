@@ -1,6 +1,6 @@
 const fs = require('node:fs/promises');
 const path = require('node:path');
-const Progress = require('./media/commander-progress');
+const Progress = require('./media/bitfroest-progress');
 const crypto = require('node:crypto');
 const { AsyncLocalStorage } = require('node:async_hooks');
 const { WritableStream, TransformStream } = require('node:stream/web');

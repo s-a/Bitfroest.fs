@@ -12,15 +12,15 @@ const activity = app => app.document.querySelector('#status-activity');
 const finishGit = (app, request, directories = request.directories) => send(app, { type: 'git-status-result', requestId: request.requestId, snapshotId: request.snapshotId, directories: Object.fromEntries(directories.map(path => [path, { ok: true, repository: false }])), partial: true });
 
 test('the initial Git query uses the planned child checks for its overall total rather than two directory replies', t => {
-  const app = createApp(t, fixture()), Progress = require('../media/commander-progress'), git = app.messages.find(message => message.type === 'git-status');
+  const app = createApp(t, fixture()), Progress = require('../media/bitfroest-progress'), git = app.messages.find(message => message.type === 'git-status');
   for (const [directory, count] of [['/left', 2], ['/right', 8]]) send(app, { type: 'git-status-result', requestId: git.requestId, snapshotId: git.snapshotId, partial: true, directories: { [directory]: Progress.event({ phase: 'git-dirty-check', stage: 'inspect', ok: true, loading: true, repository: false, repositoryChecks: { paths: Array.from({ length: count }, (_, index) => `${directory}/${index}`), total: count, completed: 0, active: null }, overall: Progress.unknown('requests', 0, 'enumerating'), current: Progress.known('requests', 0, count) }) } });
   const overall = app.document.querySelector('#status-progress-overall');
   assert.ok(Number(overall.getAttribute('aria-valuemax')) > 10);
   assert.match(overall.getAttribute('aria-valuetext'), /Programmschritte/);
 });
 function observeRefresh(app) {
-  const create = app.window.CommanderProgress.statusPlan; let plan;
-  app.window.CommanderProgress.statusPlan = input => { const result = create(input); if (input.id.startsWith('refresh-')) plan = result; return result; };
+  const create = app.window.BitfroestProgress.statusPlan; let plan;
+  app.window.BitfroestProgress.statusPlan = input => { const result = create(input); if (input.id.startsWith('refresh-')) plan = result; return result; };
   return () => plan.snapshot();
 }
 
@@ -39,7 +39,7 @@ test('focus refresh retains its total plan and elapsed time when one Git query f
 });
 
 test('focus refresh plans all child dirty checks before execution and advances one overall process', t => {
-  const app = createApp(t, fixture()), Progress = require('../media/commander-progress'), snapshot = observeRefresh(app);
+  const app = createApp(t, fixture()), Progress = require('../media/bitfroest-progress'), snapshot = observeRefresh(app);
   finishGit(app, app.messages.find(message => message.type === 'git-status'));
   send(app, { type: 'window-focus' }); const refresh = app.messages.findLast(message => message.type === 'filesystem-refresh');
   send(app, { type: 'filesystem-result', ok: true, state: app.state() });
@@ -81,7 +81,7 @@ test('refresh does not show an overall percentage while subsequent Git work is s
 });
 
 test('Git counter updates preserve file icons and only refresh the status display', t => {
-  const app = createApp(t, fixture()), Progress = require('../media/commander-progress');
+  const app = createApp(t, fixture()), Progress = require('../media/bitfroest-progress');
   const request = app.messages.find(message => message.type === 'git-status');
   const update = completed => send(app, { type: 'git-status-result', requestId: request.requestId, snapshotId: request.snapshotId, partial: true, directories: { '/left': Progress.event({ phase: 'git-read-worktree', ok: true, loading: true, incremental: true, statuses: { child: 'clean' }, overall: Progress.unknown('items', completed, 'native-operation'), current: Progress.unknown('items', completed, 'native-operation') }) } });
   update(0);
@@ -180,7 +180,7 @@ test('refresh counts actual metadata steps in the overall plan and keeps current
 });
 
 test('refresh overall progress and elapsed time span metadata and the complete follow-up query', t => {
-  const Progress = require('../media/commander-progress');
+  const Progress = require('../media/bitfroest-progress');
   const app = createApp(t, fixture());
   const initial = app.messages.find(message => message.type === 'git-status');
   finishGit(app, initial);
@@ -254,7 +254,7 @@ test('directory names cannot collide with internal step identities in another vi
 });
 
 test('refresh recursively registers matrix rows and advances the same plan as those rows are processed', t => {
-  const Progress = require('../media/commander-progress');
+  const Progress = require('../media/bitfroest-progress');
   const app = createApp(t, fixture());
   const snapshot = observeRefresh(app);
   finishGit(app, app.messages.find(message => message.type === 'git-status'));
@@ -297,7 +297,7 @@ test('archive-only refresh plans no Git request and ends on filesystem confirmat
 });
 
 test('refresh comment bytes use their own unit without changing planned step counts', t => {
-  const Progress = require('../media/commander-progress'), app = createApp(t, fixture());
+  const Progress = require('../media/bitfroest-progress'), app = createApp(t, fixture());
   finishGit(app, app.messages.find(message => message.type === 'git-status'));
   app.action('refresh');
   const request = app.messages.filter(message => message.type === 'filesystem-refresh').at(-1);
@@ -312,7 +312,7 @@ test('refresh comment bytes use their own unit without changing planned step cou
 });
 
 test('informational Git activity does not invent a completed program step', t => {
-  const Progress = require('../media/commander-progress'), app = createApp(t, fixture());
+  const Progress = require('../media/bitfroest-progress'), app = createApp(t, fixture());
   finishGit(app, app.messages.find(message => message.type === 'git-status'));
   app.action('refresh'); send(app, { type: 'filesystem-result', ok: true, state: app.state() });
   const request = app.messages.filter(message => message.type === 'git-status').at(-1), overall = app.document.querySelector('#status-progress-overall');
@@ -322,7 +322,7 @@ test('informational Git activity does not invent a completed program step', t =>
 });
 
 test('native comparisons extend the running plan and confirm prior comparisons rather than their start', t => {
-  const Progress = require('../media/commander-progress'), app = createApp(t, fixture());
+  const Progress = require('../media/bitfroest-progress'), app = createApp(t, fixture());
   const snapshot = observeRefresh(app);
   finishGit(app, app.messages.find(message => message.type === 'git-status'));
   send(app, { type: 'window-focus' }); send(app, { type: 'filesystem-result', ok: true, state: app.state() });
@@ -340,7 +340,7 @@ test('native comparisons extend the running plan and confirm prior comparisons r
 });
 
 test('a failed child repository does not leave native comparisons attached to the next repository', t => {
-  const Progress = require('../media/commander-progress'), app = createApp(t, fixture()), snapshot = observeRefresh(app), errors = [];
+  const Progress = require('../media/bitfroest-progress'), app = createApp(t, fixture()), snapshot = observeRefresh(app), errors = [];
   app.window.addEventListener('error', event => { errors.push(event.message); event.preventDefault(); });
   finishGit(app, app.messages.find(message => message.type === 'git-status'));
   app.action('refresh'); send(app, { type: 'filesystem-result', ok: true, state: app.state() });
@@ -377,7 +377,7 @@ test('real directory and native Git progress complete one recursive refresh plan
   const state = await provider.load({ visibleOnly: true, directories: [directory], onDirectory: update => receive({ type: 'filesystem-refresh-step', refreshRequestId: request.refreshRequestId, path: update.path, phase: update.phase || (update.done ? 'done' : 'metadata'), completed: update.completed, total: update.total, progress: update.progress }) });
   receive({ type: 'filesystem-result', ok: true, state });
   const git = app.messages.filter(message => message.type === 'git-status').at(-1);
-  const Progress = require('../media/commander-progress'), engine = require('../git-status-engine').createGitStatusEngine();
+  const Progress = require('../media/bitfroest-progress'), engine = require('../git-status-engine').createGitStatusEngine();
   t.after(() => engine.close());
   const gitProgress = info => receive({ type: 'git-status-result', requestId: git.requestId, snapshotId: git.snapshotId, partial: true, directories: { [directory]: info } });
   const description = await engine.describe(directory, {}, update => gitProgress(Progress.event({ ...update, stage: 'describe' })));
@@ -438,14 +438,14 @@ test('navigation counts fresh metadata rows against the enumerated names without
 
 test('activity does not change status ownership and yields to operation progress until reset', t => {
   const app = createApp(t, fixture());
-  const bar = app.window.CommanderStatusbar.create({ t: value => value, actions: [], focusList() {} });
+  const bar = app.window.BitfroestStatusbar.create({ t: value => value, actions: [], focusList() {} });
   bar.error('Failure'); const version = bar.version;
-  const plan = app.window.CommanderProgress.statusPlan({ id: 'read', startedAt: 0, steps: ['read'] }); plan.start('read');
+  const plan = app.window.BitfroestProgress.statusPlan({ id: 'read', startedAt: 0, steps: ['read'] }); plan.start('read');
   bar.setActivity('Read directory', plan.snapshot());
   assert.equal(bar.version, version);
   assert.equal(app.document.querySelector('#status-message').textContent, 'Failure');
   assert.equal(activity(app).hidden, false);
-  const copy = app.window.CommanderProgress.statusPlan({ id: 'copy', startedAt: 0, steps: ['copy'] }); copy.start('copy');
+  const copy = app.window.BitfroestProgress.statusPlan({ id: 'copy', startedAt: 0, steps: ['copy'] }); copy.start('copy');
   bar.setProgress({ title: 'Copying', progress: copy.snapshot() });
   assert.equal(activity(app).hidden, true);
   assert.equal(app.document.querySelector('#status-message').textContent, 'Copying');
@@ -458,7 +458,7 @@ test('activity does not change status ownership and yields to operation progress
 
 
 test('Git query retains one overall measurement across phases and panel completions', t => {
-  const Progress = require('../media/commander-progress');
+  const Progress = require('../media/bitfroest-progress');
   const app = createApp(t, fixture()), request = app.messages.find(message => message.type === 'git-status');
   const overall = app.document.querySelector('#status-progress-overall');
   assert.equal(overall.hasAttribute('aria-valuemax'), false);

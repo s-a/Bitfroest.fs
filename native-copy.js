@@ -1,7 +1,7 @@
 const path = require('node:path');
 const fs = require('node:fs/promises');
 const nativeFs = require('node:fs');
-const Progress = require('./media/commander-progress');
+const Progress = require('./media/bitfroest-progress');
 const { loadNativeApi } = require('./native-api');
 
 function abortError() { const error = new Error('Dateiübertragung abgebrochen.'); error.name = 'AbortError'; error.code = 'ABORT_ERR'; return error; }

@@ -38,10 +38,10 @@ test('popup placement opens upward at the bottom and constrains oversized menus'
   const popup = app.document.querySelector('[data-favorite-menu]');
   Object.defineProperty(app.window, 'innerWidth', { value: 300 }); Object.defineProperty(app.window, 'innerHeight', { value: 180 });
   popup.getBoundingClientRect = () => ({ width: 180, height: 120 });
-  app.window.CommanderMenus.place(popup, { x: 290, y: 170 });
+  app.window.BitfroestMenus.place(popup, { x: 290, y: 170 });
   assert.equal(popup.style.left, '116px'); assert.equal(popup.style.top, '50px'); assert.equal(popup.dataset.vertical, 'up');
   popup.getBoundingClientRect = () => ({ width: 800, height: 700 });
-  app.window.CommanderMenus.place(popup, { x: 290, y: 170 });
+  app.window.BitfroestMenus.place(popup, { x: 290, y: 170 });
   assert.equal(popup.style.left, '4px'); assert.equal(popup.style.top, '4px'); assert.equal(popup.style.maxHeight, '172px'); assert.equal(popup.style.maxWidth, '292px');
 });
 

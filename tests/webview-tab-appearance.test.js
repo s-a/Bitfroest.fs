@@ -40,7 +40,7 @@ test('tabs use folder icons and regular theme-accent selection while inactive ar
   const selectedStyle = [...style.sheet.cssRules].find(rule => rule.selectorText === '.tab[aria-selected="true"], .tab[aria-selected="true"]:hover')?.style;
   assert.equal(selectedStyle?.color, 'var(--accent)');
   const color = tab.style.getPropertyValue('--archive-tab-color');
-  assert.ok(app.window.CommanderFileColors.ratio(color, '#ffffff') >= 4.5);
+  assert.ok(app.window.BitfroestFileColors.ratio(color, '#ffffff') >= 4.5);
   assert.ok(color !== '#000000');
   assert.equal(app.document.querySelector('.pane.active [data-tab="0"]').style.getPropertyValue('--archive-tab-color'), '');
   assert.equal(app.messages.filter(message => message.type === 'icons').flatMap(message => message.requests).length, 0);
@@ -49,7 +49,7 @@ test('tabs use folder icons and regular theme-accent selection while inactive ar
   assert.equal(app.document.querySelector('.pane.active [data-tab="0"]').getAttribute('aria-selected'), 'true');
   assert.equal(app.window.getComputedStyle(app.document.querySelector('.pane.active [data-tab="0"]')).fontWeight, '400');
   const inactive = app.document.querySelector('.pane.active [data-tab="1"]');
-  assert.ok(app.window.CommanderFileColors.ratio(inactive.style.getPropertyValue('--archive-tab-color'), '#181818') >= 4.5);
+  assert.ok(app.window.BitfroestFileColors.ratio(inactive.style.getPropertyValue('--archive-tab-color'), '#181818') >= 4.5);
   assert.equal(app.document.querySelectorAll('.tabs .tab-icon.codicon-folder').length, 4);
   app.document.body.classList.add('vscode-high-contrast');
   await new Promise(resolve => setImmediate(resolve));
@@ -62,7 +62,7 @@ test('archive tab contrast uses the tab surface fallback when header theme color
   app.document.body.style.setProperty('--vscode-editor-background', '#ffffff');
   await new Promise(resolve => setImmediate(resolve));
   const color = app.document.querySelector('.pane.active [data-tab="1"]').style.getPropertyValue('--archive-tab-color');
-  assert.ok(app.window.CommanderFileColors.ratio(color, '#252526') >= 4.5);
+  assert.ok(app.window.BitfroestFileColors.ratio(color, '#252526') >= 4.5);
 });
 
 test('active folder tabs keep their selected state without an accent border line', t => {

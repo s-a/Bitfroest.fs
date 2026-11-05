@@ -117,12 +117,12 @@ test('a cached parent missing an existing target is reread before a left-drop ca
 
 test('left-drop planning cannot expose an unconfirmed move when an unrelated redraw arrives', { timeout: 5000 }, async t => {
   const app = createApp(t, fixture());
-  const execute = app.window.CommanderTransfer.execute;
+  const execute = app.window.BitfroestTransfer.execute;
   let entered, release;
   const reached = new Promise(resolve => { entered = resolve; });
   const held = new Promise(resolve => { release = resolve; });
   t.after(() => release());
-  app.window.CommanderTransfer = { ...app.window.CommanderTransfer, execute: async options => { const result = await execute(options); entered(); await held; return result; } };
+  app.window.BitfroestTransfer = { ...app.window.BitfroestTransfer, execute: async options => { const result = await execute(options); entered(); await held; return result; } };
   const { row } = start(app, { shiftKey: true }); drag(app, 'drop', row, { shiftKey: true }); submit(app); await tick();
   const fresh = app.state(); fresh.snapshotId = 'plan-parent';
   fresh.folders['C:/base'] = [{ id: 'temp', name: 'temp', type: 'folder', fsSource: 'C:/base/temp' }];

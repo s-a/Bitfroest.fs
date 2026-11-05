@@ -200,7 +200,7 @@
     ],
     "sources": [
       "media/index.html",
-      "media/commander-menu.js"
+      "media/bitfroest-menu.js"
     ],
     "captures": [
       {
@@ -399,7 +399,7 @@
     ],
     "sources": [
       "media/app.js",
-      "media/commander-menu.js"
+      "media/bitfroest-menu.js"
     ],
     "category": "Navigation & Selection",
     "shortcuts": [
@@ -944,7 +944,7 @@
     ],
     "sources": [
       "media/app.js",
-      "media/commander-file-names.js",
+      "media/bitfroest-file-names.js",
       "filesystem-provider.js"
     ],
     "shortcuts": [
@@ -1343,8 +1343,8 @@
     ],
     "sources": [
       "media/app.js",
-      "media/commander-statusbar.js",
-      "media/commander-jobs.js"
+      "media/bitfroest-statusbar.js",
+      "media/bitfroest-jobs.js"
     ],
     "status": "pending",
     "reason": "Requires a real running operation; progress must not be synthesized.",
@@ -3236,7 +3236,7 @@
       "${demo}/right"
     ],
     "sources": [
-      "media/commander-xray.js",
+      "media/bitfroest-xray.js",
       "lister-provider.js"
     ],
     "captures": [
@@ -3338,7 +3338,7 @@
       "${demo}/right"
     ],
     "sources": [
-      "media/commander-quick-diff.js",
+      "media/bitfroest-quick-diff.js",
       "quick-diff.js"
     ],
     "captures": [

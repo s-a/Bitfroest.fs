@@ -1,5 +1,5 @@
 const fs = require('node:fs');
-const { normalizePath } = require('./media/commander-paths');
+const { normalizePath } = require('./media/bitfroest-paths');
 const { archivePath } = require('./zip-io');
 
 function selectStartupRoots(preferred, fallback, filesystem = fs) {

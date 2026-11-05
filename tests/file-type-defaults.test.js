@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const groups = require('../file-type-colors.json');
-const colors = require('../media/commander-file-colors');
+const colors = require('../media/bitfroest-file-colors');
 const manifest = require('../package.json');
 const defaults = Object.assign({}, ...manifest.contributes.configuration.map(section => section.properties))['bitfroest.colors.rules'].default;
 

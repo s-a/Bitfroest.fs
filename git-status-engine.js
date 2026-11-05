@@ -1,7 +1,7 @@
 const fs = require('node:fs');
 const fsp = require('node:fs/promises');
 const path = require('node:path');
-const Progress = require('./media/commander-progress');
+const Progress = require('./media/bitfroest-progress');
 const { loadNativeApi } = require('./native-api');
 const { allowedGitPath } = require('./git-status-paths');
 

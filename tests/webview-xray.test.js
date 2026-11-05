@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const { createApp } = require('./support/webview.cjs');
 function editor(app) {
   const shown = [], disposed = [];
-  app.window.CommanderXrayEditor = { create(element, text, name) { shown.push({ text, name }); element.textContent = text; return { dispose() { disposed.push(name); } }; } };
+  app.window.BitfroestXrayEditor = { create(element, text, name) { shown.push({ text, name }); element.textContent = text; return { dispose() { disposed.push(name); } }; } };
   return { shown, disposed };
 }
 

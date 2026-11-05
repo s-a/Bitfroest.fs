@@ -52,7 +52,7 @@ test('POSIX filesystem moves preserve distinct case-sensitive source names', { s
   const { provider, left, right } = await fixture(t, Object.create(fs));
   await fs.writeFile(`${left}/LOWER.txt`, 'SECOND');
   const before = await provider.load(), after = structuredClone(before);
-  const result = await require('../media/commander-transfer').execute({ folders: after.folders, sourcePath: left, targetPath: right, ids: before.folders[left].map(row => row.id), mode: 'move', policy: 'overwrite-all' });
+  const result = await require('../media/bitfroest-transfer').execute({ folders: after.folders, sourcePath: left, targetPath: right, ids: before.folders[left].map(row => row.id), mode: 'move', policy: 'overwrite-all' });
   assert.equal(result.completed, 2);
   await provider.apply(before, after);
   assert.deepEqual(await fs.readdir(left), []);

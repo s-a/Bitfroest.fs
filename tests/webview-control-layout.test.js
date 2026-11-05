@@ -133,7 +133,7 @@ test('refresh glyph bounds and its rotation box retain the same center at every 
     const width = refresh.width === 'var(--icon-size)' ? size : parseFloat(refresh.width);
     const height = refresh.height === 'var(--icon-size)' ? size : parseFloat(refresh.height);
     for (const name of ['refresh', 'loading']) {
-      const fit = app.window.CommanderIconFontMetrics[name];
+      const fit = app.window.BitfroestIconFontMetrics[name];
       const bounds = require('../scripts/true-type-metrics.cjs').readGlyph(fs.readFileSync(path.join(__dirname, '../media/codicon.ttf')), fit.codePoint, { contourBounds: name === 'refresh' });
       const centerX = size * fit.left + (bounds.bounds.xMin + bounds.bounds.xMax) * size * fit.fontScale / (2 * bounds.unitsPerEm);
       const centerY = size * (fit.top + fit.fontScale) - (bounds.bounds.yMin + bounds.bounds.yMax) * size * fit.fontScale / (2 * bounds.unitsPerEm);

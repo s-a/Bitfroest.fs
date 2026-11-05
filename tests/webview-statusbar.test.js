@@ -154,7 +154,7 @@ test('late folder results retain model values without replacing a newer clipboar
 
 test('header retains direct file actions while bottom bar reserves progress and typed status', t => {
   const app = createApp(t), doc = app.document;
-  const bar = doc.querySelector('#statusbar'), header = doc.querySelector('.commander-header');
+  const bar = doc.querySelector('#statusbar'), header = doc.querySelector('.bitfroest-header');
   assert.ok(header);
   assert.equal(bar.querySelector('#functionbar'), null);
   assert.ok(header.querySelector('#functionbar'));
@@ -176,7 +176,7 @@ test('header retains direct file actions while bottom bar reserves progress and 
 
 test('every status level and background activity includes an icon and explicit type', t => {
   const app = createApp(t);
-  const bar = app.window.CommanderStatusbar.create({ t: value => value, actions: [], focusList() {} });
+  const bar = app.window.BitfroestStatusbar.create({ t: value => value, actions: [], focusList() {} });
   for (const level of ['info', 'success', 'warning', 'error', 'cancelled']) {
     bar.setStatus('Literal <message>', level);
     const message = app.document.querySelector('#status-message');
@@ -185,7 +185,7 @@ test('every status level and background activity includes an icon and explicit t
     assert.equal(message.textContent, 'Literal <message>');
     assert.equal(message.querySelector('message'), null);
   }
-  const plan = app.window.CommanderProgress.statusPlan({ id: 'reading', startedAt: 0, steps: ['read'] });
+  const plan = app.window.BitfroestProgress.statusPlan({ id: 'reading', startedAt: 0, steps: ['read'] });
   plan.start('read'); bar.setActivity('Reading', plan.snapshot());
   assert.equal(app.document.querySelector('#status-activity').dataset.outcome, 'info');
   assert.ok(app.document.querySelector('#status-activity [data-status-icon]'));
@@ -423,11 +423,11 @@ test('header controls activate by keyboard and keep wrapping groups bounded', t 
   assert.ok(app.document.querySelector('.inline-rename'));
   const css = fs.readFileSync(path.resolve(__dirname, '../media/app.css'), 'utf8');
   assert.match(css, /#header-actions \.functionbar[^}]*max-width:\s*100%/);
-  assert.match(css, /\.commander-header > \[data-main-menu\][^}]*max-width:\s*100%/);
+  assert.match(css, /\.bitfroest-header > \[data-main-menu\][^}]*max-width:\s*100%/);
 });
 
 test('notification height budget follows the wrapped header on open and resize', t => {
-  const app = createApp(t), header = app.document.querySelector('.commander-header');
+  const app = createApp(t), header = app.document.querySelector('.bitfroest-header');
   header.getBoundingClientRect = () => ({ bottom: 88 });
   app.click(app.document.querySelector('#notifications-toggle'));
   const center = app.document.querySelector('#notifications-center');

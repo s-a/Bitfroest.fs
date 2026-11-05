@@ -18,7 +18,7 @@ test('Quick Diff footer survives pointer focus and cycles folder, repository and
 });
 
 test('Quick Diff ignores stale reads, follows keyboard selection and restores Escape focus', t => {
-  const shown = [], app = createApp(t, undefined, { beforeApp: ({ window }) => { window.CommanderXrayEditor = { createDiff(_node, a, b) { shown.push([a, b]); return { dispose() {} }; } }; } });
+  const shown = [], app = createApp(t, undefined, { beforeApp: ({ window }) => { window.BitfroestXrayEditor = { createDiff(_node, a, b) { shown.push([a, b]); return { dispose() {} }; } }; } });
   app.click(app.document.querySelector('[data-quick-diff-toggle]'));
   const list = app.messages.find(m => m.type === 'quick-diff-list');
   const receive = data => app.window.dispatchEvent(new app.window.MessageEvent('message', { data }));
@@ -146,7 +146,7 @@ test('Quick Diff metadata uses the bright foreground even on unselected rows', t
 });
 
 test('Quick Diff displays a syntax-capable Added ghost preview without a HEAD commit', t => {
-  const shown = [], app = createApp(t, undefined, { beforeApp: ({ window }) => { window.CommanderXrayEditor = { createDiff(_node, original, modified, name) { shown.push({ original, modified, name }); return { dispose() {} }; } }; } });
+  const shown = [], app = createApp(t, undefined, { beforeApp: ({ window }) => { window.BitfroestXrayEditor = { createDiff(_node, original, modified, name) { shown.push({ original, modified, name }); return { dispose() {} }; } }; } });
   const receive = data => app.window.dispatchEvent(new app.window.MessageEvent('message', { data }));
   app.click(app.document.querySelector('[data-quick-diff-toggle]'));
   const list = app.messages.find(message => message.type === 'quick-diff-list');

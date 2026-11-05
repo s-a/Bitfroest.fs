@@ -21,7 +21,7 @@ test('actual command callers fail compilation without a supported operation and 
 });
 
 test('ZIP remove transport action resolves through the foreground delete capability', () => {
-  const Jobs = require('../media/commander-jobs');
+  const Jobs = require('../media/bitfroest-jobs');
   const command = Jobs.commandForAction('remove');
   assert.equal(command?.id, 'delete');
   assert.equal(command?.supportsBackgroundOperation.enabled, false);
@@ -29,7 +29,7 @@ test('ZIP remove transport action resolves through the foreground delete capabil
 
 test('a registry entry missing capabilities fails the build gate', () => {
   const { check } = require('../scripts/check-operations.cjs');
-  const file = path.resolve(__dirname, '../media/commander-jobs.js'), original = fs.readFileSync(file, 'utf8');
+  const file = path.resolve(__dirname, '../media/bitfroest-jobs.js'), original = fs.readFileSync(file, 'utf8');
   const modified = original.replace("copy: { id: 'copy', supportsBackgroundOperation: background('pane-header', 'cooperative') }", "copy: { id: 'copy' }");
   assert.notEqual(modified, original);
   assert.ok(check([file], new Map([[file, modified]])).length);

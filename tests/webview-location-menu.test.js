@@ -95,7 +95,7 @@ test('ZIP context offers archive navigation instead of actions for its containin
 test('context colors distinguish the symbols and remain readable after theme changes', async t => {
   const app = createApp(t, fixture()); git(app);
   const root = app.document.documentElement.style;
-  const ratio = require('../media/commander-file-colors').ratio;
+  const ratio = require('../media/bitfroest-file-colors').ratio;
   for (const background of ['#ffffff', '#202020']) {
     root.setProperty('--vscode-sideBar-background', background);
     root.setProperty('--vscode-editor-background', background);
@@ -215,7 +215,7 @@ test('all interaction surfaces keep distinct context colors and a readable badge
   const zip = 'zip:%2Frepo%2Fa.zip!', state = fixture('/repo', zip);
   state.archiveLocations = { [zip]: { archive: '/repo/a.zip', parent: '/repo' } };
   const app = createApp(t, state); git(app);
-  const ratio = require('../media/commander-file-colors').ratio, root = app.document.documentElement.style;
+  const ratio = require('../media/bitfroest-file-colors').ratio, root = app.document.documentElement.style;
   for (const [background, hover, active] of [['#ffffff', '#dddddd', '#111111'], ['#202020', '#555555', '#eeeeee']]) {
     root.setProperty('--vscode-sideBar-background', background);
     root.setProperty('--vscode-list-inactiveSelectionBackground', 'rgba(0, 0, 0, 0.05)');
@@ -241,7 +241,7 @@ test('the recessed composition stays within its button and uses system colors in
   assert.equal(overlay.left, '-2px'); assert.equal(overlay.bottom, '-2px');
   const rules = [...style.sheet.cssRules];
   assert.ok(rules.some(rule => rule.selectorText?.includes('.main-menu, .menu-surface, .pathbar') && rule.style.getPropertyValue('--icon-size') === 'var(--icon-base-size)'));
-  const grid = app.window.CommanderIcons.layout();
+  const grid = app.window.BitfroestIcons.layout();
   assert.ok((grid.control - grid.size) / 2 + parseFloat(overlay.left) - 1 >= 0);
   assert.ok((grid.control - grid.size) / 2 + parseFloat(overlay.bottom) - 1 >= 0);
   assert.equal(icon.querySelectorAll('.codicon-star-full').length, 1);

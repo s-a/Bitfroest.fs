@@ -75,7 +75,7 @@ test('the viewport address retains a long branch when columns move or hide', asy
   }
   for (const size of [12, 28, 48]) {
     app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'file-settings', settings: { iconSize: size } } }));
-    for (const side of [0, 1]) assert.equal(app.grid(side).getGridOption('groupHeaderHeight'), Math.max(26, app.window.CommanderIcons.layout().control + 6));
+    for (const side of [0, 1]) assert.equal(app.grid(side).getGridOption('groupHeaderHeight'), Math.max(26, app.window.BitfroestIcons.layout().control + 6));
   }
 });
 

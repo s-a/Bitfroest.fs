@@ -20,7 +20,7 @@ function inspectIconSource(source, filename = 'source.js') {
   const tree = espree.parse(source, { ecmaVersion: 'latest', sourceType: 'script', loc: true });
   function visit(node, ancestors = []) {
     if (!node || typeof node !== 'object') return;
-    if (node.type === 'MemberExpression' && ['CommanderWorkbenchIcons', 'CommanderStatusIcons', 'CommanderIconFontMetrics'].includes(node.property.name || node.property.value)) report(node);
+    if (node.type === 'MemberExpression' && ['BitfroestWorkbenchIcons', 'BitfroestStatusIcons', 'BitfroestIconFontMetrics'].includes(node.property.name || node.property.value)) report(node);
     if (node.type === 'CallExpression' && node.callee.type === 'MemberExpression') {
       const method = node.callee.property.name;
       if (method === 'createElement' && ['svg', 'img'].includes(node.arguments[0]?.value) || method === 'createElementNS' && /svg/.test(node.arguments[0]?.value || '')) report(node);
@@ -48,7 +48,7 @@ function inspectIconSource(source, filename = 'source.js') {
 function checkProduct() {
   const root = path.resolve(__dirname, '..');
   const excluded = new Set(['.git', '.vscode', '.agents', '.codex', '.tmp', 'node_modules', 'scripts', 'tests', 'Docs', 'coverage', 'design']);
-  const resources = new Set(['media/xray-icons.js', 'media/xray-editor.js', 'media/xray-editor.css', 'media/commander-icons.js', 'media/workbench-icons.js', 'media/git-status-icons.js', 'media/icon-font-metrics.js', 'media/codicons.css', 'media/icon-metrics.css']);
+  const resources = new Set(['media/xray-icons.js', 'media/xray-editor.js', 'media/xray-editor.css', 'media/bitfroest-icons.js', 'media/workbench-icons.js', 'media/git-status-icons.js', 'media/icon-font-metrics.js', 'media/codicons.css', 'media/icon-metrics.css']);
   function files(directory, prefix = '') {
     return fs.readdirSync(directory, { withFileTypes: true }).flatMap(item => {
       if (!prefix && excluded.has(item.name)) return [];

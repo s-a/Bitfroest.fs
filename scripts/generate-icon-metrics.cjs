@@ -16,8 +16,8 @@ function generateFontSet(entries) {
     for (const [, name, hex] of source.matchAll(/\.codicon-([a-z0-9-]+)::before\s*\{\s*content:\s*['"]\\([a-f\d]+)['"];\s*\}/g)) mappings.push([name, parseInt(hex, 16)]);
     if (!mappings.length) throw new Error(`No icon glyph mappings found: ${id}.`);
     const prefix = id === 'codicon' ? 'codicon' : `icon-font-${id}`;
-    faces.push(`@font-face{font-family:commander-${id}-metrics;src:url('./${file}') format('truetype');font-weight:normal;font-style:normal;font-display:block;ascent-override:100%;descent-override:0%;line-gap-override:0%}`);
-    faces.push(`.${prefix}::before{font-family:commander-${id}-metrics}`);
+    faces.push(`@font-face{font-family:bitfroest-${id}-metrics;src:url('./${file}') format('truetype');font-weight:normal;font-style:normal;font-display:block;ascent-override:100%;descent-override:0%;line-gap-override:0%}`);
+    faces.push(`.${prefix}::before{font-family:bitfroest-${id}-metrics}`);
     for (const [name, codePoint] of mappings) {
       if (!identifier.test(name) || !Number.isInteger(codePoint)) throw new Error('Invalid icon glyph registration.');
       const key = id === 'codicon' ? name : `${id}:${name}`;
@@ -44,7 +44,7 @@ function generateFontSet(entries) {
     '.codicon::before,.icon-font::before{position:absolute;display:block;height:1em;font-style:normal;font-weight:normal;font-synthesis:none;line-height:1;text-align:left;white-space:pre}',
     ...faces, ...rules
   ].join('\n') + '\n';
-  return { css, catalog: `/* Generated icon metrics. Source SHA-256: ${signature}. */\nwindow.CommanderIconFontMetrics = Object.freeze(${JSON.stringify(metrics, null, 2)});\n` };
+  return { css, catalog: `/* Generated icon metrics. Source SHA-256: ${signature}. */\nwindow.BitfroestIconFontMetrics = Object.freeze(${JSON.stringify(metrics, null, 2)});\n` };
 }
 
 function generate(source, font) { return generateFontSet([{ id: 'codicon', file: 'codicon.ttf', source, contourGlyphs: ['refresh'], font }]); }

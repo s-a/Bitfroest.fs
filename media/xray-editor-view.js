@@ -1,6 +1,6 @@
 (function () {
 'use strict';
-const monaco = window.CommanderMonaco;
+const monaco = window.BitfroestMonaco;
 
 monaco.languages.register({ id: 'json' });
 monaco.languages.setMonarchTokensProvider('json', { tokenizer: { root: [[/"(?:[^"\\]|\\.)*"(?=\s*:)/, 'string.key.json'], [/"(?:[^"\\]|\\.)*"/, 'string.value.json'], [/\b(?:true|false|null)\b/, 'keyword.json'], [/-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/, 'number.json'], [/[{}[\]]/, '@brackets'], [/[,:]/, 'delimiter.json']] } });
@@ -16,7 +16,7 @@ function statistics(changes, original, modified) {
   }
   return result;
 }
-window.CommanderXrayEditor = {
+window.BitfroestXrayEditor = {
   statistics,
   createDiff(element, originalText, modifiedText, name, { onCopy, onOpen, copyLabel, onStatistics = () => {} }) {
     const language = names[name.split('.').pop().toLowerCase()] || 'plaintext';

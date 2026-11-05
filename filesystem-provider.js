@@ -3,13 +3,13 @@ const fsPromises = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
 const crypto = require('node:crypto');
-const Progress = require('./media/commander-progress');
+const Progress = require('./media/bitfroest-progress');
 const { createOperationError } = require('./operation-errors');
 const { getFileVersionInfo } = require('./pe-file-version');
 const { readDirectoryComments } = require('./content-comments');
 const { renameCase, renameNoReplace } = require('./native-rename');
 const { createCopySession, abortError, throwIfAborted } = require('./native-copy');
-const { normalizePath } = require('./media/commander-paths');
+const { normalizePath } = require('./media/bitfroest-paths');
 
 const clone = value => JSON.parse(JSON.stringify(value));
 const hash = value => crypto.createHash('sha256').update(value).digest('hex');

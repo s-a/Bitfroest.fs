@@ -6,7 +6,7 @@
   const pendingLog = [];
   const settledStyles = new WeakSet();
   function writeLog(kind, name) {
-    window.CommanderDiagnostics?.report(kind, { resource: String(name || '').slice(0, 256) });
+    window.BitfroestDiagnostics?.report(kind, { resource: String(name || '').slice(0, 256) });
     pendingLog.push({ kind, name, elapsed: Math.max(0, performance.now() - startTime) });
     flushLog();
   }
@@ -27,7 +27,7 @@
   function resourceName(target) {
     return (target.getAttribute('src') || target.getAttribute('href') || '').split(/[\\/]/).pop().split(/[?#]/)[0];
   }
-  window.CommanderStartupResource = { start(name) { writeLog('requestedScript', name); }, step(name) { if (['initializing', 'settings', 'restore', 'controls', 'rendering'].includes(name)) writeLog(name, ''); } };
+  window.BitfroestStartupResource = { start(name) { writeLog('requestedScript', name); }, step(name) { if (['initializing', 'settings', 'restore', 'controls', 'rendering'].includes(name)) writeLog(name, ''); } };
   function updateStartupStatus() {
     const status = document.querySelector('#startup-detail');
     if (!status || !lastResource || failed) return;
@@ -55,7 +55,7 @@
       line: event?.lineno || 0, column: event?.colno || 0,
       stack: String(error?.stack || '').slice(0, 16000)
     };
-    window.CommanderHost?.postMessage({ type: 'app-startup-error', diagnostic });
+    window.BitfroestHost?.postMessage({ type: 'app-startup-error', diagnostic });
     if (!document.querySelector('#panes')) {
       document.addEventListener('DOMContentLoaded', () => showStartupError(diagnostic), { once: true });
       return;
@@ -92,7 +92,7 @@
     copy.onclick = async () => {
       details.open = true; text.focus(); text.select();
       try {
-        if (window.CommanderHost) window.CommanderHost.postMessage({ type: 'startup-log-copy' });
+        if (window.BitfroestHost) window.BitfroestHost.postMessage({ type: 'startup-log-copy' });
         else await navigator.clipboard?.writeText(text.value);
       } catch { /* The selected text remains available for manual copying. */ }
     };
@@ -108,19 +108,19 @@
   document.addEventListener('load', resourceLoaded, true);
   document.addEventListener('DOMContentLoaded', updateStartupStatus, { once: true });
   document.addEventListener('DOMContentLoaded', flushLog, { once: true });
-  window.addEventListener('commander-started', () => {
+  window.addEventListener('bitfroest-started', () => {
     window.removeEventListener('error', startupError, true);
     window.removeEventListener('unhandledrejection', startupError);
     document.removeEventListener('load', resourceLoaded, true);
-    delete window.CommanderStartupResource;
+    delete window.BitfroestStartupResource;
   }, { once: true });
-  window.CommanderHost = window.CommanderHost || (typeof acquireVsCodeApi === 'function' ? acquireVsCodeApi() : null);
+  window.BitfroestHost = window.BitfroestHost || (typeof acquireVsCodeApi === 'function' ? acquireVsCodeApi() : null);
   let observer;
   function showEarlyStatus() {
     if (!document.querySelector('#startup-log')) return;
     observer?.disconnect();
     const copy = document.querySelector('#startup-log-copy');
-    if (copy) copy.onclick = () => window.CommanderHost?.postMessage({ type: 'startup-log-copy' });
+    if (copy) copy.onclick = () => window.BitfroestHost?.postMessage({ type: 'startup-log-copy' });
     writeLog('webviewStarted', '');
     for (const link of document.querySelectorAll('link[rel="stylesheet"]')) {
       if (!settledStyles.has(link)) writeLog('waitingStyle', resourceName(link));

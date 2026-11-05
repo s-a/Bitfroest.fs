@@ -230,7 +230,7 @@
     "kind": "drag-and-drop",
     "title": "Reorder folder tabs",
     "sources": [
-      "tests/commander-tabs.test.js"
+      "tests/bitfroest-tabs.test.js"
     ]
   },
   {

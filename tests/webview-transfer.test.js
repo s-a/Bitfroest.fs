@@ -127,8 +127,8 @@ test('favorites navigate while a background copy is waiting in its JavaScript pl
   const state = fixture(); state.realFilesystem = true;
   let release;
   const app = createApp(t, state, { beforeApp({ window }) {
-    const api = window.CommanderTransfer;
-    window.CommanderTransfer = { ...api, execute: () => new Promise(resolve => { release = () => resolve({ completed: 0, directories: 0, skipped: 0, cancelled: true, errors: [], completedIds: [] }); }) };
+    const api = window.BitfroestTransfer;
+    window.BitfroestTransfer = { ...api, execute: () => new Promise(resolve => { release = () => resolve({ completed: 0, directories: 0, skipped: 0, cancelled: true, errors: [], completedIds: [] }); }) };
   } });
   app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'favorite-settings', settings: { entries: { elsewhere: '/elsewhere' }, order: ['elsewhere'] } } }));
   choose(app, 'same.txt'); app.action('copy'); app.document.querySelector('#value').value = '/right/new/deep/'; submit(app); await tick();
@@ -148,8 +148,8 @@ test('a successful favorites navigation during the real copy planner preserves i
   const state = fixture(); state.realFilesystem = true; state.snapshotId = 'navigation-copy-race'; state.folders['/right'] = []; state.folders['/elsewhere'] = [];
   let release, executionCount = 0;
   const app = createApp(t, state, { beforeApp({ window }) {
-    const api = window.CommanderTransfer;
-    window.CommanderTransfer = { ...api, execute: options => new Promise((resolve, reject) => { release = () => { executionCount++; api.execute(options).then(resolve, reject); }; }) };
+    const api = window.BitfroestTransfer;
+    window.BitfroestTransfer = { ...api, execute: options => new Promise((resolve, reject) => { release = () => { executionCount++; api.execute(options).then(resolve, reject); }; }) };
   } });
   app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'favorite-settings', settings: { entries: { elsewhere: '/elsewhere' }, order: ['elsewhere'] } } }));
   const originalTargetTabId = app.state().panes[0].tabStates?.[app.state().panes[0].tab]?.id;
@@ -187,8 +187,8 @@ test('X cancellation before the host commit discards planner changes and release
   const state = fixture(); state.realFilesystem = true; state.snapshotId = 'cancel-copy-navigation-race'; state.folders['/right'] = []; state.folders['/elsewhere'] = [];
   let release;
   const app = createApp(t, state, { beforeApp({ window }) {
-    const api = window.CommanderTransfer;
-    window.CommanderTransfer = { ...api, execute: options => new Promise((resolve, reject) => { release = () => api.execute(options).then(resolve, reject); }) };
+    const api = window.BitfroestTransfer;
+    window.BitfroestTransfer = { ...api, execute: options => new Promise((resolve, reject) => { release = () => api.execute(options).then(resolve, reject); }) };
   } });
   app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'favorite-settings', settings: { entries: { elsewhere: '/elsewhere' }, order: ['elsewhere'] } } }));
   choose(app, 'same.txt'); app.action('copy'); submit(app); await tick();
@@ -207,8 +207,8 @@ test('a queued ZIP starts after an X-cancelled copy planner has finished its out
   const state = fixture(); state.realFilesystem = true; state.snapshotId = 'queued-after-planner-cancel'; state.folders['/right'] = [];
   let release;
   const app = createApp(t, state, { beforeApp({ window }) {
-    const api = window.CommanderTransfer;
-    window.CommanderTransfer = { ...api, execute: options => new Promise((resolve, reject) => { release = () => api.execute(options).then(resolve, reject); }) };
+    const api = window.BitfroestTransfer;
+    window.BitfroestTransfer = { ...api, execute: options => new Promise((resolve, reject) => { release = () => api.execute(options).then(resolve, reject); }) };
   } });
   app.action('select-all'); app.action('pack'); submit(app);
   const firstZip = app.messages.find(message => message.type === 'zip-write'); assert.ok(firstZip);

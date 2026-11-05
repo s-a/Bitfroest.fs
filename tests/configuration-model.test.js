@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const model = require('../media/configuration-model');
 
 test('column settings omit custom titles from validated saved data and public schemas', () => {
-  const columns = require('../media/commander-column-settings').catalog;
+  const columns = require('../media/bitfroest-column-settings').catalog;
   const normalized = model.validateColumns(columns);
   assert.ok(normalized.every(column => !Object.hasOwn(column, 'title')));
   const properties = Object.assign({}, ...require('../package.json').contributes.configuration.map(category => category.properties));
@@ -42,7 +42,7 @@ test('validation rejects malformed hierarchy and commands while accepting unavai
 });
 
 test('column editor validates the complete fixed catalog and preserves display order', () => {
-  const catalog = require('../media/commander-column-settings').catalog;
+  const catalog = require('../media/bitfroest-column-settings').catalog;
   const layout = catalog.map(item => ({ ...item }));
   layout.reverse();
   assert.equal(model.validateColumns(layout)[0].id, catalog.at(-1).id);
@@ -52,7 +52,7 @@ test('column editor validates the complete fixed catalog and preserves display o
 });
 
 test('saved layouts from the previous catalog retain order and receive an invisible Version column', () => {
-  const catalog = require('../media/commander-column-settings').catalog;
+  const catalog = require('../media/bitfroest-column-settings').catalog;
   const old = catalog.slice(0, 13).reverse().map(item => ({ id: item.id, align: 'center', visible: true }));
   const result = model.validateColumns(old);
   assert.equal(result.length, catalog.length);
@@ -62,7 +62,7 @@ test('saved layouts from the previous catalog retain order and receive an invisi
 });
 
 test('fourteen-field layouts preserve Windows preferences and append the new fields without enabling them', () => {
-  const catalog = require('../media/commander-column-settings').catalog;
+  const catalog = require('../media/bitfroest-column-settings').catalog;
   const old = catalog.slice(0, 14).reverse().map(item => ({ id: item.id, visible: true, align: 'right' }));
   const result = model.validateColumns(old);
   assert.deepEqual(result.slice(0, 14), old);

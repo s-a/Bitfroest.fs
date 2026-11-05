@@ -1,4 +1,4 @@
-import type { ProgressEvent } from './media/commander-progress';
+import type { ProgressEvent } from './media/bitfroest-progress';
 
 export type NativeOperation =
   | 'files.copy' | 'files.rename' | 'files.readDirectory'

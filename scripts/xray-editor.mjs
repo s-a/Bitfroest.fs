@@ -22,4 +22,4 @@ register({ id: 'yaml' }); setMonarchTokensProvider('yaml', yaml); setLanguageCon
 register({ id: 'shell' }); setMonarchTokensProvider('shell', shell); setLanguageConfiguration('shell', shellConfiguration);
 register({ id: 'markdown' }); setMonarchTokensProvider('markdown', markdown); setLanguageConfiguration('markdown', markdownConfiguration);
 register({ id: 'sql' }); setMonarchTokensProvider('sql', sql); setLanguageConfiguration('sql', sqlConfiguration);
-window.CommanderMonaco = { ...createMonacoBaseAPI(), editor: { create, createDiffEditor, createModel, setTheme }, languages: { register, setMonarchTokensProvider } };
+window.BitfroestMonaco = { ...createMonacoBaseAPI(), editor: { create, createDiffEditor, createModel, setTheme }, languages: { register, setMonarchTokensProvider } };

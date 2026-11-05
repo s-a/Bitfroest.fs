@@ -14,8 +14,8 @@
 }
 * { box-sizing: border-box; }
 body { margin: 0; padding: 0; height: 100vh; color: var(--text); background: var(--bg); display: flex; flex-direction: column; overflow: hidden; }
-.commander-header { display: flex; flex-wrap: wrap; align-items: center; flex: 0 0 auto; border-bottom: 1px solid var(--line); }
-.commander-header > [data-main-menu] { max-width: 100%; border-bottom: 0; flex-wrap: wrap; }
+.bitfroest-header { display: flex; flex-wrap: wrap; align-items: center; flex: 0 0 auto; border-bottom: 1px solid var(--line); }
+.bitfroest-header > [data-main-menu] { max-width: 100%; border-bottom: 0; flex-wrap: wrap; }
 #header-actions { display: flex; flex: 1 1 auto; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 4px; min-width: 0; }
 #header-actions .functionbar { max-width: 100%; flex-wrap: wrap; justify-content: flex-end; height: auto; }
 .header-utilities { display: flex; margin-left: 0; }

@@ -87,7 +87,7 @@ test('the address has a viewport containing block and equal vertical button clea
       assert.equal(wrapper.parentElement, pane.querySelector('[data-file-grid]'));
       assert.equal(address.closest('.ag-header-group-cell'), null);
       const rowHeight = parseFloat(pane.querySelector('.ag-header-row').style.height);
-      assert.equal(rowHeight, Math.max(26, app.window.CommanderIcons.layout().control + 6));
+      assert.equal(rowHeight, Math.max(26, app.window.BitfroestIcons.layout().control + 6));
       const style = app.window.getComputedStyle(address);
       assert.equal(style.paddingTop, '3px'); assert.equal(style.paddingBottom, '3px');
       assert.equal(style.borderBottomWidth, '0px');

@@ -1,9 +1,9 @@
 (() => {
   'use strict';
-  window.CommanderStartupResource?.step('initializing');
-  const paths = window.CommanderPaths;
-  /** @type {typeof import('./commander-progress')} */
-  const Progress = window.CommanderProgress;
+  window.BitfroestStartupResource?.step('initializing');
+  const paths = window.BitfroestPaths;
+  /** @type {typeof import('./bitfroest-progress')} */
+  const Progress = window.BitfroestProgress;
   const displayPath = value => paths.displayPath(value);
   const inputPath = (value, base) => paths.normalizePath(value, { base, input: true, platform: document.body.dataset.platform });
   document.addEventListener('keydown', event => {
@@ -19,9 +19,9 @@
     if ((modified || /^F\d+$/.test(event.key)) && !textEdit) event.preventDefault();
   });
   document.addEventListener('keyup', event => event.stopPropagation());
-  const { language, t, ui, count } = window.CommanderI18n.create(document.body.dataset.language || document.documentElement.lang);
+  const { language, t, ui, count } = window.BitfroestI18n.create(document.body.dataset.language || document.documentElement.lang);
   const nativePlatform = document.body.dataset.platform;
-  const menus = window.CommanderMenus;
+  const menus = window.BitfroestMenus;
   const systemFileClipboardSupported = !nativePlatform || ['win32', 'linux'].includes(nativePlatform);
   const nativeDesktopSupported = !nativePlatform || ['win32', 'linux'].includes(nativePlatform);
   document.documentElement.lang = language;
@@ -84,7 +84,7 @@
       openTrigger = null;
     }
     function showMenu(trigger) {
-      window.dispatchEvent(new CustomEvent('commander-menu-open', { detail: 'main' }));
+      window.dispatchEvent(new CustomEvent('bitfroest-menu-open', { detail: 'main' }));
       openTrigger?.setAttribute('aria-expanded', 'false');
       openTrigger = trigger;
       trigger.setAttribute('aria-expanded', 'true');
@@ -135,9 +135,9 @@
     window.addEventListener('lister-menu-change', () => closeMenu());
     window.addEventListener('resize', () => closeMenu());
     window.addEventListener('blur', () => closeMenu());
-    window.addEventListener('commander-menu-open', event => { if (event.detail !== 'main') closeMenu(); });
+    window.addEventListener('bitfroest-menu-open', event => { if (event.detail !== 'main') closeMenu(); });
   }
-  const host = window.CommanderHost || (typeof acquireVsCodeApi === 'function' ? acquireVsCodeApi() : null);
+  const host = window.BitfroestHost || (typeof acquireVsCodeApi === 'function' ? acquireVsCodeApi() : null);
   let auxiliaryCompactRequest = null, auxiliaryCompactReported = false;
   function reportAuxiliaryCompactReady() {
     if (!host || !auxiliaryCompactRequest || auxiliaryCompactReported || document.visibilityState !== 'visible' || !document.hasFocus()) return;
@@ -148,18 +148,18 @@
   document.addEventListener('focusin', reportAuxiliaryCompactReady);
   document.addEventListener('visibilitychange', reportAuxiliaryCompactReady);
   const $ = selector => document.querySelector(selector);
-  window.CommanderStartupResource?.step('settings');
+  window.BitfroestStartupResource?.step('settings');
   let fileSettings = {};
   try { fileSettings = JSON.parse(decodeURIComponent(document.body.dataset.fileSettings || '%7B%7D')); } catch { fileSettings = {}; }
-  window.CommanderIcons.configure(fileSettings.iconSize);
+  window.BitfroestIcons.configure(fileSettings.iconSize);
   const activeRow = id => {
     fileGrid.ensure(document.querySelector('.pane.active'), id);
     if (id === parentId) return document.querySelector('.pane.active [data-parent]');
     return [...document.querySelectorAll('.pane.active [data-file-row][data-id]')].find(row => row.dataset.id === id);
   };
-  const tabs = window.CommanderTabs;
-  const columns = window.CommanderColumns;
-  const columnModel = window.CommanderColumnSettings;
+  const tabs = window.BitfroestTabs;
+  const columns = window.BitfroestColumns;
+  const columnModel = window.BitfroestColumnSettings;
   let hostColumnSettings;
   try { hostColumnSettings = JSON.parse(decodeURIComponent(document.body.dataset.columnSettings || '%7B%7D')); } catch { hostColumnSettings = {}; }
   let favoriteSettings;
@@ -209,7 +209,7 @@
     if (favoritesBlocked() || $('#modal').open) return;
     const wasOpen = trigger === favoriteTrigger;
     closeFavorites(false); if (wasOpen) return;
-    window.dispatchEvent(new CustomEvent('commander-menu-open', { detail: 'favorites' }));
+    window.dispatchEvent(new CustomEvent('bitfroest-menu-open', { detail: 'favorites' }));
     favoriteTrigger = trigger; trigger.setAttribute('aria-expanded', 'true');
     const side = Number(trigger.closest('[data-pane]').dataset.pane);
     const origin = state.panes[side], originPath = currentPath(origin), originTab = origin.tabStates[origin.tab].id;
@@ -285,7 +285,7 @@
   document.addEventListener('pointerdown', event => { if (!event.target.closest('[data-favorite-menu],[data-favorites]')) closeFavorites(false); });
   window.addEventListener('blur', () => closeFavorites(false));
   window.addEventListener('resize', () => closeFavorites(false));
-  window.addEventListener('commander-menu-open', event => { if (event.detail !== 'favorites') closeFavorites(false); });
+  window.addEventListener('bitfroest-menu-open', event => { if (event.detail !== 'favorites') closeFavorites(false); });
   function prepareColumns(p) {
     if (Array.isArray(hostColumnSettings?.sets) && hostColumnSettings.sets.length) {
       const sets = columnModel.normalizeColumnSets(hostColumnSettings.sets);
@@ -296,7 +296,7 @@
     } else { p.columns = columns.normalize(p.columns); }
     for (const column of p.columns) if (!columnModel.isColumnAvailable(column, nativePlatform)) column.visible = false;
   }
-  const search = window.CommanderSearch;
+  const search = window.BitfroestSearch;
   let clipboardSelection = null, nativeClipboardUnavailable = false, clipboardSequence = 0;
   let clipboardWriteRequestId = null, clipboardPasteGeneration = null, clipboardPasteRequestId = null;
   let clipboardGeneration = 0, clipboardAvailabilityRevision = 0, clipboardAvailable = false, clipboardStatusPending = false;
@@ -311,7 +311,7 @@
     const marked = file && markedPaths.has(fileIdentity(file.fsSource || join(directory, file.name)));
     const cut = Boolean(marked && clipboardSelection.mode === 'move'), copied = Boolean(marked && clipboardSelection.mode === 'copy');
     const hidden = Boolean(file && (file.hidden === true || /h/i.test(String(file.attributes ?? file.attr ?? ''))));
-    return { cut, copied, hidden, width: cut ? window.CommanderIcons.layout().size : copied ? window.CommanderIcons.layout().badge : 0 };
+    return { cut, copied, hidden, width: cut ? window.BitfroestIcons.layout().size : copied ? window.BitfroestIcons.layout().badge : 0 };
   }
   function refreshClipboardMarkers() {
     const paths = new Set(clipboardSelection?.paths.map(fileIdentity));
@@ -332,7 +332,7 @@
         else row.removeAttribute('aria-label');
         for (const [enabled, className, glyph, description] of [[hidden, 'hidden-marker', 'eye-closed', t('Versteckt')], [cut, 'cut-marker', 'arrow-right', t('Zum Verschieben vorgemerkt')]]) {
           if (!enabled) continue;
-          const marker = window.CommanderIcons.element(glyph, { class: className, title: description });
+          const marker = window.BitfroestIcons.element(glyph, { class: className, title: description });
           const icon = row.querySelector('.fileicon');
           if (hidden && className === 'hidden-marker' && icon) {
             let wrapper = icon.closest('.git-icon,.filename-icon');
@@ -343,7 +343,7 @@
       });
       const table = section.querySelector('.file-table');
       table?.style.setProperty('--file-marker-width', `${markerWidth}px`);
-      table?.style.setProperty('--file-marker-gap', markerWidth ? `${window.CommanderIcons.layout().gap}px` : '0px');
+      table?.style.setProperty('--file-marker-gap', markerWidth ? `${window.BitfroestIcons.layout().gap}px` : '0px');
     });
     if (startupReady) reportFocus();
   }
@@ -386,7 +386,7 @@
   function copyClipboard(mode, contextSelection) {
     if (selected().some(row => row.archive)) { toast(t('Dateioperationen innerhalb von Archiven sind nicht verfügbar. F3 zeigt den Inhalt schreibgeschützt an.')); return; }
     let captured;
-    try { captured = window.CommanderClipboard.capture(contextSelection ? { ...state, panes: state.panes.map((p, index) => index === state.active ? { ...p, selected: contextSelection.ids, cursor: null } : p) } : state, mode, nativePlatform); }
+    try { captured = window.BitfroestClipboard.capture(contextSelection ? { ...state, panes: state.panes.map((p, index) => index === state.active ? { ...p, selected: contextSelection.ids, cursor: null } : p) } : state, mode, nativePlatform); }
     catch (error) { toast(t(error.message)); return; }
     if (!captured) return;
     clipboardPasteGeneration = null; clipboardPasteRequestId = null;
@@ -440,12 +440,12 @@
       setClipboardSelection(selection);
       if (!selection) { toast(t('Die Zwischenablage enthält keine Dateien.')); return; }
       let plan;
-      try { plan = window.CommanderClipboard.inspectPaste(state, selection, targetPath, nativePlatform); }
+      try { plan = window.BitfroestClipboard.inspectPaste(state, selection, targetPath, nativePlatform); }
       catch (error) { toast(t(error.message)); return; }
       if (!plan.ready) { requestFilesystem({ type: 'filesystem-prepare', paths: plan.directories, action: 'clipboard-paste', recursive: false }, () => start(selection)); return; }
       const completions = [], policyState = { value: 'ask' };
       const finish = () => {
-        const remainingPaths = window.CommanderClipboard.remaining(selection, completions, nativePlatform);
+        const remainingPaths = window.BitfroestClipboard.remaining(selection, completions, nativePlatform);
         if (acknowledgedSelection.source === 'system' && acknowledgedSelection.mode === 'move') {
           const remainingSet = new Set(remainingPaths.map(fileIdentity));
           for (const filePath of selection.paths) if (!remainingSet.has(fileIdentity(filePath))) completedClipboardMovePaths.add(fileIdentity(filePath));
@@ -537,14 +537,14 @@
       }
     };
   }
-  window.CommanderStartupResource?.step('restore');
+  window.BitfroestStartupResource?.step('restore');
   let saved;
   try { const injected = JSON.parse(document.body.dataset.initialState || 'null'); saved = host ? injected?.realFilesystem ? injected : host.getState() || injected : JSON.parse(sessionStorage.getItem('bitfroest-demo')); } catch { saved = null; }
   let state = saved?.version === 1 && saved.folders && saved.panes?.length === 2 ? saved : initial();
   for (const pane of state.panes) if (typeof pane.filter !== 'string') pane.filter = '';
   nextId = Math.max(Date.now(), ...Object.values(state.folders).flat().map(item => Number(item.id) + 1).filter(Number.isFinite));
   let confirmedFolders = JSON.stringify(state.folders);
-  const directoryCache = window.CommanderDirectoryCache.create();
+  const directoryCache = window.BitfroestDirectoryCache.create();
   const directoryListings = new Map();
   const navigationRequests = new Map();
   const navigationByTab = new Map();
@@ -567,7 +567,7 @@
   const refreshStages = new Map();
   const refreshMeasurements = new Map(), statusTasks = new Map();
   const statusPlans = new Map();
-  /** @returns {import('./commander-progress').StatusSnapshot} */
+  /** @returns {import('./bitfroest-progress').StatusSnapshot} */
   function plannedStatus(input) {
     const progress = Progress.read(input), id = typeof progress.id === 'string' ? progress.id : progress.phase;
     let plan = statusPlans.get(id);
@@ -578,7 +578,7 @@
     plan.update('operation', progress);
     return plan.snapshot();
   }
-  /** @param {import('./commander-progress').ProgressEvent | null} progress */
+  /** @param {import('./bitfroest-progress').ProgressEvent | null} progress */
   function statusTask(id, label, progress = null) {
     if (!label) { statusTasks.delete(id); statusPlans.delete(id); }
     else {
@@ -588,7 +588,7 @@
     }
     updateDirectoryActivity();
   }
-  /** @param {import('./commander-progress').StatusSnapshot | null} snapshot */
+  /** @param {import('./bitfroest-progress').StatusSnapshot | null} snapshot */
   function xrayTask(id, label, snapshot) {
     if (!snapshot) statusTasks.delete(id);
     else statusTasks.set(id, { label, startedAt: snapshot.startedAt, progress: snapshot, snapshot: Progress.readStatus(snapshot) });
@@ -641,7 +641,7 @@
     if (refreshPlan.confirmed.has(id)) return;
     refreshPlan.progress.start(id); refreshPlan.progress.complete(id); refreshPlan.confirmed.add(id);
   }
-  /** @param {import('./commander-progress').DeterminateMeasurement | null} count */
+  /** @param {import('./bitfroest-progress').DeterminateMeasurement | null} count */
   function updateRefreshDirectory(path, phase, count) {
     const job = refreshPlan?.filesystem.get(path); if (!job) return;
     const plan = refreshPlan.progress;
@@ -732,7 +732,7 @@
       if (node && ['pending', 'running'].includes(node.state)) refreshPlan.progress.fail(job.root, error.message);
       planned.pending.delete(directory);
     }
-    try { window.CommanderDiagnostics?.report('git-protocol-error', { directory, requestId: data.requestId, snapshotId: data.snapshotId,
+    try { window.BitfroestDiagnostics?.report('git-protocol-error', { directory, requestId: data.requestId, snapshotId: data.snapshotId,
       message: error.message, stack: error.stack, protocol: { info: data.directories?.[directory] } }); } catch { /* Diagnostics cannot replace the failed Git result. */ }
   }
   const folderSizes = new Map(), folderSizeRequests = new Map();
@@ -787,7 +787,7 @@
   let transferCheckpoint = null;
   let transferJob = null, transferSequence = 0;
   let transferStatusPlan = null;
-  /** @returns {import('./commander-progress').TerminalStatusSnapshot | null} */
+  /** @returns {import('./bitfroest-progress').TerminalStatusSnapshot | null} */
   function finishTransferStatus(outcome) {
     if (!transferStatusPlan) return null;
     if (transferStatusPlan.analyze().state === 'running') {
@@ -803,8 +803,8 @@
     const target = state.panes[targetPane];
     return { pane: targetPane, tabId: target.tabStates[target.tab].id };
   }
-  /** @param {import('./commander-jobs').OperationInput} request
-   * @param {(job: import('./commander-jobs').Job) => unknown} run
+  /** @param {import('./bitfroest-jobs').OperationInput} request
+   * @param {(job: import('./bitfroest-jobs').Job) => unknown} run
    * @param {0 | 1} [targetPane] */
   function enqueueOperation(request, run, targetPane = state.active) { return operationQueue.add({ ...request, targetLocation: operationTargetLocation(targetPane) }, run); }
   function runQueuedOperation(job, run) {
@@ -863,7 +863,7 @@
       }
       const actions = document.createElement('div'); actions.className = 'transfer-progress-actions';
       const label = document.createElement('span'), button = document.createElement('button'); label.dataset.progressCount = ''; label.setAttribute('role', 'status');
-      button.type = 'button'; button.dataset.cancelTransfer = ''; button.replaceChildren(window.CommanderIcons.element('close')); button.setAttribute('aria-label', t('Abbrechen')); button.title = t('Abbrechen');
+      button.type = 'button'; button.dataset.cancelTransfer = ''; button.replaceChildren(window.BitfroestIcons.element('close')); button.setAttribute('aria-label', t('Abbrechen')); button.title = t('Abbrechen');
       button.onclick = cancelTransfer;
       actions.append(label, button); element.append(title, paths, meters, actions); (transferJob.modalPreparation ? $('#modal-body') : document.body).append(element);
     }
@@ -913,7 +913,7 @@
     cancelButton.hidden = false;
     cancelButton.disabled = Boolean(transferJob.cancelRequested);
     const measurement = (completed, total) => Number.isSafeInteger(total) && total >= (completed || 0) ? Progress.known('bytes', completed || 0, total) : Progress.unknown('bytes', completed || 0, transferJob.phase === 'preparing' ? 'enumerating' : 'stream-size-unknown');
-    /** @type {import('./commander-progress').ProgressEvent} */
+    /** @type {import('./bitfroest-progress').ProgressEvent} */
     const statusProgress = reported || transferJob.reportedProgress || Progress.event({ phase: transferJob.phase || 'preparing', overall: measurement(transferJob.completedBytes, transferJob.totalBytes), current: measurement(transferJob.currentTransferred, transferJob.currentTotal) });
     const statusPlanId = transferJob.queueJobId || transferJob.id;
     const statusSnapshot = plannedStatus(Progress.event({ ...statusProgress, id: statusPlanId })); transferStatusPlan = statusPlans.get(statusPlanId);
@@ -1158,7 +1158,7 @@
     }
     else { try { sessionStorage.setItem('bitfroest-demo', JSON.stringify(state)); } catch { /* Storage may be unavailable. */ } }
   }
-  const parentId = window.CommanderGrid.parentId;
+  const parentId = window.BitfroestGrid.parentId;
   const hasParent = p => Boolean(state.archiveLocations?.[currentPath(p)] || parent(currentPath(p)) !== currentPath(p));
   const currentFolder = p => ({ id: parentId, name: base(currentPath(p)), type: 'folder', fsSource: currentPath(p) });
   const selectionFile = (p, id) => id === parentId && hasParent(p) && !state.archiveLocations?.[currentPath(p)] ? currentFolder(p) : files(p).find(file => file.id === id);
@@ -1191,9 +1191,9 @@
   const gitPending = new Set();
   function updateDirectoryActivity() {
     const activities = [], gitActivities = new Map();
-    /** @type {import('./commander-progress').ProgressEvent | null} */
+    /** @type {import('./bitfroest-progress').ProgressEvent | null} */
     let measured = null;
-    /** @type {import('./commander-progress').StatusSnapshot | null} */
+    /** @type {import('./bitfroest-progress').StatusSnapshot | null} */
     let planned = null;
     document.querySelectorAll('.pane').forEach((section, side) => {
       const path = currentPath(state.panes[side]);
@@ -1207,7 +1207,7 @@
         const binding = gitBindings.get(path);
         if (!gitActivities.has(binding.requestId) || side === state.active) gitActivities.set(binding.requestId, { paths: binding.directories.map(displayArchivePath), phase: gitProgress?.phase });
       }
-      /** @param {import('./commander-progress').ProgressEvent} value */
+      /** @param {import('./bitfroest-progress').ProgressEvent} value */
       const setMeasurement = value => {
         if (!measured || side === state.active) measured = Progress.event({ phase: value.phase, overall: value.overall, current: value.current,
           id: reading?.navigationRequestId || (refreshing ? refreshRequestId : gitBindings.get(path)?.requestId),
@@ -1224,7 +1224,7 @@
       if (stages.length) activities.push(t(side === 0 ? 'Links: {step} · {path}' : 'Rechts: {step} · {path}', { step: stages.join(' / '), path: displayArchivePath(reading?.path || path) }));
       section.querySelector('[data-refresh]')?.setAttribute('aria-busy', String(busy));
       const refreshIcon = section.querySelector('[data-refresh-icon]');
-      if (refreshIcon) window.CommanderIcons.setFont(refreshIcon, busy ? 'loading' : 'refresh', busy);
+      if (refreshIcon) window.BitfroestIcons.setFont(refreshIcon, busy ? 'loading' : 'refresh', busy);
       const locationIcon = section.querySelector('[data-location-icon]');
       const loadingRow = reading?.loadingEntry && path === reading.originPath ? [...section.querySelectorAll('[data-file-row][data-id]')].find(row => row.dataset.id === reading.loadingEntry) : null;
       for (const overlay of section.querySelectorAll('[data-directory-loading]')) {
@@ -1233,7 +1233,7 @@
       }
       if (loadingRow && !loadingRow.querySelector('[data-directory-loading]')) {
         const overlay = document.createElement('span'); overlay.className = 'directory-loading'; overlay.dataset.directoryLoading = ''; overlay.dataset.navigationId = reading.navigationRequestId; overlay.setAttribute('aria-hidden', 'true');
-        const spinner = window.CommanderIcons.element('loading'); window.CommanderIcons.setFont(spinner, 'loading', true);
+        const spinner = window.BitfroestIcons.element('loading'); window.BitfroestIcons.setFont(spinner, 'loading', true);
         overlay.append(spinner); loadingRow.querySelector('.filename')?.append(overlay); loadingRow.setAttribute('aria-busy', 'true');
       }
       section.querySelector('[data-favorites]')?.setAttribute('aria-busy', 'false');
@@ -1303,7 +1303,7 @@
     return info?.repositoryDetected || info?.ok && info.repository ? 'git' : '';
   }
   function locationMarkup(p) {
-    return window.CommanderIcons.location(locationKind(p));
+    return window.BitfroestIcons.location(locationKind(p));
   }
   function branchMarkup(p) {
     const info = gitInfo(currentPath(p));
@@ -1317,20 +1317,20 @@
     const error = gitEntryError(directory, file.name);
     if (error) {
       const label = escape(t('Git-Prüfung fehlgeschlagen: {error}', { error }));
-      return `<span class="git-icon">${original}<span data-git-status="error" role="img" aria-label="${label}" title="${label}">${window.CommanderIcons.svg('workbench', 'error')}</span></span>`;
+      return `<span class="git-icon">${original}<span data-git-status="error" role="img" aria-label="${label}" title="${label}">${window.BitfroestIcons.svg('workbench', 'error')}</span></span>`;
     }
     const status = info?.ok && info.statuses?.[file.name];
     if (!status && emptyGitFolder(directory, file)) {
       const label = escape(t('Leer – von Git nicht erfasst'));
-      return `<span class="git-icon">${original}<span data-git-status="empty" role="img" aria-label="${label}" title="${label}">${window.CommanderIcons.svg('status', 'empty')}</span></span>`;
+      return `<span class="git-icon">${original}<span data-git-status="empty" role="img" aria-label="${label}" title="${label}">${window.BitfroestIcons.svg('status', 'empty')}</span></span>`;
     }
     const labels = { clean: 'Unverändert', modified: 'Geändert', added: 'Hinzugefügt', deleted: 'Gelöscht', untracked: 'Unversioniert', ignored: 'Ignoriert', conflict: 'Konflikt' };
     if (!labels[status]) {
       const confirmed = info?.ok && info.loading && (info.repository || file.type === 'folder' && info.loadingRepositories?.includes(file.name));
       if (!confirmed) return host && state.realFilesystem ? `<span class="git-icon">${original}</span>` : original;
-      return `<span class="git-icon">${original}<span data-git-placeholder role="img" aria-label="${escape(t('Git-Status wird geladen'))}" title="${escape(t('Git-Status wird geladen'))}">${window.CommanderIcons.svg('status', 'untracked')}</span></span>`;
+      return `<span class="git-icon">${original}<span data-git-placeholder role="img" aria-label="${escape(t('Git-Status wird geladen'))}" title="${escape(t('Git-Status wird geladen'))}">${window.BitfroestIcons.svg('status', 'untracked')}</span></span>`;
     }
-    return `<span class="git-icon">${original}<span data-git-status="${status}" role="img" aria-label="${escape(t(labels[status]))}" title="${escape(t(labels[status]))}">${window.CommanderIcons.svg('status', status)}</span></span>`;
+    return `<span class="git-icon">${original}<span data-git-status="${status}" role="img" aria-label="${escape(t(labels[status]))}" title="${escape(t(labels[status]))}">${window.BitfroestIcons.svg('status', status)}</span></span>`;
   }
   function gitEntryError(directory, name) {
     const errors = gitInfo(directory)?.repositoryErrors;
@@ -1384,7 +1384,7 @@
     const cached = nativeIconPixels.get(source);
     for (const [state, background] of Object.entries(nativeIconBackgrounds)) {
       if (!cached.filters.has(background)) {
-        const color = window.CommanderContrast.nativeIconOutline(cached.pixels, background);
+        const color = window.BitfroestContrast.nativeIconOutline(cached.pixels, background);
         cached.filters.set(background, color ? `drop-shadow(0 0 1px ${color}) drop-shadow(0 0 1px ${color})` : 'none');
         while (cached.filters.size > 16) cached.filters.delete(cached.filters.keys().next().value);
       }
@@ -1398,7 +1398,7 @@
   }, true);
   let fileColorRuleSource, matchFileColor;
   function refreshLocationColors() {
-    const colors = window.CommanderFileColors;
+    const colors = window.BitfroestFileColors;
     const body = getComputedStyle(document.body), root = getComputedStyle(document.documentElement);
     const variable = name => body.getPropertyValue(name).trim() || root.getPropertyValue(name).trim();
     const base = colors.composite(variable('--vscode-sideBar-background') || variable('--vscode-editor-background') || '#252526', '#252526');
@@ -1428,9 +1428,9 @@
   }
   function refreshFileColors() {
     refreshLocationColors();
-    const colors = window.CommanderFileColors, settings = fileSettings.colors || {};
+    const colors = window.BitfroestFileColors, settings = fileSettings.colors || {};
     const requestedSize = fileSettings.gitStatus?.iconSizePercent;
-    const iconSize = Number.isFinite(requestedSize) ? Math.round(Math.max(25, Math.min(100, requestedSize))) : window.CommanderIconLayout.defaults.badgeRatio * 100;
+    const iconSize = Number.isFinite(requestedSize) ? Math.round(Math.max(25, Math.min(100, requestedSize))) : window.BitfroestIconLayout.defaults.badgeRatio * 100;
     if (!matchFileColor || fileColorRuleSource !== settings.rules) {
       fileColorRuleSource = settings.rules;
       matchFileColor = colors.compile(settings.rules || {});
@@ -1534,8 +1534,8 @@
   }
   function baseIcon(file, directory) {
     const key = file.iconKey || join(directory || '', file.name);
-    if (nativeIcons.get(key)) return window.CommanderIcons.native(nativeIcons.get(key));
-    if (file.type === 'folder') return window.CommanderIcons.folder();
+    if (nativeIcons.get(key)) return window.BitfroestIcons.native(nativeIcons.get(key));
+    if (file.type === 'folder') return window.BitfroestIcons.folder();
 
     const baseTheme = iconTheme.base || {};
     const override = document.body.classList.contains('vscode-high-contrast') ? iconTheme.highContrast : document.body.classList.contains('vscode-light') || document.body.classList.contains('vscode-high-contrast-light') ? iconTheme.light : {};
@@ -1554,7 +1554,7 @@
       const language = ({ md: 'markdown', ts: 'typescript', js: 'javascript', json: 'json', svg: 'xml', txt: 'plaintext', csv: 'csv' })[extension(file)];
       themed ||= mapping('languageIds')[language] || association.file;
     }
-    return themed ? window.CommanderIcons.theme(themed) : window.CommanderIcons.fallback(file.type);
+    return themed ? window.BitfroestIcons.theme(themed) : window.BitfroestIcons.fallback(file.type);
   }
   function requestIcons() {
     if (!host) return;
@@ -1632,7 +1632,7 @@
     refreshFileColors();
   }
   function refreshHighlight() {
-    const highlight = CommanderContrast.highlight(getComputedStyle(document.body).getPropertyValue('--vscode-list-filterMatchBackground'));
+    const highlight = BitfroestContrast.highlight(getComputedStyle(document.body).getPropertyValue('--vscode-list-filterMatchBackground'));
     $('#panes').style.setProperty('--match-background', highlight.background);
     $('#panes').style.setProperty('--match-foreground', highlight.foreground);
   }
@@ -1817,13 +1817,13 @@
       const content = isName ? `<span class="filename">${icon(file, currentPath(p))}<span data-filename${file.type === 'link' ? ' class="is-link"' : ''}><span class="filename-text">${highlight(text, p.filter)}</span></span>${resultView(p) ? `<span data-result-source class="result-source" title="${escape(displayPath(file.fsSource))}">${escape(displayPath(parent(file.fsSource)))}</span>` : ''}</span>` : highlight(text, column.key === 'type' && p.filter.startsWith('.') ? p.filter.slice(1) : p.filter);
       return content;
   }
-  const fileGrid = window.CommanderGrid.create({
+  const fileGrid = window.BitfroestGrid.create({
     translate: t, isFilename: isFilenameColumn, history: historyMarkup,
     value: (file, column) => columns.displayValue(file, column.field === undefined ? column.key : column),
     compare: (a, b, column, descending) => columns.compare(a, b, column.field === undefined ? column.key : column, descending),
     cell: renderFileCell, patch: patchView, results: resultView, source: p => resultView(p) || files(p),
-    rowHeight: () => window.CommanderIcons.layout().row,
-    controlHeight: () => window.CommanderIcons.layout().control,
+    rowHeight: () => window.BitfroestIcons.layout().row,
+    controlHeight: () => window.BitfroestIcons.layout().control,
     ready: p => !directoryListings.has(currentPath(p)) && !state.unloadedFolders?.includes(currentPath(p)),
     address: p => pathbarMarkup(p, state.panes.indexOf(p)),
     path: currentPath, hasParent, view: p => p.tabStates[p.tab].id,
@@ -1833,7 +1833,7 @@
     columnsChanged: () => persist()
   });
   function pathbarMarkup(p, index) {
-    return ui`<div class="pathbar" data-vscode-context='{"webviewSection":"address","preventDefaultContextMenuItems":true}'><button data-favorites title="${escape(t('Ortsmenü: Favoriten und Aktionen'))}" aria-label="${escape(t('Ortsmenü: Favoriten und Aktionen'))}" aria-haspopup="menu" aria-expanded="false">${locationMarkup(p)}</button><div class="path"><div class="path-address"><div class="path-breadcrumbs" title="${escape(displayArchivePath(currentPath(p)) + '\n' + t('Rechtsklick: Pfad kopieren'))}">${breadcrumbMarkup(p)}<span data-path-edit></span></div><input class="path-input" data-vscode-context='{"webviewSection":"textInput","preventDefaultContextMenuItems":false}' aria-label="Pfad ${index === 0 ? t('links') : t('rechts')}" value="${escape(displayArchivePath(currentPath(p)))}" spellcheck="false"></div><span data-git-location>${branchMarkup(p)}</span></div><button data-refresh title="Liste aktualisieren" aria-label="Liste aktualisieren">${window.CommanderIcons.font('refresh', { 'data-refresh-icon': '' })}</button></div>`;
+    return ui`<div class="pathbar" data-vscode-context='{"webviewSection":"address","preventDefaultContextMenuItems":true}'><button data-favorites title="${escape(t('Ortsmenü: Favoriten und Aktionen'))}" aria-label="${escape(t('Ortsmenü: Favoriten und Aktionen'))}" aria-haspopup="menu" aria-expanded="false">${locationMarkup(p)}</button><div class="path"><div class="path-address"><div class="path-breadcrumbs" title="${escape(displayArchivePath(currentPath(p)) + '\n' + t('Rechtsklick: Pfad kopieren'))}">${breadcrumbMarkup(p)}<span data-path-edit></span></div><input class="path-input" data-vscode-context='{"webviewSection":"textInput","preventDefaultContextMenuItems":false}' aria-label="Pfad ${index === 0 ? t('links') : t('rechts')}" value="${escape(displayArchivePath(currentPath(p)))}" spellcheck="false"></div><span data-git-location>${branchMarkup(p)}</span></div><button data-refresh title="Liste aktualisieren" aria-label="Liste aktualisieren">${window.BitfroestIcons.font('refresh', { 'data-refresh-icon': '' })}</button></div>`;
   }
   function renderPane(p, index) {
     tabs.ensure(p);
@@ -1842,14 +1842,14 @@
     const empty = !p.columns.some(column => column.visible !== false) ? t('Keine sichtbaren Spalten') : !(p.searchFilter && p.filter ? search.matches(files(p), p.filter) : files(p)).length ? t('Keine Einträge') : '';
     return ui`<section class="pane ${state.active === index ? 'active' : ''}" data-pane="${index}" data-tab-key="${p.tabStates[p.tab].id}" data-directory="${escape(currentPath(p))}" aria-label="${index === 0 ? t('Linke') : t('Rechte')} Dateiliste">
       <div class="pane-label"><span>${index === 0 ? t('LINKE') : t('RECHTE')} DATEILISTE</span><span>${state.active === index ? t('AKTIV') : t('GEGENSEITE')}</span></div>
-      <div class="tabs" data-vscode-context='{"webviewSection":"address","preventDefaultContextMenuItems":true}' role="tablist" aria-label="Ordner-Tabs ${index === 0 ? t('links') : t('rechts')}">${p.tabs.map((path, tab) => ui`<div class="tab-wrap ${p.tab === tab ? 'selected' : ''}" draggable="true" data-tab-drag="${tab}"><button class="tab" role="tab" aria-selected="${p.tab === tab}" data-tab="${tab}" title="${escape(displayArchivePath(path))} · Doppelklick schließt">${window.CommanderIcons.font('folder', { class: 'tab-icon' })}<span data-tab-label>${escape(p.tabStates[tab].searchResult?.label || archiveTabName(path))}</span></button></div>`).join('')}<button class="add-tab" data-new-tab title="Ordner-Tab hinzufügen" aria-label="Ordner-Tab hinzufügen">+</button></div>
+      <div class="tabs" data-vscode-context='{"webviewSection":"address","preventDefaultContextMenuItems":true}' role="tablist" aria-label="Ordner-Tabs ${index === 0 ? t('links') : t('rechts')}">${p.tabs.map((path, tab) => ui`<div class="tab-wrap ${p.tab === tab ? 'selected' : ''}" draggable="true" data-tab-drag="${tab}"><button class="tab" role="tab" aria-selected="${p.tab === tab}" data-tab="${tab}" title="${escape(displayArchivePath(path))} · Doppelklick schließt">${window.BitfroestIcons.font('folder', { class: 'tab-icon' })}<span data-tab-label>${escape(p.tabStates[tab].searchResult?.label || archiveTabName(path))}</span></button></div>`).join('')}<button class="add-tab" data-new-tab title="Ordner-Tab hinzufügen" aria-label="Ordner-Tab hinzufügen">+</button></div>
       <div class="address-fallback" ${p.columns.some(column => column.visible !== false) ? 'hidden' : ''}>${!p.columns.some(column => column.visible !== false) ? pathbarMarkup(p, index) : ''}</div>
       <div class="pane-jobs" role="region" aria-label="${escape(t('Aufträge'))}" hidden></div>
       <div class="list" tabindex="0" aria-label="Dateien ${index === 0 ? t('links') : t('rechts')}"><div class="file-table" data-file-grid></div>${empty ? `<div class="empty grid-empty">${empty}</div>` : ''}</div>
       <div class="pane-status" data-id="pane-footer-${index}">${footerMarkup(p)}</div></section>`;
   }
   function footerMarkup(p) {
-    return `<div class="pane-controls" data-vscode-context='{"preventDefaultContextMenuItems":true}'><button type="button" data-xray-toggle data-mode="off" aria-label="X-Ray" title="X-Ray">${window.CommanderIcons.svg('xray', 'eye-slash-fill')}</button><button type="button" data-quick-diff-toggle data-mode="off" aria-label="Quick Diff" title="Quick Diff">${window.CommanderIcons.svg('xray', 'file-diff')}</button></div><div class="pane-metrics">${footerMetrics(p)}</div>`;
+    return `<div class="pane-controls" data-vscode-context='{"preventDefaultContextMenuItems":true}'><button type="button" data-xray-toggle data-mode="off" aria-label="X-Ray" title="X-Ray">${window.BitfroestIcons.svg('xray', 'eye-slash-fill')}</button><button type="button" data-quick-diff-toggle data-mode="off" aria-label="Quick Diff" title="Quick Diff">${window.BitfroestIcons.svg('xray', 'file-diff')}</button></div><div class="pane-metrics">${footerMetrics(p)}</div>`;
   }
   function footerMetrics(p) {
     const marked = selectedFor(p);
@@ -1910,9 +1910,9 @@
     persist();
   }
   const actions = [['F2', t('Umbenennen'), 'rename-one'], ['F3', t('Anzeigen'), 'view'], ['F4', t('Bearbeiten'), 'edit'], ['F5', t('Kopieren'), 'copy'], ['F6', t('Verschieben'), 'move'], ['F7', t('Neuer Ordner'), 'mkdir'], ['F8', t('Löschen'), 'delete']];
-  const lister = window.CommanderListerView.create({ host, state: () => state, t, escape, modal, restore: render, edit: file => preview(file, true), notify: toast, report: reportStatus, remember: rememberScroll, task: statusTask });
-  const previewManager = window.CommanderPreview.create();
-  const quickDiff = window.CommanderQuickDiff.create({ host, t, state: () => state, currentPath, isArchive: isArchiveLocation, notify: toast, task: xrayTask, preview: previewManager, decorate: refreshFileColors, reveal: revealQuickDiffEntry, copy: (text, slash) => selectionIO('copy', text, [{ start: 0, length: text.length }], undefined, slash ? 'slash' : 'native'), beforeStart: () => { document.querySelectorAll("[data-lister-close]").forEach(button => button.click()); }, });
+  const lister = window.BitfroestListerView.create({ host, state: () => state, t, escape, modal, restore: render, edit: file => preview(file, true), notify: toast, report: reportStatus, remember: rememberScroll, task: statusTask });
+  const previewManager = window.BitfroestPreview.create();
+  const quickDiff = window.BitfroestQuickDiff.create({ host, t, state: () => state, currentPath, isArchive: isArchiveLocation, notify: toast, task: xrayTask, preview: previewManager, decorate: refreshFileColors, reveal: revealQuickDiffEntry, copy: (text, slash) => selectionIO('copy', text, [{ start: 0, length: text.length }], undefined, slash ? 'slash' : 'native'), beforeStart: () => { document.querySelectorAll("[data-lister-close]").forEach(button => button.click()); }, });
   function revealQuickDiffEntry({ entry, root, side, previewState }) {
     const target = join(root, entry.path), directory = parent(target);
     const finish = () => {
@@ -1929,8 +1929,8 @@
     if (host && state.realFilesystem) requestFilesystem({ type: 'filesystem-navigate', path: directory, side }, finish);
     else finish();
   }
-  const xray = window.CommanderXray.create({ host, t, state: () => state, currentPath, files, isArchive: isArchiveLocation, settings: () => fileSettings, task: xrayTask, notify: toast, preview: previewManager, beforeStart: () => { previewManager.activate("xray", () => xray.stop()); document.querySelectorAll("[data-lister-close]").forEach(button => button.click()); }, compact: (side, enabled) => fileGrid.compact(document.querySelector(`[data-pane="${side}"]`), enabled), restoreFocus: side => { state.active = side; document.querySelector(`[data-pane="${side}"] .list`)?.focus({ preventScroll: true }); } });
-  const fileSearch = window.CommanderFileSearch.create({ host, t, escape, report: reportStatus, task: statusTask,
+  const xray = window.BitfroestXray.create({ host, t, state: () => state, currentPath, files, isArchive: isArchiveLocation, settings: () => fileSettings, task: xrayTask, notify: toast, preview: previewManager, beforeStart: () => { previewManager.activate("xray", () => xray.stop()); document.querySelectorAll("[data-lister-close]").forEach(button => button.click()); }, compact: (side, enabled) => fileGrid.compact(document.querySelector(`[data-pane="${side}"]`), enabled), restoreFocus: side => { state.active = side; document.querySelector(`[data-pane="${side}"] .list`)?.focus({ preventScroll: true }); } });
+  const fileSearch = window.BitfroestFileSearch.create({ host, t, escape, report: reportStatus, task: statusTask,
     context: () => ({ path: currentPath(pane()), selected: selected().map(row => row.fsSource || join(currentPath(pane()), row.name)), side: state.active, state }),
     apply: (fresh, rows, source, id, name) => {
       const view = clone(state.panes); state = fresh; state.panes = view; state.active = source.side;
@@ -2141,11 +2141,11 @@
     const related = mask.indexOf('>');
     if (related > 0) {
       const source = mask.slice(0, related), target = mask.slice(related + 1);
-      const found = rows.filter(row => window.CommanderTransfer.matches(row.name, source));
-      const companions = new Set(found.map(row => window.CommanderTransfer.applyNameMask(row.name, target).toLocaleLowerCase()));
+      const found = rows.filter(row => window.BitfroestTransfer.matches(row.name, source));
+      const companions = new Set(found.map(row => window.BitfroestTransfer.applyNameMask(row.name, target).toLocaleLowerCase()));
       return rows.filter(row => found.includes(row) || companions.has(row.name.toLocaleLowerCase()));
     }
-    return rows.filter(row => window.CommanderTransfer.matches(row.name, mask));
+    return rows.filter(row => window.BitfroestTransfer.matches(row.name, mask));
   }
   function selectionCommand(command, reverseDirectories = false) {
     const p = pane(), rows = visible(p), includeDirectories = (fileSettings.selectDirectories !== false) !== reverseDirectories;
@@ -2272,7 +2272,7 @@
       const unavailable = direction === 'back' ? tab.historyIndex === 0 : tab.historyIndex === tab.history.length - 1;
       const preview = tab.historyPreviews?.[tab.historyIndex + (direction === 'back' ? -1 : 1)];
       const label = t(preview ? direction === 'back' ? 'Zurück zu Quick Diff' : 'Vorwärts zu Quick Diff' : direction === 'back' ? 'Zurück' : 'Vorwärts');
-      return '<button type="button" data-history="' + direction + '" aria-label="' + escape(label) + '" aria-haspopup="menu" aria-disabled="' + unavailable + '" title="' + escape(label) + ' · ' + escape(t('Rechtsklick: Verlauf')) + '"><span class="history-outline">' + window.CommanderIcons.svg('status', 'forward') + '</span><span class="history-filled">' + window.CommanderIcons.svg('status', 'forward-fill') + '</span></button>';
+      return '<button type="button" data-history="' + direction + '" aria-label="' + escape(label) + '" aria-haspopup="menu" aria-disabled="' + unavailable + '" title="' + escape(label) + ' · ' + escape(t('Rechtsklick: Verlauf')) + '"><span class="history-outline">' + window.BitfroestIcons.svg('status', 'forward') + '</span><span class="history-filled">' + window.BitfroestIcons.svg('status', 'forward-fill') + '</span></button>';
     }).join('') + '</span>';
   }
   function breadcrumbMarkup(p) {
@@ -2539,7 +2539,7 @@
         const reason = samePathDisabled ? t('Quelle und Ziel sind identisch. Zum Kopieren einen neuen Namen wählen.') : appendDisabled ? t('Anhängen ist für diese Dateien nicht verfügbar.') : '';
         return `<button type="button" data-conflict-action="${value}" ${value.startsWith('overwrite') || value === 'append' ? 'data-destructive="true"' : ''} ${reason ? `disabled title="${escape(reason)}" aria-describedby="conflict-limitations"` : ''}>${labels[value]}</button>`;
       };
-      modal(t('Datei bereits vorhanden'), `<section class="conflict-layout" data-conflict-layout>${conflictComparison(conflict)}${conflict.samePath ? `<p class="dialog-notice">${t('Quelle und Ziel sind identisch. Zum Kopieren einen neuen Namen wählen.')}</p>` : ''}<div class="conflict-rename-grid">${field(t('Neuer Name für Kopie oder Ziel'), window.CommanderTransfer.uniqueName([conflict.source, conflict.target], conflict.source.name), 'conflict-name')}<div class="conflict-rename-actions">${['rename-source', 'rename-target'].map(button).join('')}</div></div><details class="dialog-options"><summary>${t('Weitere Konfliktentscheidungen')}</summary><div class="conflict-actions">${['overwrite-all', 'skip-all', 'autorename-source', 'autorename-target', 'overwrite-older', 'overwrite-older-equal', 'rename-older-target', 'larger', 'smaller'].map(button).join('')}</div></details><p id="conflict-limitations" class="sr-only">${conflict.samePath ? t('Quelle und Ziel sind identisch. Zum Kopieren einen neuen Namen wählen.') : t('Entscheidungen für alle Dateien gelten für weitere Konflikte dieses Auftrags.')}</p><button type="button" id="conflict-compare" class="dialog-link" ${typeof conflict.source.content !== 'string' || typeof conflict.target.content !== 'string' || ['folder', 'archive'].includes(conflict.source.type) || ['folder', 'archive'].includes(conflict.target.type) ? `disabled title="${t('Keine vollständigen Textdaten für einen Vergleich vorhanden')}"` : ''}>${t('Inhalt vergleichen')}</button><pre id="conflict-comparison" class="preview-text" hidden></pre></section>`, null, () => false, t('KOPIER-/VERSCHIEBEKONFLIKT'));
+      modal(t('Datei bereits vorhanden'), `<section class="conflict-layout" data-conflict-layout>${conflictComparison(conflict)}${conflict.samePath ? `<p class="dialog-notice">${t('Quelle und Ziel sind identisch. Zum Kopieren einen neuen Namen wählen.')}</p>` : ''}<div class="conflict-rename-grid">${field(t('Neuer Name für Kopie oder Ziel'), window.BitfroestTransfer.uniqueName([conflict.source, conflict.target], conflict.source.name), 'conflict-name')}<div class="conflict-rename-actions">${['rename-source', 'rename-target'].map(button).join('')}</div></div><details class="dialog-options"><summary>${t('Weitere Konfliktentscheidungen')}</summary><div class="conflict-actions">${['overwrite-all', 'skip-all', 'autorename-source', 'autorename-target', 'overwrite-older', 'overwrite-older-equal', 'rename-older-target', 'larger', 'smaller'].map(button).join('')}</div></details><p id="conflict-limitations" class="sr-only">${conflict.samePath ? t('Quelle und Ziel sind identisch. Zum Kopieren einen neuen Namen wählen.') : t('Entscheidungen für alle Dateien gelten für weitere Konflikte dieses Auftrags.')}</p><button type="button" id="conflict-compare" class="dialog-link" ${typeof conflict.source.content !== 'string' || typeof conflict.target.content !== 'string' || ['folder', 'archive'].includes(conflict.source.type) || ['folder', 'archive'].includes(conflict.target.type) ? `disabled title="${t('Keine vollständigen Textdaten für einen Vergleich vorhanden')}"` : ''}>${t('Inhalt vergleichen')}</button><pre id="conflict-comparison" class="preview-text" hidden></pre></section>`, null, () => false, t('KOPIER-/VERSCHIEBEKONFLIKT'));
       const primary = document.createElement('fieldset'); primary.className = 'conflict-single conflict-footer-actions'; primary.dataset.dialogSecondary = '';
       primary.innerHTML = `<legend>${t('Für diese Datei')}</legend><div class="conflict-actions">${['overwrite', 'skip', 'append'].map(button).join('')}</div>`;
       $('.modal-actions').prepend(primary);
@@ -2625,7 +2625,7 @@
   async function executeTransfer(options) {
     if (!host || !state.realFilesystem) return executeTransferNow(options);
     const captured = { ...options, verifyAfterCopy: options.verifyAfterCopy ?? fileSettings.verifyAfterCopy === true, validateSelection: undefined, ids: [...options.ids] };
-    const target = captured.requiredDirectory || window.CommanderTransfer.planTarget({ ...captured, folders: state.folders }).directory;
+    const target = captured.requiredDirectory || window.BitfroestTransfer.planTarget({ ...captured, folders: state.folders }).directory;
     enqueueOperation({ command: options.mode === 'move' ? 'move' : 'copy', title: t(options.mode === 'move' ? 'Verschieben' : 'Kopieren'), target, sources: options.ids.map(id => (state.folders[options.sourcePath] || []).find(file => file.id === id)).filter(Boolean).map(file => file.fsSource || join(options.sourcePath, file.name)) }, job => executeTransferNow(captured).catch(error => {
       failTransferExecution(error, captured.onComplete);
       operationQueue.complete(job.id, { ok: false, error: error.message });
@@ -2645,7 +2645,7 @@
       requestFilesystem({ type: 'filesystem-prepare', paths: [options.requiredDirectory], action: options.mode, recursive: false }, () => executeTransferNow({ ...options, requiredDirectoryVerified: true }).catch(failed));
       return;
     }
-    const plan = window.CommanderTransfer.planTarget({ ...options, folders: state.folders });
+    const plan = window.BitfroestTransfer.planTarget({ ...options, folders: state.folders });
     const targetDirectory = plan.directory;
     const progressSources = new Map((state.folders[options.sourcePath] || []).filter(file => options.ids.includes(file.id)).map(file => [file.id, join(options.sourcePath, file.name)]));
     if (!transferJob) {
@@ -2657,7 +2657,7 @@
     const resume = () => executeTransferNow(options).catch(failed);
     if (prepareFolders([plan.directories.length ? parent(plan.directories[0]) : targetDirectory], options.mode, resume, false)) { transferPreparationFailure = cancelled => options.onComplete?.({ confirmed: false, completed: 0, completedIds: [], errors: cancelled ? [] : [t('Dateioperation fehlgeschlagen; Verzeichnisse erneut eingelesen')], cancelled: Boolean(cancelled) }); return; }
     const selectedFolders = (state.folders[options.sourcePath] || []).filter(file => options.ids.includes(file.id) && file.type === 'folder');
-    if (prepareFolders(selectedFolders.flatMap(file => [join(options.sourcePath, file.name), join(targetDirectory, plan.name || (plan.mask ? window.CommanderTransfer.applyNameMask(file.name, plan.mask) : file.name))]), options.mode, resume)) { transferPreparationFailure = cancelled => options.onComplete?.({ confirmed: false, completed: 0, completedIds: [], errors: cancelled ? [] : [t('Dateioperation fehlgeschlagen; Verzeichnisse erneut eingelesen')], cancelled: Boolean(cancelled) }); return; }
+    if (prepareFolders(selectedFolders.flatMap(file => [join(options.sourcePath, file.name), join(targetDirectory, plan.name || (plan.mask ? window.BitfroestTransfer.applyNameMask(file.name, plan.mask) : file.name))]), options.mode, resume)) { transferPreparationFailure = cancelled => options.onComplete?.({ confirmed: false, completed: 0, completedIds: [], errors: cancelled ? [] : [t('Dateioperation fehlgeschlagen; Verzeichnisse erneut eingelesen')], cancelled: Boolean(cancelled) }); return; }
     transferPending = true;
     const planningJob = transferJob;
     planningJob.controller = new AbortController();
@@ -2722,8 +2722,8 @@
       });
     };
     transferPlanning = true;
-    const result = await window.CommanderTransfer.execute({ ...options, policy: options.policyState?.value || options.policy, signal: planningJob.controller.signal, folders: planningFolders, createId: () => String(nextId++),
-      onBeforeDecision: flushCompleted, onConflict: async (...args) => { const decision = await transferConflict(...args); if (options.policyState && window.CommanderTransfer.policies.includes(decision?.action) && decision.action !== 'ask') options.policyState.value = decision.action; return decision; }, onRename: (source, directory) => transferIndividualName(source, directory, options.mode, planningFolders) });
+    const result = await window.BitfroestTransfer.execute({ ...options, policy: options.policyState?.value || options.policy, signal: planningJob.controller.signal, folders: planningFolders, createId: () => String(nextId++),
+      onBeforeDecision: flushCompleted, onConflict: async (...args) => { const decision = await transferConflict(...args); if (options.policyState && window.BitfroestTransfer.policies.includes(decision?.action) && decision.action !== 'ask') options.policyState.value = decision.action; return decision; }, onRename: (source, directory) => transferIndividualName(source, directory, options.mode, planningFolders) });
     if (transferJob !== planningJob) return;
     if (planningJob.cancelRequested) {
       state.folders = originalFolders;
@@ -2770,7 +2770,7 @@
   }
   function failTransferExecution(error, onComplete) {
     const progress = finishTransferStatus('error');
-    if (progress) statusbar.finishProgress({ message: error.message, severity: window.CommanderWorkbench.Severity.Error, progress });
+    if (progress) statusbar.finishProgress({ message: error.message, severity: window.BitfroestWorkbench.Severity.Error, progress });
     if (transferJob?.hostActive === false) { transferJob = null; transferProgress(); }
     if (state.realFilesystem) { render(true); showOperationFailure(error.message, { notify: !operationQueue?.active }); } else toast(error.message);
     onComplete?.({ completed: 0, completedIds: [], ...error.confirmedTransfer, confirmed: Boolean(error.confirmedTransfer), errors: [error.message], cancelled: false });
@@ -2781,7 +2781,7 @@
       const message = transferSummary(completion);
       const outcome = result.errors.length ? 'error' : result.cancelled ? 'cancelled' : result.skipped || !confirmed ? 'info' : 'success';
       const progress = finishTransferStatus(outcome);
-      if (progress) statusbar.finishProgress({ message, outcome, progress, ...(result.errors.length ? { severity: window.CommanderWorkbench.Severity.Error } : {}) }); statusbar.setStatus(message, outcome);
+      if (progress) statusbar.finishProgress({ message, outcome, progress, ...(result.errors.length ? { severity: window.BitfroestWorkbench.Severity.Error } : {}) }); statusbar.setStatus(message, outcome);
       if (transferJob?.hostActive === false) { transferJob = null; transferProgress(); }
     }
     const accepted = confirmed || completion.actualOutcome;
@@ -2806,12 +2806,12 @@
     delete hostRequest.sourceSide;
     const captured = clone(hostRequest);
     const destination = request.target || (request.messageType === 'zip-test' ? request.path : request.archive ? parent(request.archive) : request.path || request.sourcePath);
-    /** @type {import('./commander-jobs').BackgroundCommandId} */
+    /** @type {import('./bitfroest-jobs').BackgroundCommandId} */
     const command = request.messageType === 'zip-test' ? 'zip-test' : ['zip-unpack', 'zip-copy'].includes(request.messageType) ? 'zip-unpack' : request.action === 'pack' ? 'zip-pack' : 'zip-update';
     const sourceRows = state.folders[request.sourcePath || request.path] || [];
     const sourcePaths = (request.ids || []).map(id => sourceRows.find(file => file.id === id)).filter(Boolean).map(file => file.fsSource || join(request.sourcePath || request.path, file.name));
     if (command === 'zip-test' && !sourcePaths.length && state.archiveLocations?.[request.path]?.archive) sourcePaths.push(state.archiveLocations[request.path].archive);
-    const actionCommand = request.action && window.CommanderJobs.commandForAction(request.action);
+    const actionCommand = request.action && window.BitfroestJobs.commandForAction(request.action);
     if (actionCommand && !actionCommand.supportsBackgroundOperation.enabled) { sendZipWriteNow(captured, completed, true); return; }
     enqueueOperation({ command, title: t(request.messageType === 'zip-test' ? 'Archiv prüfen' : ['zip-unpack', 'zip-copy'].includes(request.messageType) ? 'Entpacken' : 'ZIP erstellen'), target: destination, label: request.archive || destination, sources: sourcePaths }, () => sendZipWriteNow(captured, completed), targetSide);
   }
@@ -2882,7 +2882,7 @@
       if (sourceGroups?.length && sourceGroups.reduce((sum, group) => sum + group.ids.length, 0) > 1 && destination.trim() && !/[\\/]$/.test(destination)) destination += '/';
       if (validateSelection && !validateSelection()) { toast(t('Die gezogene Auswahl wurde geändert. Bitte erneut ziehen.')); return false; }
       const requiredDirectory = targetIsDirectory && paths.identity(inputPath(destination, sourcePath)) === paths.identity(inputPath(targetPath, sourcePath)) ? inputPath(targetPath, sourcePath) : undefined;
-      try { if (!requiredDirectory || Object.hasOwn(state.folders, requiredDirectory)) for (const group of sourceGroups || [{ sourcePath, ids: picked.map(file => file.id) }]) window.CommanderTransfer.planTarget({ folders: state.folders, sourcePath: group.sourcePath, ids: group.ids, targetPath: destination }); }
+      try { if (!requiredDirectory || Object.hasOwn(state.folders, requiredDirectory)) for (const group of sourceGroups || [{ sourcePath, ids: picked.map(file => file.id) }]) window.BitfroestTransfer.planTarget({ folders: state.folders, sourcePath: group.sourcePath, ids: group.ids, targetPath: destination }); }
       catch (error) { toast(error.message); return false; }
       const options = { sourceSide, targetSide, sourcePath, ids: picked.map(file => file.id), targetPath: destination, requiredDirectory, mode, verifyAfterCopy: $('#transfer-verify').checked, individualNames: $('#transfer-individual').checked, filter: $('#transfer-filter').value, policy: $('#transfer-policy').value, onComplete, validateSelection };
       if (sourceGroups?.length) {
@@ -2954,7 +2954,7 @@
     return !types.length || types.includes('application/x-bitfroest-files');
   }
   function action(kind, frozen) {
-    const command = window.CommanderJobs.commandForAction(kind);
+    const command = window.BitfroestJobs.commandForAction(kind);
     if ((filesystemPending && !refreshingFilesystem && !(operationQueue?.active && (command?.supportsBackgroundOperation.enabled || ['parent', 'up', 'open'].includes(kind)))) || transferPending) return;
     if (frozen && !validDraggedFiles(frozen)) return toast(t('Die gezogene Auswahl wurde geändert. Bitte erneut ziehen.'));
     if (state.realFilesystem && kind === 'reset') return toast(t('Diese Aktion ist für das reale Dateisystem noch nicht verfügbar.'));
@@ -2987,10 +2987,10 @@
       const create = () => {
         let plan;
         const entered = $('#value').value;
-        try { plan = window.CommanderFileNames.plan(entered, { base: targetPath, folders: state.folders, kind: file ? 'file' : 'folder', allowExisting: !file, now: openedAt, currentName: cursor?.name, currentType: cursor?.type }); }
+        try { plan = window.BitfroestFileNames.plan(entered, { base: targetPath, folders: state.folders, kind: file ? 'file' : 'folder', allowExisting: !file, now: openedAt, currentName: cursor?.name, currentType: cursor?.type }); }
         catch (error) { toast(t(error.message)); return false; }
         if (prepareFolders([...plan.paths, ...plan.directories].map(parent), kind, create, false)) return false;
-        window.CommanderFileNames.ensureDirectories(state.folders, plan.directories, name => entry(name, 'folder'));
+        window.BitfroestFileNames.ensureDirectories(state.folders, plan.directories, name => entry(name, 'folder'));
         if (file) for (const path of plan.paths) state.folders[parent(path)].push(entry(base(path), 'text'));
         const focusCreated = () => {
           if (plan.paths.length !== 1 || parent(plan.paths[0]) !== targetPath) return;
@@ -3158,21 +3158,21 @@
     if (event.data.ok) request.resolve(); else request.reject(new Error(event.data.error || t('Protokoll konnte nicht kopiert werden.')));
   });
   window.addEventListener('pagehide', () => { for (const request of statusLogRequests.values()) { window.clearTimeout(request.timer); request.reject(new Error(t('Die Dateiverwaltung wurde geschlossen.'))); } statusLogRequests.clear(); }, { once: true });
-  const statusbar = window.CommanderStatusbar.create({ t, onCopyLog: copyStatusLog,
+  const statusbar = window.BitfroestStatusbar.create({ t, onCopyLog: copyStatusLog,
     getLogContext: () => ({ snapshotId: state.snapshotId, language: document.body.dataset.language, timeOrigin: performance.timeOrigin, hostEvents: [...statusHostEvents], omittedHostEvents, activePane: state.active, panes: state.panes.map(p => ({ path: currentPath(p), tab: p.tab })), filesystemPending, refreshingFilesystem, refreshRequestId, pendingFilesystemKind,
       gitPending: [...gitPending], gitRequests: [...gitBindings].map(([path, request]) => ({ path, requestId: request.requestId, snapshotId: request.snapshotId, startedAt: request.startedAt })), navigationRequests: [...navigationRequests.keys()], activeJob: operationQueue?.active && { id: operationQueue.active.id, command: operationQueue.active.command } }),
     onLanguage: () => { if (host) host.postMessage({ type: 'choose-language' }); }, version: decodeURIComponent(document.body.dataset.extensionVersion || ''), actions, onCancel: cancelTransfer, focusList: () => { const list = document.querySelectorAll('.list')[state.active]; if (list instanceof HTMLElement) list.focus({ preventScroll: true }); } });
-  operationQueue = window.CommanderJobs.createQueue({
+  operationQueue = window.BitfroestJobs.createQueue({
     start: job => runQueuedOperation(job, () => job.run(job)),
     cancel: job => { if (deferredQueueJob === job) { deferredQueueJob = null; deferredQueueRun = null; operationQueue.complete(job.id, { cancelled: true }); } else cancelTransfer(); },
     finish: (job, result) => {
       jobTabFallbacks.delete(job.id);
       if (result.error && operationFailure !== result.error) showOperationFailure(result.error, { notify: false });
-      statusbar.notify(`${job.request.title} · ${job.request.target} · ${result.error || result.message || t(result.cancelled ? 'Abgebrochen' : 'Dateioperation beendet')}`, result.error || result.ok === false ? window.CommanderWorkbench.Severity.Error : undefined, job.id);
+      statusbar.notify(`${job.request.title} · ${job.request.target} · ${result.error || result.message || t(result.cancelled ? 'Abgebrochen' : 'Dateioperation beendet')}`, result.error || result.ok === false ? window.BitfroestWorkbench.Severity.Error : undefined, job.id);
     },
     change: () => jobView?.update(operationQueue.items)
   });
-  jobView = window.CommanderJobs.createView({ t, getState: () => state, cancel: id => operationQueue.cancel(id), navigate: job => {
+  jobView = window.BitfroestJobs.createView({ t, getState: () => state, cancel: id => operationQueue.cancel(id), navigate: job => {
     const location = job.request.targetLocation;
     const needsLoad = !Object.hasOwn(state.folders, job.request.target) || state.unloadedFolders?.includes(job.request.target);
     if (location && [0, 1].includes(location.pane)) {
@@ -3187,7 +3187,7 @@
       tabs.activate(targetPane, index);
       render(true);
     }
-    if (needsLoad || window.CommanderPaths.identity(currentPath(pane())) !== window.CommanderPaths.identity(job.request.target)) go(job.request.target);
+    if (needsLoad || window.BitfroestPaths.identity(currentPath(pane())) !== window.BitfroestPaths.identity(job.request.target)) go(job.request.target);
     queueMicrotask(() => document.querySelector(`.pane.active [data-job-row="${job.id}"]`)?.scrollIntoView({ block: 'nearest' }));
   } });
   window.addEventListener('pagehide', () => { operationQueue.dispose(); jobView.dispose(); }, { once: true });
@@ -3211,7 +3211,7 @@
         if (settings.include.startsWith('>')) settings.includeIds = await fileSearch.evaluatePreset(settings.include.slice(1), rows);
         if (settings.exclude.startsWith('>')) settings.excludeIds = await fileSearch.evaluatePreset(settings.exclude.slice(1), rows);
         if (!$('#modal').open || p.tabStates[p.tab].id !== activeId) return;
-        p.selected = window.CommanderSearchDuplicates.selectDuplicates(rows, settings); render();
+        p.selected = window.BitfroestSearchDuplicates.selectDuplicates(rows, settings); render();
         if (close) { $('#modal').close(); render(true); }
       } catch (error) { toast(error.message); }
       finally { applying = false; }
@@ -3475,7 +3475,7 @@
     const bounds = row.getBoundingClientRect(), index = source.items.findIndex(item => item.id === row.dataset.id);
     source.previewItems = source.items.slice(0, 5);
     if (index >= 5) source.previewItems[4] = source.items[index];
-    source.anchor = { x: event.clientX - bounds.left, y: event.clientY - bounds.top + Math.min(index, 4) * (bounds.height || window.CommanderIcons.layout().row) };
+    source.anchor = { x: event.clientX - bounds.left, y: event.clientY - bounds.top + Math.min(index, 4) * (bounds.height || window.BitfroestIcons.layout().row) };
     fileDragPointer = { source, tabId: p.tabStates[p.tab].id, rowId: row.dataset.id, button: event.button, id: event.pointerId, x: event.clientX, y: event.clientY, list: row.closest('.list'), active: false };
   }
   document.addEventListener('pointerdown', event => {
@@ -3486,7 +3486,7 @@
     if (!row || row.querySelector('.inline-rename') || event.target.closest('input,textarea,select,[contenteditable="true"]') || filesystemPending && !refreshingFilesystem || transferPending || $('#modal').open) return;
     startPointerDrag(row, event);
   });
-  const pointerDropMode = (gesture, event) => gesture.button === 2 && window.CommanderTransfer.dropMode(event) !== 'link' ? 'move' : window.CommanderTransfer.dropMode(event);
+  const pointerDropMode = (gesture, event) => gesture.button === 2 && window.BitfroestTransfer.dropMode(event) !== 'link' ? 'move' : window.BitfroestTransfer.dropMode(event);
   function validPointerDrag(gesture) {
     const p = state.panes[gesture.source.side];
     return gesture.list.isConnected && p.tabStates[p.tab].id === gesture.tabId && currentPath(p) === gesture.source.sourcePath && validDraggedFiles(gesture.source);
@@ -3504,7 +3504,7 @@
       refreshSelection(); gesture.list.setPointerCapture?.(gesture.id);
     }
     clearDropTarget(true); const destination = pointerDestination(event);
-    const allowed = !$('#modal').open && (pointerDeleteAllowed(gesture, destination, event) || validFileDropTarget(gesture.source, destination) && window.CommanderTransfer.dropMode(event) !== 'link');
+    const allowed = !$('#modal').open && (pointerDeleteAllowed(gesture, destination, event) || validFileDropTarget(gesture.source, destination) && window.BitfroestTransfer.dropMode(event) !== 'link');
     if (allowed) destination.element.classList.add('drop-target');
     showFileDragFeedback(event, destination?.action === 'delete' ? 'move' : pointerDropMode(gesture, event), gesture.source, allowed);
   });
@@ -3522,7 +3522,7 @@
       if (!$('#modal').open && !(filesystemPending && !refreshingFilesystem) && !transferPending) action(event.shiftKey ? 'delete-alternate' : 'delete', gesture.source);
       return;
     }
-    if (window.CommanderTransfer.dropMode(event) === 'link') { toast(t('Verknüpfungen sind für diese Dateiaktion noch nicht verfügbar.')); return; }
+    if (window.BitfroestTransfer.dropMode(event) === 'link') { toast(t('Verknüpfungen sind für diese Dateiaktion noch nicht verfügbar.')); return; }
     if (destination) pointerFileDrop(gesture.source, destination, pointerDropMode(gesture, event));
   });
   document.addEventListener('pointercancel', event => { if (fileDragPointer?.id === event.pointerId) cancelPointerDrag(); });
@@ -3572,7 +3572,7 @@
       const file = JSON.parse(item.signature);
       const original = rows.get(item.id), row = original ? original.cloneNode(true) : document.createElement('div');
       row.classList.add('file-drag-row'); row.classList.remove('focused');
-      row.style.height = original?.style.height || `${window.CommanderIcons.layout().row}px`;
+      row.style.height = original?.style.height || `${window.BitfroestIcons.layout().row}px`;
       row.removeAttribute('data-file-row'); row.removeAttribute('data-id'); row.setAttribute('inert', ''); row.draggable = false;
       row.setAttribute('aria-label', file.name);
       if (!original) {
@@ -3671,9 +3671,9 @@
   $('#panes').addEventListener('dragover', event => {
     if (dragged?.kind === 'files') {
       const destination = fileDropTarget(event.target); clearDropTarget(true);
-      if (!validFileDropTarget(dragged, destination)) { if (event.dataTransfer) event.dataTransfer.dropEffect = 'none'; showFileDragFeedback(event, window.CommanderTransfer.dropMode(event), dragged, false); return; }
+      if (!validFileDropTarget(dragged, destination)) { if (event.dataTransfer) event.dataTransfer.dropEffect = 'none'; showFileDragFeedback(event, window.BitfroestTransfer.dropMode(event), dragged, false); return; }
       event.preventDefault();
-      const mode = window.CommanderTransfer.dropMode(event);
+      const mode = window.BitfroestTransfer.dropMode(event);
       if (mode === 'link' && dragged.mode !== 'link') toast(t('Verknüpfungen sind für diese Dateiaktion noch nicht verfügbar.'));
       dragged.mode = mode;
       if (event.dataTransfer) event.dataTransfer.dropEffect = mode === 'link' ? 'none' : mode;
@@ -3707,7 +3707,7 @@
     if (dragged.kind === 'files') {
       const destination = fileDropTarget(event.target), source = dragged;
       dragged = null; clearDropTarget();
-      const mode = window.CommanderTransfer.dropMode(event);
+      const mode = window.BitfroestTransfer.dropMode(event);
       if (mode === 'link') { toast(t('Verknüpfungen sind für diese Dateiaktion noch nicht verfügbar.')); return; }
       if (validDraggedFiles(source) && validFileDropTarget(source, destination)) runTransfer({ sourceSide: source.side, sourcePath: source.sourcePath, targetSide: destination.side, ids: source.ids, targetPath: destination.parent ? destination.path.replace(/\/$/, '') + '/' : destination.path, targetIsDirectory: destination.parent, mode, validateSelection: () => validDraggedFiles(source) });
       return;
@@ -3926,7 +3926,7 @@
     }
   });
   $('#modal-form').addEventListener('submit', event => { event.preventDefault(); if (transferJob?.modalPreparation && filesystemPending) return; if (!confirmAction || confirmAction() !== false) $('#modal').close(); });
-  $('#modal-close').replaceChildren(window.CommanderIcons.element('close'));
+  $('#modal-close').replaceChildren(window.BitfroestIcons.element('close'));
   $('#modal-close').onclick = () => { if (jobDialogOpen()) { cancelTransfer(); return; } $('#modal').close(); if (!$('#modal').open) focusSelection(); };
   $('#modal-cancel').onclick = () => { if (jobDialogOpen()) return; $('#modal').close(); if (!$('#modal').open) focusSelection(); };
   $('#modal').addEventListener('close', () => {
@@ -4005,13 +4005,13 @@
     if (host && event.data?.type === 'copy-verification-setting-error') { toast(event.data.error, 'error'); return; }
     if (host && event.data?.type === 'file-settings') {
       fileSettings = event.data.settings || {};
-      const before = window.CommanderIcons.layout().size;
-      const after = window.CommanderIcons.configure(fileSettings.iconSize).size;
+      const before = window.BitfroestIcons.layout().size;
+      const after = window.BitfroestIcons.configure(fileSettings.iconSize).size;
       refreshFileColors(); refreshSelection();
       if (before !== after) document.querySelectorAll('[data-pane]').forEach(section => {
-        fileGrid.api(section)?.setGridOption('rowHeight', window.CommanderIcons.layout().row);
-        fileGrid.api(section)?.setGridOption('headerHeight', window.CommanderIcons.layout().row);
-        fileGrid.api(section)?.setGridOption('groupHeaderHeight', Math.max(26, window.CommanderIcons.layout().control + 6));
+        fileGrid.api(section)?.setGridOption('rowHeight', window.BitfroestIcons.layout().row);
+        fileGrid.api(section)?.setGridOption('headerHeight', window.BitfroestIcons.layout().row);
+        fileGrid.api(section)?.setGridOption('groupHeaderHeight', Math.max(26, window.BitfroestIcons.layout().control + 6));
         fileGrid.api(section)?.resetRowHeights();
         fileGrid.remeasure(section, true);
       });
@@ -4041,7 +4041,7 @@
         const message = result.error || t('Die Ordnergröße konnte nicht ermittelt werden.');
         if (folderSizeBatch) folderSizeBatch.error = message;
         if (folderSizeBatch?.statusVersion === statusbar.version) { statusbar.error(message); folderSizeBatch.statusVersion = statusbar.version; }
-        else statusbar.notify(message, window.CommanderWorkbench.Severity.Error);
+        else statusbar.notify(message, window.BitfroestWorkbench.Severity.Error);
       } else if (folderSizeBatch) folderSizeBatch.cancelled = true;
       if (!folderSizeRequests.size) {
         reportStatus(folderSizeBatch?.error || t(folderSizeBatch?.cancelled ? 'Ordnergrößenberechnung abgebrochen.' : 'Ordnergröße ermittelt.'), folderSizeBatch?.error ? 'error' : folderSizeBatch?.cancelled ? 'cancelled' : 'success', folderSizeBatch?.statusVersion);
@@ -4134,7 +4134,7 @@
       const cancelled = event.data.cancelled || event.data.operationOutcome?.cancelled || completion?.result.cancelled;
       const outcome = !event.data.ok || completion?.result.errors.length ? 'error' : cancelled ? 'cancelled' : 'success';
       const resultMessage = event.data.ok ? event.data.notice || (cancelled ? t('Dateiübertragung abgebrochen.') : completion ? transferSummary(completion) : completedTransferJob ? t('Dateioperation beendet') : '') : error;
-      if (completedTransferJob && !continuePreparation) { const progress = finishTransferStatus(outcome); if (progress) statusbar.finishProgress({ message: resultMessage, outcome, progress, severity: event.data.ok ? undefined : window.CommanderWorkbench.Severity.Error }); }
+      if (completedTransferJob && !continuePreparation) { const progress = finishTransferStatus(outcome); if (progress) statusbar.finishProgress({ message: resultMessage, outcome, progress, severity: event.data.ok ? undefined : window.BitfroestWorkbench.Severity.Error }); }
       if (completion) finishTransfer(completion, Boolean(event.data.ok), event.data.ok ? undefined : error);
       else if (event.data.ok && !resume && !continuePreparation && (event.data.notice || cancelled || completedTransferJob)) statusbar.setStatus(resultMessage, outcome);
       if (failedRename && event.data.ok && !cancelled && event.data.state?.realFilesystem) {
@@ -4286,7 +4286,7 @@
   }
   function showContextMenu(event, section, kind, selection) {
     closeContextMenu();
-    window.dispatchEvent(new CustomEvent('commander-menu-open', { detail: 'context' }));
+    window.dispatchEvent(new CustomEvent('bitfroest-menu-open', { detail: 'context' }));
     const side = Number(section.dataset.pane), p = state.panes[side];
     const directory = currentPath(p), snapshotId = state.snapshotId, tabId = p.tabStates[p.tab].id;
     const history = kind === 'history' ? [...p.tabStates[p.tab].history] : null;
@@ -4346,7 +4346,7 @@
   document.addEventListener('scroll', event => { if (contextPopup && !contextPopup.root.contains(event.target)) closeContextMenu(); }, true);
   window.addEventListener('blur', () => closeContextMenu());
   window.addEventListener('resize', () => closeContextMenu());
-  window.addEventListener('commander-menu-open', event => { if (event.detail !== 'context') closeContextMenu(); });
+  window.addEventListener('bitfroest-menu-open', event => { if (event.detail !== 'context') closeContextMenu(); });
   const pathCopyTimers = new WeakMap();
   function showPathCopyFeedback(address) {
     if (!address?.isConnected) return;
@@ -4417,7 +4417,7 @@
     const value = shortcutFocus();
     host.postMessage({ type: 'inputFocus', tabs: value.tabFocus, search: value.searchFocus, searchResults: value.searchResultsFocus, resultTab: value.searchResults, lister: value.listerFocus, value: value.textInput, list: value.listFocus, conflict: value.conflictDialog, inlineRename: value.inlineRenameInput, dialog: value.fileDialog, transferName: value.transferNameInput, paste: clipboardAvailable && !state.archiveLocations?.[currentPath(pane())] && !currentPath(pane()).startsWith('zip:') });
   }
-  window.CommanderStartupResource?.step('controls');
+  window.BitfroestStartupResource?.step('controls');
   const shortcutRuntime = window.installBitfroestShortcuts({ host, focus: shortcutFocus, enabled: () => startupReady, decorate: decorateShortcut });
   document.addEventListener('focusin', event => {
     reportFocus();
@@ -4435,8 +4435,8 @@
     queueMicrotask(reportFocus);
   });
   $('#modal').addEventListener('close', reportFocus);
-  window.CommanderStartupResource?.step('rendering');
-  window.CommanderDiagnostics?.registerState?.(() => {
+  window.BitfroestStartupResource?.step('rendering');
+  window.BitfroestDiagnostics?.registerState?.(() => {
     const analysis = refreshPlan?.progress.analyze();
     const { steps, ...plan } = analysis || {};
     return { ready: startupReady, snapshotId: state.snapshotId, realFilesystem: state.realFilesystem, active: state.active,
@@ -4447,7 +4447,7 @@
         repositories: [...refreshPlan.repositories].map(([directory, job]) => ({ directory, root: job.root, active: job.active, repositoryCompleted: job.repositoryCompleted, repositorySteps: job.repositorySteps?.size, repositoryPaths: job.repositoryPaths })) } };
   });
   render(true);
-  window.dispatchEvent(new Event('commander-started'));
+  window.dispatchEvent(new Event('bitfroest-started'));
   if (host) host.postMessage({ type: 'app-ready' });
   startupReady = true;
   if (host) { reportFocus(); refreshClipboardAvailability(); requestedIcons.clear(); requestIcons(); requestGitStatus(); }

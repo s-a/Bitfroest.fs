@@ -9,7 +9,7 @@ const root = path.resolve(__dirname, '..');
 const extensionPath = path.join(root, 'extension.js');
 const manifest = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
 const tick = () => new Promise(resolve => setImmediate(resolve));
-const Progress = require('../media/commander-progress');
+const Progress = require('../media/bitfroest-progress');
 
 test('symbolic folder context reaches native menus and clipboard as the current directory', async t => {
   const initial = clipboardFixture();
@@ -398,7 +398,7 @@ test('generated host HTML supplies compact hover menus and cascading favorites w
   const initial = clipboardFixture(); initial.panes.forEach(pane => { pane.filter = ''; pane.sort = 'name'; });
   const app = harness(t, { filesystemLoad: async () => initial });
   await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
-  assert.match(panel.webview.html, /<script[^>]*nonce="[^"]+"[^>]*src="[^"]*commander-menu\.js"|<script[^>]*src="[^"]*commander-menu\.js"[^>]*nonce="[^"]+"/);
+  assert.match(panel.webview.html, /<script[^>]*nonce="[^"]+"[^>]*src="[^"]*bitfroest-menu\.js"|<script[^>]*src="[^"]*bitfroest-menu\.js"[^>]*nonce="[^"]+"/);
   const view = require('./support/webview.cjs').createApp(t, initial, { html: panel.webview.html });
   const heads = view.document.querySelectorAll('[data-main-menu] > button'); view.click(heads[0]);
   heads[1].dispatchEvent(new view.window.MouseEvent('mouseenter'));
@@ -512,7 +512,7 @@ test('Escape reset is bound to its issued clipboard request and never acknowledg
 });
 
 test('generated host HTML displays optional executable versions in both panels and reads older layouts', async t => {
-  const { catalog } = require('../media/commander-column-settings');
+  const { catalog } = require('../media/bitfroest-column-settings');
   const initial = clipboardFixture();
   initial.folders['C:/tmp'] = [{ id: 'dll', name: 'library.dll', type: 'binary', fsSource: 'C:/tmp/library.dll', fileVersion: [4, 3, 2, 1], fileVersionString: '4.3 beta', comment: '<notes>', attributeFlags: { system: true } }];
   initial.folders['C:/temp'] = [{ id: 'exe', name: 'program.exe', type: 'binary', fsSource: 'C:/temp/program.exe', fileVersion: [0, 0, 0, 0] }];
@@ -575,7 +575,7 @@ test('refresh reports the actual pending state save before its final response', 
 
 test('generated host HTML receives correlated metadata progress during an explicit refresh', async t => {
   const initial = clipboardFixture();
-  const Progress = require('../media/commander-progress');
+  const Progress = require('../media/bitfroest-progress');
   const bytes = Progress.event({ phase: 'directory-comments', overall: Progress.unknown('bytes', 4, 'enumerating'), current: Progress.known('bytes', 4, 10) });
   initial.panes.forEach(pane => { pane.filter = ''; pane.sort = 'name'; });
   const read = async settings => {
@@ -899,7 +899,7 @@ test('file colors reach actual host HTML and native configuration changes reach 
   await app.command('bitfroest.openPrototype');
   const panel = app.panels[0];
   assert.match(panel.webview.html, /Content-Security-Policy/);
-  assert.match(panel.webview.html, /nonce="[^"]+" src="[^"]*commander-file-colors.js"/);
+  assert.match(panel.webview.html, /nonce="[^"]+" src="[^"]*bitfroest-file-colors.js"/);
   const view = require('./support/webview.cjs').createApp(t, initial, { html: panel.webview.html });
   const parsed = JSON.parse(decodeURIComponent(view.document.body.dataset.fileSettings));
   assert.deepEqual(parsed.colors.rules, { '*.txt': '#ffffff' });
@@ -1336,7 +1336,7 @@ test('directory navigation streams display batches and binds the final snapshot 
     return { ...before, snapshotId: 'streamed', folders: { ...before.folders, 'C:/tmp/next': [{ id: 'fresh', name: 'fresh.txt', type: 'text' }] } };
   } });
   await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
-  assert.match(panel.webview.html, /commander-directory-cache\.js/);
+  assert.match(panel.webview.html, /bitfroest-directory-cache\.js/);
   assert.match(panel.webview.html, /href="webview-resource:[^"]*codicons\.css"/);
   assert.match(panel.webview.html, /font-src webview-resource:/);
   assert.match(panel.webview.html, /Content-Security-Policy/);
@@ -2211,7 +2211,7 @@ test('Quick Diff generated host compares HEAD, copies and opens the same native 
   const app = harness(t, { filesystemLoad: async () => initial, containsPath: candidate => candidate === fixture.dir || candidate.startsWith(fixture.dir + path.sep),
     gitExtension: { getAPI: () => ({ getRepository: () => repository, toGitUri: (uri, ref) => ({ ...uri, scheme: 'git', ref }) }) } });
   await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
-  assert.match(panel.webview.html, /commander-quick-diff\.js/); assert.match(panel.webview.html, /editor-worker-loader\.js/);
+  assert.match(panel.webview.html, /bitfroest-quick-diff\.js/); assert.match(panel.webview.html, /editor-worker-loader\.js/);
   assert.match(panel.webview.html, /worker-src blob:/); assert.match(panel.webview.html, /script-src 'nonce-/);
   const requestId = 'quick-diff-0123456789abcdef-1';
   await panel.receive({ type: 'quick-diff-list', requestId, generation: 1, directory: fixture.dir, mode: 'folder' });
@@ -2483,9 +2483,9 @@ for (const language of ['de', 'en']) test(`generated startup status displays a l
   const { window } = dom;
   window.acquireVsCodeApi = () => ({ postMessage() {} });
   require('node:vm').runInContext(window.document.querySelector('head script:not([src])').textContent, dom.getInternalVMContext());
-  window.document.querySelector('script[src$="commander-paths.js"]').dispatchEvent(new window.Event('load'));
+  window.document.querySelector('script[src$="bitfroest-paths.js"]').dispatchEvent(new window.Event('load'));
   const status = window.document.querySelector('#startup-detail').textContent;
-  assert.match(status, language === 'de' ? /Ressource geladen: commander-paths\.js/ : /Loaded resource: commander-paths\.js/);
+  assert.match(status, language === 'de' ? /Ressource geladen: bitfroest-paths\.js/ : /Loaded resource: bitfroest-paths\.js/);
   panel.dispose();
 });
 
@@ -2504,7 +2504,7 @@ for (const language of ['de', 'en']) test(`generated startup shows indeterminate
   const window = dom.window;
   window.acquireVsCodeApi = () => ({ postMessage() {} });
   require('node:vm').runInContext(document.querySelector('head script:not([src])').textContent, dom.getInternalVMContext());
-  document.querySelector('script[src$="commander-paths.js"]').dispatchEvent(new window.Event('load'));
+  document.querySelector('script[src$="bitfroest-paths.js"]').dispatchEvent(new window.Event('load'));
   assert.equal(document.querySelector('#startup-progress'), progress, 'resource updates must preserve the indicator');
   panel.dispose();
 });
@@ -2538,17 +2538,17 @@ for (const language of ['de', 'en']) test(`startup log reports actual requests a
   const context = dom.getInternalVMContext(), vm = require('node:vm');
   const scripts = [...document.querySelectorAll('script:not([src])')];
   vm.runInContext(scripts.find(script => script.textContent.includes('app-startup-error')).textContent, context);
-  const marker = scripts.find(script => script.textContent.includes('CommanderStartupResource.start') && script.textContent.includes('commander-paths.js'));
+  const marker = scripts.find(script => script.textContent.includes('BitfroestStartupResource.start') && script.textContent.includes('bitfroest-paths.js'));
   assert.ok(marker, 'the actual HTML records the request before its script');
-  const resource = document.querySelector('script[src$="commander-paths.js"]');
+  const resource = document.querySelector('script[src$="bitfroest-paths.js"]');
   assert.ok(marker.compareDocumentPosition(resource) & window.Node.DOCUMENT_POSITION_FOLLOWING);
   vm.runInContext(marker.textContent, context);
   const log = document.querySelector('#startup-log');
-  assert.match(log.textContent, language === 'de' ? /Skript angefordert: commander-paths\.js/ : /Script requested: commander-paths\.js/);
+  assert.match(log.textContent, language === 'de' ? /Skript angefordert: bitfroest-paths\.js/ : /Script requested: bitfroest-paths\.js/);
   assert.match(log.querySelector('li').textContent, /^\[\d+\.\d{3} s\] /);
   assert.doesNotMatch(log.textContent, language === 'de' ? /Skript geladen/ : /Script loaded/);
   resource.dispatchEvent(new window.Event('load'));
-  assert.match(log.textContent, language === 'de' ? /Skript geladen: commander-paths\.js/ : /Script loaded: commander-paths\.js/);
+  assert.match(log.textContent, language === 'de' ? /Skript geladen: bitfroest-paths\.js/ : /Script loaded: bitfroest-paths\.js/);
   panel.dispose();
 });
 
@@ -2573,8 +2573,8 @@ test('the generated HTML executes its complete startup sequence with the log ena
     const source = src ? fs.readFileSync(src.includes('ag-grid-community') ? path.join(root, 'node_modules/ag-grid-community/dist', path.win32.basename(src)) : path.join(root, 'media', path.win32.basename(src)), 'utf8') : script.textContent;
     new vm.Script(source).runInContext(dom.getInternalVMContext());
     if (script.textContent.includes('app-startup-error')) {
-      const original = window.CommanderStartupResource.step;
-      window.CommanderStartupResource.step = name => { steps.push(name); original(name); };
+      const original = window.BitfroestStartupResource.step;
+      window.BitfroestStartupResource.step = name => { steps.push(name); original(name); };
     }
     if (src) script.dispatchEvent(new window.Event('load'));
   }
@@ -2629,7 +2629,7 @@ test('fresh and restored views authorize existing stylesheets inside their resou
     assert.ok(links.some(link => link.getAttribute('href') === `webview-resource:${path.join(notyfRoot, 'notyf.min.css')}`));
     const notyfScript = [...dom.window.document.querySelectorAll('script[src]')].find(script => script.getAttribute('src').endsWith('/notyf/notyf.min.js') || script.getAttribute('src').endsWith('\\notyf\\notyf.min.js'));
     assert.ok(notyfScript?.nonce && policy.includes(`'nonce-${notyfScript.nonce}'`));
-    for (const name of ['workbench-vendor.css', 'codicons.css', 'app.css', 'file-search.css', 'xray-editor.css', 'commander-notifications.css']) {
+    for (const name of ['workbench-vendor.css', 'codicons.css', 'app.css', 'file-search.css', 'xray-editor.css', 'bitfroest-notifications.css']) {
       assert.ok(links.some(link => link.getAttribute('href') === `webview-resource:${path.join(mediaRoot, name)}`));
       assert.ok(fs.statSync(path.join(mediaRoot, name)).size > 0);
     }
@@ -4455,7 +4455,7 @@ test('native column tables reach the webview on startup and after configuration 
 });
 
 test('short default column headers reach generated host HTML in both settings paths', async t => {
-  const layout = require('../media/commander-column-settings').catalog.map(column => ({ id: column.id, title: 'Old custom title', align: column.align, visible: column.visible }));
+  const layout = require('../media/bitfroest-column-settings').catalog.map(column => ({ id: column.id, title: 'Old custom title', align: column.align, visible: column.visible }));
   for (const configuration of [{}, { 'columns.visibility': { 'standard.name': true } }, { 'columns.layout': layout }]) {
     const app = harness(t, { language: 'en', configuration });
     await app.command('bitfroest.openPrototype');
@@ -5391,7 +5391,7 @@ test('system context menu setting reaches host HTML, live updates and frozen cli
 
 test('switching from English restores German column headings across saved layouts and both panels', async t => {
   const { createApp } = require('./support/webview.cjs');
-  const columns = require('../media/commander-column-settings').catalog.slice(0, 5).map(column => ({ ...column, title: ({ name: 'Name', type: 'Extension', size: 'Size', date: 'Date', attributes: 'Attributes' })[column.id] }));
+  const columns = require('../media/bitfroest-column-settings').catalog.slice(0, 5).map(column => ({ ...column, title: ({ name: 'Name', type: 'Extension', size: 'Size', date: 'Date', attributes: 'Attributes' })[column.id] }));
   const savedLayout = columns.map(({ id, title, width, align, visible }) => ({ id, title, width, align, visible }));
   const savedTables = { 'columns.names': { standard: 'Standard' }, 'columns.fields': Object.fromEntries(columns.map(column => [`standard.${column.id}`, column.field])), 'columns.titles': Object.fromEntries(columns.map(column => [`standard.${column.id}`, column.title])) };
   for (const source of [{}, { 'columns.layout': columns }, { 'columns.layout': savedLayout }, savedTables, { 'columns.sets': [{ id: 'legacy', name: 'Legacy', columns }], 'columns.activeSet': 'legacy' }]) {
@@ -5562,7 +5562,7 @@ test('header actions and typed status operate in generated host HTML with its CS
   await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
   assert.match(panel.webview.html, /Content-Security-Policy/);
   const view = require('./support/webview.cjs').createApp(t, initial, { html: panel.webview.html });
-  const header = view.document.querySelector('.commander-header');
+  const header = view.document.querySelector('.bitfroest-header');
   assert.equal(header.querySelectorAll('#functionbar button').length, 7);
   assert.equal(header.querySelector('#functionbar').closest('[role="menubar"]'), null);
   const language = header.querySelector('#language-toggle'); language.focus(); view.key('Enter', {}, language);

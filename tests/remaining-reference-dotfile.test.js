@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const transfer = require('../media/commander-transfer');
+const transfer = require('../media/bitfroest-transfer');
 
 test('target masks retain a leading-dot filename stem when adding an extension', async () => {
   assert.equal(transfer.applyNameMask('.env', '*'), '.env');

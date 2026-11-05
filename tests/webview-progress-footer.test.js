@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { createApp } = require('./support/webview.cjs');
-const Progress = require('../media/commander-progress');
+const Progress = require('../media/bitfroest-progress');
 
 test('copied status logs retain native clipboard diagnostics', t => {
   const pane = path => ({ tabs: [path], tab: 0, selected: [], cursor: null, filter: '', sort: 'name' });
@@ -50,7 +50,7 @@ test('footer icon copies the message and execution log and confirms only a succe
 
 test('footer copy failure retains the current message and permits a keyboard retry', async t => {
   const app = createApp(t), failure = new Error('Clipboard unavailable'); let calls = 0;
-  const bar = app.window.CommanderStatusbar.create({ t: value => value, actions: [], focusList() {}, onCopyLog: async () => { if (!calls++) throw failure; } });
+  const bar = app.window.BitfroestStatusbar.create({ t: value => value, actions: [], focusList() {}, onCopyLog: async () => { if (!calls++) throw failure; } });
   bar.error('Read failed');
   const button = app.document.querySelector('#status-message [data-status-icon]');
   app.click(button); await new Promise(resolve => setImmediate(resolve));
@@ -68,13 +68,13 @@ function footer(t) {
   Object.defineProperty(app.window.performance, 'now', { value: () => now });
   app.window.setInterval = callback => { timers.set(++sequence, callback); return sequence; };
   app.window.clearInterval = id => timers.delete(id);
-  const bar = app.window.CommanderStatusbar.create({ t: value => value, actions: [], focusList() {}, onCancel: () => cancelled++ });
+  const bar = app.window.BitfroestStatusbar.create({ t: value => value, actions: [], focusList() {}, onCancel: () => cancelled++ });
   const snapshot = progress => {
-    const plan = app.window.CommanderProgress.statusPlan({ id: progress.id || progress.phase, startedAt: now, steps: ['run'], mode: 'work' });
+    const plan = app.window.BitfroestProgress.statusPlan({ id: progress.id || progress.phase, startedAt: now, steps: ['run'], mode: 'work' });
     plan.start('run'); plan.update('run', progress); return plan.snapshot();
   };
   const finished = (outcome = 'success') => {
-    const plan = app.window.CommanderProgress.statusPlan({ id: 'copy', startedAt: 0, steps: ['run'] }); plan.start('run');
+    const plan = app.window.BitfroestProgress.statusPlan({ id: 'copy', startedAt: 0, steps: ['run'] }); plan.start('run');
     if (outcome === 'cancelled' || outcome === 'error') plan.terminate(outcome); else plan.complete('run');
     return plan.finishedSnapshot();
   };
@@ -158,7 +158,7 @@ test('elapsed time ticks without host progress and ETA uses observed overall wor
 });
 
 test('the footer clock starts at the planner action start rather than the first rendered frame', t => {
-  const app = footer(t), plan = app.window.CommanderProgress.statusPlan({ id: 'copy', startedAt: 0, steps: ['copy'] });
+  const app = footer(t), plan = app.window.BitfroestProgress.statusPlan({ id: 'copy', startedAt: 0, steps: ['copy'] });
   plan.start('copy'); app.advance(5);
   app.bar.setProgress({ title: 'Copy', progress: plan.snapshot() });
   assert.equal(app.text('#status-elapsed'), '00:05');

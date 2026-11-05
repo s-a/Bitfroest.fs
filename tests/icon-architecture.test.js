@@ -12,13 +12,13 @@ test('direct SVG, font, native and forged approval output is rejected', () => {
     'document.createElementNS("http://www.w3.org/2000/svg", "svg");',
     'document.createElement("img");',
     'new Image();',
-    'view.innerHTML = window.CommanderStatusIcons.clean;',
+    'view.innerHTML = window.BitfroestStatusIcons.clean;',
     'view.innerHTML = `<span data-icon-reviewed="font:refresh"></span>`;'
   ]) assert.ok(inspectIconSource(source).length, source);
   assert.ok(inspectIconSource('<span class="codicon codicon-refresh"></span>', 'media/new.html').length);
   assert.ok(inspectIconSource('.indicator::before{content:"✓"}', 'media/new.css').length);
   assert.ok(inspectIconSource('view.innerHTML = `<button>×</button>`;').length);
-  assert.deepEqual(inspectIconSource('view.innerHTML = window.CommanderIcons.font("refresh");'), []);
+  assert.deepEqual(inspectIconSource('view.innerHTML = window.BitfroestIcons.font("refresh");'), []);
 });
 
 test('every product icon output uses the central renderer', () => {

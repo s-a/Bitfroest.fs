@@ -1,8 +1,8 @@
 (function (root, factory) {
-  const transfer = typeof module === 'object' && module.exports ? require('./commander-transfer') : root.CommanderTransfer;
+  const transfer = typeof module === 'object' && module.exports ? require('./bitfroest-transfer') : root.BitfroestTransfer;
   const api = factory(transfer);
   if (typeof module === 'object' && module.exports) module.exports = api;
-  else root.CommanderSearchDuplicates = api;
+  else root.BitfroestSearchDuplicates = api;
 })(typeof globalThis === 'object' ? globalThis : this, function (transfer) {
   'use strict';
   function selectDuplicates(rows, settings = {}) {

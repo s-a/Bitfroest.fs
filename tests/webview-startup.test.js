@@ -36,8 +36,8 @@ test('startup module/runtime failures produce a localized visible error and noti
 
 test('successful startup stops its error listener and shares the single acquired host API', t => {
   const app = fixture(t, 'Startup failed');
-  assert.ok(app.window.CommanderHost);
-  app.window.dispatchEvent(new app.window.Event('commander-started'));
+  assert.ok(app.window.BitfroestHost);
+  app.window.dispatchEvent(new app.window.Event('bitfroest-started'));
   app.window.dispatchEvent(new app.window.ErrorEvent('error', { message: 'later unrelated error' }));
   assert.equal(app.status.textContent, 'Loading file manager…');
   assert.equal(app.messages.length, 0);

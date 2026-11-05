@@ -6,8 +6,8 @@
 .codicon:not([data-icon-reviewed]),.icon-font:not([data-icon-reviewed]),.fileicon:not([data-icon-reviewed]),svg:not([data-icon-reviewed]){visibility:hidden}
 svg[data-icon-reviewed]{width:var(--icon-size, 16px);height:var(--icon-size, 16px);flex-shrink:0;vertical-align:middle}
 .codicon::before,.icon-font::before{position:absolute;display:block;height:1em;font-style:normal;font-weight:normal;font-synthesis:none;line-height:1;text-align:left;white-space:pre}
-@font-face{font-family:commander-codicon-metrics;src:url('./codicon.ttf') format('truetype');font-weight:normal;font-style:normal;font-display:block;ascent-override:100%;descent-override:0%;line-gap-override:0%}
-.codicon::before{font-family:commander-codicon-metrics}
+@font-face{font-family:bitfroest-codicon-metrics;src:url('./codicon.ttf') format('truetype');font-weight:normal;font-style:normal;font-display:block;ascent-override:100%;descent-override:0%;line-gap-override:0%}
+.codicon::before{font-family:bitfroest-codicon-metrics}
 .codicon-refresh::before{font-size:calc(var(--icon-size, 16px) * 1);left:calc(var(--icon-size, 16px) * 0);top:calc(var(--icon-size, 16px) * 0.0016666667);content:'\eb37'}
 .codicon-star-empty::before{font-size:calc(var(--icon-size, 16px) * 1);left:calc(var(--icon-size, 16px) * 0.0166666667);top:calc(var(--icon-size, 16px) * -0.03);content:'\ea6a'}
 .codicon-loading::before{font-size:calc(var(--icon-size, 16px) * 1);left:calc(var(--icon-size, 16px) * 0.0616666667);top:calc(var(--icon-size, 16px) * -0.0616666667);content:'\eb19'}

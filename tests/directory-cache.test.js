@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 test('directory cache bounds UTF-8 data and evicts least recently read directories including oversized replacements', () => {
-  const { create } = require('../media/commander-directory-cache');
+  const { create } = require('../media/bitfroest-directory-cache');
   const rows = [{ id: 'ä', name: '文件.txt', type: 'text' }];
   const weight = Buffer.byteLength(JSON.stringify(['/a', rows]));
   const cache = create(weight * 2);
@@ -14,7 +14,7 @@ test('directory cache bounds UTF-8 data and evicts least recently read directori
 });
 
 test('Git decorations share the directory budget and survive row updates until eviction or invalidation', () => {
-  const { create } = require('../media/commander-directory-cache');
+  const { create } = require('../media/bitfroest-directory-cache');
   const rows = [{ id: 'a', name: 'a.txt', type: 'text' }], info = { ok: true, repository: true, branch: 'main', statuses: { 'a.txt': 'modified' } };
   const cache = create(400);
   cache.set('/a', rows); const before = cache.bytes;
@@ -27,7 +27,7 @@ test('Git decorations share the directory budget and survive row updates until e
 });
 
 test('column widths share the cache budget and survive row and Git updates', () => {
-  const { create } = require('../media/commander-directory-cache');
+  const { create } = require('../media/bitfroest-directory-cache');
   const cache = create(400), rows = [{ name: 'a.txt' }];
   const columns = { signature: 'standard', widths: { name: 180, size: 90 } };
   cache.set('/a', rows); const before = cache.bytes;

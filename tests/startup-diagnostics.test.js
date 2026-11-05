@@ -34,7 +34,7 @@ test('document diagnostics report lifecycle, resources, frames and errors after 
   window.acquireVsCodeApi = () => { acquired++; return { postMessage: message => messages.push(message) }; };
   window.requestAnimationFrame = callback => { frames.push(callback); return frames.length; };
   window.eval(fs.readFileSync(path.join(__dirname, '../media/startup-diagnostics.js'), 'utf8'));
-  window.dispatchEvent(new window.Event('commander-started'));
+  window.dispatchEvent(new window.Event('bitfroest-started'));
   assert.ok(messages.some(message => message.event.name === 'document-start'));
   assert.ok(frames.length > 0);
   frames.shift()();
@@ -82,7 +82,7 @@ test('diagnostic probes acknowledge the live application even when frame callbac
   window.acquireVsCodeApi = () => ({ postMessage: message => messages.push(message) });
   window.requestAnimationFrame = () => 1;
   window.eval(fs.readFileSync(path.join(__dirname, '../media/startup-diagnostics.js'), 'utf8'));
-  window.CommanderDiagnostics.registerState(() => ({ ready: true, snapshotId: 'current' }));
+  window.BitfroestDiagnostics.registerState(() => ({ ready: true, snapshotId: 'current' }));
   window.dispatchEvent(new window.MessageEvent('message', { data: { type: 'diagnostic-probe', startupId: 'start', documentId: 'view', requestId: 'probe-1' } }));
   const response = messages.find(message => message.event.name === 'probe-received');
   assert.equal(response.event.requestId, 'probe-1');
@@ -99,7 +99,7 @@ test('large diagnostic contexts remain deliverable and explicitly identify omitt
   window.acquireVsCodeApi = () => ({ postMessage: message => messages.push(message) });
   window.requestAnimationFrame = () => 1;
   window.eval(fs.readFileSync(path.join(__dirname, '../media/startup-diagnostics.js'), 'utf8'));
-  window.CommanderDiagnostics.registerState(() => ({ repositories: Array.from({ length: 500 }, () => ({ path: 'x'.repeat(4096) })) }));
+  window.BitfroestDiagnostics.registerState(() => ({ repositories: Array.from({ length: 500 }, () => ({ path: 'x'.repeat(4096) })) }));
   window.dispatchEvent(new window.MessageEvent('message', { data: { type: 'diagnostic-probe', startupId: 'start', documentId: 'view', requestId: 'large' } }));
   const response = messages.find(message => message.event.name === 'probe-received');
   assert.ok(JSON.stringify(response).length < 32000);

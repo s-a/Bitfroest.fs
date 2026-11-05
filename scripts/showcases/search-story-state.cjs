@@ -27,7 +27,7 @@ function viewerMatch(root = document) {
 }
 
 function searchIsolation(action, root = document) {
-  const state = root.defaultView.CommanderHost?.getState?.();
+  const state = root.defaultView.BitfroestHost?.getState?.();
   const searches = root.querySelectorAll('dialog[data-file-search]'), openSearches = root.querySelectorAll('dialog[data-file-search][open]');
   const viewers = root.querySelectorAll('.lister'), modal = root.querySelector('dialog[open]#modal');
   const idle = root.querySelector('#status-progress-area')?.classList.contains('is-idle') && root.querySelector('#status-activity')?.hidden &&

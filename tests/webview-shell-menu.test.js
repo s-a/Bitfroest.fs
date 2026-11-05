@@ -142,11 +142,11 @@ test('empty list space keeps its background action while the symbol targets the 
     assert.equal(event.defaultPrevented, true);
     const symbolic = selector.includes('data-parent');
     assert.equal(requests(app).length, symbolic ? 1 : 0);
-    assert.deepEqual(Array.from(app.state().panes[0].selected), symbolic ? [app.window.CommanderGrid.parentId] : ['a', 'b']);
+    assert.deepEqual(Array.from(app.state().panes[0].selected), symbolic ? [app.window.BitfroestGrid.parentId] : ['a', 'b']);
     assert.equal(app.document.querySelector('#modal').open, false);
     if (symbolic) {
       assert.equal(requests(app)[0].directory, 'C:/tmp');
-      assert.deepEqual(Array.from(requests(app)[0].ids), [app.window.CommanderGrid.parentId]);
+      assert.deepEqual(Array.from(requests(app)[0].ids), [app.window.BitfroestGrid.parentId]);
     } else assert.match(app.document.querySelector('#status-message').textContent, /Ordnerhintergrund/);
   }
 });

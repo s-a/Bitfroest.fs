@@ -48,7 +48,7 @@ test('missing packaged bindings fail explicitly without a build or interpreter f
     const copy = path.join(root, 'native-api.js');
     await fs.copyFile(path.join(__dirname, '../native-api.js'), copy);
     await fs.mkdir(path.join(root, 'media'));
-    await fs.copyFile(path.join(__dirname, '../media/commander-progress.js'), path.join(root, 'media/commander-progress.js'));
+    await fs.copyFile(path.join(__dirname, '../media/bitfroest-progress.js'), path.join(root, 'media/bitfroest-progress.js'));
     assert.throws(() => require(copy).loadNativeApi(), error => error.code === 'BindingUnavailable' && error.cause?.code === 'MODULE_NOT_FOUND');
   } finally { await fs.rm(root, { recursive: true, force: true }); }
 });

@@ -1,6 +1,6 @@
 (() => {
   const host = window.acquireVsCodeApi();
-  const paths = window.CommanderPaths;
+  const paths = window.BitfroestPaths;
   let english = false, busy = true, finished = false, rows = [], statusText = '', capabilities;
   const text = (de, en) => english ? en : de;
   const labels = { title: ['Ordnersperren untersuchen', 'Inspect folder locks'], processes: ['Sperrende Prozesse', 'Locking processes'], details: ['Details anzeigen', 'Show details'], refresh: ['Aktualisieren (F5)', 'Refresh (F5)'], unlock: ['Freigeben', 'Unlock'], delete: ['Löschen…', 'Delete…'], other: ['Weitere Aktionen…', 'Other actions…'], close: ['Schließen', 'Close'] };

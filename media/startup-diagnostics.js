@@ -3,7 +3,7 @@
   const started = performance.now();
   const startupId = document.documentElement.dataset.startupId;
   const documentId = document.documentElement.dataset.documentId;
-  window.CommanderHost = window.CommanderHost || (typeof acquireVsCodeApi === 'function' ? acquireVsCodeApi() : null);
+  window.BitfroestHost = window.BitfroestHost || (typeof acquireVsCodeApi === 'function' ? acquireVsCodeApi() : null);
   let sequence = 0, framePending = false, frameRequestedAt = 0, applicationState = () => null;
   const recentMessages = [];
   let intersection = null, intersectionObserver = null, visibilityTracking = false;
@@ -90,7 +90,7 @@
         paintEntries: (performance.getEntriesByType?.('paint') || []).map(entry => ({ name: entry.name, startTime: entry.startTime, duration: entry.duration })),
         navigation: (performance.getEntriesByType?.('navigation') || []).map(entry => ({ type: entry.type, domComplete: entry.domComplete, loadEventEnd: entry.loadEventEnd, activationStart: entry.activationStart })) },
       root: geometry(document.documentElement), body: geometry(document.body), container: geometry(document.getElementById('panes')),
-      header: geometry(document.querySelector('.commander-header')), statusbar: geometry(document.getElementById('statusbar')),
+      header: geometry(document.querySelector('.bitfroest-header')), statusbar: geometry(document.getElementById('statusbar')),
       paneCount: document.querySelectorAll('#panes > .pane').length, panes,
       stylesheets: [...document.querySelectorAll('link[rel="stylesheet"]')].slice(0, 32).map(link => {
         const result = { resource: resource(link), disabled: Boolean(link.disabled), present: Boolean(link.sheet), media: link.media };
@@ -99,10 +99,10 @@
       }) };
   }
   function report(name, detail = {}) {
-    if (!startupId || !documentId || !window.CommanderHost) return;
+    if (!startupId || !documentId || !window.BitfroestHost) return;
     try {
       const budget = { remaining: 24000, truncated: false }, payload = bounded(detail, budget);
-      window.CommanderHost.postMessage({ type: 'startup-diagnostic', version: 1, startupId, documentId, sequence: ++sequence,
+      window.BitfroestHost.postMessage({ type: 'startup-diagnostic', version: 1, startupId, documentId, sequence: ++sequence,
         event: { ...payload, detailsTruncated: budget.truncated, name, elapsed: Math.max(0, performance.now() - started), readyState: document.readyState,
           visibility: document.visibilityState, focused: document.hasFocus() } });
       if (name === 'git-protocol-error') failureContext();
@@ -123,7 +123,7 @@
         frameDelayMs: Math.max(0, performance.now() - frameRequestedAt), layout: layout(), application: application() });
     });
   }
-  window.CommanderDiagnostics = { report, registerState(read) { if (typeof read === 'function') applicationState = read; } };
+  window.BitfroestDiagnostics = { report, registerState(read) { if (typeof read === 'function') applicationState = read; } };
   function failureContext() { report('failure-context', { relatedSequence: sequence, layout: layout(), application: application(), recentMessages: recentMessages.slice(-12) }); }
   window.addEventListener('message', event => {
     const data = event.data;
@@ -161,7 +161,7 @@
     if (event.target !== window && event.target !== document && name === 'load') return;
     report(name); frame();
   });
-  window.addEventListener('commander-started', () => { report('application-ready'); frame(); });
+  window.addEventListener('bitfroest-started', () => { report('application-ready'); frame(); });
   document.addEventListener('load', event => {
     const target = event.target;
     if (target instanceof Element && target.matches('script[src],link[rel="stylesheet"]')) report('resource-loaded', { resource: resource(target) });

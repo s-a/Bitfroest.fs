@@ -29,12 +29,12 @@ test('startup status reports resources only after they load and stops after read
   new vm.Script(fs.readFileSync(path.join(media, 'webview-bootstrap.js'), 'utf8')).runInContext(dom.getInternalVMContext());
   const status = document.querySelector('#startup-message');
   assert.equal(status.textContent, 'Loading file manager…');
-  document.querySelector('script[src="commander-paths.js"]').dispatchEvent(new window.Event('load'));
+  document.querySelector('script[src="bitfroest-paths.js"]').dispatchEvent(new window.Event('load'));
   assert.equal(status.textContent, 'Loading file manager…');
-  assert.equal(document.querySelector('#startup-detail').textContent, 'Ressource geladen: commander-paths.js');
-  window.dispatchEvent(new window.Event('commander-started'));
+  assert.equal(document.querySelector('#startup-detail').textContent, 'Ressource geladen: bitfroest-paths.js');
+  window.dispatchEvent(new window.Event('bitfroest-started'));
   document.querySelector('script[src="app.js"]').dispatchEvent(new window.Event('load'));
-  assert.equal(document.querySelector('#startup-detail').textContent, 'Ressource geladen: commander-paths.js');
+  assert.equal(document.querySelector('#startup-detail').textContent, 'Ressource geladen: bitfroest-paths.js');
 });
 
 test('an early stylesheet failure is reported before the body exists and rendered when it becomes available', t => {

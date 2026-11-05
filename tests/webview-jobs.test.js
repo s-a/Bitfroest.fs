@@ -125,7 +125,7 @@ test('foreground deletion reports native progress in the footer and cancels by o
   const state = fixture(); state.folders['C:/left'].push({ id: 'z', name: 'z.txt', type: 'text', fsSource: 'C:/left/z.txt', size: 5 });
   const app = createApp(t, state); app.click(app.row('a.txt')); app.click(app.row('z.txt'), { ctrlKey: true }); app.action('delete'); submit(app);
   const request = app.messages.find(message => message.type === 'filesystem-delete');
-  const Progress = require('../media/commander-progress');
+  const Progress = require('../media/bitfroest-progress');
   assert.match(request.operationId, /^delete-/);
   assert.equal(app.document.querySelector('#panes').inert, true);
   assert.equal(app.document.querySelector('#functionbar').inert, true);

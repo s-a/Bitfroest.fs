@@ -30,6 +30,6 @@ module.exports = [
   },
   {
     files: ['media/app.js', 'media/webview-bootstrap.js', 'media/startup-diagnostics.js', 'media/configuration-view.js'],
-    languageOptions: { globals: { acquireVsCodeApi: 'readonly', CommanderContrast: 'readonly' } }
+    languageOptions: { globals: { acquireVsCodeApi: 'readonly', BitfroestContrast: 'readonly' } }
   }
 ];

@@ -1,5 +1,5 @@
 (function (root, factory) {
-  const columns = typeof module === 'object' && module.exports ? require('./commander-column-settings') : root.CommanderColumnSettings;
+  const columns = typeof module === 'object' && module.exports ? require('./bitfroest-column-settings') : root.BitfroestColumnSettings;
   const api = factory(columns);
   if (typeof module === 'object' && module.exports) module.exports = api;
   if (root) root.ConfigurationModel = api;

@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const names = require('../media/commander-file-names');
-const transfer = require('../media/commander-transfer');
+const names = require('../media/bitfroest-file-names');
+const transfer = require('../media/bitfroest-transfer');
 const { createApp } = require('./support/webview.cjs');
 const tick = () => new Promise(resolve => setImmediate(resolve));
 

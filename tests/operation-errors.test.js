@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createOperationError, renderOperationError } = require('../operation-errors');
-const { create } = require('../media/commander-i18n');
+const { create } = require('../media/bitfroest-i18n');
 
 test('structured recovery errors localize only application parts and preserve paths', () => {
   const paths = ['C:/tmp/Neuer Ordner/Dateioperation fehlgeschlagen<&.stage'];

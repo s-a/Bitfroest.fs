@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createApp } = require('./support/webview.cjs');
-const Progress = require('../media/commander-progress');
+const Progress = require('../media/bitfroest-progress');
 function state(inside = false) {
   const root = 'zip:C%3A%2Ftmp%2Ftest.zip!';
   const pane = path => ({ tabs: [path], tab: 0, selected: [], cursor: null, filter: '', sort: 'name', descending: false });

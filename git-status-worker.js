@@ -1,6 +1,6 @@
 const { parentPort } = require('node:worker_threads');
 const { createGitStatusEngine } = require('./git-status-engine');
-const Progress = require('./media/commander-progress');
+const Progress = require('./media/bitfroest-progress');
 
 const engine = createGitStatusEngine();
 let queue = Promise.resolve();

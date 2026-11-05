@@ -1,5 +1,5 @@
 /* Generated icon metrics. Source SHA-256: 2f4ced509ca4e41cbbbb276b54c758714e8459d682060eb08bfb6c7205cc5be8. */
-window.CommanderIconFontMetrics = Object.freeze({
+window.BitfroestIconFontMetrics = Object.freeze({
   "refresh": {
     "codePoint": 60215,
     "fontId": "codicon",

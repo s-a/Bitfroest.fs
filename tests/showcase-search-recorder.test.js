@@ -17,7 +17,7 @@ test('search actions require the dedicated fixture', () => {
 test('search isolation requires the idle product and one expected surface', () => {
   const dom = new JSDOM('<div id="status-progress-area" class="is-idle"></div><span id="status-activity" hidden></span><div id="panes"></div><div id="functionbar"></div><dialog data-file-search open><button data-search-start></button></dialog>');
   const root = dom.window.document;
-  dom.window.CommanderHost = { getState: () => ({ realFilesystem: true }) };
+  dom.window.BitfroestHost = { getState: () => ({ realFilesystem: true }) };
   assert.equal(searchIsolation('start', root), true);
   root.querySelector('#status-progress-area').classList.remove('is-idle');
   assert.equal(searchIsolation('start', root), false);

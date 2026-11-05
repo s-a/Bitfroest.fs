@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const settings = require('../media/commander-column-settings');
+const settings = require('../media/bitfroest-column-settings');
 const properties = Object.assign({}, ...require('../package.json').contributes.configuration.map(item => item.properties));
 
 test('every available column has fixed native controls with visibility first and bounded choices', () => {

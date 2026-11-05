@@ -1,6 +1,6 @@
 /* global document */
 function archiveSnapshot(action, root = document) {
-  const state = root.defaultView.CommanderHost.getState(), pane = state.panes[state.active], other = state.panes[1 - state.active];
+  const state = root.defaultView.BitfroestHost.getState(), pane = state.panes[state.active], other = state.panes[1 - state.active];
   const activeDirectory = pane.tabs[pane.tab], otherDirectory = other.tabs[other.tab], rows = state.folders[activeDirectory] || [];
   const selected = pane.selected.map(id => rows.find(row => row.id === id)?.fsSource || '');
   if (action === 'leave-archive') {
@@ -78,7 +78,7 @@ function inspectArchiveCompletion(action, fixture, root = document) {
 }
 
 function inspectArchiveOpened(fixture, root = document) {
-  const state = root.defaultView.CommanderHost.getState(), pane = state.panes[state.active], directory = pane.tabs[pane.tab];
+  const state = root.defaultView.BitfroestHost.getState(), pane = state.panes[state.active], directory = pane.tabs[pane.tab];
   const location = state.archiveLocations?.[directory], rows = state.folders?.[directory];
   const same = (a, b) => typeof a === 'string' && typeof b === 'string' && a.replace(/\\/g, '/').replace(/\/$/, '').toLowerCase() === b.replace(/\\/g, '/').replace(/\/$/, '').toLowerCase();
   return { complete: Boolean(state.realFilesystem && same(location?.archive, fixture.archive) && same(location?.parent, fixture.right) &&
@@ -86,14 +86,14 @@ function inspectArchiveOpened(fixture, root = document) {
 }
 
 function inspectArchiveLeft(fixture, root = document) {
-  const state = root.defaultView.CommanderHost.getState(), pane = state.panes[state.active], directory = pane.tabs[pane.tab];
+  const state = root.defaultView.BitfroestHost.getState(), pane = state.panes[state.active], directory = pane.tabs[pane.tab];
   const same = (a, b) => typeof a === 'string' && typeof b === 'string' && a.replace(/\\/g, '/').replace(/\/$/, '').toLowerCase() === b.replace(/\\/g, '/').replace(/\/$/, '').toLowerCase();
   const rows = state.folders?.[directory];
   return { complete: Boolean(state.realFilesystem && same(directory, fixture.right) && Array.isArray(rows) && rows.some(row => row.name === 'Project-Plan.zip' && same(row.fsSource, fixture.archive))) };
 }
 
 function inspectArchiveExtracted(fixture, root = document) {
-  const state = root.defaultView.CommanderHost.getState(), pane = state.panes[state.active], directory = pane.tabs[pane.tab];
+  const state = root.defaultView.BitfroestHost.getState(), pane = state.panes[state.active], directory = pane.tabs[pane.tab];
   const same = (a, b) => typeof a === 'string' && typeof b === 'string' && a.replace(/\\/g, '/').replace(/\/$/, '').toLowerCase() === b.replace(/\\/g, '/').replace(/\/$/, '').toLowerCase();
   const rows = state.folders?.[directory];
   return { complete: Boolean(state.realFilesystem && same(directory, fixture.unpacked) && Array.isArray(rows) && rows.some(row => row.name === 'Project-Plan.md' && same(row.fsSource, fixture.extracted))) };

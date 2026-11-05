@@ -954,5 +954,5 @@ class ProgressBar extends Disposable {
     }
 }
 
-root.CommanderWorkbench = { NotificationsModel, NotificationChangeType, Severity, StatusbarViewModel, StatusbarAlignment, ProgressBar };
+root.BitfroestWorkbench = { NotificationsModel, NotificationChangeType, Severity, StatusbarViewModel, StatusbarAlignment, ProgressBar };
 })(globalThis);

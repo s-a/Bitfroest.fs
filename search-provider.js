@@ -1,7 +1,7 @@
 const path = require('node:path');
 const { Worker } = require('node:worker_threads');
 const { validateSettings } = require('./file-search');
-const Progress = require('./media/commander-progress');
+const Progress = require('./media/bitfroest-progress');
 
 function createSearchProvider({ roots }) {
   const jobs = new Map(), completed = new Map(); let disposed = false;

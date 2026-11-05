@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const Progress = require('../media/commander-progress');
+const Progress = require('../media/bitfroest-progress');
 const { createApp } = require('./support/webview.cjs');
 
 for (const refreshing of [false, true]) test(`malformed Git progress retains operable file lists ${refreshing ? 'after filesystem refresh' : 'after startup'}`, t => {
@@ -8,7 +8,7 @@ for (const refreshing of [false, true]) test(`malformed Git progress retains ope
   const diagnostics = [], errors = [];
   const app = createApp(t, { version: 1, realFilesystem: true, snapshotId: 'isolation', active: 0, panes: [pane('/left'), pane('/right')], folders: {
     '/left': [{ id: 'file', name: 'file.txt', type: 'text' }], '/right': []
-  } }, { beforeApp({ window }) { window.CommanderDiagnostics = { report: (name, detail) => diagnostics.push({ name, ...detail }), registerState() {} }; } });
+  } }, { beforeApp({ window }) { window.BitfroestDiagnostics = { report: (name, detail) => diagnostics.push({ name, ...detail }), registerState() {} }; } });
   app.window.addEventListener('error', event => { errors.push(event.message); event.preventDefault(); });
   const send = data => app.window.dispatchEvent(new app.window.MessageEvent('message', { data }));
   let query = app.messages.find(message => message.type === 'git-status');

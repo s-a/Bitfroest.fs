@@ -2,7 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { createFolderLocks } = require('./folder-locks');
-const { displayPath, normalizePath } = require('./media/commander-paths');
+const { displayPath, normalizePath } = require('./media/bitfroest-paths');
 
 function createLockInspector(vscode, context, options) {
   const sessions = new Set();
@@ -11,7 +11,7 @@ function createLockInspector(vscode, context, options) {
     const text = (de, en) => english ? en : de;
     const media = vscode.Uri.joinPath(context.extensionUri, 'media');
     let html = fs.readFileSync(vscode.Uri.joinPath(media, 'lock-inspector.html').fsPath, 'utf8');
-    for (const name of ['lock-inspector.css', 'commander-paths.js', 'lock-inspector.js']) fs.readFileSync(vscode.Uri.joinPath(media, name).fsPath);
+    for (const name of ['lock-inspector.css', 'bitfroest-paths.js', 'lock-inspector.js']) fs.readFileSync(vscode.Uri.joinPath(media, name).fsPath);
     const panel = vscode.window.createWebviewPanel('bitfroestFolderLocks', text('Ordnersperren untersuchen', 'Inspect folder locks'), vscode.ViewColumn.Active, { enableScripts: true, retainContextWhenHidden: true, localResourceRoots: [media] });
     const provider = (options.createProvider || (() => createFolderLocks({ get roots() { return options.roots; }, trash: file => vscode.workspace.fs.delete(vscode.Uri.file(file), { recursive: true, useTrash: true }) })))();
     const session = { panel, provider }; sessions.add(session);
@@ -30,7 +30,7 @@ function createLockInspector(vscode, context, options) {
     const send = data => { if (!closed) return panel.webview.postMessage(data); };
     const nonce = crypto.randomBytes(18).toString('base64');
     html = html.replace('<!--POLICY-->', `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${panel.webview.cspSource}; script-src 'nonce-${nonce}';">`);
-    for (const name of ['lock-inspector.css', 'commander-paths.js', 'lock-inspector.js']) html = html.replaceAll(`"${name}"`, `"${panel.webview.asWebviewUri(vscode.Uri.joinPath(media, name))}"`);
+    for (const name of ['lock-inspector.css', 'bitfroest-paths.js', 'lock-inspector.js']) html = html.replaceAll(`"${name}"`, `"${panel.webview.asWebviewUri(vscode.Uri.joinPath(media, name))}"`);
     panel.webview.html = html.replaceAll('<script ', `<script nonce="${nonce}" `);
     panel.onDidDispose(() => { closed = true; scanVersion++; provider.dispose(); sessions.delete(session); });
     async function scan() {

@@ -45,7 +45,7 @@ test('scan observation requires a fresh busy transition before its result', () =
 test('inspector opening is bound to the selected real folder and a visible menu action', () => {
   const dom = new JSDOM('<div data-context-menu><button data-context-action="inspect-folder-locks">Inspect</button></div>');
   const root = dom.window.document, menu = root.querySelector('button');
-  dom.window.CommanderHost = { getState: () => ({ realFilesystem: true, active: 1,
+  dom.window.BitfroestHost = { getState: () => ({ realFilesystem: true, active: 1,
     panes: [{ tabs: ['C:/demo/left'], tab: 0, selected: [] }, { tabs: ['C:/demo/right'], tab: 0, selected: ['folder'] }],
     folders: { 'C:/demo/right': [{ id: 'folder', fsSource: 'C:/demo/right/Build-Output' }] } }) };
   menu.getBoundingClientRect = () => ({ width: 50, height: 20 });

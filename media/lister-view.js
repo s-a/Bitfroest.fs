@@ -1,8 +1,8 @@
 (function (root) {
   'use strict';
-  root.CommanderListerView = { create };
+  root.BitfroestListerView = { create };
   function create({ host, state, t, escape, modal, restore, edit, notify, remember, report = () => {}, task = () => {} }) {
-    const core = root.CommanderLister, sessions = [null, null], requests = new Map();
+    const core = root.BitfroestLister, sessions = [null, null], requests = new Map();
     const menu = document.querySelector('[data-main-menu]'), originalMenu = [...menu.childNodes];
     const labels = { text: '1 Nur Text', binary: '2 Binär', hex: '3 Hexadezimal', html: '5 HTML-Text', unicode: '6 Unicode', utf8: '7 UTF-8' };
     const cpNames = ['ANSI (lokale Codeseite)', 'ASCII/DOS (lokale Codeseite)', 'MacOS', 'Osteuropa', 'Kyrillisch Windows', 'Westeuropa', 'Griechisch', 'Türkisch', 'Hebräisch', 'Arabisch', 'Baltisch', 'Vietnamesisch', 'Chinesisch Festland', 'Chinesisch Taiwan', 'Japanisch', 'Koreanisch', 'Thai', 'DOS-USA', 'DOS-Latin1', 'Kyrillisch KOI8-R'];
@@ -65,7 +65,7 @@
             request(session, 'lister-link', { id: session.id, href: link.href }, result => {
             if (navigation !== session.navigation) return;
             if (!result.ok) { setStatus(session, t(result.error)); return; }
-            if (result.id) { session.id = result.id; session.file = { ...session.file, fsSource: result.path, name: root.CommanderPaths.baseName(result.path) }; session.root.querySelector('.lister-heading span').textContent = root.CommanderPaths.displayPath(result.path); session.selection = null; session.hit = null; if (version !== session.version) { session.view = result.view; load(session, 0); } else paint(session, result.view); }
+            if (result.id) { session.id = result.id; session.file = { ...session.file, fsSource: result.path, name: root.BitfroestPaths.baseName(result.path) }; session.root.querySelector('.lister-heading span').textContent = root.BitfroestPaths.displayPath(result.path); session.selection = null; session.hit = null; if (version !== session.version) { session.view = result.view; load(session, 0); } else paint(session, result.view); }
           });
           }
           else if (/^https?:\/\//i.test(link.href)) window.open(link.href, '_blank', 'noopener');
@@ -217,7 +217,7 @@
         const shut = () => { popup.hidden = true; heads.forEach(head => head.setAttribute('aria-expanded', 'false')); };
         const show = index => {
           const current = active(); if (!current) return;
-          window.dispatchEvent(new CustomEvent('commander-menu-open', { detail: 'lister' }));
+          window.dispatchEvent(new CustomEvent('bitfroest-menu-open', { detail: 'lister' }));
           shut(); opened = index; heads[index].setAttribute('aria-expanded', 'true');
           popup.replaceChildren(); popup.setAttribute('aria-label', t(groups[index][0])); popup.style.left = `${heads[index].offsetLeft}px`;
           const entries = groups[index][1].concat(index === 2 ? current.custom.map(item => [`encoding:${item.encoding}`, `${item.label} (${item.encoding})`]) : []);
@@ -226,11 +226,11 @@
             const checked = action === `mode:${current.mode}` || action === `encoding:${current.selectedEncoding}` || action === `charset:${current.fontEncoding}` || action === 'cursor' && current.cursor || action === 'wrap' && current.wrap || action === 'variable' && current.variable;
             if (action.startsWith('mode:') || action.startsWith('encoding:') || action.startsWith('charset:') || ['cursor', 'wrap', 'variable'].includes(action)) { button.role = ['mode:', 'encoding:', 'charset:'].some(prefix => action.startsWith(prefix)) ? 'menuitemradio' : 'menuitemcheckbox'; button.setAttribute('aria-checked', String(Boolean(checked))); }
             button.onclick = () => { shut(); command(current, action); if (!document.querySelector('#modal').open) current.area.focus(); };
-            window.CommanderMenus.decorate(button, action);
-            if (checked) button.append(window.CommanderIcons.element('check', { class: 'menu-check' }));
+            window.BitfroestMenus.decorate(button, action);
+            if (checked) button.append(window.BitfroestIcons.element('check', { class: 'menu-check' }));
             popup.append(button); return button;
           });
-          popup.hidden = false; window.CommanderMenus.place(popup, { anchor: heads[index] }); items[0]?.focus();
+          popup.hidden = false; window.BitfroestMenus.place(popup, { anchor: heads[index] }); items[0]?.focus();
         };
         groups.forEach(([title], index) => {
           const button = document.createElement('button'); button.type = 'button'; button.role = 'menuitem'; button.textContent = t(title);
@@ -274,8 +274,8 @@
       if (sessions[side]) close(sessions[side]);
       remember();
       const element = document.createElement('div'); element.dataset.lister = ''; element.className = 'lister';
-      element.innerHTML = `<div class="lister-heading"><span></span><button type="button" data-lister-close aria-label="${escape(t('Zur Dateiliste'))}" title="Escape">${window.CommanderIcons.font('close')}</button></div><div class="lister-content"><textarea readonly wrap="off" spellcheck="false" aria-label="${escape(t('Dateiinhalt'))}" data-cursor="false"></textarea></div><nav data-lister-links class="lister-links" hidden aria-label="${escape(t('Links'))}"></nav><label class="lister-position">${escape(t('Dateiposition'))}<input type="range" min="0" max="100000" value="0" data-lister-position aria-label="${escape(t('Dateiposition'))}"></label><div class="lister-status" data-lister-status role="status"></div>`;
-      element.querySelector('.lister-heading span').textContent = root.CommanderPaths.displayPath(file.fsSource || file.name);
+      element.innerHTML = `<div class="lister-heading"><span></span><button type="button" data-lister-close aria-label="${escape(t('Zur Dateiliste'))}" title="Escape">${window.BitfroestIcons.font('close')}</button></div><div class="lister-content"><textarea readonly wrap="off" spellcheck="false" aria-label="${escape(t('Dateiinhalt'))}" data-cursor="false"></textarea></div><nav data-lister-links class="lister-links" hidden aria-label="${escape(t('Links'))}"></nav><label class="lister-position">${escape(t('Dateiposition'))}<input type="range" min="0" max="100000" value="0" data-lister-position aria-label="${escape(t('Dateiposition'))}"></label><div class="lister-status" data-lister-status role="status"></div>`;
+      element.querySelector('.lister-heading span').textContent = root.BitfroestPaths.displayPath(file.fsSource || file.name);
       const session = { side, file, root: element, area: element.querySelector('textarea'), mode: 'text', encoding: 'utf-8', selectedEncoding: 'font', fontEncoding: '0', wrap: true, width: 80, version: 0, navigation: 0, searchVersion: 0, cursor: false, variable: false, size: file.size || 0, custom: [] };
       sessions[side] = session;
       element.querySelector('[data-lister-close]').onclick = () => close(session);
@@ -306,7 +306,7 @@
       } else { session.bytes = new TextEncoder().encode(file.content || ''); Object.assign(session, core.detect(session.bytes)); load(session); }
     }
     document.addEventListener('click', event => { if (!menu.contains(event.target)) menu._listerClose?.(); });
-    window.addEventListener('commander-menu-open', event => { if (event.detail !== 'lister') menu._listerClose?.(); });
+    window.addEventListener('bitfroest-menu-open', event => { if (event.detail !== 'lister') menu._listerClose?.(); });
     window.addEventListener('resize', () => menu._listerClose?.());
     window.addEventListener('blur', () => menu._listerClose?.());
     document.addEventListener('keydown', event => {

@@ -38,7 +38,7 @@ test('parent-directory transfers resolve an existing target and commit actual by
     await fs.writeFile(`${left}/source.bin`, 'old target');
     const before = await provider.load({ directories: [sourcePath] }), after = structuredClone(before), source = after.folders[sourcePath][0];
     let conflicts = 0;
-    const result = await require('../media/commander-transfer').execute({ folders: after.folders, sourcePath, targetPath: left, ids: [source.id], mode, onConflict: () => { conflicts++; return { action: 'overwrite' }; } });
+    const result = await require('../media/bitfroest-transfer').execute({ folders: after.folders, sourcePath, targetPath: left, ids: [source.id], mode, onConflict: () => { conflicts++; return { action: 'overwrite' }; } });
     assert.equal(conflicts, 1); assert.equal(result.completed, 1);
     await provider.apply(before, after, { transfer: { mode, sourcePath, sourceSide: 0, ids: [source.id] } });
     assert.deepEqual(await fs.readFile(`${left}/source.bin`), Buffer.from([0, 2, 4, 6]));

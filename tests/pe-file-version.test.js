@@ -77,7 +77,7 @@ module.exports={image,fakeFile};
 
 test('filesystem snapshots include versions for executable files without inventing them for unrelated files',async t=>{
  const fs=require('node:fs/promises'),path=require('node:path'),os=require('node:os');
- const root=await fs.mkdtemp(path.join(os.tmpdir(),'commander-versions-'));t.after(()=>fs.rm(root,{recursive:true,force:true}));
+ const root=await fs.mkdtemp(path.join(os.tmpdir(),'bitfroest-versions-'));t.after(()=>fs.rm(root,{recursive:true,force:true}));
  await fs.writeFile(path.join(root,'sample.dll'),stringImage());await fs.writeFile(path.join(root,'plain.txt'),'ordinary');
  await fs.writeFile(path.join(root,'descript.ion'),'sample.dll Release notes\n');
  const {createProvider}=require('../filesystem-provider');const state=await createProvider({roots:[root]}).load();

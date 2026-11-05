@@ -156,7 +156,7 @@ test('native current-directory menu and lock inspection receive the symbolic fol
     const request = app.messages.findLast(message => message.type === 'shell-context-menu');
     assert.ok(request);
     assert.equal(request.directory, 'C:/base/current');
-    assert.deepEqual(Array.from(request.ids), [app.window.CommanderGrid.parentId]);
+    assert.deepEqual(Array.from(request.ids), [app.window.BitfroestGrid.parentId]);
     assert.equal(Boolean(request.inspectLocks), !system);
   }
 });

@@ -1,4 +1,4 @@
-const core = require('./media/commander-lister');
+const core = require('./media/bitfroest-lister');
 const { loadNativeApi } = require('./native-api');
 
 const MAX_CHUNK = 1024 * 1024;

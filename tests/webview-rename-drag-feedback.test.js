@@ -181,7 +181,7 @@ test('drag preview renders virtualized selected rows with the same columns witho
   style.textContent = resolveThemeCss(fs.readFileSync(path.join(__dirname, '../media/app.css'), 'utf8'));
   app.document.head.append(style);
   assert.equal(app.window.getComputedStyle(ghost).position, 'relative');
-  assert.equal(ghost.style.height, `${app.window.CommanderIcons.layout().row}px`);
+  assert.equal(ghost.style.height, `${app.window.BitfroestIcons.layout().row}px`);
   assert.deepEqual(app.state().panes[0].selected, ['a', 'b']);
   assert.equal(original.isConnected, false);
 });

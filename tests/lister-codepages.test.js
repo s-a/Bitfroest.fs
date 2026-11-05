@@ -4,7 +4,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { createCodepageDecoder } = require('../lister-codepages');
 const { createNativeApi } = require('../native-api');
-const core = require('../media/commander-lister');
+const core = require('../media/bitfroest-lister');
 
 function createNativeDecoder() {
   const bindingPath = process.env.NATIVE_BINDING_TEST_PATH || path.join(__dirname, '..', 'native', 'binding.node');

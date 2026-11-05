@@ -10,7 +10,7 @@ test('Git read errors use readable red row context and an error badge while sele
   app.document.body.style.setProperty('--vscode-errorForeground', '#ff4040');
   const request = app.messages.find(message => message.type === 'git-status');
   app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'git-status-result', requestId: request.requestId, snapshotId: request.snapshotId, directories: { '/repo': { ok: true, repository: false, statuses: {}, repositoryErrors: { folder: 'Access denied' } } } } }));
-  const row = app.row('folder'), color = row.style.getPropertyValue('--git-text-color'), colors = app.window.CommanderFileColors;
+  const row = app.row('folder'), color = row.style.getPropertyValue('--git-text-color'), colors = app.window.BitfroestFileColors;
   assert.ok(color); assert.ok(colors.ratio(color, '#252526') >= 4.5);
   const [red, green, blue] = colors.parse(color); assert.ok(red > green && red > blue);
   assert.ok(row.querySelector('[data-git-status="error"]'));
@@ -43,7 +43,7 @@ test('Git badges use seven distinct semantic colors with theme values and fallba
   const fallbackColors = Object.keys(expected).map(send);
   assert.equal(new Set(fallbackColors).size, 7);
   for (const color of fallbackColors) {
-    assert.ok(require('../media/commander-file-colors').ratio(color, '#ffffff') >= 4.5);
+    assert.ok(require('../media/bitfroest-file-colors').ratio(color, '#ffffff') >= 4.5);
   }
 });
 
@@ -70,7 +70,7 @@ test('Git palette follows live light dark and high contrast theme changes', asyn
   const app = createApp(t, state, { fileSettings: settings });
   const request = app.messages.find(message => message.type === 'git-status');
   const tokens = { clean: 'gitDecoration-addedResourceForeground', modified: 'gitDecoration-modifiedResourceForeground', added: 'charts-blue', deleted: 'gitDecoration-deletedResourceForeground', untracked: 'terminal-ansiCyan', ignored: 'gitDecoration-ignoredResourceForeground', conflict: 'terminal-ansiMagenta' };
-  const colors = app.window.CommanderFileColors;
+  const colors = app.window.BitfroestFileColors;
   for (const [status, token] of Object.entries(tokens)) {
     app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'git-status-result', requestId: request.requestId, snapshotId: 'colors', directories: { '/repo': { ok: true, repository: true, statuses: { folder: status } } } } }));
     const folder = app.row('folder'), badge = folder.querySelector('[data-git-status]');
@@ -100,7 +100,7 @@ test('text matching pane backgrounds is corrected even when the body has a diffe
   const state = fixture();
   state.folders['/repo'].push({ id: 'folder', name: 'folder', type: 'folder' });
   const app = createApp(t, state, { fileSettings: settings });
-  const body = app.document.body.style, colors = app.window.CommanderFileColors;
+  const body = app.document.body.style, colors = app.window.BitfroestFileColors;
   const request = app.messages.find(message => message.type === 'git-status');
   for (const [background, outer] of [['#181818', '#ffffff'], ['#ffffff', '#181818']]) {
     body.setProperty('background-color', outer);
@@ -196,7 +196,7 @@ test('parent entry uses a labelled ellipsis and keeps existing navigation', t =>
 
 test('palette checks sidebar, transparent hover, both selections and white badge backgrounds', async t => {
   const app = createApp(t, fixture(), { fileSettings: settings });
-  const colors = app.window.CommanderFileColors, style = app.document.body.style;
+  const colors = app.window.BitfroestFileColors, style = app.document.body.style;
   style.setProperty('--vscode-sideBar-background', '#ffffff');
   style.setProperty('--vscode-list-hoverBackground', 'rgba(0,0,0,0.2)');
   for (const state of ['active', 'inactive']) {
@@ -220,7 +220,7 @@ test('rule changes update names in place and missing theme backgrounds use the s
   const app = createApp(t, fixture(), { fileSettings: settings });
   const name = app.row('test.js').querySelector('[data-filename]');
   assert.equal(name.style.getPropertyValue('--file-type-color'), '#ffffff');
-  assert.ok(app.window.CommanderFileColors.ratio(name.style.getPropertyValue('--file-type-color'), '#252526') >= 4.5);
+  assert.ok(app.window.BitfroestFileColors.ratio(name.style.getPropertyValue('--file-type-color'), '#252526') >= 4.5);
   await theme(app, '#ffffff');
   app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'file-settings', settings: { colors: { enabled: true, rules: { '*.js': '#123456' } } } } }));
   assert.equal(name.style.getPropertyValue('--file-type-color'), '#123456');
@@ -232,7 +232,7 @@ test('missing hover theme color uses the same fallback background as the stylesh
   const app = createApp(t, fixture(), { fileSettings: settings });
   await theme(app, '#ffffff');
   const foreground = app.row('test.js').querySelector('[data-filename]').style.getPropertyValue('--file-type-hover');
-  assert.ok(app.window.CommanderFileColors.ratio(foreground, '#2a2d2e') >= 4.5);
+  assert.ok(app.window.BitfroestFileColors.ratio(foreground, '#2a2d2e') >= 4.5);
 });
 
 test('clean files use type colors throughout while clean folders use Git colors throughout', async t => {
@@ -254,7 +254,7 @@ test('clean files use type colors throughout while clean folders use Git colors 
 
 test('catalog rules are prepared once across both panes and reused on theme and status refresh', async t => {
   const app = createApp(t, fixture());
-  const colors = app.window.CommanderFileColors, compile = colors.compile;
+  const colors = app.window.BitfroestFileColors, compile = colors.compile;
   let preparations = 0;
   colors.compile = rules => { preparations++; return compile(rules); };
   const rules = Object.assign({}, ...require('../package.json').contributes.configuration.map(section => section.properties))['bitfroest.colors.rules'].default;

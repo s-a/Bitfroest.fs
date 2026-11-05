@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const Progress = require('../media/commander-progress');
+const Progress = require('../media/bitfroest-progress');
 const { check } = require('../scripts/check-progress.cjs');
 
 test('phase byte totals never become the overall total of an unfinished operation', () => {
@@ -177,7 +177,7 @@ test('the compiler rejects missing totals, missing measurements and direct untyp
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'progress-contract-'));
   t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
   const file = path.join(directory, 'producer.js');
-  const api = JSON.stringify(path.resolve(__dirname, '../media/commander-progress').replaceAll('\\', '/'));
+  const api = JSON.stringify(path.resolve(__dirname, '../media/bitfroest-progress').replaceAll('\\', '/'));
   fs.writeFileSync(file, `const Progress = require(${api});\nfunction onProgress(value) { return value; }\nonProgress(Progress.event({ phase: 'copying', overall: Progress.known('bytes', 0, 100), current: Progress.known('bytes', 0, 10) }));\n`);
   assert.deepEqual(check([file]), []);
   fs.writeFileSync(file, `const Progress = require(${api});\nconst statusbar = { setActivity() {}, setProgress() {} };\nconst plan = Progress.statusPlan({ id: 'copy', startedAt: 0, steps: ['copy'] });\nstatusbar.setActivity('Copy', plan.snapshot());\nstatusbar.setProgress({ progress: plan.snapshot() });\n`);
@@ -196,8 +196,8 @@ test('the compiler rejects missing totals, missing measurements and direct untyp
     `const statusbar = { finishProgress() {} }; const plan = Progress.statusPlan({ id: 'copy', startedAt: 0, steps: ['copy'] }); statusbar.finishProgress({ progress: plan.snapshot() });`,
     `const statusbar = { setProgress() {} }; const plan = Progress.statusPlan({ id: 'copy', startedAt: 0, steps: ['copy'] }); statusbar.setProgress({ progress: plan.snapshot(), completed: 1, total: 2 });`,
     `class Controller { setProgress(value) {} run() { this.setProgress({ completed: 1, total: 2 }); } }`,
-    `const bar = window.CommanderStatusbar.create({}); const render = bar.setProgress; render({ title: 'Copy', progress: Progress.event({ phase: 'copy', overall: Progress.known('bytes', 1, 2), current: Progress.known('bytes', 1, 2) }) });`,
-    `const bar = window.CommanderStatusbar.create({}); const render = bar.setProgress; const plan = Progress.statusPlan({ id: 'copy', startedAt: 0, steps: ['copy'] }); const input = { title: 'Copy', progress: plan.snapshot(), completed: 1, total: 2 }; render(input);`
+    `const bar = window.BitfroestStatusbar.create({}); const render = bar.setProgress; render({ title: 'Copy', progress: Progress.event({ phase: 'copy', overall: Progress.known('bytes', 1, 2), current: Progress.known('bytes', 1, 2) }) });`,
+    `const bar = window.BitfroestStatusbar.create({}); const render = bar.setProgress; const plan = Progress.statusPlan({ id: 'copy', startedAt: 0, steps: ['copy'] }); const input = { title: 'Copy', progress: plan.snapshot(), completed: 1, total: 2 }; render(input);`
   ]) {
     fs.writeFileSync(file, `const Progress = require(${api});\nfunction onProgress(value) { return value; }\n${code}\n`);
     assert.ok(check([file]).length, code);
