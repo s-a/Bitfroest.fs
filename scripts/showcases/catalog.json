@@ -2338,159 +2338,188 @@
   },
   {
     "id": "archive-options",
-    "parentId": "archive-browser",
-    "title": "Review archive pack and extraction options",
-    "description": "Compare ZIP packing and extraction options without creating or extracting an archive.",
+    "parentId": "main",
+    "title": "Create, inspect and extract an archive",
+    "description": "Pack a project file, inspect the ZIP contents and extract it to a separate folder.",
+    "category": "Archive Operations",
+    "fixture": "archive-story",
     "paths": [
       "${demo}/left",
       "${demo}/right"
     ],
     "sources": [
-      "media/app.js"
+      "media/app.js",
+      "zip-provider.js"
+    ],
+    "shortcuts": [
+      "Alt+F5",
+      "Alt+F9"
     ],
     "captures": [
       {
-        "id": "options",
+        "id": "handover",
         "format": "gif",
+        "intro": "Pack, inspect and extract a project file",
         "expect": ".pane",
-        "text": "Drafts-2026-11-03",
+        "text": "Project-Plan",
         "steps": [
           {
             "type": "move",
             "target": {
-              "name": "Project-Plan.md"
+              "name": "Project-Plan.md",
+              "side": 0
             }
           },
           {
             "type": "click",
-            "effect": "Select a file to pack"
-          },
-          {
-            "type": "check",
-            "selector": "[data-pane=\"0\"] [data-file-row][aria-selected=\"true\"]",
-            "text": "Project-Plan"
-          },
-          {
-            "type": "pause",
-            "duration": 400
+            "effect": "Select the project plan"
           },
           {
             "type": "key",
             "key": "Alt+F5",
-            "effect": "Open packing options"
+            "effect": "Create a ZIP archive"
           },
           {
             "type": "check",
-            "selector": "dialog[open]",
+            "selector": "dialog[open] #modal-title",
             "text": "Pack selection"
           },
           {
-            "type": "check",
-            "selector": ".zip-pack-settings",
-            "text": "Encryption"
-          },
-          {
             "type": "pause",
-            "duration": 1300
+            "duration": 1100
           },
           {
-            "type": "key",
-            "key": "Escape",
-            "effect": "Cancel packing options"
+            "type": "confirm",
+            "action": "archive-pack",
+            "effect": "Pack the selected file"
           },
           {
             "type": "check",
-            "selector": "dialog[open]",
-            "absent": true
+            "selector": "[data-pane=\"1\"] [data-cell][title=\"Project-Plan.zip\"]"
           },
           {
             "type": "pause",
-            "duration": 350
-          },
-          {
-            "type": "key",
-            "key": "Ctrl+NumpadSubtract",
-            "effect": "Clear current selection"
-          },
-          {
-            "type": "check",
-            "selector": "[data-pane=\"0\"] [data-file-row][aria-selected=\"true\"]",
-            "absent": true
-          },
-          {
-            "type": "pause",
-            "duration": 350
+            "duration": 1000
           },
           {
             "type": "move",
             "target": {
-              "name": "Drafts-2026-11-03.zip"
+              "name": "Project-Plan.zip",
+              "side": 1
             }
           },
           {
             "type": "click",
-            "effect": "Select archive to unpack"
+            "effect": "Select the new archive"
+          },
+          {
+            "type": "confirm",
+            "action": "open-archive",
+            "effect": "Open the archive"
           },
           {
             "type": "check",
-            "selector": "[data-pane=\"0\"] [data-file-row][aria-selected=\"true\"]",
-            "text": "Drafts-2026-11-03"
+            "selector": "[data-pane=\"1\"] [data-cell][title=\"Project-Plan.md\"]"
           },
           {
             "type": "pause",
-            "duration": 400
+            "duration": 1800
+          },
+          {
+            "type": "move",
+            "target": {
+              "selector": "[data-pane=\"1\"] [data-parent]"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Select the parent folder"
+          },
+          {
+            "type": "confirm",
+            "action": "leave-archive",
+            "effect": "Return to the ZIP file"
+          },
+          {
+            "type": "move",
+            "target": {
+              "name": "Project-Plan.zip",
+              "side": 1
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Select the archive to extract"
           },
           {
             "type": "key",
             "key": "Alt+F9",
-            "effect": "Open extraction options"
+            "effect": "Extract the archive"
           },
           {
             "type": "check",
-            "selector": "dialog[open]",
+            "selector": "dialog[open] #modal-title",
             "text": "Unpack archive"
           },
           {
+            "type": "move",
+            "target": {
+              "selector": "dialog[open] #value"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Choose the extraction folder"
+          },
+          {
+            "type": "fixture-path",
+            "selector": "dialog[open] #value",
+            "path": "unpacked"
+          },
+          {
             "type": "pause",
-            "duration": 1300
+            "duration": 900
+          },
+          {
+            "type": "confirm",
+            "action": "archive-unpack",
+            "effect": "Extract to a separate folder"
+          },
+          {
+            "type": "move",
+            "target": {
+              "selector": "[data-pane=\"0\"] .list"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Select the target pane"
           },
           {
             "type": "key",
-            "key": "Escape",
-            "effect": "Cancel extraction options"
+            "key": "Ctrl+L",
+            "effect": "Open the folder path"
+          },
+          {
+            "type": "fixture-path",
+            "selector": "[data-pane=\"0\"] .path-input",
+            "path": "unpacked"
+          },
+          {
+            "type": "confirm",
+            "action": "show-unpacked-folder",
+            "effect": "Show the extracted file"
           },
           {
             "type": "check",
-            "selector": "dialog[open]",
-            "absent": true
+            "selector": "[data-pane=\"0\"] [data-cell][title=\"Project-Plan.md\"]"
           },
           {
             "type": "pause",
-            "duration": 350
-          },
-          {
-            "type": "key",
-            "key": "Ctrl+NumpadSubtract",
-            "effect": "Clear current selection"
-          },
-          {
-            "type": "check",
-            "selector": "[data-pane=\"0\"] [data-file-row][aria-selected=\"true\"]",
-            "absent": true
-          },
-          {
-            "type": "check",
-            "selector": "[data-pane=\"0\"]",
-            "text": "Drafts-2026-11-03"
+            "duration": 2000
           }
         ]
       }
-    ],
-    "category": "Archive Operations",
-    "shortcuts": [
-      "Alt+F5",
-      "Alt+F9",
-      "Ctrl+Numpad-"
     ]
   },
   {

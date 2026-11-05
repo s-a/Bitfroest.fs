@@ -2,6 +2,14 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { validateSequence, executeSequence, inspectState, assertSafePointer } = require('../scripts/showcases/sequence.cjs');
 
+test('archive fixture path steps use only the known extraction destination', async () => {
+  const observed = [];
+  await executeSequence([{ type: 'fixture-path', selector: 'dialog[open] #value', path: 'unpacked' }], { fixturePath: async step => observed.push(step.path) });
+  assert.deepEqual(observed, ['unpacked']);
+  assert.throws(() => validateSequence([{ type: 'fixture-path', selector: '#any', path: 'unpacked' }]), /fixture/i);
+  assert.throws(() => validateSequence([{ type: 'fixture-path', selector: 'dialog[open] #value', path: 'external' }]), /fixture/i);
+});
+
 test('fixture confirmations are explicit, limited, and delegated to the fixture guard', async () => {
   const observed = [];
   await executeSequence([{ type: 'confirm', action: 'copy', effect: 'Copy the demo file' }], {

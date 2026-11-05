@@ -83,7 +83,7 @@ function validateCatalog(catalog) {
     if (scene.parentId && !ids.has(scene.parentId)) throw new Error('A parent must precede its subsections.');
     ids.add(scene.id);
     if (!scene.title?.trim() || !scene.description?.trim()) throw new Error('A title and description are required.');
-    if (scene.fixture !== undefined && !['handover', 'deletion'].includes(scene.fixture)) throw new Error('Unsupported showcase fixture.');
+    if (scene.fixture !== undefined && !['handover', 'deletion', 'archive-story'].includes(scene.fixture)) throw new Error('Unsupported showcase fixture.');
     if (scene.paths?.length !== 2 || scene.paths.some(p => !path.win32.isAbsolute(p))) throw new Error('Two absolute demo paths are required.');
     if (scene.status && !['pending', 'excluded'].includes(scene.status)) throw new Error('Invalid inventory status.');
     if (scene.status && !scene.reason?.trim()) throw new Error('An inventory status requires a reason.');
@@ -103,7 +103,9 @@ function validateCatalog(catalog) {
         if (!['gif', 'webm'].includes(capture.format) || unsupportedSetup) throw new Error('A recording sequence requires an animation capture with only supported surface preparation.');
         require('./sequence.cjs').validateSequence(capture.steps);
         const confirmations = capture.steps.filter(step => step.type === 'confirm');
-        if (confirmations.length && (capture.surface || confirmations.some(step => scene.fixture === 'handover' ? ['trash', 'delete-permanent'].includes(step.action) : scene.fixture !== 'deletion' || !['trash', 'delete-permanent'].includes(step.action)))) throw new Error('Fixture confirmations require the matching showcase fixture.');
+        const permitted = { handover: ['mkdir', 'open', 'copy', 'rename'], deletion: ['trash', 'delete-permanent'], 'archive-story': ['archive-pack', 'archive-unpack', 'open-archive', 'leave-archive', 'show-unpacked-folder'] };
+        if (confirmations.length && (capture.surface || confirmations.some(step => !permitted[scene.fixture]?.includes(step.action)))) throw new Error('Fixture confirmations require the matching showcase fixture.');
+        if (capture.steps.some(step => step.type === 'fixture-path') && (scene.fixture !== 'archive-story' || capture.surface)) throw new Error('Fixture path entry requires the archive fixture.');
       }
       if (['gif', 'webm'].includes(capture.format) && !capture.steps && !['path-copy', 'ctrl-l', 'right-selection', 'right-drag'].includes(capture.gesture)) throw new Error('An animation requires a sequence or known gesture.');
       if (!capture.expect || !capture.text) throw new Error('Capture readiness criteria are required.');
@@ -287,7 +289,8 @@ async function main() {
     for (const scene of scenes) {
       if (scene.status) continue;
       const fixture = scene.fixture === 'handover' ? await require('./story-fixture.cjs').createStoryFixture(run)
-        : scene.fixture === 'deletion' ? await require('./deletion-story-fixture.cjs').createDeletionStoryFixture(run) : undefined;
+        : scene.fixture === 'deletion' ? await require('./deletion-story-fixture.cjs').createDeletionStoryFixture(run)
+          : scene.fixture === 'archive-story' ? await require('./archive-story-fixture.cjs').createArchiveStoryFixture(run) : undefined;
       if (scene.fixture === 'deletion') deletionFixtures.push(fixture);
       if (fixture) scene.paths = [fixture.left, fixture.right];
       stage = `${scene.id}: navigation`;

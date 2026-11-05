@@ -255,9 +255,43 @@ async function recordGesture({ capture, scene, page, target, evaluate, invoke, r
       await pageEvaluate(() => window.__showcasePresentation.intro(''));
     }
     if (capture.steps) {
+      let archiveController;
+      if (scene.fixture === 'archive-story') {
+        const archiveState = require('./archive-state.cjs');
+        const readArchive = action => evaluate(new Function('action', `return (${archiveState.archiveSnapshot.toString()})(action, document);`), action);
+        const archiveFixture = { source: fixture.source, right: fixture.right, archive: fixture.archive, unpacked: fixture.unpacked, extracted: fixture.extracted };
+        const inspect = (fn, ...args) => evaluate(new Function('fixture', `return (${fn.toString()})(fixture, document);`), ...args);
+        const waitView = fn => waitFor(async () => { const state = await inspect(fn, archiveFixture); return state.complete && state; });
+        const progress = action => evaluate(new Function('action', 'fixture', `return (${archiveState.inspectArchiveProgress.toString()})(action, fixture, document);`), action, archiveFixture);
+        archiveController = require('./archive-controller.cjs').createArchiveController({
+          fixture, readSnapshot: readArchive,
+          observe: async action => {
+            await evaluate(new Function(`(${archiveState.installArchiveCompletion.toString()})(document);`));
+            return { wait: async operationId => waitFor(async () => {
+              const identity = await progress(action); if (identity.error) return identity;
+              const state = await evaluate(new Function('action', 'fixture', `return (${archiveState.inspectArchiveCompletion.toString()})(action, fixture, document);`), action, { ...archiveFixture, operationId });
+              return (state.complete || state.error) && state;
+            }), dispose: () => evaluate(() => window.__showcaseArchiveCompletion?.dispose()) };
+          },
+          clickConfirm: async (effect, snapshot, action) => {
+            await move(await point('#modal-confirm', 0));
+            if (JSON.stringify(await readArchive(action)) !== JSON.stringify(snapshot)) throw new Error('Archive confirmation state changed.');
+            const valid = await evaluate(p => document.elementFromPoint(p.x, p.y)?.closest('#modal-confirm')?.matches('button:not(:disabled):not([hidden])'), { x: position.x - offset.x, y: position.y - offset.y });
+            if (!valid) throw new Error('Archive confirmation target changed.');
+            await mouse('mousePressed', position, 'left', 0, effect); await mouse('mouseReleased', position, 'left', 0, effect);
+            const observed = await waitFor(async () => { const value = await progress(action); return (value.operationId || value.error) && value; });
+            if (observed.error) throw new Error(observed.error);
+            return observed.operationId;
+          },
+          pressEnter: async effect => { await keyEvent('keyDown', 'Enter', 'Enter', 13, 0, effect); await keyEvent('keyUp', 'Enter', 'Enter', 13); },
+          waitOpened: () => waitView(archiveState.inspectArchiveOpened), waitLeft: () => waitView(archiveState.inspectArchiveLeft),
+          waitExtracted: () => waitView(archiveState.inspectArchiveExtracted)
+        });
+      }
       result = { steps: await executeSequence(capture.steps, {
         confirm: async (action, effect) => {
           if (!fixture) throw new Error('Fixture confirmation is unavailable.');
+          if (archiveController) return archiveController.confirm(action, effect);
           if (!['rename', 'open'].includes(action)) await move(await point('#modal-confirm', 0));
           const read = () => evaluate(new Function('action', `return (${fixtureSnapshot.toString()})(action, document);`), action);
           const snapshot = await read();
@@ -286,6 +320,21 @@ async function recordGesture({ capture, scene, page, target, evaluate, invoke, r
             if (completion.error) throw new Error(completion.error);
           }
           } finally { if (action !== 'open') await evaluate(() => window.__showcaseCompletion?.dispose()); }
+        },
+        fixturePath: async step => {
+          if (!archiveController || step.path !== 'unpacked') throw new Error('Fixture path entry is unavailable.');
+          const isDialog = step.selector === 'dialog[open] #value';
+          const read = action => evaluate(new Function('action', `return (${require('./archive-state.cjs').archiveSnapshot.toString()})(action, document);`), action);
+          const snapshot = await read(isDialog ? 'unpack' : 'show-unpacked-folder');
+          if (isDialog) await fixture.validateUnpackInput(snapshot); else await fixture.validatePathEdit(snapshot);
+          const focused = await evaluate(selector => document.querySelector(selector) === document.activeElement, step.selector);
+          if (!focused) throw new Error('Fixture path input is not focused.');
+          await keyEvent('keyDown', 'Control', 'ControlLeft', 17, 2);
+          await keyEvent('keyDown', 'a', 'KeyA', 65, 2, 'Select the existing path');
+          await keyEvent('keyUp', 'a', 'KeyA', 65, 2); await keyEvent('keyUp', 'Control', 'ControlLeft', 17);
+          await page.call('Input.insertText', { text: fixture.unpacked }); await refreshProtection();
+          const typed = await evaluate(selector => ({ focused: document.querySelector(selector) === document.activeElement, value: document.querySelector(selector)?.value }), step.selector);
+          if (!typed.focused || typed.value.replace(/\\/g, '/').toLowerCase() !== fixture.unpacked.replace(/\\/g, '/').toLowerCase()) throw new Error('Fixture destination was not entered.');
         },
         move: async step => {
           const t = step.target;

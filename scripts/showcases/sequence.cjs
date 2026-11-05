@@ -16,8 +16,9 @@ function validateSequence(steps) {
   if (!Array.isArray(steps) || !steps.length) throw new Error('A nonempty recording sequence is required.');
   let held;
   for (const step of steps) {
-    if (!step || !['move', 'click', 'press', 'release', 'key', 'pause', 'check', 'type', 'confirm'].includes(step.type)) throw new Error('Unknown recording step.');
-    if (step.type === 'confirm' && (!['mkdir', 'open', 'copy', 'rename', 'trash', 'delete-permanent'].includes(step.action) || typeof step.effect !== 'string' || !step.effect.trim() || step.target)) throw new Error('Invalid fixture confirmation.');
+    if (!step || !['move', 'click', 'press', 'release', 'key', 'pause', 'check', 'type', 'confirm', 'fixture-path'].includes(step.type)) throw new Error('Unknown recording step.');
+    if (step.type === 'confirm' && (!['mkdir', 'open', 'copy', 'rename', 'trash', 'delete-permanent', 'archive-pack', 'archive-unpack', 'open-archive', 'leave-archive', 'show-unpacked-folder'].includes(step.action) || typeof step.effect !== 'string' || !step.effect.trim() || step.target)) throw new Error('Invalid fixture confirmation.');
+    if (step.type === 'fixture-path' && (step.path !== 'unpacked' || !['dialog[open] #value', '[data-pane="0"] .path-input'].includes(step.selector))) throw new Error('Invalid fixture path.');
     if (step.duration !== undefined && (!Number.isFinite(step.duration) || step.duration < 1 || step.duration > 30000)) throw new Error('Invalid recording duration.');
     if (step.type === 'pause' && step.duration === undefined) throw new Error('A pause requires a duration.');
     if (step.type === 'move' || step.target) {
@@ -85,6 +86,10 @@ async function executeSequence(steps, driver) {
     try {
       if (step.target) await driver.move(step);
       if (step.type === 'pause') await driver.pause(step.duration);
+      else if (step.type === 'fixture-path') {
+        if (typeof driver.fixturePath !== 'function') throw new Error('Fixture path entry is unavailable.');
+        await driver.fixturePath(step);
+      }
       else if (step.type === 'confirm') {
         if (typeof driver.confirm !== 'function') throw new Error('Fixture confirmation is unavailable.');
         await driver.confirm(step.action, step.effect);

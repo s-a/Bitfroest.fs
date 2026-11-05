@@ -158,9 +158,9 @@ Windows examples with isolated sample files.
 ### Archive Operations
 
 <details>
-<summary><kbd>Alt+F5</kbd> <kbd>Alt+F9</kbd> <kbd>Ctrl+Numpad-</kbd> Review archive pack and extraction options</summary>
+<summary><kbd>Alt+F5</kbd> <kbd>Alt+F9</kbd> Create, inspect and extract an archive</summary>
 
-![Review archive pack and extraction options](media/marketplace/showcases/0019-windows-en-dark-archive-options-options.gif)
+![Create, inspect and extract an archive](media/marketplace/showcases/0019-windows-en-dark-archive-options-handover.gif)
 
 </details>
 
