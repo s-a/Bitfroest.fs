@@ -3839,6 +3839,7 @@
   "dependencies": {
     "@zip.js/zip.js": "2.24.0",
     "ag-grid-community": "36.2.0",
-    "monaco-editor": "0.55.1"
+    "monaco-editor": "0.55.1",
+    "notyf": "3.10.0"
   }
 }

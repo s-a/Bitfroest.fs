@@ -19,6 +19,9 @@ node_modules/**
 !node_modules/@zip.js/zip.js/**
 !node_modules/ag-grid-community/dist/ag-grid-community.min.noStyle.js
 !node_modules/ag-grid-community/LICENSE.txt
+!node_modules/notyf/notyf.min.js
+!node_modules/notyf/notyf.min.css
+!node_modules/notyf/LICENSE.md
 package-lock.json
 AGENTS.md
 .vscode/**

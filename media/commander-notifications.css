@@ -1,0 +1,14 @@
+.notyf { padding: 12px; font: var(--vscode-font-size) var(--vscode-font-family); }
+.notyf__toast { width: min(400px, calc(100vw - 24px)); max-width: 400px; color: var(--vscode-notifications-foreground); background: var(--vscode-notifications-background) !important; border: 1px solid var(--vscode-notifications-border, var(--vscode-contrastBorder, transparent)); box-shadow: 0 2px 8px var(--vscode-widget-shadow); border-radius: 2px; }
+.notyf__wrapper { padding: 12px 24px 12px 0; }
+.notyf__message { overflow-wrap: anywhere; white-space: pre-wrap; line-height: 1.4; }
+.notyf__toast--upper { margin-bottom: 8px; }
+.notyf__dismiss { width: 26px; margin-right: -10px; }
+.notyf__dismiss-btn { opacity: 1; background: transparent; color: var(--vscode-notifications-foreground); }
+.notyf__dismiss-btn:before, .notyf__dismiss-btn:after { background: currentColor; }
+.notyf__dismiss-btn:hover { background: var(--vscode-toolbar-hoverBackground); opacity: 1; }
+.notyf__dismiss-btn:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: -2px; }
+.commander-notification-error { border-left: 3px solid var(--vscode-notificationsErrorIcon-foreground); }
+.commander-notification-warning { border-left: 3px solid var(--vscode-notificationsWarningIcon-foreground); }
+.commander-notification-info, .commander-notification-success { border-left: 3px solid var(--vscode-notificationsInfoIcon-foreground); }
+@media (prefers-reduced-motion: reduce) { .notyf__toast, .notyf__toast *, .notyf__toast--disappear, .notyf__toast--disappear * { animation-duration: 0.001ms !important; animation-delay: 0ms !important; transition: none !important; } }

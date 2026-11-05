@@ -294,5 +294,20 @@
       "de": "Schreibgeschützte X-Ray-Codevorschau und Inline-Diffeditor mit lokal mitgeliefertem Berechnungsworker. Gebündelte Stylesheets übernehmen die Nonce der Webview; Grammatikimporte lassen ungenutzte Editorintegrationen aus.",
       "en": "Read-only X-Ray code preview and inline Quick Diff editor with a locally bundled computation worker. Bundled stylesheets use the webview nonce; grammar imports omit unused editor integrations."
     }
+  },
+  {
+    "name": "Notyf",
+    "version": "3.10.0",
+    "author": "Carlos Roso",
+    "license": "MIT",
+    "licenseUrl": "https://github.com/caroso1222/notyf/blob/master/LICENSE.md",
+    "source": "https://github.com/caroso1222/notyf",
+    "files": [
+      "node_modules/notyf/LICENSE.md"
+    ],
+    "description": {
+      "de": "Benachrichtigungskomponente für die Webview.",
+      "en": "Notification component for the webview."
+    }
   }
 ]
