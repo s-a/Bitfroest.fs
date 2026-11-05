@@ -3536,8 +3536,8 @@
   {
     "id": "xray-click",
     "parentId": "main",
-    "title": "Preview files on selection (X-Ray)",
-    "description": "Inspect a text file in the opposite pane with syntax highlighting and a complete minimap. The preview uses 60% of the available width. Select files by clicking or using the keyboard. Right-click the eye to turn X-Ray off.",
+    "title": "Preview files by click and hover",
+    "description": "Preview one file by selection, then switch to hover mode to inspect another file.",
     "paths": [
       "${demo}/left",
       "${demo}/right"
@@ -3606,72 +3606,6 @@
           },
           {
             "type": "click",
-            "button": "right",
-            "effect": "Turn X-Ray off"
-          },
-          {
-            "type": "check",
-            "selector": "[data-xray]",
-            "absent": true
-          },
-          {
-            "type": "pause",
-            "duration": 500
-          }
-        ]
-      }
-    ],
-    "category": "Search & View"
-  },
-  {
-    "id": "xray-hover",
-    "parentId": "main",
-    "title": "Preview files on hover (X-Ray Ultra)",
-    "description": "X-Ray Ultra updates the opposite preview after pausing over a text file for 200 ms. Syntax highlighting and a complete minimap use 60% of the available width; the source list shows filenames and icons. Right-click the eye to turn X-Ray off.",
-    "paths": [
-      "${demo}/left",
-      "${demo}/right"
-    ],
-    "sources": [
-      "media/commander-xray.js",
-      "lister-provider.js"
-    ],
-    "captures": [
-      {
-        "id": "preview",
-        "format": "gif",
-        "expect": "[data-xray]:has(.monaco-editor .minimap)",
-        "text": "X-Ray-Sample.ps1",
-        "steps": [
-          {
-            "type": "move",
-            "target": {
-              "selector": "[data-cell][title=\"Colors.json\"] [data-filename]",
-              "side": 0
-            }
-          },
-          {
-            "type": "click",
-            "effect": "Select Colors.json"
-          },
-          {
-            "type": "move",
-            "target": {
-              "selector": "[data-pane=\"0\"] [data-xray-toggle]"
-            }
-          },
-          {
-            "type": "click",
-            "effect": "Enable X-Ray preview"
-          },
-          {
-            "type": "move",
-            "target": {
-              "selector": "[data-pane=\"0\"] [data-xray-toggle]"
-            }
-          },
-          {
-            "type": "click",
             "effect": "Switch to hover preview"
           },
           {
@@ -3694,28 +3628,9 @@
           {
             "type": "pause",
             "duration": 1600
-          },
-          {
-            "type": "move",
-            "target": {
-              "selector": "[data-pane=\"0\"] [data-xray-toggle]"
-            }
-          },
-          {
-            "type": "click",
-            "button": "right",
-            "effect": "Turn X-Ray off"
-          },
-          {
-            "type": "check",
-            "selector": "[data-xray]",
-            "absent": true
-          },
-          {
-            "type": "pause",
-            "duration": 500
           }
-        ]
+        ],
+        "intro": "Compare files before opening them"
       }
     ],
     "category": "Search & View"

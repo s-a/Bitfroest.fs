@@ -170,16 +170,9 @@ Windows examples with sample files. File operations stop before confirmation.
 </details>
 
 <details>
-<summary>Preview files on selection (X-Ray)</summary>
+<summary>Preview files by click and hover</summary>
 
-![Preview files on selection (X-Ray)](media/marketplace/showcases/0035-windows-en-dark-xray-click-preview.gif)
-
-</details>
-
-<details>
-<summary>Preview files on hover (X-Ray Ultra)</summary>
-
-![Preview files on hover (X-Ray Ultra)](media/marketplace/showcases/0036-windows-en-dark-xray-hover-preview.gif)
+![Preview files by click and hover](media/marketplace/showcases/0035-windows-en-dark-xray-click-preview.gif)
 
 </details>
 
@@ -225,7 +218,7 @@ Windows examples with sample files. File operations stop before confirmation.
 <details>
 <summary>Review changes across a repository</summary>
 
-![Review changes across a repository](media/marketplace/showcases/0037-windows-en-dark-quick-diff-folder-preview.gif)
+![Review changes across a repository](media/marketplace/showcases/0036-windows-en-dark-quick-diff-folder-preview.gif)
 
 </details>
 
