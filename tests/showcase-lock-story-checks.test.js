@@ -9,7 +9,7 @@ const fixture = { folder, file, pid: 42, async assertTarget(value) { assert.equa
 const snapshot = { activeDirectory: folder, selected: [file], dialog: 'Delete permanently?', dialogFiles: ['Locked.txt'], controlReady: true };
 const failure = { type: 'filesystem-result', operationId: 'delete-123', ok: false, error: 'Delete failed: file is in use',
   diagnostic: { request: { type: 'filesystem-delete', operationId: 'delete-123', paths: [file] }, failure: { cause: { code: 'EBUSY' } } } };
-const view = { dialogTitle: 'File operation failed', errorVisible: true, errorText: failure.error };
+const view = { dialogOpen: false, statusText: failure.error };
 
 test('allows only the exact locked fixture target and permanent-delete dialog', async () => {
   await validateLockDeleteSnapshot(fixture, snapshot);
@@ -26,7 +26,8 @@ test('requires a correlated failed delete, visible product error and intact fixt
     { ...failure, diagnostic: { ...failure.diagnostic, request: { ...failure.diagnostic.request, paths: [path.join(folder, 'Other.txt')] } } },
     { ...failure, diagnostic: { ...failure.diagnostic, failure: { cause: { code: 'EINVAL' } } } }
   ]) await assert.rejects(validateLockDeleteFailure(fixture, changed, view));
-  await assert.rejects(validateLockDeleteFailure(fixture, failure, { ...view, errorVisible: false }));
+  await assert.rejects(validateLockDeleteFailure(fixture, failure, { ...view, dialogOpen: true }));
+  await assert.rejects(validateLockDeleteFailure(fixture, failure, { ...view, statusText: 'Unrelated failure' }));
   await assert.rejects(validateLockDeleteFailure({ ...fixture, async assertIntact() { throw new Error('changed'); } }, failure, view), /changed/);
 });
 

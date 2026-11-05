@@ -11,7 +11,7 @@ function setup() {
   const failure = { type: 'filesystem-result', operationId: 'delete-123-1', ok: false, error: 'File is in use',
     diagnostic: { request: { type: 'filesystem-delete', operationId: 'delete-123-1', paths: [file] }, failure: { cause: { code: 'EBUSY' } } } };
   const scan = { type: 'locks-state', path: folder, rows: [{ pid: 42, started: '12345', file, kind: 'handle' }] };
-  const failureView = { dialogTitle: 'File operation failed', errorVisible: true, errorText: 'File is in use' };
+  const failureView = { dialogOpen: false, statusText: 'File is in use' };
   const scanView = { ready: true, detailsVisible: true, text: 'PID 42 Locked.txt' };
   const progress = { type: 'filesystem-task-progress', operationId: 'delete-123-1', progress: { phase: 'deleting', path: file } };
   const options = { fixture, readSnapshot: async action => action === 'lock-delete' ? deleteSnapshot : inspectorSnapshot,

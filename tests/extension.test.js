@@ -1494,7 +1494,10 @@ function harness(t, options = {}) {
       onDidCloseTextDocument(listener) { closeDocumentListener = listener; return disposable(); },
       createFileSystemWatcher() { return { onDidCreate: disposable, onDidChange: disposable, onDidDelete: disposable, dispose() {} }; },
       registerTextDocumentContentProvider(scheme, provider) { documentProviders.set(scheme, provider); return { dispose() { documentProviders.delete(scheme); } }; },
-      fs: { delete: async (uri, deleteOptions) => { deleteCalls.push({ uri, options: deleteOptions }); if (options.deleteError) throw new Error(options.deleteError); } },
+      fs: { async delete(uri, deleteOptions) {
+        deleteCalls.push({ uri, options: deleteOptions });
+        if (options.deleteError) throw options.deleteError;
+      } },
       getConfiguration: () => ({ get: key => {
         if (!options.configurationScopes?.[key]) return options.configuration?.[key] ?? options.configurationDefaults?.[key];
         const { globalValue, workspaceValue } = options.configurationScopes[key];
@@ -4667,6 +4670,55 @@ test('real delete passes useTrash explicitly to the VS Code filesystem adapter',
   assert.equal(app.deleteCalls[0].uri.fsPath, 'C:/tmp/a.txt');
   assert.deepEqual(app.deleteCalls[0].options, { recursive: true, useTrash: true });
   assert.equal(app.panels[0].messages.at(-1).ok, true);
+});
+
+test('permanent deletion of a locked file reports the failure in the status bar and keeps the file', async t => {
+  const disk = require('node:fs/promises'), { createProvider } = require('../filesystem-provider');
+  const root = (await disk.mkdtemp(path.join(os.tmpdir(), 'locked-delete-host-'))).replaceAll('\\', '/');
+  t.after(() => disk.rm(root, { recursive: true, force: true }));
+  const left = `${root}/left`, right = `${root}/right`, target = `${left}/Locked.txt`;
+  await disk.mkdir(left); await disk.mkdir(right);
+  await disk.writeFile(target, 'locked fixture');
+  const deleteError = Object.assign(new Error('EBUSY: resource busy or locked'), { code: 'EBUSY', path: target });
+  const app = harness(t, { language: 'en', startupRoots: [left, right], deleteError, providerFactory: creation =>
+    createProvider({ ...creation, roots: [left, right], readDirectory: undefined, readAttributes: undefined }) });
+  await app.command('bitfroest.openPrototype');
+  const panel = app.panels[0], html = panel.webview.html;
+  assert.match(html, /Content-Security-Policy/);
+  const view = require('./support/webview.cjs').createApp(t, undefined, { html });
+  view.click(view.row('Locked.txt'));
+  view.key('Delete', { shiftKey: true });
+  assert.equal(view.document.querySelector('#modal-title').textContent, 'Delete permanently?');
+  assert.equal(view.messages.some(message => message.type === 'filesystem-delete'), false);
+  view.document.querySelector('#modal-form').dispatchEvent(new view.window.Event('submit', { bubbles: true, cancelable: true }));
+  const request = view.messages.find(message => message.type === 'filesystem-delete');
+  assert.match(request.operationId, /^delete-\d+-\d+$/);
+  assert.deepEqual(Array.from(request.paths), [target]);
+  assert.equal(request.useTrash, false);
+
+  const start = panel.messages.length;
+  await panel.receive(request);
+  assert.deepEqual(app.deleteCalls.map(({ uri, options }) => [uri.fsPath, options]), [[target, { recursive: true, useTrash: false }]]);
+  const replies = panel.messages.slice(start).filter(message => message.operationId === request.operationId);
+  assert.deepEqual(replies.map(message => message.type), ['filesystem-task-progress', 'filesystem-result']);
+  const [progress, result] = replies;
+  assert.equal(progress.progress.phase, 'deleting');
+  assert.equal(progress.progress.path, target);
+  assert.equal(result.ok, false);
+  assert.equal(Boolean(result.cancelled), false);
+  assert.equal(result.diagnostic.request.operationId, request.operationId);
+  assert.equal(result.diagnostic.failure.cause.code, 'EBUSY');
+  assert.equal(result.diagnostic.failure.cause.path, target);
+  assert.deepEqual(app.errors, []);
+
+  for (const data of replies) view.window.dispatchEvent(new view.window.MessageEvent('message', { data }));
+  assert.equal(view.document.querySelector('dialog[open], .operation-error'), null, 'a blocked deletion does not open an error dialog');
+  const status = view.document.querySelector('#status-message');
+  assert.equal(status.dataset.outcome, 'error');
+  assert.equal(status.querySelector('[data-status-text]').textContent, result.error);
+  assert.match(result.error, /EBUSY: resource busy or locked/);
+  assert.ok(view.row('Locked.txt'));
+  assert.equal(await disk.readFile(target, 'utf8'), 'locked fixture');
 });
 
 test('a partial native delete failure reports its completed count in the interface language', async t => {

@@ -135,9 +135,11 @@ function inspectLockScan(root = document) {
 }
 
 function inspectLockFailureView(root = document) {
-  const area = root.querySelector('dialog[open]#modal .operation-error-details[open] textarea[readonly]'), rect = area?.getBoundingClientRect();
-  if (!rect?.width || !rect.height || area.scrollTop + area.clientHeight < area.scrollHeight - 1) return false;
-  return { dialogTitle: root.querySelector('#modal-title')?.textContent, errorVisible: true, errorText: area.value };
+  const status = root.querySelector('#status-message');
+  const text = status?.querySelector('[data-status-text]');
+  const rect = text?.getBoundingClientRect();
+  if (status?.dataset.outcome !== 'error' || !rect?.width || !rect.height) return false;
+  return { statusText: text.textContent, dialogOpen: Boolean(root.querySelector('dialog[open], .operation-error')) };
 }
 
 function installFixtureCompletion(root = document) {
@@ -417,19 +419,6 @@ async function recordGesture({ capture, scene, page, target, evaluate, invoke, r
               waitStarted: () => waitFor(() => evaluate(new Function('file', `return (${inspectLockProgress.toString()})(file, document);`), fixture.file)),
               wait: async id => {
                 const event = await waitFor(() => evaluate(new Function('id', `return (${inspectLockResult.toString()})(id, document);`), id));
-                await waitFor(() => evaluate(() => Boolean(document.querySelector('dialog[open]#modal .operation-error-details > summary'))));
-                await move(await point('dialog[open]#modal .operation-error-details > summary', 0));
-                const safe = await evaluate(p => document.querySelector('#modal-title')?.textContent === 'File operation failed' &&
-                  document.elementFromPoint(p.x, p.y)?.closest('.operation-error-details > summary') === document.querySelector('dialog[open]#modal .operation-error-details:not([open]) > summary'), { x: position.x - offset.x, y: position.y - offset.y });
-                if (!safe) throw new Error('The failure details control changed.');
-                await mouse('mousePressed', position, 'left', 0, 'Show error details'); await mouse('mouseReleased', position, 'left', 0, 'Show error details');
-                await waitFor(() => evaluate(() => { const r = document.querySelector('dialog[open]#modal .operation-error-details[open] textarea')?.getBoundingClientRect(); return Boolean(r?.width && r.height); }));
-                await move(await point('dialog[open]#modal .operation-error-details[open] textarea', 0));
-                const textSafe = await evaluate(p => document.elementFromPoint(p.x, p.y)?.closest('textarea') === document.querySelector('dialog[open]#modal .operation-error-details[open] textarea[readonly]'), { x: position.x - offset.x, y: position.y - offset.y });
-                if (!textSafe) throw new Error('The failure details field changed.');
-                await mouse('mousePressed', position, 'left', 0, 'Read the error'); await mouse('mouseReleased', position, 'left', 0, 'Read the error');
-                await keyEvent('keyDown', 'Control', 'ControlLeft', 17, 2); await keyEvent('keyDown', 'End', 'End', 35, 2, 'Show the error');
-                await keyEvent('keyUp', 'End', 'End', 35, 2); await keyEvent('keyUp', 'Control', 'ControlLeft', 17);
                 const view = await waitFor(() => evaluate(new Function(`return (${inspectLockFailureView.toString()})(document);`)));
                 return { event, view };
               }, dispose: () => evaluate(() => window.__showcaseLockObservation?.dispose())

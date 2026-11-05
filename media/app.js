@@ -4151,7 +4151,10 @@
       if (!event.data.ok && failedCreation) failedCreation();
       if (!event.data.ok && failedTransferPreparation) failedTransferPreparation();
       if (event.data.cancelled && failedTransferPreparation) failedTransferPreparation(true);
-      if (!event.data.ok) showOperationFailure(error, { inline: Boolean(failedRename && restoreRename(failedRename)), diagnostic: event.data.diagnostic, notify: !operationQueue?.active });
+      if (!event.data.ok) {
+        if (completedFilesystemKind === 'filesystem-delete' && event.data.errorPresentation === 'status') statusbar.setStatus(error, 'error');
+        else showOperationFailure(error, { inline: Boolean(failedRename && restoreRename(failedRename)), diagnostic: event.data.diagnostic, notify: !operationQueue?.active });
+      }
       if (pendingGitDiff) { const selection = pendingGitDiff; pendingGitDiff = null; if (event.data.ok) requestGitDiff(selection.selection, selection.action); else { gitMenuSelection = null; toast(t(selection.action === 'git-history' ? 'Ungültige Auswahl für Git History.' : 'Ungültige Dateiauswahl für Git Diff.'), 'error'); } }
     if (completedTransferJob?.queueJobId && operationQueue.active?.id === completedTransferJob.queueJobId && !continuePreparation) operationQueue.complete(completedTransferJob.queueJobId, { ok: event.data.ok, cancelled, message: resultMessage, ...(!event.data.ok ? { error } : {}) });
       flushQueuedOperation(); flushDeferredNavigationReads(); flushPanelRefreshes(); flushFocusRefresh(); return;

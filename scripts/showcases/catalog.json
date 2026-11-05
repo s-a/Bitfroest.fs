@@ -3128,17 +3128,12 @@
           },
           {
             "type": "check",
-            "selector": "dialog[open] #modal-title",
-            "text": "File operation failed"
+            "selector": "#status-message[data-outcome=error]",
+            "text": "Deletion failed"
           },
           {
             "type": "pause",
             "duration": 1800
-          },
-          {
-            "type": "key",
-            "key": "Escape",
-            "effect": "Close the error message"
           },
           {
             "type": "check",

@@ -1748,7 +1748,7 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
           const initialNavigationRevision = navigationRevision;
           let ok = true;
           let cancelled = false;
-          let operationError;
+          let operationError, errorPresentation;
           let diagnostic;
           let updatedDirectories;
           let navigationReplyPath;
@@ -1841,6 +1841,7 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
             diagnostic = operationDiagnostic(error, message, message.state || filesystemState);
             const detail = Number.isInteger(error.deletedCount) ? t('Löschen fehlgeschlagen nach {count} Einträgen: {error}', { count: error.deletedCount, error: renderOperationError(error.cause, t) }) : renderOperationError(error, t);
             operationError = detail;
+            if (message.type === 'filesystem-delete' && error.deletePathFailed) errorPresentation = 'status';
             if (message.type !== 'filesystem-prepare' && message.type !== 'filesystem-navigate' && !(message.type === 'filesystem-refresh' && [0, 1].includes(message.side))) {
               try { filesystemState = retainView(await loadView(savedState), savedState); } catch { /* Preserve the last confirmed state. */ }
             }
@@ -1849,7 +1850,7 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
           if (job) transferJobs.delete(operationId);
           if (directoryJob && directoryJobs.get(directoryKey) === directoryJob) directoryJobs.delete(directoryKey);
           if (refreshController && refreshRead === refreshController) refreshRead = null;
-          if (current && panel === current) await current.webview.postMessage({ type: 'filesystem-result', ok, state: filesystemState, ...(typeof message.refreshRequestId === 'string' ? { refreshRequestId: message.refreshRequestId } : {}), ...(message.taskRequestId ? { taskRequestId: message.taskRequestId } : {}), ...(message.navigationRequestId ? { navigationRequestId: message.navigationRequestId } : {}), ...(updatedDirectories?.length ? { refreshGitDirectories: updatedDirectories } : {}), ...(cancelled ? { cancelled: true } : {}), ...(operationId ? { operationId, operationOutcome: filesystemState?.operationOutcome } : {}), ...(!ok ? { error: operationError, diagnostic } : {}), ...(ok && !cancelled && message.type === 'filesystem-navigate' && navigationReplyPath ? { resumeNavigation: { path: navigationReplyPath, side: message.side } } : {}), ...(ok && !cancelled && message.type === 'filesystem-navigate' && openReplyPath ? { resumeOpen: { path: openReplyPath } } : {}), ...(ok && !cancelled && message.type === 'filesystem-prepare' ? { resumeAction: message.action } : {}) });
+          if (current && panel === current) await current.webview.postMessage({ type: 'filesystem-result', ok, state: filesystemState, ...(typeof message.refreshRequestId === 'string' ? { refreshRequestId: message.refreshRequestId } : {}), ...(message.taskRequestId ? { taskRequestId: message.taskRequestId } : {}), ...(message.navigationRequestId ? { navigationRequestId: message.navigationRequestId } : {}), ...(updatedDirectories?.length ? { refreshGitDirectories: updatedDirectories } : {}), ...(cancelled ? { cancelled: true } : {}), ...(operationId ? { operationId, operationOutcome: filesystemState?.operationOutcome } : {}), ...(!ok ? { error: operationError, diagnostic, ...(errorPresentation ? { errorPresentation } : {}) } : {}), ...(ok && !cancelled && message.type === 'filesystem-navigate' && navigationReplyPath ? { resumeNavigation: { path: navigationReplyPath, side: message.side } } : {}), ...(ok && !cancelled && message.type === 'filesystem-navigate' && openReplyPath ? { resumeOpen: { path: openReplyPath } } : {}), ...(ok && !cancelled && message.type === 'filesystem-prepare' ? { resumeAction: message.action } : {}) });
         }).finally(() => { filesystemRequests--; });
         if (!isolatedNavigation) {
           filesystemQueue = Promise.all([filesystemQueue, execution]).then(() => {}, () => {});

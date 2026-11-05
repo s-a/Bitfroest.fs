@@ -58,17 +58,17 @@ test('inspector opening is bound to the selected real folder and a visible menu 
   dom.window.close();
 });
 
-test('failure view requires the actual open dialog and the visible end of the error report', () => {
-  const dom = new JSDOM('<dialog id="modal" open><span id="modal-title">File operation failed</span><details class="operation-error-details" open><textarea readonly></textarea></details></dialog>');
-  const root = dom.window.document, field = root.querySelector('textarea');
-  field.value = 'Diagnostics\nDeletion failed: EBUSY';
-  field.getBoundingClientRect = () => ({ width: 100, height: 100 });
-  Object.defineProperties(field, { scrollHeight: { value: 300 }, clientHeight: { value: 100 }, scrollTop: { value: 200, writable: true } });
-  assert.equal(inspectLockFailureView(root).errorText, field.value);
-  field.scrollTop = 10;
+test('failure view reads the visible error status and detects an open dialog', () => {
+  const dom = new JSDOM('<span id="status-message" data-outcome="error"><span data-status-text>Deletion failed: EBUSY</span></span><dialog></dialog>');
+  const root = dom.window.document, status = root.querySelector('#status-message'), message = root.querySelector('[data-status-text]');
+  message.getBoundingClientRect = () => ({ width: 150, height: 20 });
+  assert.deepEqual(inspectLockFailureView(root), { statusText: 'Deletion failed: EBUSY', dialogOpen: false });
+  root.querySelector('dialog').open = true;
+  assert.equal(inspectLockFailureView(root).dialogOpen, true);
+  status.dataset.outcome = 'info';
   assert.equal(inspectLockFailureView(root), false);
-  root.querySelector('details').open = false;
-  field.scrollTop = 200;
+  status.dataset.outcome = 'error';
+  message.getBoundingClientRect = () => ({ width: 0, height: 0 });
   assert.equal(inspectLockFailureView(root), false);
   dom.window.close();
 });

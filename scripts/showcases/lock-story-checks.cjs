@@ -26,7 +26,9 @@ async function validateLockDeleteFailure(fixture, event, view) {
   if (event?.type !== 'filesystem-result' || event.ok !== false || event.cancelled || typeof event.operationId !== 'string' || !event.operationId.startsWith('delete-')) throw new Error('The deletion failure response is invalid.');
   if (request?.type !== 'filesystem-delete' || request.operationId !== event.operationId || !Array.isArray(request.paths) || request.paths.length !== 1 || !equalPath(request.paths[0], fixture.file)) throw new Error('The deletion failure request does not match the fixture.');
   if (!failureIndicatesFileUse(event.diagnostic?.failure)) throw new Error('The deletion failure diagnostic does not identify a file lock.');
-  if (typeof event.error !== 'string' || !event.error || view?.dialogTitle !== 'File operation failed' || view.errorVisible !== true || typeof view.errorText !== 'string' || !view.errorText.includes(event.error)) throw new Error('The deletion failure is not visible in the product.');
+  if (typeof event.error !== 'string' || !event.error || view?.dialogOpen !== false || view.statusText !== event.error) {
+    throw new Error('The status bar must show the deletion failure without opening an error dialog.');
+  }
   await fixture.assertIntact();
 }
 

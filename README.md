@@ -18,6 +18,8 @@ Requires Visual Studio Code 1.100.0 or later within the declared compatible vers
 
 The default shortcut is `Ctrl+Alt+Shift+F12` on Windows and Linux. Repeating the command closes the window. Each panel has its own folder tabs and navigation history. Keyboard shortcuts can be customized in VS Code.
 
+The file manager reports a refused deletion in its status bar, for example when another process is using the file.
+
 <!-- showcase-gallery:start -->
 ## Feature walkthrough
 
