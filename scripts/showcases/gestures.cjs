@@ -85,6 +85,13 @@ function fixtureSnapshot(action, root = document) {
   const state = root.defaultView.CommanderHost.getState(), pane = state.panes[state.active];
   const activeDirectory = pane.tabs[pane.tab], other = state.panes[1 - state.active], otherDirectory = other.tabs[other.tab], rows = state.folders[activeDirectory] || [];
   const selected = pane.selected.map(id => rows.find(row => row.id === id)?.fsSource || '');
+  if (action === 'lock-inspect') {
+    const item = root.querySelector('[data-context-menu] [data-context-action="inspect-folder-locks"]');
+    const rect = item?.getBoundingClientRect();
+    return { activeDirectory, selected, dialog: 'folder-context-menu', realFilesystem: state.realFilesystem === true,
+      controlReady: Boolean(item && !item.disabled && !item.hidden && rect?.width && rect.height) };
+  }
+  if (action === 'lock-delete') action = 'delete-permanent';
   if (action === 'open') {
     return { activeDirectory, otherDirectory, selected, entryType: rows.find(row => row.id === pane.selected[0])?.type,
       dialog: root.querySelector('dialog[open]') ? 'dialog' : 'folder-list', controlReady: Boolean(root.activeElement?.closest('.pane.active .list')) };
@@ -98,6 +105,36 @@ function fixtureSnapshot(action, root = document) {
     ...(['trash', 'delete-permanent'].includes(action) ? { dialogFiles: deleteList && deleteList.children.length === 0 ? [deleteList.textContent.trim()] : [] } : {}),
     ...(action === 'copy' ? { filter: modal?.querySelector('#transfer-filter')?.value, policy: modal?.querySelector('#transfer-policy')?.value,
       transferSource: modal?.querySelector('[data-transfer-source]')?.textContent, individualNames: modal?.querySelector('#transfer-individual')?.checked } : {}) };
+}
+
+function installLockObservation(kind, root = document) {
+  const host = root.defaultView, events = [];
+  if (host.__showcaseLockObservation) throw new Error('A lock observation is already active.');
+  const listener = event => { if ((kind === 'delete' ? ['filesystem-task-progress', 'filesystem-result'] : ['locks-busy', 'locks-state']).includes(event.data?.type)) events.push(event.data); };
+  host.addEventListener('message', listener);
+  host.__showcaseLockObservation = { events, dispose() { host.removeEventListener('message', listener); delete host.__showcaseLockObservation; } };
+}
+
+function inspectLockProgress(file, root = document) {
+  const same = value => typeof value === 'string' && value.replace(/\\/g, '/').toLowerCase() === file.replace(/\\/g, '/').toLowerCase();
+  const events = root.defaultView.__showcaseLockObservation.events.filter(event => event.type === 'filesystem-task-progress' && event.progress?.phase === 'deleting' && same(event.progress?.path));
+  if (new Set(events.map(event => event.operationId)).size > 1) throw new Error('Multiple deletion operations observed.');
+  return events[0] || false;
+}
+
+function inspectLockResult(id, root = document) {
+  return root.defaultView.__showcaseLockObservation.events.find(event => event.type === 'filesystem-result' && event.operationId === id) || false;
+}
+
+function inspectLockScan(root = document) {
+  const events = root.defaultView.__showcaseLockObservation.events, busy = events.findIndex(event => event.type === 'locks-busy' && event.busy === true);
+  return busy < 0 ? false : events.slice(busy + 1).find(event => event.type === 'locks-state') || false;
+}
+
+function inspectLockFailureView(root = document) {
+  const area = root.querySelector('dialog[open]#modal .operation-error-details[open] textarea[readonly]'), rect = area?.getBoundingClientRect();
+  if (!rect?.width || !rect.height || area.scrollTop + area.clientHeight < area.scrollHeight - 1) return false;
+  return { dialogTitle: root.querySelector('#modal-title')?.textContent, errorVisible: true, errorText: area.value };
 }
 
 function installFixtureCompletion(root = document) {
@@ -139,7 +176,7 @@ function inspectFixtureCompletion(action, fixture, root = document) {
   return { complete: Boolean(success && idle && visibleSuccess) };
 }
 
-async function recordGesture({ capture, scene, page, target, evaluate, invoke, run, file, fixture, waitFor: poll }) {
+async function recordGesture({ capture, scene, page, target, evaluate, invoke, run, file, fixture, waitFor: poll, targets, connect, connections }) {
   const frames = path.join(run, path.parse(file).name);
   fs.mkdirSync(frames, { recursive: true });
   const pageEvaluate = async (fn, ...args) => {
@@ -255,6 +292,99 @@ async function recordGesture({ capture, scene, page, target, evaluate, invoke, r
       await pageEvaluate(() => window.__showcasePresentation.intro(''));
     }
     if (capture.steps) {
+      let lockController;
+      if (scene.fixture === 'file-lock') {
+        const readLock = action => evaluate(new Function('action', `return (${fixtureSnapshot.toString()})(action, document);`), action);
+        const clients = new Map();
+        let inspector;
+        const inspectorEval = async (fn, ...args) => {
+          const response = await inspector.client.call('Runtime.evaluate', { contextId: inspector.context.id, returnByValue: true, awaitPromise: true,
+            expression: `(${fn.toString()})(${args.map(arg => JSON.stringify(arg)).join(',')})` });
+          if (response.exceptionDetails) throw new Error(response.exceptionDetails.exception?.description || response.exceptionDetails.text);
+          return response.result.value;
+        };
+        const findInspector = async () => waitFor(async () => {
+          for (const candidate of await targets()) {
+            if (candidate.type !== 'iframe' || candidate.parentId !== target.parentId || !candidate.url.includes('extensionId=bitfroest.bitfroest-fs-prototype')) continue;
+            let client = clients.get(candidate.id);
+            if (!client) { client = await connect(candidate.webSocketDebuggerUrl); connections.push(client); clients.set(candidate.id, client); await client.call('Runtime.enable'); }
+            for (const context of client.contexts) {
+              const response = await client.call('Runtime.evaluate', { contextId: context.id, returnByValue: true,
+                expression: `({path:document.querySelector('#target')?.textContent,ready:!!document.querySelector('#processes[aria-busy="false"] .process')})` });
+              const state = response.result?.value;
+              if (state?.ready && state.path?.replace(/\\/g, '/').toLowerCase() === fixture.folder.replace(/\\/g, '/').toLowerCase()) return { target: candidate, client, context };
+            }
+          }
+          return false;
+        });
+        const inspectorClick = async (selector, effect) => {
+          const frame = await page.call('DOM.getFrameOwner', { frameId: inspector.target.id });
+          const box = await page.call('DOM.getBoxModel', { backendNodeId: frame.backendNodeId });
+          const rect = await inspectorEval(selector => { const node = document.querySelector(selector), r = node?.getBoundingClientRect();
+            return node && !node.disabled && r?.width && r.height ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : null; }, selector);
+          if (!rect) throw new Error('The lock inspector control is unavailable.');
+          await move({ x: box.model.content[0] + rect.x, y: box.model.content[1] + rect.y });
+          const valid = await inspectorEval(({ selector, rect }) => document.elementFromPoint(rect.x, rect.y)?.closest(selector) === document.querySelector(selector), { selector, rect });
+          if (!valid) throw new Error('The lock inspector control changed.');
+          await mouse('mousePressed', position, 'left', 0, effect); await mouse('mouseReleased', position, 'left', 0, effect);
+        };
+        lockController = require('./lock-story-controller.cjs').createLockStoryController({
+          fixture, readSnapshot: readLock,
+          observeDelete: async () => {
+            await evaluate(new Function(`(${installLockObservation.toString()})('delete', document);`));
+            return {
+              waitStarted: () => waitFor(() => evaluate(new Function('file', `return (${inspectLockProgress.toString()})(file, document);`), fixture.file)),
+              wait: async id => {
+                const event = await waitFor(() => evaluate(new Function('id', `return (${inspectLockResult.toString()})(id, document);`), id));
+                await waitFor(() => evaluate(() => Boolean(document.querySelector('dialog[open]#modal .operation-error-details > summary'))));
+                await move(await point('dialog[open]#modal .operation-error-details > summary', 0));
+                const safe = await evaluate(p => document.querySelector('#modal-title')?.textContent === 'File operation failed' &&
+                  document.elementFromPoint(p.x, p.y)?.closest('.operation-error-details > summary') === document.querySelector('dialog[open]#modal .operation-error-details:not([open]) > summary'), { x: position.x - offset.x, y: position.y - offset.y });
+                if (!safe) throw new Error('The failure details control changed.');
+                await mouse('mousePressed', position, 'left', 0, 'Show error details'); await mouse('mouseReleased', position, 'left', 0, 'Show error details');
+                await waitFor(() => evaluate(() => { const r = document.querySelector('dialog[open]#modal .operation-error-details[open] textarea')?.getBoundingClientRect(); return Boolean(r?.width && r.height); }));
+                await move(await point('dialog[open]#modal .operation-error-details[open] textarea', 0));
+                const textSafe = await evaluate(p => document.elementFromPoint(p.x, p.y)?.closest('textarea') === document.querySelector('dialog[open]#modal .operation-error-details[open] textarea[readonly]'), { x: position.x - offset.x, y: position.y - offset.y });
+                if (!textSafe) throw new Error('The failure details field changed.');
+                await mouse('mousePressed', position, 'left', 0, 'Read the error'); await mouse('mouseReleased', position, 'left', 0, 'Read the error');
+                await keyEvent('keyDown', 'Control', 'ControlLeft', 17, 2); await keyEvent('keyDown', 'End', 'End', 35, 2, 'Show the error');
+                await keyEvent('keyUp', 'End', 'End', 35, 2); await keyEvent('keyUp', 'Control', 'ControlLeft', 17);
+                const view = await waitFor(() => evaluate(new Function(`return (${inspectLockFailureView.toString()})(document);`)));
+                return { event, view };
+              }, dispose: () => evaluate(() => window.__showcaseLockObservation?.dispose())
+            };
+          },
+          clickConfirm: async (effect, snapshot) => {
+            await move(await point('#modal-confirm', 0));
+            if (JSON.stringify(await readLock('lock-delete')) !== JSON.stringify(snapshot)) throw new Error('Lock deletion state changed.');
+            await require('./lock-story-checks.cjs').validateLockDeleteSnapshot(fixture, snapshot);
+            const valid = await evaluate(p => document.elementFromPoint(p.x, p.y)?.closest('#modal-confirm')?.matches('button:not(:disabled):not([hidden])'), { x: position.x - offset.x, y: position.y - offset.y });
+            if (!valid) throw new Error('The lock deletion target changed.');
+            await mouse('mousePressed', position, 'left', 0, effect); await mouse('mouseReleased', position, 'left', 0, effect);
+          },
+          openInspector: async (effect, snapshot) => {
+            const selector = '[data-context-menu] [data-context-action="inspect-folder-locks"]';
+            await move(await point(selector, 0));
+            if (JSON.stringify(await readLock('lock-inspect')) !== JSON.stringify(snapshot)) throw new Error('Lock inspector selection changed.');
+            await fixture.assertIntact();
+            const valid = await evaluate(p => document.elementFromPoint(p.x, p.y)?.closest('[data-context-action="inspect-folder-locks"]') === document.querySelector('[data-context-menu] [data-context-action="inspect-folder-locks"]'), { x: position.x - offset.x, y: position.y - offset.y });
+            if (!valid) throw new Error('The lock inspector target changed.');
+            await mouse('mousePressed', position, 'left', 0, effect); await mouse('mouseReleased', position, 'left', 0, effect);
+            inspector = await findInspector();
+            await inspectorClick('#details', 'Show process details');
+          },
+          observeInspector: async () => {
+            await inspectorEval(new Function(`(${installLockObservation.toString()})('scan', document);`));
+            return { wait: () => waitFor(async () => { const event = await inspectorEval(new Function(`return (${inspectLockScan.toString()})(document);`));
+              return event && await inspectorEval(event => { const region = document.querySelector('#processes');
+              const detail = region?.querySelector('.detail'), files = region?.querySelector('.files'), a = detail?.getBoundingClientRect(), b = files?.getBoundingClientRect();
+              return event && region?.getAttribute('aria-busy') === 'false' && a?.width && a.height && b?.width && b.height
+                ? { event, view: { ready: true, detailsVisible: Boolean(document.querySelector('#details')?.checked), text: region.textContent } } : false; }, event); }),
+              dispose: () => inspectorEval(() => window.__showcaseLockObservation?.dispose()) };
+          },
+          refreshInspector: async effect => { await keyEvent('keyDown', 'F5', 'F5', 116, 0, effect); await keyEvent('keyUp', 'F5', 'F5', 116); }
+        });
+      }
       let archiveController;
       if (scene.fixture === 'archive-story') {
         const archiveState = require('./archive-state.cjs');
@@ -291,6 +421,7 @@ async function recordGesture({ capture, scene, page, target, evaluate, invoke, r
       result = { steps: await executeSequence(capture.steps, {
         confirm: async (action, effect) => {
           if (!fixture) throw new Error('Fixture confirmation is unavailable.');
+          if (lockController) return lockController.confirm(action, effect);
           if (archiveController) return archiveController.confirm(action, effect);
           if (!['rename', 'open'].includes(action)) await move(await point('#modal-confirm', 0));
           const read = () => evaluate(new Function('action', `return (${fixtureSnapshot.toString()})(action, document);`), action);
@@ -451,4 +582,4 @@ function encodingArgs(destination, webm, duration, input) {
     webm ? 'fps=30,scale=1280:-2:flags=lanczos' : 'fps=30,scale=1280:-1:flags=lanczos,split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=3',
     '-t', String(duration), ...(webm ? ['-an', '-c:v', 'libvpx-vp9', '-crf', '32', '-b:v', '0', '-pix_fmt', 'yuv420p'] : ['-loop', '0']), destination];
 }
-module.exports = { recordGesture, animatePointer, pulsePointer, frameList, installPointer, findTargetPoint, fixtureSnapshot, installFixtureCompletion, inspectFixtureCompletion, encodingArgs, dispatchMouseInput };
+module.exports = { recordGesture, animatePointer, pulsePointer, frameList, installPointer, findTargetPoint, fixtureSnapshot, installFixtureCompletion, inspectFixtureCompletion, installLockObservation, inspectLockProgress, inspectLockResult, inspectLockScan, inspectLockFailureView, encodingArgs, dispatchMouseInput };

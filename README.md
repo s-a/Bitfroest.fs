@@ -151,7 +151,7 @@ Windows examples with isolated sample files.
 <details>
 <summary>Preview files by click and hover</summary>
 
-![Preview files by click and hover](media/marketplace/showcases/0029-windows-en-dark-xray-click-preview.gif)
+![Preview files by click and hover](media/marketplace/showcases/0026-windows-en-dark-xray-click-preview.gif)
 
 </details>
 
@@ -197,7 +197,7 @@ Windows examples with isolated sample files.
 <details>
 <summary>Review changes across a repository</summary>
 
-![Review changes across a repository](media/marketplace/showcases/0030-windows-en-dark-quick-diff-folder-preview.gif)
+![Review changes across a repository](media/marketplace/showcases/0027-windows-en-dark-quick-diff-folder-preview.gif)
 
 </details>
 
@@ -213,30 +213,9 @@ Windows examples with isolated sample files.
 ### File &amp; Folder Locks
 
 <details>
-<summary><kbd>F5</kbd> Find processes holding files and folders open</summary>
+<summary><kbd>Shift+F8</kbd> <kbd>F5</kbd> Find the process using a locked file</summary>
 
-![Find processes holding files and folders open](media/marketplace/showcases/0025-windows-en-dark-folder-locks-processes.gif)
-
-</details>
-
-<details>
-<summary>Review actions for files held open</summary>
-
-![Review actions for files held open](media/marketplace/showcases/0026-windows-en-dark-folder-lock-actions-quickpick.gif)
-
-</details>
-
-<details>
-<summary>Choose a destination for a locked-folder copy</summary>
-
-![Choose a destination for a locked-folder copy](media/marketplace/showcases/0027-windows-en-dark-folder-lock-target-destination.gif)
-
-</details>
-
-<details>
-<summary>Review the file-lock release warning</summary>
-
-![Review the file-lock release warning](media/marketplace/showcases/0028-windows-en-dark-folder-lock-confirmation-warning.gif)
+![Find the process using a locked file](media/marketplace/showcases/0025-windows-en-dark-folder-locks-story.gif)
 
 </details>
 

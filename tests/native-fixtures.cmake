@@ -25,6 +25,9 @@ target_link_libraries(clipboard_engine_tests PRIVATE ole32 shell32 uuid user32)
 add_windows_test_module(locks_module_fixture
   "${CMAKE_CURRENT_LIST_DIR}/fixtures/native-locks-module-fixture.cc")
 
+add_windows_test_module(showcase_file_lock_fixture
+  "${CMAKE_CURRENT_LIST_DIR}/fixtures/showcase-file-lock-fixture.cc")
+
 add_windows_test_module(locks_detach_test
   "${CMAKE_CURRENT_LIST_DIR}/fixtures/native-locks-detach-binding.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/locks-win.cc"

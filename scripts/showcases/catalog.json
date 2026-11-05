@@ -3162,265 +3162,118 @@
   {
     "id": "folder-locks",
     "parentId": "main",
-    "title": "Find processes holding files and folders open",
-    "description": "A preview build keeps Build.log open and loads Preview-Plugin.dll. Inspect its real process references and the scan's access limits without releasing locks.",
+    "title": "Find the process using a locked file",
+    "description": "Try to delete a demo file, investigate the failure, and identify the process holding it open.",
+    "category": "File & Folder Locks",
+    "fixture": "file-lock",
     "paths": [
       "${demo}/left",
       "${demo}/right"
     ],
     "sources": [
       "lock-inspector.js",
-      "media/lock-inspector.js"
+      "media/lock-inspector.js",
+      "filesystem-provider.js"
     ],
     "shortcuts": [
+      "Shift+F8",
       "F5"
     ],
     "captures": [
       {
-        "id": "processes",
+        "id": "story",
         "format": "gif",
-        "surface": "folder-locks",
-        "expect": "body",
-        "ready": "#processes[aria-busy=\"false\"] .process",
-        "text": "Inspect folder locks",
-        "lockAction": "inspect",
-        "select": {
-          "side": 0,
-          "name": "Build-Output"
-        },
-        "command": "bitfroest.inspect-folder-locks",
+        "expect": ".pane",
+        "text": "Locked",
+        "intro": "A build file cannot be deleted. Which process is using it?",
         "steps": [
           {
             "type": "move",
             "target": {
-              "selector": "#processes [data-process]"
+              "name": "Locked.txt",
+              "side": 0
             }
           },
           {
             "type": "click",
-            "effect": "Select locking process"
+            "effect": "Select the file to delete"
+          },
+          {
+            "type": "key",
+            "key": "Shift+F8",
+            "effect": "Delete the demo file permanently"
           },
           {
             "type": "check",
-            "selector": "#processes [data-process]:checked"
+            "selector": "dialog[open] #modal-title",
+            "text": "Delete permanently?"
+          },
+          {
+            "type": "check",
+            "selector": "dialog[open] #modal-body",
+            "text": "Locked.txt"
           },
           {
             "type": "pause",
             "duration": 900
           },
           {
+            "type": "confirm",
+            "action": "lock-delete",
+            "effect": "Confirm deletion"
+          },
+          {
+            "type": "check",
+            "selector": "dialog[open] #modal-title",
+            "text": "File operation failed"
+          },
+          {
+            "type": "pause",
+            "duration": 1800
+          },
+          {
             "type": "key",
-            "key": "F5",
-            "effect": "Rescan file and folder locks"
-          },
-          {
-            "type": "pause",
-            "duration": 1000
+            "key": "Escape",
+            "effect": "Close the error message"
           },
           {
             "type": "check",
-            "selector": "#processes[aria-busy=\"false\"] .process",
-            "text": "Build.log"
-          },
-          {
-            "type": "check",
-            "selector": "#processes [data-process]:checked"
-          },
-          {
-            "type": "pause",
-            "duration": 1200
+            "selector": "dialog[open]",
+            "absent": true
           },
           {
             "type": "move",
             "target": {
-              "selector": "#processes [data-process]:checked"
+              "name": "Build-Output",
+              "side": 1
             }
           },
           {
             "type": "click",
-            "effect": "Clear process selection"
+            "effect": "Select the containing folder"
+          },
+          {
+            "type": "click",
+            "button": "right",
+            "effect": "Open folder actions"
           },
           {
             "type": "check",
-            "selector": "#processes [data-process]:checked",
-            "absent": true
-          }
-        ]
-      }
-    ],
-    "category": "File & Folder Locks"
-  },
-  {
-    "id": "folder-lock-actions",
-    "parentId": "folder-locks",
-    "title": "Review actions for files held open",
-    "description": "Inspect available process and folder actions for a real scan result.",
-    "paths": [
-      "${demo}/left",
-      "${demo}/right"
-    ],
-    "sources": [
-      "lock-inspector.js"
-    ],
-    "captures": [
-      {
-        "id": "quickpick",
-        "format": "gif",
-        "surface": "quickpick",
-        "expect": ".quick-input-widget",
-        "ready": ".quick-input-list .monaco-list-row",
-        "text": "Folder locks",
-        "lockAction": "actions",
-        "select": {
-          "side": 0,
-          "name": "Build-Output"
-        },
-        "command": "bitfroest.inspect-folder-locks",
-        "steps": [
-          {
-            "type": "check",
-            "selector": ".quick-input-widget"
+            "selector": "[data-context-menu] [data-context-action=\"inspect-folder-locks\"]",
+            "text": "Inspect folder locks"
           },
           {
-            "type": "type",
-            "selector": ".quick-input-box input",
-            "text": "Copy process information"
-          },
-          {
-            "type": "check",
-            "selector": ".quick-input-list .monaco-list-row",
-            "text": "Copy process information"
+            "type": "confirm",
+            "action": "lock-inspect",
+            "effect": "Inspect folder locks"
           },
           {
             "type": "pause",
-            "duration": 1300
-          },
-          {
-            "type": "key",
-            "key": "Escape",
-            "effect": "Cancel action list"
-          },
-          {
-            "type": "check",
-            "selector": ".quick-input-widget",
-            "absent": true
+            "duration": 2000
           }
         ]
       }
-    ],
-    "category": "File & Folder Locks"
-  },
-  {
-    "id": "folder-lock-target",
-    "parentId": "folder-locks",
-    "title": "Choose a destination for a locked-folder copy",
-    "description": "Review the complete destination path for a folder copy. The example leaves the input unconfirmed.",
-    "paths": [
-      "${demo}/left",
-      "${demo}/right"
-    ],
-    "sources": [
-      "lock-inspector.js"
-    ],
-    "captures": [
-      {
-        "id": "destination",
-        "format": "gif",
-        "surface": "inputbox",
-        "expect": ".quick-input-widget",
-        "ready": ".quick-input-box input",
-        "text": "Full destination path",
-        "lockAction": "destination",
-        "select": {
-          "side": 0,
-          "name": "Build-Output"
-        },
-        "command": "bitfroest.inspect-folder-locks",
-        "steps": [
-          {
-            "type": "check",
-            "selector": ".quick-input-box input",
-            "focused": true
-          },
-          {
-            "type": "type",
-            "selector": ".quick-input-box input",
-            "text": "-Preview"
-          },
-          {
-            "type": "check",
-            "selector": ".quick-input-box input",
-            "focused": true
-          },
-          {
-            "type": "pause",
-            "duration": 1300
-          },
-          {
-            "type": "key",
-            "key": "Escape",
-            "effect": "Cancel destination path"
-          },
-          {
-            "type": "check",
-            "selector": ".quick-input-widget",
-            "absent": true
-          }
-        ]
-      }
-    ],
-    "category": "File & Folder Locks"
-  },
-  {
-    "id": "folder-lock-confirmation",
-    "parentId": "folder-locks",
-    "title": "Review the file-lock release warning",
-    "description": "Review the warning before closing file handles or unloading modules. The example stops before Run.",
-    "paths": [
-      "${demo}/left",
-      "${demo}/right"
-    ],
-    "sources": [
-      "lock-inspector.js"
-    ],
-    "captures": [
-      {
-        "id": "warning",
-        "format": "gif",
-        "surface": "confirmation",
-        "expect": ".monaco-dialog-box",
-        "ready": ".monaco-dialog-box .dialog-buttons-row .monaco-button",
-        "text": "Selected file handles will be closed",
-        "lockAction": "confirmation",
-        "select": {
-          "side": 0,
-          "name": "Build-Output"
-        },
-        "command": "bitfroest.inspect-folder-locks",
-        "steps": [
-          {
-            "type": "check",
-            "selector": ".monaco-dialog-box",
-            "text": "Selected file handles will be closed"
-          },
-          {
-            "type": "pause",
-            "duration": 1300
-          },
-          {
-            "type": "key",
-            "key": "Escape",
-            "effect": "Cancel lock release"
-          },
-          {
-            "type": "check",
-            "selector": ".monaco-dialog-box",
-            "absent": true
-          }
-        ]
-      }
-    ],
-    "category": "File & Folder Locks"
+    ]
   },
   {
     "id": "native-browse-dialogs",
