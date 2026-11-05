@@ -21,7 +21,7 @@ The default shortcut is `Ctrl+Alt+Shift+F12` on Windows and Linux. Repeating the
 <!-- showcase-gallery:start -->
 ## Feature walkthrough
 
-Windows examples with sample files. File operations stop before confirmation.
+Windows examples with isolated sample files.
 
 ### Navigation &amp; Selection
 
@@ -33,102 +33,81 @@ Windows examples with sample files. File operations stop before confirmation.
 </details>
 
 <details>
-<summary>Select files (right-button drag)</summary>
-
-![Select files (right-button drag)](media/marketplace/showcases/0003-windows-en-dark-right-selection-gesture.gif)
-
-</details>
-
-<details>
 <summary>Drag files (hold right button)</summary>
 
-![Drag files (hold right button)](media/marketplace/showcases/0004-windows-en-dark-right-drag-gesture.gif)
+![Drag files (hold right button)](media/marketplace/showcases/0003-windows-en-dark-right-drag-gesture.gif)
 
 </details>
 
 <details>
 <summary><kbd>Ctrl+L</kbd> Edit folder path</summary>
 
-![Edit folder path](media/marketplace/showcases/0005-windows-en-dark-shortcut-ctrl-l-gesture.gif)
+![Edit folder path](media/marketplace/showcases/0004-windows-en-dark-shortcut-ctrl-l-gesture.gif)
 
 </details>
 
 <details>
 <summary>File manager menus</summary>
 
-![File manager menus](media/marketplace/showcases/0006-windows-en-dark-main-menus-categories.gif)
+![File manager menus](media/marketplace/showcases/0005-windows-en-dark-main-menus-categories.gif)
 
 </details>
 
 <details>
-<summary>Open favorite folders</summary>
+<summary><kbd>Ctrl+Numpad-</kbd> Find and select project documents</summary>
 
-![Favorite locations containing only sample project folders](media/marketplace/showcases/0007-windows-en-dark-location-menu-favorites.gif)
+![Find and select project documents](media/marketplace/showcases/0006-windows-en-dark-location-menu-favorites.gif)
 
 </details>
 
 <details>
 <summary><kbd>Numpad+</kbd> Select files by name pattern</summary>
 
-![Select files by name pattern](media/marketplace/showcases/0008-windows-en-dark-select-group-dialog.gif)
+![Select files by name pattern](media/marketplace/showcases/0007-windows-en-dark-select-group-dialog.gif)
 
 </details>
 
 <details>
 <summary><kbd>Numpad-</kbd> Deselect files by name pattern</summary>
 
-![Deselect files by name pattern](media/marketplace/showcases/0009-windows-en-dark-unselect-group-dialog.gif)
+![Deselect files by name pattern](media/marketplace/showcases/0008-windows-en-dark-unselect-group-dialog.gif)
 
 </details>
 
 ### Basic File Operations
 
 <details>
-<summary><kbd>F7</kbd> New folder dialog</summary>
+<summary><kbd>F7</kbd> <kbd>F5</kbd> <kbd>F2</kbd> Prepare a project handover</summary>
 
-![New folder dialog](media/marketplace/showcases/0010-windows-en-dark-new-folder-dialog.gif)
+![Prepare a project handover](media/marketplace/showcases/0009-windows-en-dark-new-folder-handover.gif)
 
 </details>
 
 <details>
 <summary><kbd>Shift+F4</kbd> New text file dialog</summary>
 
-![New text file dialog](media/marketplace/showcases/0011-windows-en-dark-new-file-dialog.gif)
-
-</details>
-
-<details>
-<summary><kbd>F5</kbd> Copy files dialog</summary>
-
-![Copy files dialog](media/marketplace/showcases/0012-windows-en-dark-copy-dialog.gif)
+![New text file dialog](media/marketplace/showcases/0010-windows-en-dark-new-file-dialog.gif)
 
 </details>
 
 <details>
 <summary><kbd>F6</kbd> Move files dialog</summary>
 
-![Move files dialog](media/marketplace/showcases/0013-windows-en-dark-move-dialog.gif)
-
-</details>
-
-<details>
-<summary><kbd>F2</kbd> Rename a file inline</summary>
-
-![Rename a file inline](media/marketplace/showcases/0014-windows-en-dark-rename-inline-editor.gif)
+![Move files dialog](media/marketplace/showcases/0011-windows-en-dark-move-dialog.gif)
 
 </details>
 
 <details>
 <summary>Batch rename preview</summary>
 
-![Batch rename preview](media/marketplace/showcases/0015-windows-en-dark-rename-multiple-dialog.gif)
+![Batch rename preview](media/marketplace/showcases/0012-windows-en-dark-rename-multiple-dialog.gif)
 
 </details>
 
 <details>
 <summary><kbd>F8</kbd> <kbd>Shift+F8</kbd> Review deletion confirmations</summary>
 
-![Review deletion confirmations](media/marketplace/showcases/0016-windows-en-dark-delete-confirmations-options.gif)
+![Review deletion confirmations](media/marketplace/showcases/0013-windows-en-dark-delete-confirmations-options.gif)
 
 </details>
 
@@ -137,42 +116,42 @@ Windows examples with sample files. File operations stop before confirmation.
 <details>
 <summary>File search options</summary>
 
-![File search options](media/marketplace/showcases/0017-windows-en-dark-file-search-workflow.gif)
+![File search options](media/marketplace/showcases/0014-windows-en-dark-file-search-workflow.gif)
 
 </details>
 
 <details>
 <summary>File search in a separate window</summary>
 
-![File search in a separate window](media/marketplace/showcases/0018-windows-en-dark-file-search-separate-workflow.gif)
+![File search in a separate window](media/marketplace/showcases/0015-windows-en-dark-file-search-separate-workflow.gif)
 
 </details>
 
 <details>
 <summary><kbd>F3</kbd> View file contents</summary>
 
-![View file contents](media/marketplace/showcases/0019-windows-en-dark-file-viewer-walkthrough.gif)
+![View file contents](media/marketplace/showcases/0016-windows-en-dark-file-viewer-walkthrough.gif)
 
 </details>
 
 <details>
 <summary><kbd>F3</kbd> <kbd>F7</kbd> Search file contents</summary>
 
-![Search file contents](media/marketplace/showcases/0020-windows-en-dark-viewer-search-dialog.gif)
+![Search file contents](media/marketplace/showcases/0017-windows-en-dark-viewer-search-dialog.gif)
 
 </details>
 
 <details>
 <summary><kbd>F3</kbd> Choose text encoding</summary>
 
-![Choose text encoding](media/marketplace/showcases/0021-windows-en-dark-viewer-codepage-dialog.gif)
+![Choose text encoding](media/marketplace/showcases/0018-windows-en-dark-viewer-codepage-dialog.gif)
 
 </details>
 
 <details>
 <summary>Preview files by click and hover</summary>
 
-![Preview files by click and hover](media/marketplace/showcases/0032-windows-en-dark-xray-click-preview.gif)
+![Preview files by click and hover](media/marketplace/showcases/0029-windows-en-dark-xray-click-preview.gif)
 
 </details>
 
@@ -181,7 +160,7 @@ Windows examples with sample files. File operations stop before confirmation.
 <details>
 <summary><kbd>Alt+F5</kbd> <kbd>Alt+F9</kbd> <kbd>Ctrl+Numpad-</kbd> Review archive pack and extraction options</summary>
 
-![Review archive pack and extraction options](media/marketplace/showcases/0022-windows-en-dark-archive-options-options.gif)
+![Review archive pack and extraction options](media/marketplace/showcases/0019-windows-en-dark-archive-options-options.gif)
 
 </details>
 
@@ -190,35 +169,35 @@ Windows examples with sample files. File operations stop before confirmation.
 <details>
 <summary>Git file status</summary>
 
-![Git file status](media/marketplace/showcases/0023-windows-en-dark-git-status-overview.gif)
+![Git file status](media/marketplace/showcases/0020-windows-en-dark-git-status-overview.gif)
 
 </details>
 
 <details>
 <summary>Git commit history</summary>
 
-![Git commit history](media/marketplace/showcases/0024-windows-en-dark-git-history-log.gif)
+![Git commit history](media/marketplace/showcases/0021-windows-en-dark-git-history-log.gif)
 
 </details>
 
 <details>
 <summary><kbd>Ctrl+F</kbd> Git diff: selected file</summary>
 
-![Git diff: selected file](media/marketplace/showcases/0025-windows-en-dark-git-diff-working-tree.gif)
+![Git diff: selected file](media/marketplace/showcases/0022-windows-en-dark-git-diff-working-tree.gif)
 
 </details>
 
 <details>
 <summary>Local Git branches</summary>
 
-![Native Visual Studio Code list of branches from the sample repository](media/marketplace/showcases/0026-windows-en-dark-git-branches-quickpick.gif)
+![Native Visual Studio Code list of branches from the sample repository](media/marketplace/showcases/0023-windows-en-dark-git-branches-quickpick.gif)
 
 </details>
 
 <details>
 <summary>Review changes across a repository</summary>
 
-![Review changes across a repository](media/marketplace/showcases/0033-windows-en-dark-quick-diff-folder-preview.gif)
+![Review changes across a repository](media/marketplace/showcases/0030-windows-en-dark-quick-diff-folder-preview.gif)
 
 </details>
 
@@ -227,7 +206,7 @@ Windows examples with sample files. File operations stop before confirmation.
 <details>
 <summary>Set up a project view</summary>
 
-![Set up a project view](media/marketplace/showcases/0027-windows-en-dark-settings-editor.gif)
+![Set up a project view](media/marketplace/showcases/0024-windows-en-dark-settings-editor.gif)
 
 </details>
 
@@ -236,28 +215,28 @@ Windows examples with sample files. File operations stop before confirmation.
 <details>
 <summary><kbd>F5</kbd> Find processes holding files and folders open</summary>
 
-![Find processes holding files and folders open](media/marketplace/showcases/0028-windows-en-dark-folder-locks-processes.gif)
+![Find processes holding files and folders open](media/marketplace/showcases/0025-windows-en-dark-folder-locks-processes.gif)
 
 </details>
 
 <details>
 <summary>Review actions for files held open</summary>
 
-![Review actions for files held open](media/marketplace/showcases/0029-windows-en-dark-folder-lock-actions-quickpick.gif)
+![Review actions for files held open](media/marketplace/showcases/0026-windows-en-dark-folder-lock-actions-quickpick.gif)
 
 </details>
 
 <details>
 <summary>Choose a destination for a locked-folder copy</summary>
 
-![Choose a destination for a locked-folder copy](media/marketplace/showcases/0030-windows-en-dark-folder-lock-target-destination.gif)
+![Choose a destination for a locked-folder copy](media/marketplace/showcases/0027-windows-en-dark-folder-lock-target-destination.gif)
 
 </details>
 
 <details>
 <summary>Review the file-lock release warning</summary>
 
-![Review the file-lock release warning](media/marketplace/showcases/0031-windows-en-dark-folder-lock-confirmation-warning.gif)
+![Review the file-lock release warning](media/marketplace/showcases/0028-windows-en-dark-folder-lock-confirmation-warning.gif)
 
 </details>
 

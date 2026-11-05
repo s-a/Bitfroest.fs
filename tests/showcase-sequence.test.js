@@ -1,6 +1,16 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { validateSequence, executeSequence, inspectState, assertSafePointer } = require('../scripts/showcases/sequence.cjs');
+
+test('fixture confirmations are explicit, limited, and delegated to the fixture guard', async () => {
+  const observed = [];
+  await executeSequence([{ type: 'confirm', action: 'copy', effect: 'Copy the demo file' }], {
+    confirm: async (action, effect) => observed.push([action, effect])
+  });
+  assert.deepEqual(observed, [['copy', 'Copy the demo file']]);
+  assert.throws(() => validateSequence([{ type: 'confirm', action: 'delete', effect: 'Delete' }]), /fixture/);
+  await assert.rejects(executeSequence([{ type: 'confirm', action: 'copy', effect: 'Copy' }], {}), /fixture/i);
+});
 const { JSDOM } = require('jsdom');
 
 test('click labels wait for the corresponding dispatched press and never precede it', async () => {

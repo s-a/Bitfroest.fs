@@ -83,6 +83,7 @@ function validateCatalog(catalog) {
     if (scene.parentId && !ids.has(scene.parentId)) throw new Error('A parent must precede its subsections.');
     ids.add(scene.id);
     if (!scene.title?.trim() || !scene.description?.trim()) throw new Error('A title and description are required.');
+    if (scene.fixture !== undefined && scene.fixture !== 'handover') throw new Error('Unsupported showcase fixture.');
     if (scene.paths?.length !== 2 || scene.paths.some(p => !path.win32.isAbsolute(p))) throw new Error('Two absolute demo paths are required.');
     if (scene.status && !['pending', 'excluded'].includes(scene.status)) throw new Error('Invalid inventory status.');
     if (scene.status && !scene.reason?.trim()) throw new Error('An inventory status requires a reason.');
@@ -101,6 +102,7 @@ function validateCatalog(catalog) {
           (!surfacePreparation && (capture.select || capture.command));
         if (!['gif', 'webm'].includes(capture.format) || unsupportedSetup) throw new Error('A recording sequence requires an animation capture with only supported surface preparation.');
         require('./sequence.cjs').validateSequence(capture.steps);
+        if (capture.steps.some(step => step.type === 'confirm') && (scene.fixture !== 'handover' || capture.surface)) throw new Error('Fixture confirmations require the handover fixture.');
       }
       if (['gif', 'webm'].includes(capture.format) && !capture.steps && !['path-copy', 'ctrl-l', 'right-selection', 'right-drag'].includes(capture.gesture)) throw new Error('An animation requires a sequence or known gesture.');
       if (!capture.expect || !capture.text) throw new Error('Capture readiness criteria are required.');
@@ -282,6 +284,8 @@ async function main() {
     if (scenes.some(scene => scene.captures.some(capture => capture.lockAction))) lockFixture = await require('./locks.cjs').createLockFixture(demo);
     for (const scene of scenes) {
       if (scene.status) continue;
+      const fixture = scene.fixture === 'handover' ? await require('./story-fixture.cjs').createStoryFixture(run) : undefined;
+      if (fixture) scene.paths = [fixture.left, fixture.right];
       stage = `${scene.id}: navigation`;
       if (lockFixture) await invoke('showcase.close-locks');
       await invoke('showcase.focus-main');
@@ -312,7 +316,7 @@ async function main() {
           stage = `${scene.id}/${capture.id}: recording sequence`;
           const { recordGesture } = require('./gestures.cjs');
           const file = filename(scene, capture);
-          const size = await recordGesture({ capture, scene, view, page, target, evaluate, invoke, run, file, waitFor });
+          const size = await recordGesture({ capture, scene, view, page, target, evaluate, invoke, run, file, fixture, waitFor });
           images.push({ scene: scene.id, capture: capture.id, file, ...size });
           console.log(`Rendered ${file}`); continue;
         }

@@ -4137,6 +4137,10 @@
       if (completedTransferJob && !continuePreparation) { const progress = finishTransferStatus(outcome); if (progress) statusbar.finishProgress({ message: resultMessage, outcome, progress, severity: event.data.ok ? undefined : window.CommanderWorkbench.Severity.Error }); }
       if (completion) finishTransfer(completion, Boolean(event.data.ok), event.data.ok ? undefined : error);
       else if (event.data.ok && !resume && !continuePreparation && (event.data.notice || cancelled || completedTransferJob)) statusbar.setStatus(resultMessage, outcome);
+      if (failedRename && event.data.ok && !cancelled && event.data.state?.realFilesystem) {
+        const entries = event.data.state.folders?.[failedRename.source] || [];
+        if (entries.some(file => file.name === failedRename.proposal) && !entries.some(file => file.name === failedRename.oldName)) toast(t('Eintrag umbenannt.'), 'success');
+      }
       if (event.data.ok && !event.data.cancelled && resume) resume();
       if (event.data.ok && !event.data.cancelled && !resume && event.data.resumeNavigation) {
         state.active = event.data.resumeNavigation.side;

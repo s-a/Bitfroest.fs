@@ -15,7 +15,7 @@ function galleryFile(image) {
 }
 function renderGallery(manifest, catalog = []) {
   const lines = [begin, '## Feature walkthrough', '',
-    'Windows examples with sample files. File operations stop before confirmation.', ''];
+    'Windows examples with isolated sample files.', ''];
   const groups = new Map();
   for (const section of manifest.sections.filter(item => item.status === 'rendered' && item.id !== 'main' && item.images.length)) {
     const scene = catalog.find(item => item.id === section.id);

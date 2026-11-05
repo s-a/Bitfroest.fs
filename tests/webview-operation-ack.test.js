@@ -7,6 +7,23 @@ function fixture() {
 }
 const submit = app => app.document.querySelector('#modal-form').dispatchEvent(new app.window.Event('submit', { bubbles: true, cancelable: true }));
 const reply = (app, data) => app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-result', ...data } }));
+test('inline rename reports success only after host acknowledgement and never on error or cancellation', t => {
+  for (const outcome of ['success', 'error', 'cancelled', 'unchanged']) {
+    const original = fixture(), app = createApp(t, structuredClone(original), { language: 'en' });
+    app.action('rename-one');
+    const input = app.document.querySelector('.inline-rename');
+    input.value = 'renamed.txt'; app.key('Enter', {}, input);
+    const request = app.messages.find(item => item.type === 'filesystem-apply'); assert.ok(request);
+    assert.match(app.document.querySelector('#status-message').textContent, /progress/i);
+    assert.doesNotMatch(app.document.querySelector('#status-message').textContent, /renamed/i);
+    reply(app, outcome === 'success' ? { ok: true, state: structuredClone(request.state) }
+      : outcome === 'error' ? { ok: false, error: 'Blocked', state: original }
+      : { ok: true, cancelled: outcome === 'cancelled', state: original });
+    const status = app.document.querySelector('#status-message');
+    if (outcome === 'success') { assert.equal(status.textContent, 'Entry renamed.'); assert.equal(status.dataset.outcome, 'success'); }
+    else assert.doesNotMatch(status.textContent, /Entry renamed/i);
+  }
+});
 test('real folder and file creation report success only after successful host acknowledgement', t => {
   for (const [kind, name, expected] of [['mkdir', 'Future', 'Folder created'], ['mkdir', 'one|two', 'Folders created'], ['new-file', 'one.txt|two.txt', 'Files created'], ['new-file', 'single.txt', 'File system updated']]) {
     const app = createApp(t, fixture(), { language: 'en' }); app.action(kind); app.document.querySelector('#value').value = name; submit(app);

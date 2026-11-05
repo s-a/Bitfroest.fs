@@ -137,31 +137,6 @@
     "category": "Navigation & Selection"
   },
   {
-    "id": "right-selection",
-    "parentId": "main",
-    "title": "Select files (right-button drag)",
-    "description": "Draw a selection with the right mouse button held down.",
-    "paths": [
-      "${demo}/left",
-      "${demo}/right"
-    ],
-    "sources": [
-      "media/app.js",
-      "media/shortcut-runtime.js"
-    ],
-    "captures": [
-      {
-        "id": "gesture",
-        "format": "gif",
-        "gesture": "right-selection",
-        "expect": ".pane",
-        "text": "README"
-      }
-    ],
-    "kind": "drag-and-drop",
-    "category": "Navigation & Selection"
-  },
-  {
     "id": "right-drag",
     "parentId": "main",
     "title": "Drag files (hold right button)",
@@ -416,19 +391,27 @@
   {
     "id": "location-menu",
     "parentId": "main",
-    "title": "Open favorite folders",
-    "description": "Browse favorite project folders from the location menu.",
+    "title": "Find and select project documents",
+    "description": "Open a favorite folder, select documents with the right mouse button and clear the selection.",
     "paths": [
       "${demo}/left",
       "${demo}/right"
     ],
     "sources": [
-      "media/app.js"
+      "media/app.js",
+      "media/commander-menu.js"
+    ],
+    "category": "Navigation & Selection",
+    "shortcuts": [
+      "Ctrl+Numpad-"
     ],
     "captures": [
       {
         "id": "favorites",
         "format": "gif",
+        "expect": ".pane",
+        "text": "README",
+        "intro": "Select project documents for review",
         "steps": [
           {
             "type": "move",
@@ -438,7 +421,7 @@
           },
           {
             "type": "click",
-            "effect": "Open location favorites"
+            "effect": "Open favorite folders"
           },
           {
             "type": "check",
@@ -453,44 +436,108 @@
           },
           {
             "type": "click",
-            "effect": "Open Project sources location"
+            "effect": "Show favorite folders"
           },
           {
             "type": "check",
             "selector": "[data-favorite-menu]",
-            "text": "Project sources"
+            "text": "Documents"
+          },
+          {
+            "type": "move",
+            "target": {
+              "selector": "[data-favorite-menu] [data-favorite-entry]:nth-of-type(1)"
+            }
+          },
+          {
+            "type": "check",
+            "selector": "[data-location-section=\"favorites\"][aria-expanded=\"true\"]"
+          },
+          {
+            "type": "move",
+            "target": {
+              "selector": "[data-favorite-menu] [data-favorite-entry]:nth-of-type(2)"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Open Documents"
+          },
+          {
+            "type": "check",
+            "selector": "[data-pane=\"0\"] .path-breadcrumbs",
+            "text": "documents"
+          },
+          {
+            "type": "check",
+            "selector": "[data-pane=\"0\"] [data-cell][title=\"Approval.txt\"]"
+          },
+          {
+            "type": "check",
+            "selector": "[data-pane=\"0\"] [data-cell][title=\"Briefing.md\"]"
           },
           {
             "type": "pause",
-            "duration": 1300
+            "duration": 800
           },
           {
-            "type": "key",
-            "key": "Escape",
-            "effect": "Close Project sources submenu"
+            "type": "move",
+            "target": {
+              "selector": "[data-pane=\"0\"] [data-cell][title=\"Approval.txt\"]",
+              "xFraction": 0.15
+            }
+          },
+          {
+            "type": "press",
+            "button": "right",
+            "effect": "Select documents"
+          },
+          {
+            "type": "move",
+            "target": {
+              "selector": "[data-pane=\"0\"] [data-cell][title=\"Briefing.md\"]",
+              "xFraction": 0.65
+            }
+          },
+          {
+            "type": "release",
+            "button": "right",
+            "effect": "Select documents"
           },
           {
             "type": "check",
-            "selector": "[data-favorite-menu]",
-            "text": "Favorites"
-          },
-          {
-            "type": "key",
-            "key": "Escape",
-            "effect": "Close location menu"
+            "selector": "[data-pane=\"0\"] .pane-metrics",
+            "text": "2 selected"
           },
           {
             "type": "check",
-            "selector": "[data-favorite-menu]",
+            "selector": "[data-pane=\"0\"] [data-file-row][aria-selected=\"true\"]:has([data-cell][title=\"Approval.txt\"])"
+          },
+          {
+            "type": "check",
+            "selector": "[data-pane=\"0\"] [data-file-row][aria-selected=\"true\"]:has([data-cell][title=\"Briefing.md\"])"
+          },
+          {
+            "type": "pause",
+            "duration": 1500
+          },
+          {
+            "type": "key",
+            "key": "Ctrl+NumpadSubtract",
+            "effect": "Clear current selection"
+          },
+          {
+            "type": "check",
+            "selector": "[data-pane=\"0\"] [data-file-row][aria-selected=\"true\"]",
             "absent": true
+          },
+          {
+            "type": "pause",
+            "duration": 1200
           }
-        ],
-        "expect": "[data-favorite-menu]",
-        "text": "Project sources",
-        "alt": "Favorite locations containing only sample project folders"
+        ]
       }
-    ],
-    "category": "Navigation & Selection"
+    ]
   },
   {
     "id": "history-menu",
@@ -704,8 +751,8 @@
   {
     "id": "new-folder",
     "parentId": "main",
-    "title": "New folder dialog",
-    "description": "Inspect the folder name and destination before creating anything.",
+    "title": "Prepare a project handover",
+    "description": "Create a folder, copy a project file and rename the copy.",
     "paths": [
       "${demo}/left",
       "${demo}/right"
@@ -715,15 +762,26 @@
     ],
     "captures": [
       {
-        "id": "dialog",
-        "expect": "dialog[open]",
-        "text": "New folder",
+        "id": "handover",
         "format": "gif",
+        "expect": ".pane",
+        "text": "Project-Plan",
+        "intro": "Prepare a project handover",
         "steps": [
+          {
+            "type": "move",
+            "target": {
+              "selector": "[data-pane=\"1\"] .list"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Choose the destination folder"
+          },
           {
             "type": "key",
             "key": "F7",
-            "effect": "Open New folder dialog"
+            "effect": "Create a handover folder"
           },
           {
             "type": "check",
@@ -731,37 +789,147 @@
             "text": "New folder"
           },
           {
-            "type": "check",
-            "selector": "#value",
-            "focused": true
-          },
-          {
             "type": "type",
             "selector": "#value",
-            "text": "Showcase Folder",
-            "value": "Showcase Folder"
+            "text": "Handover",
+            "value": "Handover"
           },
           {
-            "type": "pause",
-            "duration": 1300
+            "type": "confirm",
+            "action": "mkdir",
+            "effect": "Create the folder"
+          },
+          {
+            "type": "check",
+            "selector": "[data-pane=\"1\"] [data-cell][title=\"Handover\"]"
+          },
+          {
+            "type": "move",
+            "target": {
+              "name": "Handover",
+              "side": 1
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Select the handover folder"
+          },
+          {
+            "type": "confirm",
+            "action": "open",
+            "effect": "Open the handover folder"
+          },
+          {
+            "type": "move",
+            "target": {
+              "name": "Project-Plan.md",
+              "side": 0
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Select the project plan"
           },
           {
             "type": "key",
-            "key": "Escape",
-            "effect": "Cancel new folder"
+            "key": "F5",
+            "effect": "Copy the project plan"
           },
           {
             "type": "check",
             "selector": "dialog[open]",
+            "text": "Copy"
+          },
+          {
+            "type": "pause",
+            "duration": 900
+          },
+          {
+            "type": "confirm",
+            "action": "copy",
+            "effect": "Copy into Handover"
+          },
+          {
+            "type": "check",
+            "selector": "[data-pane=\"1\"] [data-cell][title=\"Project-Plan.md\"]"
+          },
+          {
+            "type": "move",
+            "target": {
+              "name": "Project-Plan.md",
+              "side": 1
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Select the copied file"
+          },
+          {
+            "type": "pause",
+            "duration": 500
+          },
+          {
+            "type": "click",
+            "effect": "Start rename with a delayed click"
+          },
+          {
+            "type": "check",
+            "selector": ".inline-rename",
+            "focused": true
+          },
+          {
+            "type": "pause",
+            "duration": 700
+          },
+          {
+            "type": "key",
+            "key": "Escape",
+            "effect": "Cancel the first rename"
+          },
+          {
+            "type": "check",
+            "selector": ".inline-rename",
             "absent": true
+          },
+          {
+            "type": "key",
+            "key": "F2",
+            "effect": "Rename the copy"
+          },
+          {
+            "type": "check",
+            "selector": ".inline-rename",
+            "focused": true
+          },
+          {
+            "type": "type",
+            "selector": ".inline-rename",
+            "text": "Handover-Plan.md",
+            "value": "Handover-Plan.md"
+          },
+          {
+            "type": "confirm",
+            "action": "rename",
+            "effect": "Apply the new name"
+          },
+          {
+            "type": "check",
+            "selector": "[data-pane=\"1\"] [data-cell][title=\"Handover-Plan.md\"]"
+          },
+          {
+            "type": "pause",
+            "duration": 1800
           }
         ]
       }
     ],
     "shortcuts": [
-      "F7"
+      "F7",
+      "F5",
+      "F2"
     ],
-    "category": "Basic File Operations"
+    "category": "Basic File Operations",
+    "fixture": "handover"
   },
   {
     "id": "new-file",
@@ -822,76 +990,6 @@
     ],
     "shortcuts": [
       "Shift+F4"
-    ],
-    "category": "Basic File Operations"
-  },
-  {
-    "id": "copy",
-    "parentId": "main",
-    "title": "Copy files dialog",
-    "description": "Review the destination, overwrite policy and verification options before copying.",
-    "paths": [
-      "${demo}/left",
-      "${demo}/right"
-    ],
-    "sources": [
-      "media/app.js"
-    ],
-    "captures": [
-      {
-        "id": "dialog",
-        "expect": "dialog[open]",
-        "text": "Copy",
-        "format": "gif",
-        "steps": [
-          {
-            "type": "move",
-            "target": {
-              "name": "Project-Plan.md"
-            }
-          },
-          {
-            "type": "click",
-            "effect": "Select Project-Plan.md"
-          },
-          {
-            "type": "pause",
-            "duration": 400
-          },
-          {
-            "type": "key",
-            "key": "F5",
-            "effect": "Copy selected file"
-          },
-          {
-            "type": "check",
-            "selector": "dialog[open]",
-            "text": "Copy"
-          },
-          {
-            "type": "check",
-            "selector": "#value",
-            "focused": true
-          },
-          {
-            "type": "pause",
-            "duration": 1300
-          },
-          {
-            "type": "key",
-            "key": "Escape",
-            "effect": "Cancel Copy dialog"
-          },
-          {
-            "type": "check",
-            "selector": "dialog[open]",
-            "absent": true
-          }
-        ]
-      }
-    ],
-    "shortcuts": [
-      "F5"
     ],
     "category": "Basic File Operations"
   },
@@ -964,96 +1062,6 @@
       "F6"
     ],
     "category": "Basic File Operations"
-  },
-  {
-    "id": "rename-inline",
-    "parentId": "main",
-    "title": "Rename a file inline",
-    "description": "Open inline rename with a delayed second click, cancel it, then use F2 and cancel again without changing the file.",
-    "paths": [
-      "${demo}/left",
-      "${demo}/right"
-    ],
-    "sources": [
-      "media/app.js"
-    ],
-    "captures": [
-      {
-        "id": "editor",
-        "format": "webm",
-        "shortcuts": [
-          "F2"
-        ],
-        "expect": ".pane",
-        "text": "Project-Plan",
-        "steps": [
-          {
-            "type": "move",
-            "target": {
-              "name": "Project-Plan.md"
-            }
-          },
-          {
-            "type": "click",
-            "effect": "Select Project-Plan.md"
-          },
-          {
-            "type": "pause",
-            "duration": 900
-          },
-          {
-            "type": "click",
-            "effect": "Begin delayed-click rename"
-          },
-          {
-            "type": "check",
-            "selector": "input.inline-rename",
-            "value": "Project-Plan.md",
-            "focused": true
-          },
-          {
-            "type": "key",
-            "key": "Escape",
-            "effect": "Cancel delayed-click rename"
-          },
-          {
-            "type": "check",
-            "selector": "input.inline-rename",
-            "absent": true
-          },
-          {
-            "type": "key",
-            "key": "F2",
-            "effect": "Rename with F2"
-          },
-          {
-            "type": "check",
-            "selector": "input.inline-rename",
-            "value": "Project-Plan.md",
-            "focused": true
-          },
-          {
-            "type": "key",
-            "key": "Escape",
-            "effect": "Cancel F2 rename"
-          },
-          {
-            "type": "check",
-            "selector": "input.inline-rename",
-            "absent": true
-          },
-          {
-            "type": "check",
-            "selector": "[data-pane=\"0\"]",
-            "text": "Project-Plan"
-          }
-        ]
-      }
-    ],
-    "category": "Basic File Operations",
-    "shortcuts": [
-      "F2"
-    ]
   },
   {
     "id": "rename-multiple",

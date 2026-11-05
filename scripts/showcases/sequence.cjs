@@ -16,7 +16,8 @@ function validateSequence(steps) {
   if (!Array.isArray(steps) || !steps.length) throw new Error('A nonempty recording sequence is required.');
   let held;
   for (const step of steps) {
-    if (!step || !['move', 'click', 'press', 'release', 'key', 'pause', 'check', 'type'].includes(step.type)) throw new Error('Unknown recording step.');
+    if (!step || !['move', 'click', 'press', 'release', 'key', 'pause', 'check', 'type', 'confirm'].includes(step.type)) throw new Error('Unknown recording step.');
+    if (step.type === 'confirm' && (!['mkdir', 'open', 'copy', 'rename'].includes(step.action) || typeof step.effect !== 'string' || !step.effect.trim() || step.target)) throw new Error('Invalid fixture confirmation.');
     if (step.duration !== undefined && (!Number.isFinite(step.duration) || step.duration < 1 || step.duration > 30000)) throw new Error('Invalid recording duration.');
     if (step.type === 'pause' && step.duration === undefined) throw new Error('A pause requires a duration.');
     if (step.type === 'move' || step.target) {
@@ -37,7 +38,7 @@ function validateSequence(steps) {
       }
     }
     if (step.type === 'key' && !Object.hasOwn(keys, step.key)) throw new Error('Unsupported or unsafe recording key.');
-    if (step.effect !== undefined && (!['click', 'press', 'release', 'key'].includes(step.type) ||
+    if (step.effect !== undefined && (!['click', 'press', 'release', 'key', 'confirm'].includes(step.type) ||
       typeof step.effect !== 'string' || !step.effect.trim() || step.effect.length > 80 || /[\u0000-\u001f\u007f]/.test(step.effect))) {
       throw new Error('Invalid action caption.');
     }
@@ -84,6 +85,10 @@ async function executeSequence(steps, driver) {
     try {
       if (step.target) await driver.move(step);
       if (step.type === 'pause') await driver.pause(step.duration);
+      else if (step.type === 'confirm') {
+        if (typeof driver.confirm !== 'function') throw new Error('Fixture confirmation is unavailable.');
+        await driver.confirm(step.action, step.effect);
+      }
       else if (step.type === 'key') await driver.key(step.key, step.effect);
       else if (step.type === 'type') {
         const focused = await driver.check({ selector: step.selector, focused: true });

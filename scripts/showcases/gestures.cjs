@@ -81,7 +81,59 @@ function findTargetPoint({ selector, side = 0, name, xFraction }, root = documen
   return { x: rect.left + rect.width * fraction, y: rect.top + rect.height / 2 };
 }
 
-async function recordGesture({ capture, scene, page, target, evaluate, invoke, run, file, waitFor: poll }) {
+function fixtureSnapshot(action, root = document) {
+  const state = root.defaultView.CommanderHost.getState(), pane = state.panes[state.active];
+  const activeDirectory = pane.tabs[pane.tab], other = state.panes[1 - state.active], otherDirectory = other.tabs[other.tab], rows = state.folders[activeDirectory] || [];
+  const selected = pane.selected.map(id => rows.find(row => row.id === id)?.fsSource || '');
+  if (action === 'open') {
+    return { activeDirectory, otherDirectory, selected, entryType: rows.find(row => row.id === pane.selected[0])?.type,
+      dialog: root.querySelector('dialog[open]') ? 'dialog' : 'folder-list', controlReady: Boolean(root.activeElement?.closest('.pane.active .list')) };
+  }
+  const modal = root.querySelector('dialog[open]#modal'), field = action === 'rename' ? root.querySelector('.inline-rename') : modal?.querySelector('#value');
+  const control = action === 'rename' ? field : modal?.querySelector('#modal-confirm');
+  return { activeDirectory, otherDirectory, selected, dialog: action === 'rename' && !modal ? 'inline-rename' : modal?.querySelector('#modal-title')?.textContent,
+    input: field?.value, controlReady: Boolean(control && !control.disabled && !control.hidden && (action !== 'rename' || root.activeElement === field)),
+    ...(action === 'mkdir' ? { targetDirectory: modal?.querySelector('#modal-body strong')?.textContent } : {}),
+    ...(action === 'copy' ? { filter: modal?.querySelector('#transfer-filter')?.value, policy: modal?.querySelector('#transfer-policy')?.value,
+      transferSource: modal?.querySelector('[data-transfer-source]')?.textContent, individualNames: modal?.querySelector('#transfer-individual')?.checked } : {}) };
+}
+
+function installFixtureCompletion(root = document) {
+  const host = root.defaultView;
+  host.__showcaseCompletion?.dispose();
+  const events = [];
+  const listener = event => {
+    const data = event.data;
+    if (data?.type === 'filesystem-result' && !data.navigationRequestId && !data.refreshRequestId) events.push(data);
+  };
+  host.addEventListener('message', listener);
+  host.__showcaseCompletion = { events, dispose() { host.removeEventListener('message', listener); delete host.__showcaseCompletion; } };
+}
+
+function inspectFixtureCompletion(action, fixture, root = document) {
+  const events = root.defaultView.__showcaseCompletion?.events;
+  if (!events) return { error: 'Fixture completion observer is unavailable.' };
+  const same = (a, b) => typeof a === 'string' && typeof b === 'string' && a.replace(/\\/g, '/').replace(/\/$/, '').toLowerCase() === b.replace(/\\/g, '/').replace(/\/$/, '').toLowerCase();
+  for (const event of events) {
+    if (event.ok === false || event.cancelled || event.operationOutcome?.cancelled || event.operationOutcome?.errors?.length) return { error: String(event.error || event.operationOutcome?.errors?.join(', ') || 'Fixture operation failed or was cancelled.') };
+  }
+  const directory = action === 'mkdir' ? fixture.right : fixture.folder;
+  const expected = action === 'mkdir' ? 'Handover' : action === 'copy' ? 'Project-Plan.md' : 'Handover-Plan.md';
+  const success = events.some(event => {
+    if (event.ok !== true || event.state?.realFilesystem !== true || !event.state.folders) return false;
+    const rows = Object.entries(event.state.folders).find(([name]) => same(name, directory))?.[1];
+    return Array.isArray(rows) && rows.some(row => row.name === expected && row.type === (action === 'mkdir' ? 'folder' : 'markdown')) &&
+      (action !== 'rename' || !rows.some(row => row.name === 'Project-Plan.md'));
+  });
+  const idle = root.querySelector('#status-progress-area')?.classList.contains('is-idle') && root.querySelector('#status-activity')?.hidden &&
+    !root.querySelector('#panes')?.inert && !root.querySelector('#functionbar')?.inert;
+  const message = root.querySelector('#status-message');
+  const expectedStatus = action === 'mkdir' ? /^Folder created$/ : action === 'copy' ? /^1 file copied, 0 skipped$/ : /^Entry renamed\.$/;
+  const visibleSuccess = message?.dataset.outcome === 'success' && expectedStatus.test(message.textContent.trim());
+  return { complete: Boolean(success && idle && visibleSuccess) };
+}
+
+async function recordGesture({ capture, scene, page, target, evaluate, invoke, run, file, fixture, waitFor: poll }) {
   const frames = path.join(run, path.parse(file).name);
   fs.mkdirSync(frames, { recursive: true });
   const pageEvaluate = async (fn, ...args) => {
@@ -198,6 +250,37 @@ async function recordGesture({ capture, scene, page, target, evaluate, invoke, r
     }
     if (capture.steps) {
       result = { steps: await executeSequence(capture.steps, {
+        confirm: async (action, effect) => {
+          if (!fixture) throw new Error('Fixture confirmation is unavailable.');
+          if (!['rename', 'open'].includes(action)) await move(await point('#modal-confirm', 0));
+          const read = () => evaluate(new Function('action', `return (${fixtureSnapshot.toString()})(action, document);`), action);
+          const snapshot = await read();
+          if (action !== 'open') await evaluate(new Function(`(${installFixtureCompletion.toString()})(document);`));
+          try { await fixture.confirm(action, snapshot, async () => {
+            if (JSON.stringify(await read()) !== JSON.stringify(snapshot)) throw new Error('Fixture confirmation state changed.');
+            if (action === 'rename' || action === 'open') {
+              await keyEvent('keyDown', 'Enter', 'Enter', 13, 0, effect);
+              await keyEvent('keyUp', 'Enter', 'Enter', 13);
+              if (action === 'open') return await waitFor(async () => {
+                const observed = await read();
+                return observed.activeDirectory.replace(/\\/g, '/').toLowerCase() === fixture.folder.replace(/\\/g, '/').toLowerCase() && observed;
+              });
+            } else {
+              const valid = await evaluate(p => document.elementFromPoint(p.x, p.y)?.closest('#modal-confirm')?.matches('button:not(:disabled):not([hidden])'), { x: position.x - offset.x, y: position.y - offset.y });
+              if (!valid) throw new Error('Fixture confirmation target changed.');
+              await mouse('mousePressed', position, 'left', 0, effect);
+              await mouse('mouseReleased', position, 'left', 0, effect);
+            }
+          });
+          if (action !== 'open') {
+            const completion = await waitFor(async () => {
+              const observed = await evaluate(new Function('action', 'fixture', `return (${inspectFixtureCompletion.toString()})(action, fixture, document);`), action, { right: fixture.right, folder: fixture.folder });
+              return (observed.complete || observed.error) && observed;
+            });
+            if (completion.error) throw new Error(completion.error);
+          }
+          } finally { if (action !== 'open') await evaluate(() => window.__showcaseCompletion?.dispose()); }
+        },
         move: async step => {
           const t = step.target;
           await move(await point(t.selector || '[data-filename]', t.side ?? 0, t.name, t.xFraction), step.duration || 660);
@@ -313,4 +396,4 @@ function encodingArgs(destination, webm, duration, input) {
     webm ? 'fps=30,scale=1280:-2:flags=lanczos' : 'fps=30,scale=1280:-1:flags=lanczos,split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=3',
     '-t', String(duration), ...(webm ? ['-an', '-c:v', 'libvpx-vp9', '-crf', '32', '-b:v', '0', '-pix_fmt', 'yuv420p'] : ['-loop', '0']), destination];
 }
-module.exports = { recordGesture, animatePointer, pulsePointer, frameList, installPointer, findTargetPoint, encodingArgs, dispatchMouseInput };
+module.exports = { recordGesture, animatePointer, pulsePointer, frameList, installPointer, findTargetPoint, fixtureSnapshot, installFixtureCompletion, inspectFixtureCompletion, encodingArgs, dispatchMouseInput };
