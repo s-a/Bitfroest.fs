@@ -24,7 +24,7 @@ function harness() {
     }, timers };
 }
 
-test('click hints expire without losing the held-button marker and movement never restarts them', () => {
+test('click hints remain visible during a drag and expire after the button is released', () => {
   const h = harness();
   try {
     const label = h.doc.querySelector('.showcase-key'), pointer = h.doc.querySelector('#showcase-pointer');
@@ -36,11 +36,11 @@ test('click hints expire without losing the held-button marker and movement neve
     h.advance(presentationTiming.hint);
     assert.equal(label.style.opacity, '0');
     h.ui.pointer('mouseMoved', { x: 200, y: 250 }, 'right');
-    h.advance(presentationTiming.fade);
-    assert.equal(label.hidden, true);
+    assert.equal(label.hidden, false);
     assert.equal(pointer.dataset.down, 'true');
     h.ui.pointer('mouseReleased', { x: 200, y: 250 }, 'right');
     assert.equal(pointer.dataset.down, 'false');
+    h.advance(presentationTiming.hint + presentationTiming.fade);
     assert.equal(label.hidden, true);
   } finally { h.dom.window.close(); }
 });

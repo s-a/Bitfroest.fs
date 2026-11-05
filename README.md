@@ -8,7 +8,7 @@
 
 **A two-panel file manager for Visual Studio Code.** File operations, folder tabs and Git views share a compact editor window.
 
-![Bitfroest.fs with two folders, native Windows icons and file colors](media/marketplace/showcases/0001-windows-en-dark-main-overview.png)
+![Bitfroest.fs with two folders, native Windows icons and file colors](media/marketplace/showcases/0001-windows-en-dark-main-overview.gif)
 
 **Beta version** — This extension is under development and may contain bugs or incomplete features.
 
@@ -22,6 +22,8 @@ The default shortcut is `Ctrl+Alt+Shift+F12` on Windows and Linux. Repeating the
 ## Feature walkthrough
 
 Windows examples with sample files. File operations stop before confirmation.
+
+### Navigation &amp; Selection
 
 <details>
 <summary>Copy folder path to clipboard (right-click address bar)</summary>
@@ -45,284 +47,252 @@ Windows examples with sample files. File operations stop before confirmation.
 </details>
 
 <details>
-<summary>Edit folder path (Ctrl+L)</summary>
+<summary><kbd>Ctrl+L</kbd> Edit folder path</summary>
 
-![Edit folder path (Ctrl+L)](media/marketplace/showcases/0005-windows-en-dark-shortcut-ctrl-l-gesture.gif)
+![Edit folder path](media/marketplace/showcases/0005-windows-en-dark-shortcut-ctrl-l-gesture.gif)
 
 </details>
 
 <details>
 <summary>File manager menus</summary>
 
-![File manager menus](media/marketplace/showcases/0006-windows-en-dark-main-menus-files.png)
-
-![File manager menus](media/marketplace/showcases/0007-windows-en-dark-main-menus-selection.png)
-
-![File manager menus](media/marketplace/showcases/0008-windows-en-dark-main-menus-commands.png)
-
-![File manager menus](media/marketplace/showcases/0009-windows-en-dark-main-menus-view.png)
-
-![File manager menus](media/marketplace/showcases/0010-windows-en-dark-main-menus-configuration.png)
-
-![File manager menus](media/marketplace/showcases/0011-windows-en-dark-main-menus-help.png)
+![File manager menus](media/marketplace/showcases/0006-windows-en-dark-main-menus-categories.gif)
 
 </details>
 
 <details>
 <summary>Open favorite folders</summary>
 
-![Favorite locations containing only sample project folders](media/marketplace/showcases/0012-windows-en-dark-location-menu-favorites.png)
+![Favorite locations containing only sample project folders](media/marketplace/showcases/0007-windows-en-dark-location-menu-favorites.gif)
 
 </details>
 
 <details>
-<summary>Select files by name pattern</summary>
+<summary><kbd>Numpad+</kbd> Select files by name pattern</summary>
 
-![Select files by name pattern](media/marketplace/showcases/0013-windows-en-dark-select-group-dialog.png)
-
-</details>
-
-<details>
-<summary>Deselect files by name pattern</summary>
-
-![Deselect files by name pattern](media/marketplace/showcases/0014-windows-en-dark-unselect-group-dialog.png)
+![Select files by name pattern](media/marketplace/showcases/0008-windows-en-dark-select-group-dialog.gif)
 
 </details>
 
 <details>
-<summary>New folder dialog</summary>
+<summary><kbd>Numpad-</kbd> Deselect files by name pattern</summary>
 
-![New folder dialog](media/marketplace/showcases/0015-windows-en-dark-new-folder-dialog.png)
+![Deselect files by name pattern](media/marketplace/showcases/0009-windows-en-dark-unselect-group-dialog.gif)
+
+</details>
+
+### Basic File Operations
+
+<details>
+<summary><kbd>F7</kbd> New folder dialog</summary>
+
+![New folder dialog](media/marketplace/showcases/0010-windows-en-dark-new-folder-dialog.gif)
 
 </details>
 
 <details>
-<summary>New text file dialog</summary>
+<summary><kbd>Shift+F4</kbd> New text file dialog</summary>
 
-![New text file dialog](media/marketplace/showcases/0016-windows-en-dark-new-file-dialog.png)
-
-</details>
-
-<details>
-<summary>Copy files dialog</summary>
-
-![Copy files dialog](media/marketplace/showcases/0017-windows-en-dark-copy-dialog.png)
+![New text file dialog](media/marketplace/showcases/0011-windows-en-dark-new-file-dialog.gif)
 
 </details>
 
 <details>
-<summary>Move files dialog</summary>
+<summary><kbd>F5</kbd> Copy files dialog</summary>
 
-![Move files dialog](media/marketplace/showcases/0018-windows-en-dark-move-dialog.png)
+![Copy files dialog](media/marketplace/showcases/0012-windows-en-dark-copy-dialog.gif)
 
 </details>
 
 <details>
-<summary>Rename a file (delayed click or F2)</summary>
+<summary><kbd>F6</kbd> Move files dialog</summary>
 
-![Rename a file (delayed click or F2)](media/marketplace/showcases/0019-windows-en-dark-rename-inline-editor.gif)
+![Move files dialog](media/marketplace/showcases/0013-windows-en-dark-move-dialog.gif)
+
+</details>
+
+<details>
+<summary><kbd>F2</kbd> Rename a file inline</summary>
+
+![Rename a file inline](media/marketplace/showcases/0014-windows-en-dark-rename-inline-editor.gif)
 
 </details>
 
 <details>
 <summary>Batch rename preview</summary>
 
-![Batch rename preview](media/marketplace/showcases/0020-windows-en-dark-rename-multiple-dialog.png)
+![Batch rename preview](media/marketplace/showcases/0015-windows-en-dark-rename-multiple-dialog.gif)
 
 </details>
 
 <details>
-<summary>Recycle bin confirmation</summary>
+<summary><kbd>F8</kbd> <kbd>Shift+F8</kbd> Review deletion confirmations</summary>
 
-![Recycle bin confirmation](media/marketplace/showcases/0021-windows-en-dark-delete-trash-confirmation.png)
-
-</details>
-
-<details>
-<summary>Permanent deletion confirmation</summary>
-
-![Permanent deletion confirmation](media/marketplace/showcases/0022-windows-en-dark-delete-permanently-confirmation.png)
+![Review deletion confirmations](media/marketplace/showcases/0016-windows-en-dark-delete-confirmations-options.gif)
 
 </details>
+
+### Search &amp; View
 
 <details>
 <summary>File search options</summary>
 
-![File search options](media/marketplace/showcases/0023-windows-en-dark-file-search-general.png)
-
-![File search options](media/marketplace/showcases/0024-windows-en-dark-file-search-advanced.png)
-
-![File search options](media/marketplace/showcases/0025-windows-en-dark-file-search-presets.png)
+![File search options](media/marketplace/showcases/0017-windows-en-dark-file-search-workflow.gif)
 
 </details>
 
 <details>
 <summary>File search in a separate window</summary>
 
-![File search in a separate window](media/marketplace/showcases/0026-windows-en-dark-file-search-separate-dialog.png)
+![File search in a separate window](media/marketplace/showcases/0018-windows-en-dark-file-search-separate-workflow.gif)
 
 </details>
 
 <details>
-<summary>View file contents</summary>
+<summary><kbd>F3</kbd> View file contents</summary>
 
-![View file contents](media/marketplace/showcases/0027-windows-en-dark-file-viewer-text.png)
-
-![View file contents](media/marketplace/showcases/0028-windows-en-dark-file-viewer-binary.png)
-
-![View file contents](media/marketplace/showcases/0029-windows-en-dark-file-viewer-hex.png)
-
-![View file contents](media/marketplace/showcases/0030-windows-en-dark-file-viewer-html.png)
-
-![View file contents](media/marketplace/showcases/0031-windows-en-dark-file-viewer-unicode.png)
-
-![View file contents](media/marketplace/showcases/0032-windows-en-dark-file-viewer-utf8.png)
-
-![View file contents](media/marketplace/showcases/0033-windows-en-dark-file-viewer-edit-menu.png)
-
-![View file contents](media/marketplace/showcases/0034-windows-en-dark-file-viewer-options-menu.png)
-
-![View file contents](media/marketplace/showcases/0035-windows-en-dark-file-viewer-encoding-menu.png)
+![View file contents](media/marketplace/showcases/0019-windows-en-dark-file-viewer-walkthrough.gif)
 
 </details>
 
 <details>
-<summary>Search file contents</summary>
+<summary><kbd>F3</kbd> <kbd>F7</kbd> Search file contents</summary>
 
-![Search file contents](media/marketplace/showcases/0036-windows-en-dark-viewer-search-dialog.png)
-
-</details>
-
-<details>
-<summary>Choose text encoding</summary>
-
-![Choose text encoding](media/marketplace/showcases/0037-windows-en-dark-viewer-codepage-dialog.png)
+![Search file contents](media/marketplace/showcases/0020-windows-en-dark-viewer-search-dialog.gif)
 
 </details>
 
 <details>
-<summary>ZIP archive options</summary>
+<summary><kbd>F3</kbd> Choose text encoding</summary>
 
-![ZIP archive options](media/marketplace/showcases/0038-windows-en-dark-archive-pack-dialog.png)
-
-</details>
-
-<details>
-<summary>ZIP extraction options</summary>
-
-![ZIP extraction options](media/marketplace/showcases/0039-windows-en-dark-archive-unpack-dialog.png)
-
-</details>
-
-<details>
-<summary>Git file status</summary>
-
-![Git file status](media/marketplace/showcases/0040-windows-en-dark-git-status-overview.png)
-
-</details>
-
-<details>
-<summary>Git commit history</summary>
-
-![Git commit history](media/marketplace/showcases/0041-windows-en-dark-git-history-log.png)
-
-</details>
-
-<details>
-<summary>Git diff: selected file</summary>
-
-![Git diff: selected file](media/marketplace/showcases/0042-windows-en-dark-git-diff-working-tree.png)
-
-</details>
-
-<details>
-<summary>Local Git branches</summary>
-
-![Native Visual Studio Code list of branches from the sample repository](media/marketplace/showcases/0043-windows-en-dark-git-branches-quickpick.png)
-
-</details>
-
-<details>
-<summary>File manager settings</summary>
-
-![File manager settings](media/marketplace/showcases/0044-windows-en-dark-settings-editor.png)
-
-</details>
-
-<details>
-<summary>Favorite folder settings</summary>
-
-![Favorite folder settings](media/marketplace/showcases/0045-windows-en-dark-settings-favorites-editor.png)
-
-</details>
-
-<details>
-<summary>File column settings</summary>
-
-![File column settings](media/marketplace/showcases/0046-windows-en-dark-settings-columns-editor.png)
-
-</details>
-
-<details>
-<summary>Keyboard shortcut settings</summary>
-
-![Keyboard shortcut settings](media/marketplace/showcases/0047-windows-en-dark-settings-shortcuts-editor.png)
-
-</details>
-
-<details>
-<summary>Inspect folder locks</summary>
-
-![Inspect folder locks](media/marketplace/showcases/0048-windows-en-dark-folder-locks-processes.png)
-
-</details>
-
-<details>
-<summary>Folder lock actions</summary>
-
-![Folder lock actions](media/marketplace/showcases/0049-windows-en-dark-folder-lock-actions-quickpick.png)
-
-</details>
-
-<details>
-<summary>Copy locked folder: destination</summary>
-
-![Copy locked folder: destination](media/marketplace/showcases/0050-windows-en-dark-folder-lock-target-destination.png)
-
-</details>
-
-<details>
-<summary>Lock release warning</summary>
-
-![Lock release warning](media/marketplace/showcases/0051-windows-en-dark-folder-lock-confirmation-warning.png)
+![Choose text encoding](media/marketplace/showcases/0021-windows-en-dark-viewer-codepage-dialog.gif)
 
 </details>
 
 <details>
 <summary>Preview files on selection (X-Ray)</summary>
 
-![Preview files on selection (X-Ray)](media/marketplace/showcases/0052-windows-en-dark-xray-click-preview.png)
+![Preview files on selection (X-Ray)](media/marketplace/showcases/0035-windows-en-dark-xray-click-preview.gif)
 
 </details>
 
 <details>
 <summary>Preview files on hover (X-Ray Ultra)</summary>
 
-![Preview files on hover (X-Ray Ultra)](media/marketplace/showcases/0053-windows-en-dark-xray-hover-preview.png)
+![Preview files on hover (X-Ray Ultra)](media/marketplace/showcases/0036-windows-en-dark-xray-hover-preview.gif)
+
+</details>
+
+### Archive Operations
+
+<details>
+<summary><kbd>Alt+F5</kbd> <kbd>Alt+F9</kbd> <kbd>Ctrl+Numpad-</kbd> Review archive pack and extraction options</summary>
+
+![Review archive pack and extraction options](media/marketplace/showcases/0022-windows-en-dark-archive-options-options.gif)
+
+</details>
+
+### Git Operations
+
+<details>
+<summary>Git file status</summary>
+
+![Git file status](media/marketplace/showcases/0023-windows-en-dark-git-status-overview.gif)
 
 </details>
 
 <details>
-<summary>Git diff: current folder</summary>
+<summary>Git commit history</summary>
 
-![Git diff: current folder](media/marketplace/showcases/0054-windows-en-dark-quick-diff-folder-preview.png)
+![Git commit history](media/marketplace/showcases/0024-windows-en-dark-git-history-log.gif)
 
 </details>
 
 <details>
-<summary>Git diff: entire repository</summary>
+<summary><kbd>Ctrl+F</kbd> Git diff: selected file</summary>
 
-![Git diff: entire repository](media/marketplace/showcases/0055-windows-en-dark-quick-diff-repository-preview.png)
+![Git diff: selected file](media/marketplace/showcases/0025-windows-en-dark-git-diff-working-tree.gif)
+
+</details>
+
+<details>
+<summary>Local Git branches</summary>
+
+![Native Visual Studio Code list of branches from the sample repository](media/marketplace/showcases/0026-windows-en-dark-git-branches-quickpick.gif)
+
+</details>
+
+<details>
+<summary><kbd>Escape</kbd> Git diff: current folder</summary>
+
+![Git diff: current folder](media/marketplace/showcases/0037-windows-en-dark-quick-diff-folder-preview.gif)
+
+</details>
+
+<details>
+<summary><kbd>Escape</kbd> Git diff: entire repository</summary>
+
+![Git diff: entire repository](media/marketplace/showcases/0038-windows-en-dark-quick-diff-repository-preview.gif)
+
+</details>
+
+### Settings &amp; Shortcuts
+
+<details>
+<summary>File manager settings</summary>
+
+![File manager settings](media/marketplace/showcases/0027-windows-en-dark-settings-editor.gif)
+
+</details>
+
+<details>
+<summary>Favorite folder settings</summary>
+
+![Favorite folder settings](media/marketplace/showcases/0028-windows-en-dark-settings-favorites-editor.gif)
+
+</details>
+
+<details>
+<summary>File column settings</summary>
+
+![File column settings](media/marketplace/showcases/0029-windows-en-dark-settings-columns-editor.gif)
+
+</details>
+
+<details>
+<summary>Keyboard shortcut settings</summary>
+
+![Keyboard shortcut settings](media/marketplace/showcases/0030-windows-en-dark-settings-shortcuts-editor.gif)
+
+</details>
+
+### File &amp; Folder Locks
+
+<details>
+<summary><kbd>F5</kbd> Find processes holding files and folders open</summary>
+
+![Find processes holding files and folders open](media/marketplace/showcases/0031-windows-en-dark-folder-locks-processes.gif)
+
+</details>
+
+<details>
+<summary>Review actions for files held open</summary>
+
+![Review actions for files held open](media/marketplace/showcases/0032-windows-en-dark-folder-lock-actions-quickpick.gif)
+
+</details>
+
+<details>
+<summary>Choose a destination for a locked-folder copy</summary>
+
+![Choose a destination for a locked-folder copy](media/marketplace/showcases/0033-windows-en-dark-folder-lock-target-destination.gif)
+
+</details>
+
+<details>
+<summary>Review the file-lock release warning</summary>
+
+![Review the file-lock release warning](media/marketplace/showcases/0034-windows-en-dark-folder-lock-confirmation-warning.gif)
 
 </details>
 

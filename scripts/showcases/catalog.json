@@ -13,10 +13,67 @@
     "captures": [
       {
         "id": "overview",
+        "format": "gif",
         "expect": ".pane",
-        "text": "README"
+        "text": "README",
+        "steps": [
+          {
+            "type": "move",
+            "target": {
+              "name": "Project-Plan.md"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Select Project-Plan.md"
+          },
+          {
+            "type": "check",
+            "selector": "[data-pane=\"0\"] [data-file-row][aria-selected=\"true\"]",
+            "text": "Project-Plan"
+          },
+          {
+            "type": "pause",
+            "duration": 1200
+          },
+          {
+            "type": "pause",
+            "duration": 400
+          },
+          {
+            "type": "move",
+            "target": {
+              "selector": "[data-main-menu] > button:nth-of-type(2)"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Open selection menu"
+          },
+          {
+            "type": "check",
+            "selector": "#main-menu-popup",
+            "text": "Clear selection"
+          },
+          {
+            "type": "move",
+            "target": {
+              "selector": "[data-menu-action=\"clear\"]"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Clear current selection"
+          },
+          {
+            "type": "check",
+            "selector": "[data-pane=\"0\"] [data-file-row][aria-selected=\"true\"]",
+            "absent": true
+          }
+        ]
       }
-    ]
+    ],
+    "category": "Getting Started"
   },
   {
     "id": "startup-loading",
@@ -33,7 +90,8 @@
     ],
     "status": "pending",
     "reason": "Requires observing startup before readiness; no loading state is fabricated.",
-    "captures": []
+    "captures": [],
+    "category": "Diagnostics & Support"
   },
   {
     "id": "startup-error",
@@ -50,7 +108,8 @@
     ],
     "status": "pending",
     "reason": "Requires a controlled real startup failure.",
-    "captures": []
+    "captures": [],
+    "category": "Diagnostics & Support"
   },
   {
     "id": "path-copy",
@@ -74,7 +133,8 @@
         "text": "README"
       }
     ],
-    "kind": "mouse"
+    "kind": "mouse",
+    "category": "Navigation & Selection"
   },
   {
     "id": "right-selection",
@@ -98,7 +158,8 @@
         "text": "README"
       }
     ],
-    "kind": "drag-and-drop"
+    "kind": "drag-and-drop",
+    "category": "Navigation & Selection"
   },
   {
     "id": "right-drag",
@@ -122,12 +183,13 @@
         "text": "README"
       }
     ],
-    "kind": "drag-and-drop"
+    "kind": "drag-and-drop",
+    "category": "Navigation & Selection"
   },
   {
     "id": "shortcut-ctrl-l",
     "parentId": "main",
-    "title": "Edit folder path (Ctrl+L)",
+    "title": "Edit folder path",
     "description": "Press Ctrl+L and edit the selected path in the active address bar.",
     "paths": [
       "${demo}/left",
@@ -146,7 +208,11 @@
         "text": "README"
       }
     ],
-    "kind": "keyboard"
+    "kind": "keyboard",
+    "category": "Navigation & Selection",
+    "shortcuts": [
+      "Ctrl+L"
+    ]
   },
   {
     "id": "main-menus",
@@ -163,54 +229,189 @@
     ],
     "captures": [
       {
-        "id": "files",
-        "expect": "#main-menu-popup",
-        "text": "Pack",
-        "click": [
-          "[data-main-menu] > button:nth-of-type(1)"
-        ]
-      },
-      {
-        "id": "selection",
-        "expect": "#main-menu-popup",
-        "text": "Select group",
-        "click": [
-          "[data-main-menu] > button:nth-of-type(2)"
-        ]
-      },
-      {
-        "id": "commands",
-        "expect": "#main-menu-popup",
-        "text": "Search",
-        "click": [
-          "[data-main-menu] > button:nth-of-type(3)"
-        ]
-      },
-      {
-        "id": "view",
-        "expect": "#main-menu-popup",
-        "text": "Sort",
-        "click": [
-          "[data-main-menu] > button:nth-of-type(4)"
-        ]
-      },
-      {
-        "id": "configuration",
-        "expect": "#main-menu-popup",
-        "text": "Settings",
-        "click": [
-          "[data-main-menu] > button:nth-of-type(5)"
-        ]
-      },
-      {
-        "id": "help",
-        "expect": "#main-menu-popup",
-        "text": "GitHub",
-        "click": [
-          "[data-main-menu] > button:nth-of-type(6)"
+        "id": "categories",
+        "format": "gif",
+        "expect": ".pane",
+        "text": "README",
+        "steps": [
+          {
+            "type": "move",
+            "target": {
+              "selector": "[data-main-menu] > button:nth-of-type(1)"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Open File menu"
+          },
+          {
+            "type": "check",
+            "selector": "#main-menu-popup",
+            "text": "Pack"
+          },
+          {
+            "type": "pause",
+            "duration": 1200
+          },
+          {
+            "type": "key",
+            "key": "Escape",
+            "effect": "Close File menu"
+          },
+          {
+            "type": "check",
+            "selector": "#main-menu-popup",
+            "absent": true
+          },
+          {
+            "type": "move",
+            "target": {
+              "selector": "[data-main-menu] > button:nth-of-type(2)"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Open Selection menu"
+          },
+          {
+            "type": "check",
+            "selector": "#main-menu-popup",
+            "text": "Select group"
+          },
+          {
+            "type": "pause",
+            "duration": 1200
+          },
+          {
+            "type": "key",
+            "key": "Escape",
+            "effect": "Close Selection menu"
+          },
+          {
+            "type": "check",
+            "selector": "#main-menu-popup",
+            "absent": true
+          },
+          {
+            "type": "move",
+            "target": {
+              "selector": "[data-main-menu] > button:nth-of-type(3)"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Open Commands menu"
+          },
+          {
+            "type": "check",
+            "selector": "#main-menu-popup",
+            "text": "Search"
+          },
+          {
+            "type": "pause",
+            "duration": 1200
+          },
+          {
+            "type": "key",
+            "key": "Escape",
+            "effect": "Close Commands menu"
+          },
+          {
+            "type": "check",
+            "selector": "#main-menu-popup",
+            "absent": true
+          },
+          {
+            "type": "move",
+            "target": {
+              "selector": "[data-main-menu] > button:nth-of-type(4)"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Open View menu"
+          },
+          {
+            "type": "check",
+            "selector": "#main-menu-popup",
+            "text": "Sort"
+          },
+          {
+            "type": "pause",
+            "duration": 1200
+          },
+          {
+            "type": "key",
+            "key": "Escape",
+            "effect": "Close View menu"
+          },
+          {
+            "type": "check",
+            "selector": "#main-menu-popup",
+            "absent": true
+          },
+          {
+            "type": "move",
+            "target": {
+              "selector": "[data-main-menu] > button:nth-of-type(5)"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Open Settings menu"
+          },
+          {
+            "type": "check",
+            "selector": "#main-menu-popup",
+            "text": "Settings"
+          },
+          {
+            "type": "pause",
+            "duration": 1200
+          },
+          {
+            "type": "key",
+            "key": "Escape",
+            "effect": "Close Settings menu"
+          },
+          {
+            "type": "check",
+            "selector": "#main-menu-popup",
+            "absent": true
+          },
+          {
+            "type": "move",
+            "target": {
+              "selector": "[data-main-menu] > button:nth-of-type(6)"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Open Git menu"
+          },
+          {
+            "type": "check",
+            "selector": "#main-menu-popup",
+            "text": "GitHub"
+          },
+          {
+            "type": "pause",
+            "duration": 1200
+          },
+          {
+            "type": "key",
+            "key": "Escape",
+            "effect": "Close Git menu"
+          },
+          {
+            "type": "check",
+            "selector": "#main-menu-popup",
+            "absent": true
+          }
         ]
       }
-    ]
+    ],
+    "category": "Navigation & Selection"
   },
   {
     "id": "location-menu",
@@ -227,15 +428,69 @@
     "captures": [
       {
         "id": "favorites",
-        "click": [
-          "[data-pane=\"0\"] [data-favorites]",
-          "[data-location-section=\"favorites\"]"
+        "format": "gif",
+        "steps": [
+          {
+            "type": "move",
+            "target": {
+              "selector": "[data-pane=\"0\"] [data-favorites]"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Open location favorites"
+          },
+          {
+            "type": "check",
+            "selector": "[data-location-section=\"favorites\"]",
+            "text": "Favorites"
+          },
+          {
+            "type": "move",
+            "target": {
+              "selector": "[data-location-section=\"favorites\"]"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Open Project sources location"
+          },
+          {
+            "type": "check",
+            "selector": "[data-favorite-menu]",
+            "text": "Project sources"
+          },
+          {
+            "type": "pause",
+            "duration": 1300
+          },
+          {
+            "type": "key",
+            "key": "Escape",
+            "effect": "Close Project sources submenu"
+          },
+          {
+            "type": "check",
+            "selector": "[data-favorite-menu]",
+            "text": "Favorites"
+          },
+          {
+            "type": "key",
+            "key": "Escape",
+            "effect": "Close location menu"
+          },
+          {
+            "type": "check",
+            "selector": "[data-favorite-menu]",
+            "absent": true
+          }
         ],
         "expect": "[data-favorite-menu]",
         "text": "Project sources",
         "alt": "Favorite locations containing only sample project folders"
       }
-    ]
+    ],
+    "category": "Navigation & Selection"
   },
   {
     "id": "history-menu",
@@ -251,7 +506,8 @@
     ],
     "status": "pending",
     "reason": "The history menu needs a recorded sequence of real navigation steps.",
-    "captures": []
+    "captures": [],
+    "category": "Navigation & Selection"
   },
   {
     "id": "tab-menu",
@@ -267,7 +523,8 @@
     ],
     "status": "pending",
     "reason": "The tab context menu needs a context-menu capture step.",
-    "captures": []
+    "captures": [],
+    "category": "Navigation & Selection"
   },
   {
     "id": "columns-menu",
@@ -283,7 +540,8 @@
     ],
     "status": "pending",
     "reason": "The column context menu needs a context-menu capture step.",
-    "captures": []
+    "captures": [],
+    "category": "Navigation & Selection"
   },
   {
     "id": "file-context-menu",
@@ -299,7 +557,8 @@
     ],
     "status": "pending",
     "reason": "Context-menu variants need explicit context targets and native-menu capture support.",
-    "captures": []
+    "captures": [],
+    "category": "Navigation & Selection"
   },
   {
     "id": "select-group",
@@ -316,10 +575,51 @@
     "captures": [
       {
         "id": "dialog",
-        "action": "select-group",
         "expect": "dialog[open]",
-        "text": "Select group"
+        "text": "Select group",
+        "format": "gif",
+        "steps": [
+          {
+            "type": "key",
+            "key": "NumpadAdd",
+            "effect": "Select files by mask"
+          },
+          {
+            "type": "check",
+            "selector": "dialog[open]",
+            "text": "Select group"
+          },
+          {
+            "type": "check",
+            "selector": "#value",
+            "focused": true
+          },
+          {
+            "type": "type",
+            "selector": "#value",
+            "text": "*.md",
+            "value": "*.md"
+          },
+          {
+            "type": "pause",
+            "duration": 1300
+          },
+          {
+            "type": "key",
+            "key": "Escape",
+            "effect": "Cancel group selection"
+          },
+          {
+            "type": "check",
+            "selector": "dialog[open]",
+            "absent": true
+          }
+        ]
       }
+    ],
+    "category": "Navigation & Selection",
+    "shortcuts": [
+      "Numpad+"
     ]
   },
   {
@@ -337,10 +637,51 @@
     "captures": [
       {
         "id": "dialog",
-        "action": "unselect-group",
         "expect": "dialog[open]",
-        "text": "Unselect group"
+        "text": "Unselect group",
+        "format": "gif",
+        "steps": [
+          {
+            "type": "key",
+            "key": "NumpadSubtract",
+            "effect": "Deselect files by mask"
+          },
+          {
+            "type": "check",
+            "selector": "dialog[open]",
+            "text": "Unselect group"
+          },
+          {
+            "type": "check",
+            "selector": "#value",
+            "focused": true
+          },
+          {
+            "type": "type",
+            "selector": "#value",
+            "text": "*.txt",
+            "value": "*.txt"
+          },
+          {
+            "type": "pause",
+            "duration": 1300
+          },
+          {
+            "type": "key",
+            "key": "Escape",
+            "effect": "Cancel group deselection"
+          },
+          {
+            "type": "check",
+            "selector": "dialog[open]",
+            "absent": true
+          }
+        ]
       }
+    ],
+    "category": "Navigation & Selection",
+    "shortcuts": [
+      "Numpad-"
     ]
   },
   {
@@ -357,7 +698,8 @@
     ],
     "status": "pending",
     "reason": "Native save/open dialogs are outside the current WebContents image export.",
-    "captures": []
+    "captures": [],
+    "category": "Navigation & Selection"
   },
   {
     "id": "new-folder",
@@ -374,11 +716,52 @@
     "captures": [
       {
         "id": "dialog",
-        "action": "mkdir",
         "expect": "dialog[open]",
-        "text": "New folder"
+        "text": "New folder",
+        "format": "gif",
+        "steps": [
+          {
+            "type": "key",
+            "key": "F7",
+            "effect": "Open New folder dialog"
+          },
+          {
+            "type": "check",
+            "selector": "dialog[open]",
+            "text": "New folder"
+          },
+          {
+            "type": "check",
+            "selector": "#value",
+            "focused": true
+          },
+          {
+            "type": "type",
+            "selector": "#value",
+            "text": "Showcase Folder",
+            "value": "Showcase Folder"
+          },
+          {
+            "type": "pause",
+            "duration": 1300
+          },
+          {
+            "type": "key",
+            "key": "Escape",
+            "effect": "Cancel new folder"
+          },
+          {
+            "type": "check",
+            "selector": "dialog[open]",
+            "absent": true
+          }
+        ]
       }
-    ]
+    ],
+    "shortcuts": [
+      "F7"
+    ],
+    "category": "Basic File Operations"
   },
   {
     "id": "new-file",
@@ -395,11 +778,52 @@
     "captures": [
       {
         "id": "dialog",
-        "action": "new-file",
         "expect": "dialog[open]",
-        "text": "New text file"
+        "text": "New text file",
+        "format": "gif",
+        "steps": [
+          {
+            "type": "key",
+            "key": "Shift+F4",
+            "effect": "Open New text file dialog"
+          },
+          {
+            "type": "check",
+            "selector": "dialog[open]",
+            "text": "New text file"
+          },
+          {
+            "type": "check",
+            "selector": "#value",
+            "focused": true
+          },
+          {
+            "type": "type",
+            "selector": "#value",
+            "text": "Showcase-Note.txt",
+            "value": "Showcase-Note.txt"
+          },
+          {
+            "type": "pause",
+            "duration": 1300
+          },
+          {
+            "type": "key",
+            "key": "Escape",
+            "effect": "Cancel new file"
+          },
+          {
+            "type": "check",
+            "selector": "dialog[open]",
+            "absent": true
+          }
+        ]
       }
-    ]
+    ],
+    "shortcuts": [
+      "Shift+F4"
+    ],
+    "category": "Basic File Operations"
   },
   {
     "id": "copy",
@@ -416,15 +840,60 @@
     "captures": [
       {
         "id": "dialog",
-        "action": "copy",
         "expect": "dialog[open]",
         "text": "Copy",
-        "select": {
-          "side": 0,
-          "name": "Project-Plan.md"
-        }
+        "format": "gif",
+        "steps": [
+          {
+            "type": "move",
+            "target": {
+              "name": "Project-Plan.md"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Select Project-Plan.md"
+          },
+          {
+            "type": "pause",
+            "duration": 400
+          },
+          {
+            "type": "key",
+            "key": "F5",
+            "effect": "Copy selected file"
+          },
+          {
+            "type": "check",
+            "selector": "dialog[open]",
+            "text": "Copy"
+          },
+          {
+            "type": "check",
+            "selector": "#value",
+            "focused": true
+          },
+          {
+            "type": "pause",
+            "duration": 1300
+          },
+          {
+            "type": "key",
+            "key": "Escape",
+            "effect": "Cancel Copy dialog"
+          },
+          {
+            "type": "check",
+            "selector": "dialog[open]",
+            "absent": true
+          }
+        ]
       }
-    ]
+    ],
+    "shortcuts": [
+      "F5"
+    ],
+    "category": "Basic File Operations"
   },
   {
     "id": "move",
@@ -441,20 +910,65 @@
     "captures": [
       {
         "id": "dialog",
-        "action": "move",
         "expect": "dialog[open]",
         "text": "Move",
-        "select": {
-          "side": 0,
-          "name": "Project-Plan.md"
-        }
+        "format": "gif",
+        "steps": [
+          {
+            "type": "move",
+            "target": {
+              "name": "Project-Plan.md"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Select Project-Plan.md"
+          },
+          {
+            "type": "pause",
+            "duration": 400
+          },
+          {
+            "type": "key",
+            "key": "F6",
+            "effect": "Move selected file"
+          },
+          {
+            "type": "check",
+            "selector": "dialog[open]",
+            "text": "Move"
+          },
+          {
+            "type": "check",
+            "selector": "#value",
+            "focused": true
+          },
+          {
+            "type": "pause",
+            "duration": 1300
+          },
+          {
+            "type": "key",
+            "key": "Escape",
+            "effect": "Cancel Move dialog"
+          },
+          {
+            "type": "check",
+            "selector": "dialog[open]",
+            "absent": true
+          }
+        ]
       }
-    ]
+    ],
+    "shortcuts": [
+      "F6"
+    ],
+    "category": "Basic File Operations"
   },
   {
     "id": "rename-inline",
     "parentId": "main",
-    "title": "Rename a file (delayed click or F2)",
+    "title": "Rename a file inline",
     "description": "Open inline rename with a delayed second click, cancel it, then use F2 and cancel again without changing the file.",
     "paths": [
       "${demo}/left",
@@ -467,23 +981,78 @@
       {
         "id": "editor",
         "format": "webm",
+        "shortcuts": [
+          "F2"
+        ],
         "expect": ".pane",
         "text": "Project-Plan",
         "steps": [
-          { "type": "move", "target": { "name": "Project-Plan.md" } },
-          { "type": "click" },
-          { "type": "pause", "duration": 900 },
-          { "type": "click" },
-          { "type": "check", "selector": "input.inline-rename", "value": "Project-Plan.md", "focused": true },
-          { "type": "key", "key": "Escape" },
-          { "type": "check", "selector": "input.inline-rename", "absent": true },
-          { "type": "key", "key": "F2" },
-          { "type": "check", "selector": "input.inline-rename", "value": "Project-Plan.md", "focused": true },
-          { "type": "key", "key": "Escape" },
-          { "type": "check", "selector": "input.inline-rename", "absent": true },
-          { "type": "check", "selector": "[data-pane=\"0\"]", "text": "Project-Plan" }
+          {
+            "type": "move",
+            "target": {
+              "name": "Project-Plan.md"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Select Project-Plan.md"
+          },
+          {
+            "type": "pause",
+            "duration": 900
+          },
+          {
+            "type": "click",
+            "effect": "Begin delayed-click rename"
+          },
+          {
+            "type": "check",
+            "selector": "input.inline-rename",
+            "value": "Project-Plan.md",
+            "focused": true
+          },
+          {
+            "type": "key",
+            "key": "Escape",
+            "effect": "Cancel delayed-click rename"
+          },
+          {
+            "type": "check",
+            "selector": "input.inline-rename",
+            "absent": true
+          },
+          {
+            "type": "key",
+            "key": "F2",
+            "effect": "Rename with F2"
+          },
+          {
+            "type": "check",
+            "selector": "input.inline-rename",
+            "value": "Project-Plan.md",
+            "focused": true
+          },
+          {
+            "type": "key",
+            "key": "Escape",
+            "effect": "Cancel F2 rename"
+          },
+          {
+            "type": "check",
+            "selector": "input.inline-rename",
+            "absent": true
+          },
+          {
+            "type": "check",
+            "selector": "[data-pane=\"0\"]",
+            "text": "Project-Plan"
+          }
         ]
       }
+    ],
+    "category": "Basic File Operations",
+    "shortcuts": [
+      "F2"
     ]
   },
   {
@@ -501,15 +1070,76 @@
     "captures": [
       {
         "id": "dialog",
-        "action": "rename",
         "expect": "dialog[open]",
         "text": "Multi-rename",
-        "select": {
-          "side": 0,
-          "name": "Project-Plan.md"
-        }
+        "format": "gif",
+        "steps": [
+          {
+            "type": "move",
+            "target": {
+              "name": "Project-Plan.md"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Select Project-Plan.md"
+          },
+          {
+            "type": "pause",
+            "duration": 400
+          },
+          {
+            "type": "move",
+            "target": {
+              "selector": "[data-main-menu] > button:nth-of-type(1)"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Open File menu"
+          },
+          {
+            "type": "check",
+            "selector": "#main-menu-popup",
+            "text": "Multi-rename"
+          },
+          {
+            "type": "pause",
+            "duration": 300
+          },
+          {
+            "type": "move",
+            "target": {
+              "selector": "[data-menu-action=\"rename\"]"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Open batch rename dialog"
+          },
+          {
+            "type": "check",
+            "selector": "dialog[open]",
+            "text": "Multi-rename"
+          },
+          {
+            "type": "pause",
+            "duration": 1300
+          },
+          {
+            "type": "key",
+            "key": "Escape",
+            "effect": "Cancel batch rename"
+          },
+          {
+            "type": "check",
+            "selector": "dialog[open]",
+            "absent": true
+          }
+        ]
       }
-    ]
+    ],
+    "category": "Basic File Operations"
   },
   {
     "id": "transfer-individual-name",
@@ -525,13 +1155,14 @@
     ],
     "status": "pending",
     "reason": "This transfer variant needs its own verified command sequence.",
-    "captures": []
+    "captures": [],
+    "category": "Basic File Operations"
   },
   {
-    "id": "delete-trash",
+    "id": "delete-confirmations",
     "parentId": "main",
-    "title": "Recycle bin confirmation",
-    "description": "Inspect the confirmation for moving selected entries to the recycle bin.",
+    "title": "Review deletion confirmations",
+    "description": "Compare recycle-bin and permanent-deletion confirmations without deleting the selected file.",
     "paths": [
       "${demo}/left",
       "${demo}/right"
@@ -541,41 +1172,100 @@
     ],
     "captures": [
       {
-        "id": "confirmation",
-        "action": "delete",
-        "expect": "dialog[open]",
-        "text": "Trash",
-        "select": {
-          "side": 0,
-          "name": "Project-Plan.md"
-        }
+        "id": "options",
+        "format": "gif",
+        "expect": ".pane",
+        "text": "Project-Plan",
+        "steps": [
+          {
+            "type": "move",
+            "target": {
+              "name": "Project-Plan.md"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Select Project-Plan.md"
+          },
+          {
+            "type": "pause",
+            "duration": 400
+          },
+          {
+            "type": "key",
+            "key": "F8",
+            "effect": "Open Recycle Bin confirmation"
+          },
+          {
+            "type": "check",
+            "selector": "dialog[open]",
+            "text": "Trash"
+          },
+          {
+            "type": "check",
+            "selector": "dialog[open]",
+            "text": "Project-Plan.md"
+          },
+          {
+            "type": "pause",
+            "duration": 1300
+          },
+          {
+            "type": "key",
+            "key": "Escape",
+            "effect": "Cancel Recycle Bin deletion"
+          },
+          {
+            "type": "check",
+            "selector": "dialog[open]",
+            "absent": true
+          },
+          {
+            "type": "pause",
+            "duration": 400
+          },
+          {
+            "type": "key",
+            "key": "Shift+F8",
+            "effect": "Open permanent deletion confirmation"
+          },
+          {
+            "type": "check",
+            "selector": "dialog[open]",
+            "text": "Delete permanently"
+          },
+          {
+            "type": "check",
+            "selector": "dialog[open]",
+            "text": "Project-Plan.md"
+          },
+          {
+            "type": "pause",
+            "duration": 1300
+          },
+          {
+            "type": "key",
+            "key": "Escape",
+            "effect": "Cancel permanent deletion"
+          },
+          {
+            "type": "check",
+            "selector": "dialog[open]",
+            "absent": true
+          },
+          {
+            "type": "check",
+            "selector": "[data-pane=\"0\"]",
+            "text": "Project-Plan"
+          }
+        ]
       }
-    ]
-  },
-  {
-    "id": "delete-permanently",
-    "parentId": "main",
-    "title": "Permanent deletion confirmation",
-    "description": "Inspect the permanent-deletion warning without confirming it.",
-    "paths": [
-      "${demo}/left",
-      "${demo}/right"
     ],
-    "sources": [
-      "media/app.js"
+    "shortcuts": [
+      "F8",
+      "Shift+F8"
     ],
-    "captures": [
-      {
-        "id": "confirmation",
-        "action": "delete-permanently",
-        "expect": "dialog[open]",
-        "text": "Delete permanently",
-        "select": {
-          "side": 0,
-          "name": "Project-Plan.md"
-        }
-      }
-    ]
+    "category": "Basic File Operations"
   },
   {
     "id": "delete-network",
@@ -591,7 +1281,8 @@
     ],
     "status": "pending",
     "reason": "Requires real network-path fixtures; no network or deletion action is simulated.",
-    "captures": []
+    "captures": [],
+    "category": "Basic File Operations"
   },
   {
     "id": "transfer-conflict",
@@ -607,7 +1298,8 @@
     ],
     "status": "pending",
     "reason": "Requires a real transfer reaching a conflict; no operation is confirmed by this catalog.",
-    "captures": []
+    "captures": [],
+    "category": "Transfers & Conflicts"
   },
   {
     "id": "conflict-comparison",
@@ -623,7 +1315,8 @@
     ],
     "status": "pending",
     "reason": "Requires the real transfer-conflict state and complete text previews.",
-    "captures": []
+    "captures": [],
+    "category": "Transfers & Conflicts"
   },
   {
     "id": "operation-progress",
@@ -641,7 +1334,8 @@
     ],
     "status": "pending",
     "reason": "Requires a real running operation; progress must not be synthesized.",
-    "captures": []
+    "captures": [],
+    "category": "Transfers & Conflicts"
   },
   {
     "id": "operation-error",
@@ -657,7 +1351,8 @@
     ],
     "status": "pending",
     "reason": "Requires a controlled real failure; errors must not be injected.",
-    "captures": []
+    "captures": [],
+    "category": "Transfers & Conflicts"
   },
   {
     "id": "file-search",
@@ -673,28 +1368,109 @@
     ],
     "captures": [
       {
-        "id": "general",
-        "action": "search",
-        "expect": "dialog[open]",
-        "text": "Find files"
-      },
-      {
-        "id": "advanced",
-        "expect": "dialog[open]",
-        "text": "Find files",
-        "click": [
-          "dialog[open] [data-page=\"1\"]"
-        ]
-      },
-      {
-        "id": "presets",
-        "expect": "dialog[open]",
-        "text": "Find files",
-        "click": [
-          "dialog[open] [data-page=\"2\"]"
+        "id": "workflow",
+        "format": "gif",
+        "expect": ".pane",
+        "text": "README",
+        "steps": [
+          {
+            "type": "move",
+            "target": {
+              "selector": "[data-main-menu] > button:nth-of-type(3)"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Open Commands menu"
+          },
+          {
+            "type": "check",
+            "selector": "#main-menu-popup",
+            "text": "Search"
+          },
+          {
+            "type": "move",
+            "target": {
+              "selector": "#main-menu-popup [data-menu-action=\"search\"]"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Open file search"
+          },
+          {
+            "type": "check",
+            "selector": "dialog[open]",
+            "text": "Find files"
+          },
+          {
+            "type": "check",
+            "selector": "[data-file-search] [name=\"name\"]"
+          },
+          {
+            "type": "type",
+            "selector": "[data-file-search] [name=\"name\"]",
+            "text": "Project*",
+            "value": "Project*"
+          },
+          {
+            "type": "check",
+            "selector": "[data-search-page=\"0\"]"
+          },
+          {
+            "type": "pause",
+            "duration": 700
+          },
+          {
+            "type": "move",
+            "target": {
+              "selector": "[data-file-search] [data-page=\"1\"]"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Show advanced filters"
+          },
+          {
+            "type": "check",
+            "selector": "[data-search-page=\"1\"]"
+          },
+          {
+            "type": "pause",
+            "duration": 700
+          },
+          {
+            "type": "move",
+            "target": {
+              "selector": "[data-file-search] [data-page=\"2\"]"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Show saved search options"
+          },
+          {
+            "type": "check",
+            "selector": "[data-search-page=\"2\"]"
+          },
+          {
+            "type": "pause",
+            "duration": 1200
+          },
+          {
+            "type": "key",
+            "key": "Escape",
+            "effect": "Cancel without starting a search"
+          },
+          {
+            "type": "check",
+            "selector": "dialog[open]",
+            "absent": true
+          }
         ]
       }
-    ]
+    ],
+    "category": "Search & View"
   },
   {
     "id": "file-search-separate",
@@ -710,12 +1486,74 @@
     ],
     "captures": [
       {
-        "id": "dialog",
-        "action": "search-separate",
-        "expect": "dialog[open]",
-        "text": "Find files"
+        "id": "workflow",
+        "format": "gif",
+        "expect": ".pane",
+        "text": "README",
+        "steps": [
+          {
+            "type": "move",
+            "target": {
+              "selector": "[data-main-menu] > button:nth-of-type(3)"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Open Commands menu"
+          },
+          {
+            "type": "check",
+            "selector": "#main-menu-popup",
+            "text": "Search"
+          },
+          {
+            "type": "move",
+            "target": {
+              "selector": "#main-menu-popup [data-menu-action=\"search-separate\"]"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Open separate file search"
+          },
+          {
+            "type": "check",
+            "selector": "dialog[open]",
+            "text": "Find files (separate)"
+          },
+          {
+            "type": "check",
+            "selector": "[data-file-search] [name=\"name\"]"
+          },
+          {
+            "type": "type",
+            "selector": "[data-file-search] [name=\"name\"]",
+            "text": "Project*",
+            "value": "Project*"
+          },
+          {
+            "type": "check",
+            "selector": "[data-file-search]",
+            "text": "Find files (separate)"
+          },
+          {
+            "type": "pause",
+            "duration": 1300
+          },
+          {
+            "type": "key",
+            "key": "Escape",
+            "effect": "Close separate search without starting it"
+          },
+          {
+            "type": "check",
+            "selector": "[data-file-search]",
+            "absent": true
+          }
+        ]
       }
-    ]
+    ],
+    "category": "Search & View"
   },
   {
     "id": "search-results",
@@ -731,7 +1569,8 @@
     ],
     "status": "pending",
     "reason": "Needs a bounded real search against prepared fixtures.",
-    "captures": []
+    "captures": [],
+    "category": "Search & View"
   },
   {
     "id": "search-skip-confirmation",
@@ -747,7 +1586,8 @@
     ],
     "status": "pending",
     "reason": "Requires a real running search and a native confirmation target.",
-    "captures": []
+    "captures": [],
+    "category": "Search & View"
   },
   {
     "id": "duplicate-selection",
@@ -763,7 +1603,8 @@
     ],
     "status": "pending",
     "reason": "Requires real duplicate search results before opening the selection dialog.",
-    "captures": []
+    "captures": [],
+    "category": "Search & View"
   },
   {
     "id": "file-viewer",
@@ -779,69 +1620,430 @@
     ],
     "captures": [
       {
-        "id": "text",
-        "action": "view",
-        "expect": ".lister",
+        "id": "walkthrough",
+        "format": "gif",
+        "expect": ".pane",
         "text": "Notes.txt",
-        "select": {
-          "side": 0,
-          "name": "Notes.txt"
-        }
-      },
-      {
-        "id": "binary",
-        "expect": ".lister",
-        "text": "Notes.txt",
-        "listerAction": "mode:binary"
-      },
-      {
-        "id": "hex",
-        "expect": ".lister",
-        "text": "Notes.txt",
-        "listerAction": "mode:hex"
-      },
-      {
-        "id": "html",
-        "expect": ".lister",
-        "text": "Notes.txt",
-        "listerAction": "mode:html"
-      },
-      {
-        "id": "unicode",
-        "expect": ".lister",
-        "text": "Notes.txt",
-        "listerAction": "mode:unicode"
-      },
-      {
-        "id": "utf8",
-        "expect": ".lister",
-        "text": "Notes.txt",
-        "listerAction": "mode:utf8"
-      },
-      {
-        "id": "edit-menu",
-        "expect": "#lister-menu-popup",
-        "text": "Search",
-        "click": [
-          "[data-main-menu] > button:nth-of-type(1)"
-        ]
-      },
-      {
-        "id": "options-menu",
-        "expect": "#lister-menu-popup",
-        "text": "Hex",
-        "click": [
-          "[data-main-menu] > button:nth-of-type(2)"
-        ]
-      },
-      {
-        "id": "encoding-menu",
-        "expect": "#lister-menu-popup",
-        "text": "Other codepage",
-        "click": [
-          "[data-main-menu] > button:nth-of-type(3)"
+        "steps": [
+          {
+            "type": "move",
+            "target": {
+              "name": "Notes.txt"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Select Notes.txt"
+          },
+          {
+            "type": "pause",
+            "duration": 400
+          },
+          {
+            "type": "key",
+            "key": "F3",
+            "effect": "Open text viewer"
+          },
+          {
+            "type": "check",
+            "selector": ".lister",
+            "text": "Notes.txt"
+          },
+          {
+            "type": "check",
+            "selector": "[data-lister-status]",
+            "text": "1 Text only"
+          },
+          {
+            "type": "pause",
+            "duration": 900
+          },
+          {
+            "type": "move",
+            "target": {
+              "selector": "[data-main-menu] > button:nth-of-type(2)"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Open viewer options"
+          },
+          {
+            "type": "check",
+            "selector": "#lister-menu-popup",
+            "text": "2 Binary"
+          },
+          {
+            "type": "move",
+            "target": {
+              "selector": "#lister-menu-popup [data-lister-command=\"mode:binary\"]"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Switch to 2 binary mode"
+          },
+          {
+            "type": "check",
+            "selector": "[data-lister-status]",
+            "text": "2 Binary"
+          },
+          {
+            "type": "pause",
+            "duration": 700
+          },
+          {
+            "type": "move",
+            "target": {
+              "selector": "[data-main-menu] > button:nth-of-type(2)"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Open viewer options"
+          },
+          {
+            "type": "check",
+            "selector": "#lister-menu-popup",
+            "text": "3 Hexadecimal"
+          },
+          {
+            "type": "move",
+            "target": {
+              "selector": "#lister-menu-popup [data-lister-command=\"mode:hex\"]"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Switch to 3 hexadecimal mode"
+          },
+          {
+            "type": "check",
+            "selector": "[data-lister-status]",
+            "text": "3 Hexadecimal"
+          },
+          {
+            "type": "pause",
+            "duration": 700
+          },
+          {
+            "type": "move",
+            "target": {
+              "selector": "[data-main-menu] > button:nth-of-type(2)"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Open viewer options"
+          },
+          {
+            "type": "check",
+            "selector": "#lister-menu-popup",
+            "text": "5 HTML text"
+          },
+          {
+            "type": "move",
+            "target": {
+              "selector": "#lister-menu-popup [data-lister-command=\"mode:html\"]"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Switch to 5 html text mode"
+          },
+          {
+            "type": "check",
+            "selector": "[data-lister-status]",
+            "text": "5 HTML text"
+          },
+          {
+            "type": "pause",
+            "duration": 700
+          },
+          {
+            "type": "move",
+            "target": {
+              "selector": "[data-main-menu] > button:nth-of-type(2)"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Open viewer options"
+          },
+          {
+            "type": "check",
+            "selector": "#lister-menu-popup",
+            "text": "6 Unicode"
+          },
+          {
+            "type": "move",
+            "target": {
+              "selector": "#lister-menu-popup [data-lister-command=\"mode:unicode\"]"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Switch to 6 unicode mode"
+          },
+          {
+            "type": "check",
+            "selector": "[data-lister-status]",
+            "text": "6 Unicode"
+          },
+          {
+            "type": "pause",
+            "duration": 700
+          },
+          {
+            "type": "move",
+            "target": {
+              "selector": "[data-main-menu] > button:nth-of-type(2)"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Open viewer options"
+          },
+          {
+            "type": "check",
+            "selector": "#lister-menu-popup",
+            "text": "7 UTF-8"
+          },
+          {
+            "type": "move",
+            "target": {
+              "selector": "#lister-menu-popup [data-lister-command=\"mode:utf8\"]"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Switch to 7 utf-8 mode"
+          },
+          {
+            "type": "check",
+            "selector": "[data-lister-status]",
+            "text": "7 UTF-8"
+          },
+          {
+            "type": "pause",
+            "duration": 700
+          },
+          {
+            "type": "move",
+            "target": {
+              "selector": "[data-main-menu] > button:nth-of-type(1)"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Open viewer Edit menu"
+          },
+          {
+            "type": "check",
+            "selector": "#lister-menu-popup",
+            "text": "Search"
+          },
+          {
+            "type": "pause",
+            "duration": 700
+          },
+          {
+            "type": "key",
+            "key": "Escape",
+            "effect": "Close viewer menu"
+          },
+          {
+            "type": "check",
+            "selector": "#lister-menu-popup",
+            "absent": true
+          },
+          {
+            "type": "move",
+            "target": {
+              "selector": "[data-main-menu] > button:nth-of-type(2)"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Open viewer Options menu"
+          },
+          {
+            "type": "check",
+            "selector": "#lister-menu-popup",
+            "text": "Hexadecimal"
+          },
+          {
+            "type": "pause",
+            "duration": 700
+          },
+          {
+            "type": "key",
+            "key": "Escape",
+            "effect": "Close viewer menu"
+          },
+          {
+            "type": "check",
+            "selector": "#lister-menu-popup",
+            "absent": true
+          },
+          {
+            "type": "move",
+            "target": {
+              "selector": "[data-main-menu] > button:nth-of-type(3)"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Open viewer Encoding menu"
+          },
+          {
+            "type": "check",
+            "selector": "#lister-menu-popup",
+            "text": "Other codepage"
+          },
+          {
+            "type": "pause",
+            "duration": 700
+          },
+          {
+            "type": "key",
+            "key": "Escape",
+            "effect": "Close viewer menu"
+          },
+          {
+            "type": "check",
+            "selector": "#lister-menu-popup",
+            "absent": true
+          },
+          {
+            "type": "move",
+            "target": {
+              "selector": "[data-main-menu] > button:nth-of-type(1)"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Open viewer Edit menu"
+          },
+          {
+            "type": "check",
+            "selector": "#lister-menu-popup",
+            "text": "Search"
+          },
+          {
+            "type": "move",
+            "target": {
+              "selector": "#lister-menu-popup [data-lister-command=\"find\"]"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Open text search options"
+          },
+          {
+            "type": "check",
+            "selector": "[data-lister-search]",
+            "text": "Search text"
+          },
+          {
+            "type": "check",
+            "selector": "#lister-query"
+          },
+          {
+            "type": "type",
+            "selector": "#lister-query",
+            "text": "Project",
+            "value": "Project"
+          },
+          {
+            "type": "pause",
+            "duration": 900
+          },
+          {
+            "type": "key",
+            "key": "Escape",
+            "effect": "Cancel without searching"
+          },
+          {
+            "type": "check",
+            "selector": "[data-lister-search]",
+            "absent": true
+          },
+          {
+            "type": "move",
+            "target": {
+              "selector": "[data-main-menu] > button:nth-of-type(3)"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Open viewer Encoding menu"
+          },
+          {
+            "type": "check",
+            "selector": "#lister-menu-popup",
+            "text": "Other codepage"
+          },
+          {
+            "type": "move",
+            "target": {
+              "selector": "#lister-menu-popup [data-lister-command=\"manual\"]"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Open codepage input"
+          },
+          {
+            "type": "check",
+            "selector": "dialog[open]",
+            "text": "Other codepage"
+          },
+          {
+            "type": "check",
+            "selector": "#lister-codepage"
+          },
+          {
+            "type": "type",
+            "selector": "#lister-codepage",
+            "text": "65001",
+            "value": "65001"
+          },
+          {
+            "type": "pause",
+            "duration": 1000
+          },
+          {
+            "type": "key",
+            "key": "Escape",
+            "effect": "Cancel without applying the codepage"
+          },
+          {
+            "type": "check",
+            "selector": "dialog[open]",
+            "absent": true
+          },
+          {
+            "type": "move",
+            "target": {
+              "selector": "[data-lister-close]"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Close text viewer"
+          },
+          {
+            "type": "check",
+            "selector": ".lister",
+            "absent": true
+          }
         ]
       }
+    ],
+    "category": "Search & View",
+    "shortcuts": [
+      "F3"
     ]
   },
   {
@@ -859,15 +2061,99 @@
     "captures": [
       {
         "id": "dialog",
-        "action": "view",
-        "expect": "[data-lister-search]",
-        "text": "Search text",
-        "select": {
-          "side": 0,
-          "name": "Notes.txt"
-        },
-        "listerAction": "find"
+        "format": "gif",
+        "expect": ".pane",
+        "text": "Notes.txt",
+        "steps": [
+          {
+            "type": "move",
+            "target": {
+              "name": "Notes.txt"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Select Notes.txt"
+          },
+          {
+            "type": "pause",
+            "duration": 400
+          },
+          {
+            "type": "key",
+            "key": "F3",
+            "effect": "Open text viewer"
+          },
+          {
+            "type": "check",
+            "selector": ".lister",
+            "text": "Notes.txt"
+          },
+          {
+            "type": "check",
+            "selector": "[data-lister-status]",
+            "text": "1 Text only"
+          },
+          {
+            "type": "pause",
+            "duration": 900
+          },
+          {
+            "type": "key",
+            "key": "F7",
+            "effect": "Open viewer search"
+          },
+          {
+            "type": "check",
+            "selector": "[data-lister-search]",
+            "text": "Search text"
+          },
+          {
+            "type": "check",
+            "selector": "#lister-query"
+          },
+          {
+            "type": "type",
+            "selector": "#lister-query",
+            "text": "Project",
+            "value": "Project"
+          },
+          {
+            "type": "pause",
+            "duration": 1300
+          },
+          {
+            "type": "key",
+            "key": "Escape",
+            "effect": "Cancel without searching"
+          },
+          {
+            "type": "check",
+            "selector": "[data-lister-search]",
+            "absent": true
+          },
+          {
+            "type": "move",
+            "target": {
+              "selector": "[data-lister-close]"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Close text viewer"
+          },
+          {
+            "type": "check",
+            "selector": ".lister",
+            "absent": true
+          }
+        ]
       }
+    ],
+    "category": "Search & View",
+    "shortcuts": [
+      "F3",
+      "F7"
     ]
   },
   {
@@ -885,15 +2171,118 @@
     "captures": [
       {
         "id": "dialog",
-        "action": "view",
-        "expect": "dialog[open]",
-        "text": "Other codepage",
-        "select": {
-          "side": 0,
-          "name": "Notes.txt"
-        },
-        "listerAction": "manual"
+        "format": "gif",
+        "expect": ".pane",
+        "text": "Notes.txt",
+        "steps": [
+          {
+            "type": "move",
+            "target": {
+              "name": "Notes.txt"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Select Notes.txt"
+          },
+          {
+            "type": "pause",
+            "duration": 400
+          },
+          {
+            "type": "key",
+            "key": "F3",
+            "effect": "Open text viewer"
+          },
+          {
+            "type": "check",
+            "selector": ".lister",
+            "text": "Notes.txt"
+          },
+          {
+            "type": "check",
+            "selector": "[data-lister-status]",
+            "text": "1 Text only"
+          },
+          {
+            "type": "pause",
+            "duration": 900
+          },
+          {
+            "type": "move",
+            "target": {
+              "selector": "[data-main-menu] > button:nth-of-type(3)"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Open viewer Encoding menu"
+          },
+          {
+            "type": "check",
+            "selector": "#lister-menu-popup",
+            "text": "Other codepage"
+          },
+          {
+            "type": "move",
+            "target": {
+              "selector": "#lister-menu-popup [data-lister-command=\"manual\"]"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Open codepage input"
+          },
+          {
+            "type": "check",
+            "selector": "dialog[open]",
+            "text": "Other codepage"
+          },
+          {
+            "type": "check",
+            "selector": "#lister-codepage"
+          },
+          {
+            "type": "type",
+            "selector": "#lister-codepage",
+            "text": "65001",
+            "value": "65001"
+          },
+          {
+            "type": "pause",
+            "duration": 1300
+          },
+          {
+            "type": "key",
+            "key": "Escape",
+            "effect": "Cancel without applying the codepage"
+          },
+          {
+            "type": "check",
+            "selector": "dialog[open]",
+            "absent": true
+          },
+          {
+            "type": "move",
+            "target": {
+              "selector": "[data-lister-close]"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Close text viewer"
+          },
+          {
+            "type": "check",
+            "selector": ".lister",
+            "absent": true
+          }
+        ]
       }
+    ],
+    "category": "Search & View",
+    "shortcuts": [
+      "F3"
     ]
   },
   {
@@ -910,13 +2299,14 @@
     ],
     "status": "pending",
     "reason": "Archive navigation needs an explicit real ZIP-open step.",
-    "captures": []
+    "captures": [],
+    "category": "Archive Operations"
   },
   {
-    "id": "archive-pack",
+    "id": "archive-options",
     "parentId": "archive-browser",
-    "title": "ZIP archive options",
-    "description": "Inspect compression, encryption and recursive packing options without creating an archive.",
+    "title": "Review archive pack and extraction options",
+    "description": "Compare ZIP packing and extraction options without creating or extracting an archive.",
     "paths": [
       "${demo}/left",
       "${demo}/right"
@@ -926,40 +2316,147 @@
     ],
     "captures": [
       {
-        "id": "dialog",
-        "action": "pack",
-        "expect": "dialog[open]",
-        "text": "Pack selection",
-        "select": {
-          "side": 0,
-          "name": "Project-Plan.md"
-        }
+        "id": "options",
+        "format": "gif",
+        "expect": ".pane",
+        "text": "Drafts-2026-11-03",
+        "steps": [
+          {
+            "type": "move",
+            "target": {
+              "name": "Project-Plan.md"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Select a file to pack"
+          },
+          {
+            "type": "check",
+            "selector": "[data-pane=\"0\"] [data-file-row][aria-selected=\"true\"]",
+            "text": "Project-Plan"
+          },
+          {
+            "type": "pause",
+            "duration": 400
+          },
+          {
+            "type": "key",
+            "key": "Alt+F5",
+            "effect": "Open packing options"
+          },
+          {
+            "type": "check",
+            "selector": "dialog[open]",
+            "text": "Pack selection"
+          },
+          {
+            "type": "check",
+            "selector": ".zip-pack-settings",
+            "text": "Encryption"
+          },
+          {
+            "type": "pause",
+            "duration": 1300
+          },
+          {
+            "type": "key",
+            "key": "Escape",
+            "effect": "Cancel packing options"
+          },
+          {
+            "type": "check",
+            "selector": "dialog[open]",
+            "absent": true
+          },
+          {
+            "type": "pause",
+            "duration": 350
+          },
+          {
+            "type": "key",
+            "key": "Ctrl+NumpadSubtract",
+            "effect": "Clear current selection"
+          },
+          {
+            "type": "check",
+            "selector": "[data-pane=\"0\"] [data-file-row][aria-selected=\"true\"]",
+            "absent": true
+          },
+          {
+            "type": "pause",
+            "duration": 350
+          },
+          {
+            "type": "move",
+            "target": {
+              "name": "Drafts-2026-11-03.zip"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Select archive to unpack"
+          },
+          {
+            "type": "check",
+            "selector": "[data-pane=\"0\"] [data-file-row][aria-selected=\"true\"]",
+            "text": "Drafts-2026-11-03"
+          },
+          {
+            "type": "pause",
+            "duration": 400
+          },
+          {
+            "type": "key",
+            "key": "Alt+F9",
+            "effect": "Open extraction options"
+          },
+          {
+            "type": "check",
+            "selector": "dialog[open]",
+            "text": "Unpack archive"
+          },
+          {
+            "type": "pause",
+            "duration": 1300
+          },
+          {
+            "type": "key",
+            "key": "Escape",
+            "effect": "Cancel extraction options"
+          },
+          {
+            "type": "check",
+            "selector": "dialog[open]",
+            "absent": true
+          },
+          {
+            "type": "pause",
+            "duration": 350
+          },
+          {
+            "type": "key",
+            "key": "Ctrl+NumpadSubtract",
+            "effect": "Clear current selection"
+          },
+          {
+            "type": "check",
+            "selector": "[data-pane=\"0\"] [data-file-row][aria-selected=\"true\"]",
+            "absent": true
+          },
+          {
+            "type": "check",
+            "selector": "[data-pane=\"0\"]",
+            "text": "Drafts-2026-11-03"
+          }
+        ]
       }
-    ]
-  },
-  {
-    "id": "archive-unpack",
-    "parentId": "archive-browser",
-    "title": "ZIP extraction options",
-    "description": "Inspect destination and extraction options without writing files.",
-    "paths": [
-      "${demo}/left",
-      "${demo}/right"
     ],
-    "sources": [
-      "media/app.js"
-    ],
-    "captures": [
-      {
-        "id": "dialog",
-        "action": "unpack",
-        "expect": "dialog[open]",
-        "text": "Unpack archive",
-        "select": {
-          "side": 0,
-          "name": "Drafts-2026-11-03.zip"
-        }
-      }
+    "category": "Archive Operations",
+    "shortcuts": [
+      "Alt+F5",
+      "Alt+F9",
+      "Ctrl+Numpad-"
     ]
   },
   {
@@ -976,7 +2473,8 @@
     ],
     "status": "pending",
     "reason": "Requires a selected entry inside an opened real archive.",
-    "captures": []
+    "captures": [],
+    "category": "Archive Operations"
   },
   {
     "id": "archive-entry-actions",
@@ -992,7 +2490,8 @@
     ],
     "status": "pending",
     "reason": "Requires a real opened archive and verified cancellation paths.",
-    "captures": []
+    "captures": [],
+    "category": "Archive Operations"
   },
   {
     "id": "archive-password",
@@ -1008,7 +2507,8 @@
     ],
     "status": "pending",
     "reason": "Native password inputs need encrypted archive fixtures and a separate capture target.",
-    "captures": []
+    "captures": [],
+    "category": "Archive Operations"
   },
   {
     "id": "archive-overwrite",
@@ -1024,7 +2524,8 @@
     ],
     "status": "pending",
     "reason": "Native Quick Picks require a real archive write reaching an existing target.",
-    "captures": []
+    "captures": [],
+    "category": "Archive Operations"
   },
   {
     "id": "archive-repack",
@@ -1040,7 +2541,8 @@
     ],
     "status": "pending",
     "reason": "Requires a real edited extracted file and a native Quick Pick.",
-    "captures": []
+    "captures": [],
+    "category": "Archive Operations"
   },
   {
     "id": "archive-preview-choice",
@@ -1056,7 +2558,8 @@
     ],
     "status": "pending",
     "reason": "Requires a real archive search result and a native Quick Pick.",
-    "captures": []
+    "captures": [],
+    "category": "Archive Operations"
   },
   {
     "id": "git-status",
@@ -1074,10 +2577,105 @@
     "captures": [
       {
         "id": "overview",
+        "format": "gif",
         "expect": ".pane",
-        "text": "README"
+        "text": "README",
+        "steps": [
+          {
+            "type": "move",
+            "target": {
+              "name": "README.md"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Select modified README.md"
+          },
+          {
+            "type": "check",
+            "selector": "[data-pane=\"0\"] [data-file-row][aria-selected=\"true\"]",
+            "text": "README"
+          },
+          {
+            "type": "pause",
+            "duration": 900
+          },
+          {
+            "type": "move",
+            "target": {
+              "name": "showcase-staged.txt"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Select staged file"
+          },
+          {
+            "type": "check",
+            "selector": "[data-pane=\"0\"] [data-file-row][aria-selected=\"true\"]",
+            "text": "showcase-staged"
+          },
+          {
+            "type": "pause",
+            "duration": 900
+          },
+          {
+            "type": "move",
+            "target": {
+              "name": "showcase-untracked.txt"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Select untracked file"
+          },
+          {
+            "type": "check",
+            "selector": "[data-pane=\"0\"] [data-file-row][aria-selected=\"true\"]",
+            "text": "showcase-untracked"
+          },
+          {
+            "type": "pause",
+            "duration": 1200
+          },
+          {
+            "type": "pause",
+            "duration": 350
+          },
+          {
+            "type": "move",
+            "target": {
+              "selector": "[data-main-menu] > button:nth-of-type(2)"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Open selection menu"
+          },
+          {
+            "type": "check",
+            "selector": "#main-menu-popup",
+            "text": "Clear selection"
+          },
+          {
+            "type": "move",
+            "target": {
+              "selector": "[data-menu-action=\"clear\"]"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Clear current selection"
+          },
+          {
+            "type": "check",
+            "selector": "[data-pane=\"0\"] [data-file-row][aria-selected=\"true\"]",
+            "absent": true
+          }
+        ]
       }
-    ]
+    ],
+    "category": "Git Operations"
   },
   {
     "id": "git-history",
@@ -1095,6 +2693,7 @@
     "captures": [
       {
         "id": "log",
+        "format": "gif",
         "select": {
           "side": 0,
           "name": "README.md"
@@ -1103,9 +2702,63 @@
         "surface": "git-history",
         "expect": "body",
         "ready": "#file-rows [data-file]",
-        "text": "Git History"
+        "text": "Git History",
+        "steps": [
+          {
+            "type": "check",
+            "selector": "#commit-rows [data-commit]",
+            "text": "Install Linux SVG icon loaders"
+          },
+          {
+            "type": "move",
+            "target": {
+              "selector": "#commit-rows [data-commit]:nth-child(2)"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Inspect previous commit"
+          },
+          {
+            "type": "pause",
+            "duration": 1500
+          },
+          {
+            "type": "check",
+            "selector": "#message",
+            "text": "Replace file-list tables with AG Grid Community"
+          },
+          {
+            "type": "pause",
+            "duration": 1400
+          },
+          {
+            "type": "move",
+            "target": {
+              "selector": "#commit-rows [data-commit]:first-child"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Return to latest commit"
+          },
+          {
+            "type": "pause",
+            "duration": 1500
+          },
+          {
+            "type": "check",
+            "selector": "#message",
+            "text": "Install Linux SVG icon loaders"
+          },
+          {
+            "type": "pause",
+            "duration": 1400
+          }
+        ]
       }
-    ]
+    ],
+    "category": "Git Operations"
   },
   {
     "id": "git-diff",
@@ -1123,6 +2776,7 @@
     "captures": [
       {
         "id": "working-tree",
+        "format": "gif",
         "select": {
           "side": 0,
           "name": "README.md"
@@ -1131,9 +2785,38 @@
         "surface": "editor",
         "expect": ".monaco-workbench",
         "ready": ".monaco-diff-editor",
-        "text": "README.md"
+        "text": "README.md",
+        "steps": [
+          {
+            "type": "key",
+            "key": "Ctrl+F",
+            "effect": "Find in the Git diff"
+          },
+          {
+            "type": "check",
+            "selector": ".find-widget"
+          },
+          {
+            "type": "pause",
+            "duration": 1300
+          },
+          {
+            "type": "key",
+            "key": "Escape",
+            "effect": "Close diff search"
+          },
+          {
+            "type": "check",
+            "selector": ".find-widget",
+            "absent": true
+          }
+        ]
       }
-    ]
+    ],
+    "shortcuts": [
+      "Ctrl+F"
+    ],
+    "category": "Git Operations"
   },
   {
     "id": "git-branches",
@@ -1150,6 +2833,7 @@
     "captures": [
       {
         "id": "quickpick",
+        "format": "gif",
         "command": "bitfroest.showLocalBranches",
         "surface": "quickpick",
         "expect": ".quick-input-widget",
@@ -1159,9 +2843,52 @@
         "select": {
           "side": 0,
           "name": "README.md"
-        }
+        },
+        "steps": [
+          {
+            "type": "move",
+            "target": {
+              "selector": ".quick-input-box input"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Filter local branches"
+          },
+          {
+            "type": "check",
+            "selector": ".quick-input-box input",
+            "focused": true
+          },
+          {
+            "type": "type",
+            "selector": ".quick-input-box input",
+            "text": "feature",
+            "value": "feature"
+          },
+          {
+            "type": "check",
+            "selector": ".quick-input-list .monaco-list-row",
+            "text": "feature/folder-workflow"
+          },
+          {
+            "type": "pause",
+            "duration": 1400
+          },
+          {
+            "type": "key",
+            "key": "Escape",
+            "effect": "Cancel branch list"
+          },
+          {
+            "type": "check",
+            "selector": ".quick-input-widget",
+            "absent": true
+          }
+        ]
       }
-    ]
+    ],
+    "category": "Git Operations"
   },
   {
     "id": "settings",
@@ -1183,9 +2910,42 @@
         "surface": "configuration",
         "expect": "#settings-section",
         "text": "Settings",
-        "ready": "#settings-results > *"
+        "ready": "#settings-results > *",
+        "format": "gif",
+        "steps": [
+          {
+            "type": "check",
+            "selector": "#settings-search"
+          },
+          {
+            "type": "move",
+            "target": {
+              "selector": "#settings-search"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Focus settings search"
+          },
+          {
+            "type": "type",
+            "selector": "#settings-search",
+            "text": "favorites",
+            "value": "favorites"
+          },
+          {
+            "type": "check",
+            "selector": "#settings-results",
+            "text": "Favorites"
+          },
+          {
+            "type": "pause",
+            "duration": 1400
+          }
+        ]
       }
-    ]
+    ],
+    "category": "Settings & Shortcuts"
   },
   {
     "id": "settings-favorites",
@@ -1207,9 +2967,57 @@
         "surface": "configuration",
         "expect": "#favorites-section",
         "text": "Add favorite",
-        "ready": "#favorites-section [data-add-favorite]"
+        "ready": "#favorites-section [data-add-favorite]",
+        "format": "gif",
+        "steps": [
+          {
+            "type": "move",
+            "target": {
+              "selector": "[data-add-group]"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Add a favorite group"
+          },
+          {
+            "type": "check",
+            "selector": "#favorite-name",
+            "value": "New group",
+            "focused": true
+          },
+          {
+            "type": "check",
+            "selector": "#configuration-status",
+            "text": "Unsaved changes"
+          },
+          {
+            "type": "pause",
+            "duration": 1100
+          },
+          {
+            "type": "move",
+            "target": {
+              "selector": "[data-discard]"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Discard the unsaved group"
+          },
+          {
+            "type": "check",
+            "selector": "#favorite-tree",
+            "text": "Project sources"
+          },
+          {
+            "type": "pause",
+            "duration": 1100
+          }
+        ]
       }
-    ]
+    ],
+    "category": "Settings & Shortcuts"
   },
   {
     "id": "settings-columns",
@@ -1231,9 +3039,50 @@
         "surface": "configuration",
         "expect": "#columns-section",
         "text": "Alignment",
-        "ready": "#columns-section table"
+        "ready": "#columns-section table",
+        "format": "gif",
+        "steps": [
+          {
+            "type": "move",
+            "target": {
+              "selector": "[data-column-row=\"attributes\"] [data-visible]"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Show the Attributes column"
+          },
+          {
+            "type": "check",
+            "selector": "#configuration-status",
+            "text": "Unsaved changes"
+          },
+          {
+            "type": "pause",
+            "duration": 1100
+          },
+          {
+            "type": "move",
+            "target": {
+              "selector": "[data-discard]"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Discard the column change"
+          },
+          {
+            "type": "check",
+            "selector": "[data-column-row=\"attributes\"] [data-visible]"
+          },
+          {
+            "type": "pause",
+            "duration": 1100
+          }
+        ]
       }
-    ]
+    ],
+    "category": "Settings & Shortcuts"
   },
   {
     "id": "settings-shortcuts",
@@ -1255,9 +3104,51 @@
         "surface": "configuration",
         "expect": "#shortcuts-section",
         "text": "Keyboard shortcuts",
-        "ready": "[data-shortcut-row]"
+        "ready": "[data-shortcut-row]",
+        "format": "gif",
+        "steps": [
+          {
+            "type": "move",
+            "target": {
+              "selector": "[data-shortcut-row] [data-shortcut-edit]:not(:disabled)"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Open shortcut editor"
+          },
+          {
+            "type": "check",
+            "selector": "#shortcut-dialog[open]"
+          },
+          {
+            "type": "pause",
+            "duration": 1300
+          },
+          {
+            "type": "move",
+            "target": {
+              "selector": "[data-shortcut-cancel]"
+            },
+            "allowDialogContent": true
+          },
+          {
+            "type": "click",
+            "effect": "Cancel shortcut editing"
+          },
+          {
+            "type": "check",
+            "selector": "#shortcut-dialog[open]",
+            "absent": true
+          },
+          {
+            "type": "pause",
+            "duration": 1000
+          }
+        ]
       }
-    ]
+    ],
+    "category": "Settings & Shortcuts"
   },
   {
     "id": "shortcut-capture",
@@ -1273,7 +3164,8 @@
     ],
     "status": "pending",
     "reason": "Needs the actual configuration webview and an unsaved recording session.",
-    "captures": []
+    "captures": [],
+    "category": "Settings & Shortcuts"
   },
   {
     "id": "language-picker",
@@ -1289,7 +3181,8 @@
     ],
     "status": "pending",
     "reason": "Uses a native Quick Pick requiring another capture target.",
-    "captures": []
+    "captures": [],
+    "category": "Settings & Shortcuts"
   },
   {
     "id": "tab-scope-picker",
@@ -1305,7 +3198,8 @@
     ],
     "status": "pending",
     "reason": "Uses a native Quick Pick requiring another capture target.",
-    "captures": []
+    "captures": [],
+    "category": "Settings & Shortcuts"
   },
   {
     "id": "favorite-name",
@@ -1321,12 +3215,13 @@
     ],
     "status": "pending",
     "reason": "Uses a native Input Box requiring another capture target.",
-    "captures": []
+    "captures": [],
+    "category": "Settings & Shortcuts"
   },
   {
     "id": "folder-locks",
     "parentId": "main",
-    "title": "Inspect folder locks",
+    "title": "Find processes holding files and folders open",
     "description": "A preview build keeps Build.log open and loads Preview-Plugin.dll. Inspect its real process references and the scan's access limits without releasing locks.",
     "paths": [
       "${demo}/left",
@@ -1336,9 +3231,13 @@
       "lock-inspector.js",
       "media/lock-inspector.js"
     ],
+    "shortcuts": [
+      "F5"
+    ],
     "captures": [
       {
         "id": "processes",
+        "format": "gif",
         "surface": "folder-locks",
         "expect": "body",
         "ready": "#processes[aria-busy=\"false\"] .process",
@@ -1348,14 +3247,72 @@
           "side": 0,
           "name": "Build-Output"
         },
-        "command": "bitfroest.inspect-folder-locks"
+        "command": "bitfroest.inspect-folder-locks",
+        "steps": [
+          {
+            "type": "move",
+            "target": {
+              "selector": "#processes [data-process]"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Select locking process"
+          },
+          {
+            "type": "check",
+            "selector": "#processes [data-process]:checked"
+          },
+          {
+            "type": "pause",
+            "duration": 900
+          },
+          {
+            "type": "key",
+            "key": "F5",
+            "effect": "Rescan file and folder locks"
+          },
+          {
+            "type": "pause",
+            "duration": 1000
+          },
+          {
+            "type": "check",
+            "selector": "#processes[aria-busy=\"false\"] .process",
+            "text": "Build.log"
+          },
+          {
+            "type": "check",
+            "selector": "#processes [data-process]:checked"
+          },
+          {
+            "type": "pause",
+            "duration": 1200
+          },
+          {
+            "type": "move",
+            "target": {
+              "selector": "#processes [data-process]:checked"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Clear process selection"
+          },
+          {
+            "type": "check",
+            "selector": "#processes [data-process]:checked",
+            "absent": true
+          }
+        ]
       }
-    ]
+    ],
+    "category": "File & Folder Locks"
   },
   {
     "id": "folder-lock-actions",
     "parentId": "folder-locks",
-    "title": "Folder lock actions",
+    "title": "Review actions for files held open",
     "description": "Inspect available process and folder actions for a real scan result.",
     "paths": [
       "${demo}/left",
@@ -1367,6 +3324,7 @@
     "captures": [
       {
         "id": "quickpick",
+        "format": "gif",
         "surface": "quickpick",
         "expect": ".quick-input-widget",
         "ready": ".quick-input-list .monaco-list-row",
@@ -1376,14 +3334,45 @@
           "side": 0,
           "name": "Build-Output"
         },
-        "command": "bitfroest.inspect-folder-locks"
+        "command": "bitfroest.inspect-folder-locks",
+        "steps": [
+          {
+            "type": "check",
+            "selector": ".quick-input-widget"
+          },
+          {
+            "type": "type",
+            "selector": ".quick-input-box input",
+            "text": "Copy process information"
+          },
+          {
+            "type": "check",
+            "selector": ".quick-input-list .monaco-list-row",
+            "text": "Copy process information"
+          },
+          {
+            "type": "pause",
+            "duration": 1300
+          },
+          {
+            "type": "key",
+            "key": "Escape",
+            "effect": "Cancel action list"
+          },
+          {
+            "type": "check",
+            "selector": ".quick-input-widget",
+            "absent": true
+          }
+        ]
       }
-    ]
+    ],
+    "category": "File & Folder Locks"
   },
   {
     "id": "folder-lock-target",
     "parentId": "folder-locks",
-    "title": "Copy locked folder: destination",
+    "title": "Choose a destination for a locked-folder copy",
     "description": "Review the complete destination path for a folder copy. The example leaves the input unconfirmed.",
     "paths": [
       "${demo}/left",
@@ -1395,6 +3384,7 @@
     "captures": [
       {
         "id": "destination",
+        "format": "gif",
         "surface": "inputbox",
         "expect": ".quick-input-widget",
         "ready": ".quick-input-box input",
@@ -1404,14 +3394,46 @@
           "side": 0,
           "name": "Build-Output"
         },
-        "command": "bitfroest.inspect-folder-locks"
+        "command": "bitfroest.inspect-folder-locks",
+        "steps": [
+          {
+            "type": "check",
+            "selector": ".quick-input-box input",
+            "focused": true
+          },
+          {
+            "type": "type",
+            "selector": ".quick-input-box input",
+            "text": "-Preview"
+          },
+          {
+            "type": "check",
+            "selector": ".quick-input-box input",
+            "focused": true
+          },
+          {
+            "type": "pause",
+            "duration": 1300
+          },
+          {
+            "type": "key",
+            "key": "Escape",
+            "effect": "Cancel destination path"
+          },
+          {
+            "type": "check",
+            "selector": ".quick-input-widget",
+            "absent": true
+          }
+        ]
       }
-    ]
+    ],
+    "category": "File & Folder Locks"
   },
   {
     "id": "folder-lock-confirmation",
     "parentId": "folder-locks",
-    "title": "Lock release warning",
+    "title": "Review the file-lock release warning",
     "description": "Review the warning before closing file handles or unloading modules. The example stops before Run.",
     "paths": [
       "${demo}/left",
@@ -1423,6 +3445,7 @@
     "captures": [
       {
         "id": "warning",
+        "format": "gif",
         "surface": "confirmation",
         "expect": ".monaco-dialog-box",
         "ready": ".monaco-dialog-box .dialog-buttons-row .monaco-button",
@@ -1432,9 +3455,31 @@
           "side": 0,
           "name": "Build-Output"
         },
-        "command": "bitfroest.inspect-folder-locks"
+        "command": "bitfroest.inspect-folder-locks",
+        "steps": [
+          {
+            "type": "check",
+            "selector": ".monaco-dialog-box",
+            "text": "Selected file handles will be closed"
+          },
+          {
+            "type": "pause",
+            "duration": 1300
+          },
+          {
+            "type": "key",
+            "key": "Escape",
+            "effect": "Cancel lock release"
+          },
+          {
+            "type": "check",
+            "selector": ".monaco-dialog-box",
+            "absent": true
+          }
+        ]
       }
-    ]
+    ],
+    "category": "File & Folder Locks"
   },
   {
     "id": "native-browse-dialogs",
@@ -1451,7 +3496,8 @@
     ],
     "status": "pending",
     "reason": "Native operating-system dialogs are outside the current WebContents image export.",
-    "captures": []
+    "captures": [],
+    "category": "Native Integration"
   },
   {
     "id": "native-drag-choice",
@@ -1467,7 +3513,8 @@
     ],
     "status": "pending",
     "reason": "Requires a real drag sequence and a native Quick Pick.",
-    "captures": []
+    "captures": [],
+    "category": "Native Integration"
   },
   {
     "id": "licenses",
@@ -1483,7 +3530,8 @@
     ],
     "status": "pending",
     "reason": "Uses the native VS Code Markdown preview, with a text-editor fallback, requiring another capture target.",
-    "captures": []
+    "captures": [],
+    "category": "Native Integration"
   },
   {
     "id": "xray-click",
@@ -1501,16 +3549,79 @@
     "captures": [
       {
         "id": "preview",
-        "select": {
-          "side": 0,
-          "name": "Notes.txt"
-        },
-        "xrayMode": "click",
+        "format": "gif",
         "expect": "[data-xray]:has(.monaco-editor .minimap)",
         "text": "X-Ray-Sample.sql",
-        "xrayFile": "X-Ray-Sample.sql"
+        "steps": [
+          {
+            "type": "move",
+            "target": {
+              "selector": "[data-cell][title=\"Notes.txt\"] [data-filename]",
+              "side": 0
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Select Notes.txt"
+          },
+          {
+            "type": "move",
+            "target": {
+              "selector": "[data-pane=\"0\"] [data-xray-toggle]"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Enable click preview"
+          },
+          {
+            "type": "check",
+            "selector": "[data-xray-toggle][data-mode=\"click\"]"
+          },
+          {
+            "type": "move",
+            "target": {
+              "selector": "[data-cell][title=\"X-Ray-Sample.sql\"] [data-filename]",
+              "side": 0
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Preview X-Ray-Sample.sql"
+          },
+          {
+            "type": "check",
+            "selector": "[data-xray] .xray-title",
+            "text": "X-Ray-Sample.sql"
+          },
+          {
+            "type": "pause",
+            "duration": 1600
+          },
+          {
+            "type": "move",
+            "target": {
+              "selector": "[data-pane=\"0\"] [data-xray-toggle]"
+            }
+          },
+          {
+            "type": "click",
+            "button": "right",
+            "effect": "Turn X-Ray off"
+          },
+          {
+            "type": "check",
+            "selector": "[data-xray]",
+            "absent": true
+          },
+          {
+            "type": "pause",
+            "duration": 500
+          }
+        ]
       }
-    ]
+    ],
+    "category": "Search & View"
   },
   {
     "id": "xray-hover",
@@ -1528,16 +3639,86 @@
     "captures": [
       {
         "id": "preview",
-        "select": {
-          "side": 0,
-          "name": "Colors.json"
-        },
-        "xrayMode": "hover",
+        "format": "gif",
         "expect": "[data-xray]:has(.monaco-editor .minimap)",
         "text": "X-Ray-Sample.ps1",
-        "xrayFile": "X-Ray-Sample.ps1"
+        "steps": [
+          {
+            "type": "move",
+            "target": {
+              "selector": "[data-cell][title=\"Colors.json\"] [data-filename]",
+              "side": 0
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Select Colors.json"
+          },
+          {
+            "type": "move",
+            "target": {
+              "selector": "[data-pane=\"0\"] [data-xray-toggle]"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Enable X-Ray preview"
+          },
+          {
+            "type": "move",
+            "target": {
+              "selector": "[data-pane=\"0\"] [data-xray-toggle]"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Switch to hover preview"
+          },
+          {
+            "type": "check",
+            "selector": "[data-xray-toggle][data-mode=\"hover\"]"
+          },
+          {
+            "type": "move",
+            "target": {
+              "selector": "[data-cell][title=\"X-Ray-Sample.ps1\"] [data-filename]",
+              "side": 0
+            },
+            "duration": 900
+          },
+          {
+            "type": "check",
+            "selector": "[data-xray] .xray-title",
+            "text": "X-Ray-Sample.ps1"
+          },
+          {
+            "type": "pause",
+            "duration": 1600
+          },
+          {
+            "type": "move",
+            "target": {
+              "selector": "[data-pane=\"0\"] [data-xray-toggle]"
+            }
+          },
+          {
+            "type": "click",
+            "button": "right",
+            "effect": "Turn X-Ray off"
+          },
+          {
+            "type": "check",
+            "selector": "[data-xray]",
+            "absent": true
+          },
+          {
+            "type": "pause",
+            "duration": 500
+          }
+        ]
       }
-    ]
+    ],
+    "category": "Search & View"
   },
   {
     "id": "quick-diff-folder",
@@ -1556,14 +3737,75 @@
       {
         "id": "preview",
         "quickDiffMode": "folder",
+        "format": "gif",
         "expect": "[data-quick-diff]",
         "text": "Orders.sql",
-        "select": {
-          "side": 1,
-          "name": "Checklist.txt"
-        }
+        "steps": [
+          {
+            "type": "move",
+            "target": {
+              "selector": "[data-pane=\"0\"] [data-quick-diff-toggle]"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Open current-folder diff"
+          },
+          {
+            "type": "check",
+            "selector": "[data-quick-diff-toggle][data-mode=\"folder\"]"
+          },
+          {
+            "type": "check",
+            "selector": "[data-quick-diff-list] [data-diff-path=\"src/Orders.sql\"]"
+          },
+          {
+            "type": "move",
+            "target": {
+              "selector": "[data-diff-path=\"src/Orders.sql\"] .quick-diff-name",
+              "side": 0
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Open Orders.sql diff"
+          },
+          {
+            "type": "pause",
+            "duration": 1700
+          },
+          {
+            "type": "move",
+            "target": {
+              "selector": "[data-quick-diff]",
+              "side": 1
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Focus the read-only diff preview"
+          },
+          {
+            "type": "key",
+            "key": "Escape",
+            "effect": "Close Quick Diff"
+          },
+          {
+            "type": "check",
+            "selector": "[data-quick-diff]",
+            "absent": true
+          },
+          {
+            "type": "pause",
+            "duration": 500
+          }
+        ]
       }
-    ]
+    ],
+    "shortcuts": [
+      "Escape"
+    ],
+    "category": "Git Operations"
   },
   {
     "id": "quick-diff-repository",
@@ -1582,13 +3824,88 @@
       {
         "id": "preview",
         "quickDiffMode": "repository",
+        "format": "gif",
         "expect": "[data-quick-diff]",
         "text": "Orders.sql",
-        "select": {
-          "side": 1,
-          "name": "Checklist.txt"
-        }
+        "steps": [
+          {
+            "type": "move",
+            "target": {
+              "selector": "[data-pane=\"0\"] [data-quick-diff-toggle]"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Open current-folder diff"
+          },
+          {
+            "type": "check",
+            "selector": "[data-quick-diff-toggle][data-mode=\"folder\"]"
+          },
+          {
+            "type": "move",
+            "target": {
+              "selector": "[data-pane=\"0\"] [data-quick-diff-toggle]"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Include the entire repository"
+          },
+          {
+            "type": "check",
+            "selector": "[data-quick-diff-toggle][data-mode=\"repository\"]"
+          },
+          {
+            "type": "check",
+            "selector": "[data-quick-diff-list] [data-diff-path=\"Overview.md\"]"
+          },
+          {
+            "type": "move",
+            "target": {
+              "selector": "[data-diff-path=\"Overview.md\"] .quick-diff-name",
+              "side": 0
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Open root-level Overview.md diff"
+          },
+          {
+            "type": "pause",
+            "duration": 1700
+          },
+          {
+            "type": "move",
+            "target": {
+              "selector": "[data-quick-diff]",
+              "side": 1
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Focus the read-only diff preview"
+          },
+          {
+            "type": "key",
+            "key": "Escape",
+            "effect": "Close Quick Diff"
+          },
+          {
+            "type": "check",
+            "selector": "[data-quick-diff]",
+            "absent": true
+          },
+          {
+            "type": "pause",
+            "duration": 500
+          }
+        ]
       }
-    ]
+    ],
+    "shortcuts": [
+      "Escape"
+    ],
+    "category": "Git Operations"
   }
 ]

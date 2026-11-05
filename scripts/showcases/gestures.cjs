@@ -29,10 +29,10 @@ function frameList(records, endedAt) {
   return lines;
 }
 
-async function dispatchMouseInput(event, dispatch, annotate) {
+async function dispatchMouseInput(event, dispatch, annotate, effect) {
   await dispatch(event);
   if (event.type === 'mousePressed' || event.type === 'mouseReleased') {
-    await annotate(event.button === 'right' ? 'Right click' : 'Left click', event.type === 'mousePressed');
+    await annotate(event.button === 'right' ? 'Right click' : 'Left click', event.type === 'mousePressed', effect);
   }
 }
 
@@ -60,6 +60,25 @@ function installPointer() {
     style.textContent = '.showcase-ring{opacity:0;display:block;position:absolute;width:24px;height:24px;left:-12px;top:-12px;border:2px solid #ffc857;border-radius:50%;background:#ffc85733;box-sizing:border-box}.showcase-key{position:absolute;left:18px;top:16px;background:#202020ed;color:#fff;border:1px solid #ffc857;border-radius:4px;padding:5px 9px;font:13px "Segoe UI",sans-serif;white-space:nowrap}#showcase-keys kbd{min-width:28px;text-align:center;padding:8px 12px;border:1px solid #888;border-bottom-width:3px;border-radius:5px;font:600 18px "Segoe UI",sans-serif;background:#ffffff0a}.screencast-keyboard{visibility:hidden}';
     document.head.append(style); document.body.append(pointer);
     return position;
+}
+
+function findTargetPoint({ selector, side = 0, name, xFraction }, root = document) {
+  const pane = root.querySelector(`[data-pane="${side}"]`);
+  const findRow = () => name && pane ? [...pane.querySelectorAll('[data-file-row][data-id]')]
+    .find(item => item.title === name || item.querySelector('[data-cell]')?.title === name) : null;
+  let row = findRow();
+  if (name && pane && !row) {
+    const grid = root.defaultView?.agGrid?.getGridApi(`files-${side}`);
+    let rowIndex = -1;
+    grid?.forEachNodeAfterFilterAndSort(node => { if (node.data?.name === name) rowIndex = node.rowIndex; });
+    if (rowIndex >= 0) { grid.ensureIndexVisible(rowIndex, 'middle'); row = findRow(); }
+  }
+  const element = name ? row && (selector === '[data-filename]' ? row.querySelector('[data-filename]') || row : row)
+    : pane?.querySelector(selector) || root.querySelector(selector);
+  const rect = element?.getBoundingClientRect();
+  if (!rect?.width || !rect.height) throw new Error(`Recording target missing: ${name || selector}`);
+  const fraction = xFraction ?? (name ? .25 : .5);
+  return { x: rect.left + rect.width * fraction, y: rect.top + rect.height / 2 };
 }
 
 async function recordGesture({ capture, scene, page, target, evaluate, invoke, run, file, waitFor: poll }) {
@@ -95,12 +114,12 @@ async function recordGesture({ capture, scene, page, target, evaluate, invoke, r
     return value;
   };
   const keyEvents = [];
-  const keyEvent = async (type, key, code, windowsVirtualKeyCode, modifiers = 0) => {
+  const keyEvent = async (type, key, code, windowsVirtualKeyCode, modifiers = 0, effect) => {
     if (type === 'keyDown' && !buttons) await pacing.beforeInput();
     await page.call('Input.dispatchKeyEvent', { type, key, code, windowsVirtualKeyCode, modifiers });
     keyEvents.push({ type, key, code, modifiers, timestamp: Date.now() });
     await refreshProtection();
-    await pageEvaluate((type, key) => window.__showcasePresentation.key(type, key), type, key);
+    await pageEvaluate((type, key, effect) => window.__showcasePresentation.key(type, key, effect), type, key, effect);
     await hold(type === 'keyDown' ? presentationTiming.keyHold : presentationTiming.keyRelease);
   };
   let recordingError;
@@ -114,13 +133,13 @@ async function recordGesture({ capture, scene, page, target, evaluate, invoke, r
   });
   const hold = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
   const mouseEvents = [];
-  const mouse = async (type, point = position, button = 'none', modifiers = 0) => {
+  const mouse = async (type, point = position, button = 'none', modifiers = 0, effect) => {
     if (type === 'mousePressed' && !buttons) await pacing.beforeInput();
     position = point;
     if (type === 'mousePressed') buttons |= button === 'right' ? 2 : 1;
     if (type === 'mouseReleased') buttons &= ~(button === 'right' ? 2 : 1);
-    const update = () => pageEvaluate((type, point, button) => window.__showcasePresentation.pointer(type, point, button), type, point, button);
-    await dispatchMouseInput({ type, x: point.x, y: point.y, button, buttons, modifiers, clickCount: type === 'mouseMoved' ? 0 : 1 }, event => page.call('Input.dispatchMouseEvent', event), update);
+    const update = () => pageEvaluate((type, point, button, effect) => window.__showcasePresentation.pointer(type, point, button, effect), type, point, button, effect);
+    await dispatchMouseInput({ type, x: point.x, y: point.y, button, buttons, modifiers, clickCount: type === 'mouseMoved' ? 0 : 1 }, event => page.call('Input.dispatchMouseEvent', event), update, effect);
     if (type === 'mouseMoved') await update();
     else await refreshProtection();
     mouseEvents.push({ type, ...point, button, buttons, timestamp: Date.now() });
@@ -133,17 +152,20 @@ async function recordGesture({ capture, scene, page, target, evaluate, invoke, r
       if (result.exceptionDetails) throw new Error(result.exceptionDetails.text);
     }
   };
-  const point = async (selector, side, name, xFraction = .25) => {
-    const rect = await evaluate(({ selector, side, name, xFraction }) => {
-      const pane = document.querySelector(`[data-pane="${side}"]`);
-      const element = name ? [...pane.querySelectorAll('[data-file-row][data-id]')].find(row => row.title === name || row.querySelector('[data-cell]')?.title === name) : pane.querySelector(selector);
-      if (!element) throw new Error(`Gesture target missing: ${name || selector}`);
-      const r = (name && selector === '[data-filename]' ? element.querySelector('[data-filename]') || element : element).getBoundingClientRect(); return { x: r.left + r.width * xFraction, y: r.top + r.height / 2 };
-    }, { selector, side, name, xFraction });
+  const point = async (selector, side, name, xFraction) => {
+    const rect = await evaluate(new Function('target', `return (${findTargetPoint.toString()})(target, document);`), { selector, side, name, xFraction });
     return { x: offset.x + rect.x, y: offset.y + rect.y };
   };
-  const click = async (p, button = 'left', modifiers = 0) => {
-    await mouse('mouseMoved', p); await mouse('mousePressed', p, button, modifiers); await mouse('mouseReleased', p, button, modifiers);
+  const click = async (p, button = 'left', modifiers = 0, effect) => {
+    await mouse('mouseMoved', p); await mouse('mousePressed', p, button, modifiers, effect); await mouse('mouseReleased', p, button, modifiers, effect);
+  };
+  const clearSelection = async () => {
+    await move(await point('[data-main-menu] > button:nth-of-type(2)', 0));
+    await click(position, 'left', 0, 'Open selection menu');
+    await waitFor(() => evaluate(() => Boolean(document.querySelector('#main-menu-popup [data-menu-action="clear"]'))));
+    await move(await point('[data-menu-action="clear"]', 0));
+    await click(position, 'left', 0, 'Clear current selection');
+    await waitFor(() => evaluate(() => window.CommanderHost.getState().panes[0].selected.length === 0));
   };
   const move = async (end, duration = 660) => {
     if (!buttons) await pacing.beforeInput();
@@ -173,25 +195,39 @@ async function recordGesture({ capture, scene, page, target, evaluate, invoke, r
       result = { steps: await executeSequence(capture.steps, {
         move: async step => {
           const t = step.target;
-          await move(await point(t.selector || '[data-filename]', t.side ?? 0, t.name, t.xFraction ?? .25), step.duration || 660);
+          await move(await point(t.selector || '[data-filename]', t.side ?? 0, t.name, t.xFraction), step.duration || 660);
         },
-        mouse: async (type, button) => {
+        mouse: async (type, button, effect) => {
           if (type === 'press') await evaluate(new Function('p', `(${assertSafePointer.toString()})(document.elementFromPoint(p.x, p.y));`), { x: position.x - offset.x, y: position.y - offset.y });
-          await mouse(type === 'press' ? 'mousePressed' : 'mouseReleased', position, button);
+          await mouse(type === 'press' ? 'mousePressed' : 'mouseReleased', position, button, 0, effect);
         },
         pause: hold,
-        key: async name => {
+        key: async (name, effect) => {
           if (name !== 'Escape') await evaluate(() => {
             if (document.querySelector('dialog[open], [role="dialog"]')) throw new Error('Only cancellation keys are allowed in dialogs.');
           });
-          const [key, code, vk] = keys[name], control = name.startsWith('Ctrl+');
+          const [key, code, vk, modifiers = 0] = keys[name], control = name.startsWith('Ctrl+'), shift = name.startsWith('Shift+'), alt = name.startsWith('Alt+');
           if (control) await keyEvent('keyDown', 'Control', 'ControlLeft', 17, 2);
+          if (shift) await keyEvent('keyDown', 'Shift', 'ShiftLeft', 16, 8);
+          if (alt) await keyEvent('keyDown', 'Alt', 'AltLeft', 18, 1);
           try {
-            await keyEvent('keyDown', key, code, vk, control ? 2 : 0);
+            await keyEvent('keyDown', key, code, vk, control ? 2 : shift ? 8 : alt ? 1 : modifiers, effect);
           } finally {
-            await keyEvent('keyUp', key, code, vk, control ? 2 : 0);
+            await keyEvent('keyUp', key, code, vk, control ? 2 : shift ? 8 : alt ? 1 : modifiers);
+            if (alt) await keyEvent('keyUp', 'Alt', 'AltLeft', 18);
+            if (shift) await keyEvent('keyUp', 'Shift', 'ShiftLeft', 16, 8);
             if (control) await keyEvent('keyUp', 'Control', 'ControlLeft', 17);
           }
+        },
+        type: async step => {
+          const safe = await evaluate(step => {
+            const field = document.querySelector(step.selector);
+            return field && document.activeElement === field && field.matches('input:not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="file"]),textarea,[contenteditable="true"]') &&
+              !field.closest('button[type="submit"],input[type="submit"],#modal-ok,[data-confirm-action]');
+          }, step);
+          if (!safe) throw new Error('Text entry requires a focused, nonconfirming text field.');
+          await page.call('Input.insertText', { text: step.text });
+          await refreshProtection();
         },
         check: step => waitFor(async () => {
           const state = await evaluate(new Function('step', `return (${inspectState.toString()})(step);`), step);
@@ -200,27 +236,33 @@ async function recordGesture({ capture, scene, page, target, evaluate, invoke, r
       }) };
     } else if (capture.gesture === 'path-copy') {
       await move(await point('.path-breadcrumbs', 0)); await hold(350);
-      await mouse('mouseMoved'); await mouse('mousePressed', position, 'right'); await hold(20);
-      await mouse('mouseReleased', position, 'right');
+      await mouse('mouseMoved'); await mouse('mousePressed', position, 'right', 0, 'Copy folder path'); await hold(20);
+      await mouse('mouseReleased', position, 'right', 0, 'Copy folder path');
       await waitFor(async () => (await invoke('showcase.clipboard-check', [scene.paths[0].replace(/\//g, '\\')])).matched);
       result = { clipboardMatched: true };
     } else if (capture.gesture === 'ctrl-l') {
-      await move(await point('.list', 0, 'Notes.txt')); await click(position); await hold(600);
+      await move(await point('.list', 0, 'Notes.txt')); await click(position, 'left', 0, 'Focus file list'); await hold(600);
       await keyEvent('keyDown', 'Control', 'ControlLeft', 17, 2);
-      await keyEvent('keyDown', 'l', 'KeyL', 76, 2);
+      await keyEvent('keyDown', 'l', 'KeyL', 76, 2, 'Edit folder path');
       await keyEvent('keyUp', 'l', 'KeyL', 76, 2);
       await keyEvent('keyUp', 'Control', 'ControlLeft', 17);
       await waitFor(() => evaluate(() => { const input = document.activeElement; return input.matches('.path-input') && input.selectionStart === 0 && input.selectionEnd === input.value.length; }));
       result = { addressFocused: true, pathSelected: true };
+      await keyEvent('keyDown', 'Escape', 'Escape', 27, 0, 'Exit path editing');
+      await keyEvent('keyUp', 'Escape', 'Escape', 27);
+      await clearSelection();
+      result.selectionCleared = true;
     } else if (capture.gesture === 'right-selection') {
       const start = await point('.list', 0, 'Changes.txt', .15), end = await point('.list', 0, 'Colors.json', .65);
-      await move(start); await hold(300); await mouse('mouseMoved'); await mouse('mousePressed', position, 'right');
+      await move(start); await hold(300); await mouse('mouseMoved'); await mouse('mousePressed', position, 'right', 0, 'Select files');
       await move(end); await mouse('mouseReleased', position, 'right');
       await waitFor(() => evaluate(() => window.CommanderHost.getState().panes[0].selected.length >= 2));
       result = { selectionCount: await evaluate(() => window.CommanderHost.getState().panes[0].selected.length) };
+      await clearSelection();
+      result.selectionCleared = true;
     } else if (capture.gesture === 'right-drag') {
       const first = await point('.list', 0, 'Changes.txt');
-      await move(first); await hold(300); await mouse('mouseMoved'); await mouse('mousePressed', first, 'right');
+      await move(first); await hold(300); await mouse('mouseMoved'); await mouse('mousePressed', first, 'right', 0, 'Drag selected files');
       await hold(650);
       await waitFor(() => evaluate(() => document.body.dataset.fileDragCursor === 'ready'));
       await move(await point('.list', 1, 'inbox'), 880); await hold(400);
@@ -228,6 +270,11 @@ async function recordGesture({ capture, scene, page, target, evaluate, invoke, r
       await waitFor(() => evaluate(() => document.querySelector('#modal[open] #modal-title')?.textContent === 'Move'));
       result = { moveDialog: true, destination: await evaluate(() => document.querySelector('#value').value) };
       if (result.destination.replace(/\\/g, '/').toLowerCase() !== `${scene.paths[1]}/inbox`.toLowerCase()) throw new Error('The actual drop target differs from the requested destination.');
+      await keyEvent('keyDown', 'Escape', 'Escape', 27, 0, 'Cancel move');
+      await keyEvent('keyUp', 'Escape', 'Escape', 27);
+      await waitFor(() => evaluate(() => !document.querySelector('dialog[open]')));
+      await clearSelection();
+      result.selectionCleared = true;
     } else throw new Error(`Unknown gesture: ${capture.gesture}`);
     await move(origin);
     await pacing.end();
@@ -261,4 +308,4 @@ function encodingArgs(destination, webm, duration, input) {
     webm ? 'fps=30,scale=1280:-2:flags=lanczos' : 'fps=30,scale=1280:-1:flags=lanczos,split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=3',
     '-t', String(duration), ...(webm ? ['-an', '-c:v', 'libvpx-vp9', '-crf', '32', '-b:v', '0', '-pix_fmt', 'yuv420p'] : ['-loop', '0']), destination];
 }
-module.exports = { recordGesture, animatePointer, pulsePointer, frameList, installPointer, encodingArgs, dispatchMouseInput };
+module.exports = { recordGesture, animatePointer, pulsePointer, frameList, installPointer, findTargetPoint, encodingArgs, dispatchMouseInput };

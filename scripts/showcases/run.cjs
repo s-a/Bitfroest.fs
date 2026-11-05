@@ -95,7 +95,10 @@ function validateCatalog(catalog) {
       captures.add(capture.id);
       if (capture.format && !['png', 'gif', 'webm'].includes(capture.format)) throw new Error('Unsupported recording format.');
       if (capture.steps) {
-        if (!['gif', 'webm'].includes(capture.format) || capture.gesture || capture.action || capture.surface || capture.click || capture.select || capture.command) throw new Error('A recording sequence requires an exclusive animation capture.');
+        const surfacePreparation = Boolean(capture.surface);
+        const unsupportedSetup = capture.gesture || capture.action || capture.click ||
+          (!surfacePreparation && (capture.select || capture.command));
+        if (!['gif', 'webm'].includes(capture.format) || unsupportedSetup) throw new Error('A recording sequence requires an animation capture with only supported surface preparation.');
         require('./sequence.cjs').validateSequence(capture.steps);
       }
       if (['gif', 'webm'].includes(capture.format) && !capture.steps && !['path-copy', 'ctrl-l', 'right-selection', 'right-drag'].includes(capture.gesture)) throw new Error('An animation requires a sequence or known gesture.');
@@ -304,6 +307,14 @@ async function main() {
       for (const capture of scene.captures) {
         stage = `${scene.id}/${capture.id}: selection`;
         await evaluate(() => { document.querySelector('dialog[open] #modal-cancel')?.click(); });
+        if (capture.steps && !capture.surface) {
+          stage = `${scene.id}/${capture.id}: recording sequence`;
+          const { recordGesture } = require('./gestures.cjs');
+          const file = filename(scene, capture);
+          const size = await recordGesture({ capture, scene, view, page, target, evaluate, invoke, run, file, waitFor });
+          images.push({ scene: scene.id, capture: capture.id, file, ...size });
+          console.log(`Rendered ${file}`); continue;
+        }
         if (capture.select) await waitFor(() => evaluate(({ side = 0, name }) => {
           const pane = document.querySelector(`[data-pane="${side}"]`);
           const row = [...pane.querySelectorAll('[data-file-row][data-id]')].find(item => item.title === name || item.querySelector('[data-cell]')?.title === name);
@@ -358,8 +369,17 @@ async function main() {
         if (capture.surface) {
           stage = `${scene.id}/${capture.id}: surface ${capture.surface}`;
           const { captureSurface } = require('./surfaces.cjs');
-          const result = await captureSurface({ capture, targets, connect, connections, invoke, waitFor });
-          const bytes = Buffer.from(result.data, 'base64'), file = filename(scene, capture);
+          const file = filename(scene, capture);
+          const result = await captureSurface({ capture, targets, connect, connections, invoke, waitFor, run, file });
+          if (['gif', 'webm'].includes(capture.format)) {
+            const bytes = Buffer.from(result.data, 'base64');
+            fs.writeFileSync(path.join(run, file), bytes);
+            const fallback = result.fallback ? filename(scene, { ...capture, format: 'gif' }) : undefined;
+            if (fallback) fs.writeFileSync(path.join(run, fallback), Buffer.from(result.fallback, 'base64'));
+            images.push({ scene: scene.id, capture: capture.id, file, ...(fallback ? { fallback } : {}), width: result.width, height: result.height });
+            console.log(`Rendered ${file}`); continue;
+          }
+          const bytes = Buffer.from(result.data, 'base64');
           fs.writeFileSync(path.join(run, file), bytes);
           images.push({ scene: scene.id, capture: capture.id, file, width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) });
           console.log(`Rendered ${file}`); continue;

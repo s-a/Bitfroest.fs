@@ -28,6 +28,7 @@ function installPresentation(timing) {
     #showcase-keys kbd{font-size:16px;border-radius:4px;transition:background-color 100ms,transform 100ms,box-shadow 100ms}
     #showcase-keys kbd[data-state="pressed"]{background:var(--vscode-toolbar-activeBackground,#ffffff18);border-color:var(--vscode-focusBorder,#007fd4);transform:translateY(2px);box-shadow:inset 0 1px 3px #0005}
     #showcase-keys kbd[data-state="released"]{background:transparent;border-color:var(--vscode-widget-border,#666);transform:translateY(0);box-shadow:0 1px 1px #0003}
+    #showcase-keys .showcase-key-effect{font:13px "Segoe UI",sans-serif;opacity:.9;margin-left:5px;white-space:nowrap}
   `;
   document.head.append(style);
   pointer.style.color = 'var(--vscode-focusBorder,#007fd4)';
@@ -94,21 +95,26 @@ function installPresentation(timing) {
     delete ring.dataset.pulseUntil;
   };
   window.__showcasePresentation = {
-    pointer(type, point, button) {
+    pointer(type, point, button, effect) {
       position = point; pointer.style.left = `${point.x}px`; pointer.style.top = `${point.y}px`;
       if (type === 'mousePressed') {
-        pointer.dataset.down = 'true'; label.textContent = button === 'right' ? 'Right click' : 'Left click';
+        pointer.dataset.down = 'true'; label.textContent = `${button === 'right' ? 'Right click' : 'Left click'}${effect ? ` (${effect})` : ''}`;
         show(label); expire(label);
-      } else if (type === 'mouseReleased') pointer.dataset.down = 'false';
+      } else if (type === 'mouseReleased') { pointer.dataset.down = 'false'; if (!label.hidden) expire(label); }
+      else if (type === 'mouseMoved' && pointer.dataset.down === 'true' && !label.hidden) { show(label); expire(label); }
       layout();
     },
-    key(type, key) {
+    key(type, key, effect) {
       const name = key === 'Control' ? 'Ctrl' : key.length === 1 ? key.toUpperCase() : key;
       if (type === 'keyDown') {
-        pressed.add(name); show(panel); panel.replaceChildren();
+        pressed.add(name); show(panel); panel.replaceChildren(); delete panel.dataset.effect;
         for (const [index, value] of [...pressed].entries()) {
           if (index) { const plus = create('span'); plus.textContent = '+'; panel.append(plus); }
           const cap = create('kbd'); cap.textContent = value; cap.dataset.pressed = 'true'; cap.dataset.state = 'pressed'; panel.append(cap);
+        }
+        if (effect) {
+          panel.dataset.effect = effect;
+          const caption = create('span'); caption.className = 'showcase-key-effect'; caption.textContent = `(${effect})`; panel.append(caption);
         }
       } else {
         pressed.delete(name);

@@ -3,6 +3,7 @@ const path = require('node:path');
 
 const begin = '<!-- showcase-gallery:start -->', end = '<!-- showcase-gallery:end -->';
 const mediaDirectory = 'media/marketplace/showcases';
+function escapeHtml(value) { return String(value).replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]); }
 function mediaName(value) {
   if (!/^\d{4}-windows-en-dark-[a-z0-9-]+\.(png|gif|webm)$/.test(value)) throw new Error('Invalid showcase media filename.');
   return value;
@@ -15,15 +16,25 @@ function galleryFile(image) {
 function renderGallery(manifest, catalog = []) {
   const lines = [begin, '## Feature walkthrough', '',
     'Windows examples with sample files. File operations stop before confirmation.', ''];
-  for (const section of manifest.sections.filter(item => item.status === 'rendered' && item.id !== 'main')) {
-    if (!section.images.length) continue;
-    const title = catalog.find(scene => scene.id === section.id)?.title || section.title;
-    lines.push(`<details>`, `<summary>${title}</summary>`, '');
-    for (const image of section.images) {
-      const alt = image.alt === section.title ? title : image.alt;
-      lines.push(`![${alt}](${mediaDirectory}/${galleryFile(image)})`, '');
+  const groups = new Map();
+  for (const section of manifest.sections.filter(item => item.status === 'rendered' && item.id !== 'main' && item.images.length)) {
+    const scene = catalog.find(item => item.id === section.id);
+    const category = scene?.category || 'Other';
+    if (!groups.has(category)) groups.set(category, []);
+    groups.get(category).push({ section, scene });
+  }
+  for (const [category, sections] of groups) {
+    lines.push(`### ${escapeHtml(category)}`, '');
+    for (const { section, scene } of sections) {
+      const title = scene?.title || section.title;
+      const shortcuts = Array.isArray(scene?.shortcuts) ? scene.shortcuts.map(key => `<kbd>${escapeHtml(key)}</kbd>`).join(' ') : '';
+      lines.push(`<details>`, `<summary>${shortcuts ? `${shortcuts} ` : ''}${escapeHtml(title)}</summary>`, '');
+      for (const image of section.images) {
+        const alt = image.alt === section.title ? title : image.alt;
+        lines.push(`![${alt}](${mediaDirectory}/${galleryFile(image)})`, '');
+      }
+      lines.push('</details>', '');
     }
-    lines.push('</details>', '');
   }
   lines.push(end); return lines.join('\n');
 }

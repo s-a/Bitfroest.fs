@@ -94,6 +94,36 @@ test('sequences reject unsafe keys, malformed targets and unbalanced mouse butto
   }
 });
 
+test('sequences allow file-manager keys used to open nonconfirming showcases', () => {
+  for (const key of ['F2', 'F3', 'F5', 'F6', 'F7', 'F8', 'Shift+F4', 'Shift+F8']) {
+    assert.doesNotThrow(() => validateSequence([{ type: 'key', key }]));
+  }
+});
+
+test('sequences allow the read-only editor Find chord', () => {
+  assert.doesNotThrow(() => validateSequence([
+    { type: 'key', key: 'Ctrl+F', effect: 'Find in diff' },
+    { type: 'key', key: 'Escape', effect: 'Close diff search' }
+  ]));
+});
+
+test('sequences allow the nonconfirming numeric keypad selection commands', () => {
+  assert.doesNotThrow(() => validateSequence([
+    { type: 'key', key: 'NumpadAdd', effect: 'Select files by mask' },
+    { type: 'key', key: 'Escape', effect: 'Cancel group selection' },
+    { type: 'key', key: 'NumpadSubtract', effect: 'Deselect files by mask' },
+    { type: 'key', key: 'Ctrl+NumpadSubtract', effect: 'Clear current selection' }
+  ]));
+});
+
+test('sequences allow the documented archive action chords', () => {
+  assert.doesNotThrow(() => validateSequence([
+    { type: 'key', key: 'Alt+F5', effect: 'Open packing options' },
+    { type: 'key', key: 'Escape', effect: 'Cancel packing options' },
+    { type: 'key', key: 'Alt+F9', effect: 'Open extraction options' }
+  ]));
+});
+
 test('failed interface checks stop the sequence before further input', async () => {
   let keys = 0;
   await assert.rejects(executeSequence([{ type: 'check', selector: '.inline-rename' }, { type: 'key', key: 'F2' }], {
@@ -106,11 +136,14 @@ test('interface checks read visibility, focus, text and value without changing t
   const dom = new JSDOM('<input class="inline-rename" value="Notes.txt"><span hidden>Hidden</span>');
   try {
     const input = dom.window.document.querySelector('input');
+    const hiddenWidget = dom.window.document.createElement('div'); hiddenWidget.setAttribute('aria-hidden', 'true'); dom.window.document.body.append(hiddenWidget);
     input.getBoundingClientRect = () => ({ width: 100, height: 20 });
+    hiddenWidget.getBoundingClientRect = () => ({ width: 100, height: 20 });
     input.focus();
     assert.equal(inspectState({ selector: 'input', value: 'Notes.txt', focused: true }, dom.window.document).matched, true);
     assert.equal(inspectState({ selector: 'input', value: 'Other.txt' }, dom.window.document).matched, false);
     assert.equal(inspectState({ selector: 'span', absent: true }, dom.window.document).matched, true);
+    assert.equal(inspectState({ selector: 'div', absent: true }, dom.window.document).matched, true);
     assert.equal(input.value, 'Notes.txt');
   } finally { dom.window.close(); }
 });
