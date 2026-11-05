@@ -83,7 +83,7 @@ function validateCatalog(catalog) {
     if (scene.parentId && !ids.has(scene.parentId)) throw new Error('A parent must precede its subsections.');
     ids.add(scene.id);
     if (!scene.title?.trim() || !scene.description?.trim()) throw new Error('A title and description are required.');
-    if (scene.fixture !== undefined && !['handover', 'deletion', 'archive-story', 'file-lock', 'organize-notes'].includes(scene.fixture)) throw new Error('Unsupported showcase fixture.');
+    if (scene.fixture !== undefined && !['handover', 'deletion', 'archive-story', 'file-lock', 'organize-notes', 'search-story'].includes(scene.fixture)) throw new Error('Unsupported showcase fixture.');
     if (scene.paths?.length !== 2 || scene.paths.some(p => !path.win32.isAbsolute(p))) throw new Error('Two absolute demo paths are required.');
     if (scene.status && !['pending', 'excluded'].includes(scene.status)) throw new Error('Invalid inventory status.');
     if (scene.status && !scene.reason?.trim()) throw new Error('An inventory status requires a reason.');
@@ -103,7 +103,7 @@ function validateCatalog(catalog) {
         if (!['gif', 'webm'].includes(capture.format) || unsupportedSetup) throw new Error('A recording sequence requires an animation capture with only supported surface preparation.');
         require('./sequence.cjs').validateSequence(capture.steps);
         const confirmations = capture.steps.filter(step => step.type === 'confirm');
-        const permitted = { handover: ['mkdir', 'open', 'copy', 'rename'], deletion: ['trash', 'delete-permanent'], 'archive-story': ['archive-pack', 'archive-unpack', 'open-archive', 'leave-archive', 'show-unpacked-folder'], 'file-lock': ['lock-delete', 'lock-inspect', 'lock-refresh'], 'organize-notes': ['create-notes', 'move-notes', 'batch-rename'] };
+        const permitted = { handover: ['mkdir', 'open', 'copy', 'rename'], deletion: ['trash', 'delete-permanent'], 'archive-story': ['archive-pack', 'archive-unpack', 'open-archive', 'leave-archive', 'show-unpacked-folder'], 'file-lock': ['lock-delete', 'lock-inspect', 'lock-refresh'], 'organize-notes': ['create-notes', 'move-notes', 'batch-rename'], 'search-story': ['search-start', 'search-view', 'search-find'] };
         if (confirmations.length && (capture.surface || confirmations.some(step => !permitted[scene.fixture]?.includes(step.action)))) throw new Error('Fixture confirmations require the matching showcase fixture.');
         if (capture.steps.some(step => step.type === 'fixture-path') && (scene.fixture !== 'archive-story' || capture.surface)) throw new Error('Fixture path entry requires the archive fixture.');
       }
@@ -232,6 +232,7 @@ async function main() {
   const deletionFixtures = [];
   const fileLockFixtures = [];
   const notesFixtures = [];
+  const searchFixtures = [];
   let manifest, failure, diagnostic, stage = 'startup';
   try {
     const host = await waitFor(() => fs.existsSync(path.join(run, 'ready.json')) && JSON.parse(fs.readFileSync(path.join(run, 'ready.json'), 'utf8')), 90000);
@@ -294,10 +295,12 @@ async function main() {
         : scene.fixture === 'deletion' ? await require('./deletion-story-fixture.cjs').createDeletionStoryFixture(run)
           : scene.fixture === 'archive-story' ? await require('./archive-story-fixture.cjs').createArchiveStoryFixture(run)
             : scene.fixture === 'file-lock' ? await require('./file-lock-story-fixture.cjs').createFileLockStoryFixture(run, process.env.SHOWCASE_FILE_LOCK_MODULE)
-              : scene.fixture === 'organize-notes' ? await require('./organize-notes-fixture.cjs').createOrganizeNotesFixture(run) : undefined;
+              : scene.fixture === 'organize-notes' ? await require('./organize-notes-fixture.cjs').createOrganizeNotesFixture(run)
+                : scene.fixture === 'search-story' ? await require('./search-story-fixture.cjs').createSearchStoryFixture(path.join(demo, 'left', 'documents')) : undefined;
       if (scene.fixture === 'deletion') deletionFixtures.push(fixture);
       if (scene.fixture === 'file-lock') fileLockFixtures.push(fixture);
       if (scene.fixture === 'organize-notes') notesFixtures.push(fixture);
+      if (scene.fixture === 'search-story') searchFixtures.push(fixture);
       if (fixture) scene.paths = [fixture.left, fixture.right];
       stage = `${scene.id}: navigation`;
       if (lockFixture) await invoke('showcase.close-locks');
@@ -499,6 +502,9 @@ async function main() {
     }
     for (const fixture of notesFixtures) {
       try { await fixture.cleanup(); } catch (error) { failure = new Error(`Showcase notes fixture cleanup failed: ${error.message}; inspect ${run}`, { cause: failure || error }); }
+    }
+    for (const fixture of searchFixtures) {
+      try { await fixture.cleanup(); } catch (error) { failure = new Error(`Showcase search fixture cleanup failed: ${error.message}; inspect ${run}`, { cause: failure || error }); }
     }
   }
   if (failure) throw failure;

@@ -311,6 +311,68 @@ async function recordGesture({ capture, scene, page, target, evaluate, invoke, r
       await pageEvaluate(() => window.__showcasePresentation.intro(''));
     }
     if (capture.steps) {
+      let searchController;
+      if (scene.fixture === 'search-story') {
+        const searchState = require('./search-story-state.cjs');
+        const readSearch = action => evaluate(new Function('action', `return (${searchState.searchSnapshot.toString()})(action, document);`), action);
+        const isolated = action => evaluate(new Function('action', `return (${searchState.searchIsolation.toString()})(action, document);`), action);
+        const events = () => evaluate(new Function(`return (${searchState.inspectSearchObservation.toString()})(document);`));
+        const viewer = () => evaluate(new Function(`return (${require('./lister-observation.cjs').viewerEvidence.toString()})(document);`));
+        const idle = () => evaluate(() => document.querySelector('#status-progress-area')?.classList.contains('is-idle') && document.querySelector('#status-activity')?.hidden && !document.querySelector('#panes')?.inert && !document.querySelector('#functionbar')?.inert);
+        searchController = require('./search-story-controller.cjs').createSearchStoryController({
+          fixture, readSnapshot: readSearch, ensureIsolation: isolated,
+          observe: async () => {
+            await evaluate(new Function(`(${searchState.installSearchObservation.toString()})(document);`));
+            return {
+              waitProgress: () => waitFor(async () => {
+                const seen = await events();
+                const errors = seen.filter(item => item.type === 'search-error' || item.type === 'search-complete' && (item.ok === false || item.error));
+                if (errors.length) throw new Error(errors[0].error || 'Search failed.');
+                const same = value => typeof value === 'string' && value.replace(/\\/g, '/').toLowerCase() === fixture.left.replace(/\\/g, '/').toLowerCase();
+                const progress = seen.filter(item => item.type === 'search-progress' && same(item.path));
+                if (new Set(progress.map(item => item.searchId)).size > 1) throw new Error('More than one search was observed.');
+                return progress[0] || false;
+              }),
+              waitComplete: id => waitFor(async () => {
+                const seen = await events(), completion = seen.find(item => item.type === 'search-complete' && item.searchId === id);
+                if (seen.some(item => item.type === 'search-error' && item.searchId === id)) throw new Error('The search reported an error.');
+                if (!completion) return false;
+                if (completion.ok === false || completion.cancelled || completion.error || completion.errors?.length) return completion;
+                const snapshot = await readSearch('view');
+                const visible = await evaluate(new Function(`return (${searchState.searchCompletedVisible.toString()})(document);`));
+                return snapshot.ready && snapshot.paths.length === 1 && visible && await idle() ? completion : false;
+              }),
+              waitOpen: () => waitFor(async () => { const seen = await events(), view = await viewer();
+                return seen.some(item => item.type === 'lister-result') && view.visible && view.focused && await idle() ? { events: seen, viewer: view } : false; }),
+              waitMatch: () => waitFor(async () => { const seen = await events(), view = await viewer();
+                return seen.some(item => item.type === 'lister-result' && item.match) && view.visible && view.focused && view.selection === fixture.findText && await idle() ? { events: seen, viewer: view } : false; }),
+              dispose: () => evaluate(() => window.__showcaseSearchObservation?.dispose())
+            };
+          },
+          activate: async (action, snapshot, effect) => {
+            const selector = { start: 'dialog[data-file-search][open] [data-search-start]', view: 'dialog[data-file-search][open] [data-search-view]', find: 'dialog[open]#modal #modal-confirm' }[action];
+            if (!selector) throw new Error('Invalid search activation.');
+            if (action === 'view') {
+              const geometry = () => evaluate(new Function(`return (${searchState.searchViewGeometry.toString()})(document);`));
+              let observed = await geometry();
+              for (let count = 0; !observed.visible && count < 8; count++) {
+                if (!observed.scroll || !await isolated(action) || JSON.stringify(await readSearch(action)) !== JSON.stringify(snapshot)) throw new Error('The search dialog cannot be scrolled safely.');
+                await move({ x: offset.x + observed.scroll.x, y: offset.y + observed.scroll.y });
+                await page.call('Input.dispatchMouseEvent', { type: 'mouseWheel', x: position.x, y: position.y, deltaX: 0, deltaY: 300 });
+                await hold(180);
+                observed = await geometry();
+              }
+              if (!observed.visible) throw new Error('The search viewer button is not visible after scrolling.');
+            }
+            await move(await point(selector, 0));
+            if (!await isolated(action) || JSON.stringify(await readSearch(action)) !== JSON.stringify(snapshot)) throw new Error('Search activation state changed.');
+            const valid = await evaluate(({ selector, x, y }) => { const button = document.querySelector(selector);
+              return Boolean(button && !button.disabled && !button.hidden && document.elementFromPoint(x, y)?.closest(selector) === button); }, { selector, x: position.x - offset.x, y: position.y - offset.y });
+            if (!valid) throw new Error('The search activation target changed.');
+            await mouse('mousePressed', position, 'left', 0, effect); await mouse('mouseReleased', position, 'left', 0, effect);
+          }
+        });
+      }
       let lockController;
       if (scene.fixture === 'file-lock') {
         const readLock = action => evaluate(new Function('action', `return (${fixtureSnapshot.toString()})(action, document);`), action);
@@ -440,6 +502,7 @@ async function recordGesture({ capture, scene, page, target, evaluate, invoke, r
       result = { steps: await executeSequence(capture.steps, {
         confirm: async (action, effect) => {
           if (!fixture) throw new Error('Fixture confirmation is unavailable.');
+          if (searchController) return searchController.execute({ 'search-start': 'start', 'search-view': 'view', 'search-find': 'find' }[action], effect);
           if (lockController) return lockController.confirm(action, effect);
           if (archiveController) return archiveController.confirm(action, effect);
           if (!['rename', 'open'].includes(action)) await move(await point('#modal-confirm', 0));

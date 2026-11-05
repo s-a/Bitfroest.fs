@@ -100,9 +100,9 @@ Windows examples with isolated sample files.
 ### Search &amp; View
 
 <details>
-<summary>File search options</summary>
+<summary><kbd>F7</kbd> Find and inspect a project plan</summary>
 
-![File search options](media/marketplace/showcases/0012-windows-en-dark-file-search-workflow.gif)
+![Find and inspect a project plan](media/marketplace/showcases/0012-windows-en-dark-file-search-find-and-read.gif)
 
 </details>
 
@@ -121,23 +121,16 @@ Windows examples with isolated sample files.
 </details>
 
 <details>
-<summary><kbd>F3</kbd> <kbd>F7</kbd> Search file contents</summary>
-
-![Search file contents](media/marketplace/showcases/0015-windows-en-dark-viewer-search-dialog.gif)
-
-</details>
-
-<details>
 <summary><kbd>F3</kbd> Choose text encoding</summary>
 
-![Choose text encoding](media/marketplace/showcases/0016-windows-en-dark-viewer-codepage-dialog.gif)
+![Choose text encoding](media/marketplace/showcases/0015-windows-en-dark-viewer-codepage-dialog.gif)
 
 </details>
 
 <details>
 <summary>Preview files by click and hover</summary>
 
-![Preview files by click and hover](media/marketplace/showcases/0024-windows-en-dark-xray-click-preview.gif)
+![Preview files by click and hover](media/marketplace/showcases/0023-windows-en-dark-xray-click-preview.gif)
 
 </details>
 
@@ -146,7 +139,7 @@ Windows examples with isolated sample files.
 <details>
 <summary><kbd>Alt+F5</kbd> <kbd>Alt+F9</kbd> Create, inspect and extract an archive</summary>
 
-![Create, inspect and extract an archive](media/marketplace/showcases/0017-windows-en-dark-archive-options-handover.gif)
+![Create, inspect and extract an archive](media/marketplace/showcases/0016-windows-en-dark-archive-options-handover.gif)
 
 </details>
 
@@ -155,35 +148,35 @@ Windows examples with isolated sample files.
 <details>
 <summary>Git file status</summary>
 
-![Git file status](media/marketplace/showcases/0018-windows-en-dark-git-status-overview.gif)
+![Git file status](media/marketplace/showcases/0017-windows-en-dark-git-status-overview.gif)
 
 </details>
 
 <details>
 <summary>Git commit history</summary>
 
-![Git commit history](media/marketplace/showcases/0019-windows-en-dark-git-history-log.gif)
+![Git commit history](media/marketplace/showcases/0018-windows-en-dark-git-history-log.gif)
 
 </details>
 
 <details>
 <summary><kbd>Ctrl+F</kbd> Git diff: selected file</summary>
 
-![Git diff: selected file](media/marketplace/showcases/0020-windows-en-dark-git-diff-working-tree.gif)
+![Git diff: selected file](media/marketplace/showcases/0019-windows-en-dark-git-diff-working-tree.gif)
 
 </details>
 
 <details>
 <summary>Local Git branches</summary>
 
-![Native Visual Studio Code list of branches from the sample repository](media/marketplace/showcases/0021-windows-en-dark-git-branches-quickpick.gif)
+![Native Visual Studio Code list of branches from the sample repository](media/marketplace/showcases/0020-windows-en-dark-git-branches-quickpick.gif)
 
 </details>
 
 <details>
 <summary>Review changes across a repository</summary>
 
-![Review changes across a repository](media/marketplace/showcases/0025-windows-en-dark-quick-diff-folder-preview.gif)
+![Review changes across a repository](media/marketplace/showcases/0024-windows-en-dark-quick-diff-folder-preview.gif)
 
 </details>
 
@@ -192,7 +185,7 @@ Windows examples with isolated sample files.
 <details>
 <summary>Set up a project view</summary>
 
-![Set up a project view](media/marketplace/showcases/0022-windows-en-dark-settings-editor.gif)
+![Set up a project view](media/marketplace/showcases/0021-windows-en-dark-settings-editor.gif)
 
 </details>
 
@@ -201,7 +194,7 @@ Windows examples with isolated sample files.
 <details>
 <summary><kbd>Shift+F8</kbd> <kbd>F5</kbd> Find the process using a locked file</summary>
 
-![Find the process using a locked file](media/marketplace/showcases/0023-windows-en-dark-folder-locks-story.gif)
+![Find the process using a locked file](media/marketplace/showcases/0022-windows-en-dark-folder-locks-story.gif)
 
 </details>
 

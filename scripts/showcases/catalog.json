@@ -1371,22 +1371,39 @@
   {
     "id": "file-search",
     "parentId": "main",
-    "title": "File search options",
-    "description": "Inspect basic criteria, advanced filters and saved searches before starting a search.",
+    "title": "Find and inspect a project plan",
+    "description": "Find a project file and locate the delivery date in its contents.",
+    "category": "Search & View",
+    "fixture": "search-story",
     "paths": [
       "${demo}/left",
       "${demo}/right"
     ],
     "sources": [
-      "media/file-search-view.js"
+      "media/file-search-view.js",
+      "media/lister-view.js"
+    ],
+    "shortcuts": [
+      "F7"
     ],
     "captures": [
       {
-        "id": "workflow",
+        "id": "find-and-read",
         "format": "gif",
+        "intro": "Find the delivery date in the project plan",
         "expect": ".pane",
-        "text": "README",
+        "text": "Project",
         "steps": [
+          {
+            "type": "move",
+            "target": {
+              "selector": "[data-pane=\"0\"] .list"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Search the project folder"
+          },
           {
             "type": "move",
             "target": {
@@ -1395,7 +1412,7 @@
           },
           {
             "type": "click",
-            "effect": "Open Commands menu"
+            "effect": "Open Commands"
           },
           {
             "type": "check",
@@ -1410,81 +1427,98 @@
           },
           {
             "type": "click",
-            "effect": "Open file search"
+            "effect": "Find the project plan"
           },
           {
             "type": "check",
-            "selector": "dialog[open]",
-            "text": "Find files"
-          },
-          {
-            "type": "check",
-            "selector": "[data-file-search] [name=\"name\"]"
+            "selector": "[data-file-search][open] [name=\"name\"]",
+            "focused": true
           },
           {
             "type": "type",
-            "selector": "[data-file-search] [name=\"name\"]",
-            "text": "Project*",
-            "value": "Project*"
-          },
-          {
-            "type": "check",
-            "selector": "[data-search-page=\"0\"]"
+            "selector": "[data-file-search][open] [name=\"name\"]",
+            "text": "Project-Plan.md",
+            "value": "Project-Plan.md"
           },
           {
             "type": "pause",
             "duration": 700
           },
           {
-            "type": "move",
-            "target": {
-              "selector": "[data-file-search] [data-page=\"1\"]"
-            }
-          },
-          {
-            "type": "click",
-            "effect": "Show advanced filters"
+            "type": "confirm",
+            "action": "search-start",
+            "effect": "Search this project folder"
           },
           {
             "type": "check",
-            "selector": "[data-search-page=\"1\"]"
-          },
-          {
-            "type": "pause",
-            "duration": 700
-          },
-          {
-            "type": "move",
-            "target": {
-              "selector": "[data-file-search] [data-page=\"2\"]"
-            }
-          },
-          {
-            "type": "click",
-            "effect": "Show saved search options"
-          },
-          {
-            "type": "check",
-            "selector": "[data-search-page=\"2\"]"
+            "selector": "[data-file-search][open] [data-search-results]",
+            "text": "Project-Plan.md"
           },
           {
             "type": "pause",
             "duration": 1200
           },
           {
-            "type": "key",
-            "key": "Escape",
-            "effect": "Cancel without starting a search"
+            "type": "move",
+            "target": {
+              "selector": "[data-file-search][open] [data-search-results]"
+            }
+          },
+          {
+            "type": "click",
+            "effect": "Select the project plan"
+          },
+          {
+            "type": "confirm",
+            "action": "search-view",
+            "effect": "Open the result in the viewer"
           },
           {
             "type": "check",
-            "selector": "dialog[open]",
-            "absent": true
+            "selector": ".lister .lister-heading",
+            "text": "Project-Plan.md"
+          },
+          {
+            "type": "pause",
+            "duration": 900
+          },
+          {
+            "type": "key",
+            "key": "F7",
+            "effect": "Find text in the file"
+          },
+          {
+            "type": "check",
+            "selector": "#lister-query",
+            "focused": true
+          },
+          {
+            "type": "type",
+            "selector": "#lister-query",
+            "text": "delivery date",
+            "value": "delivery date"
+          },
+          {
+            "type": "pause",
+            "duration": 700
+          },
+          {
+            "type": "confirm",
+            "action": "search-find",
+            "effect": "Find the delivery date"
+          },
+          {
+            "type": "check",
+            "selector": ".lister textarea",
+            "value": "# Project plan\n\nLaunch checklist: review the delivery date.\n"
+          },
+          {
+            "type": "pause",
+            "duration": 2000
           }
         ]
       }
-    ],
-    "category": "Search & View"
+    ]
   },
   {
     "id": "file-search-separate",
@@ -2058,116 +2092,6 @@
     "category": "Search & View",
     "shortcuts": [
       "F3"
-    ]
-  },
-  {
-    "id": "viewer-search",
-    "parentId": "file-viewer",
-    "title": "Search file contents",
-    "description": "Inspect text-search, direction and matching options.",
-    "paths": [
-      "${demo}/left",
-      "${demo}/right"
-    ],
-    "sources": [
-      "media/lister-view.js"
-    ],
-    "captures": [
-      {
-        "id": "dialog",
-        "format": "gif",
-        "expect": ".pane",
-        "text": "Notes.txt",
-        "steps": [
-          {
-            "type": "move",
-            "target": {
-              "name": "Notes.txt"
-            }
-          },
-          {
-            "type": "click",
-            "effect": "Select Notes.txt"
-          },
-          {
-            "type": "pause",
-            "duration": 400
-          },
-          {
-            "type": "key",
-            "key": "F3",
-            "effect": "Open text viewer"
-          },
-          {
-            "type": "check",
-            "selector": ".lister",
-            "text": "Notes.txt"
-          },
-          {
-            "type": "check",
-            "selector": "[data-lister-status]",
-            "text": "1 Text only"
-          },
-          {
-            "type": "pause",
-            "duration": 900
-          },
-          {
-            "type": "key",
-            "key": "F7",
-            "effect": "Open viewer search"
-          },
-          {
-            "type": "check",
-            "selector": "[data-lister-search]",
-            "text": "Search text"
-          },
-          {
-            "type": "check",
-            "selector": "#lister-query"
-          },
-          {
-            "type": "type",
-            "selector": "#lister-query",
-            "text": "Project",
-            "value": "Project"
-          },
-          {
-            "type": "pause",
-            "duration": 1300
-          },
-          {
-            "type": "key",
-            "key": "Escape",
-            "effect": "Cancel without searching"
-          },
-          {
-            "type": "check",
-            "selector": "[data-lister-search]",
-            "absent": true
-          },
-          {
-            "type": "move",
-            "target": {
-              "selector": "[data-lister-close]"
-            }
-          },
-          {
-            "type": "click",
-            "effect": "Close text viewer"
-          },
-          {
-            "type": "check",
-            "selector": ".lister",
-            "absent": true
-          }
-        ]
-      }
-    ],
-    "category": "Search & View",
-    "shortcuts": [
-      "F3",
-      "F7"
     ]
   },
   {
