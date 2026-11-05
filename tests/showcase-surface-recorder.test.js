@@ -48,7 +48,7 @@ function harness(t) {
   const evaluator = dom.window.eval.bind(dom.window);
   const pageEvaluate = async (fn, ...args) => evaluator(`(${fn.toString()})(${args.map(value => JSON.stringify(value)).join(',')})`);
   const targetEvaluate = async (fn, ...args) => fn(...args, dom.window.document);
-  const encoder = (binary, args, options) => {
+  const encoder = (binary, args) => {
     const output = args.at(-1);
     fs.writeFileSync(output, output.endsWith('.webm') ? Buffer.from('webm-frame') : gifHeader(640, 400));
     return { status: 0, error: null, stderr: '' };

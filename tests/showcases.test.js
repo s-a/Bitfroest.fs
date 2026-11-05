@@ -15,14 +15,20 @@ test('gallery entries show current catalog headings and media without duplicate 
   assert.equal(JSON.stringify(manifest), original);
 });
 
-test('X-Ray captures require switching away from the file selected before activation', () => {
-  const scenes = require('../scripts/showcases/catalog.json').filter(scene => ['xray-click', 'xray-hover'].includes(scene.id));
-  assert.equal(scenes.length, 2);
-  for (const scene of scenes) for (const capture of scene.captures) {
-    assert.ok(capture.xrayFile);
-    assert.notEqual(capture.xrayFile, capture.select.name);
-    assert.equal(capture.text, capture.xrayFile);
-  }
+test('X-Ray walkthrough selects another file and checks click and hover previews', () => {
+  const scene = require('../scripts/showcases/catalog.json').find(entry => entry.id === 'xray-click');
+  assert.ok(scene);
+  assert.equal(scene.captures.length, 1);
+  const steps = scene.captures[0].steps;
+  const labels = steps.filter(step => step.type === 'click').map(step => step.effect);
+  assert.deepEqual(labels, ['Select Notes.txt', 'Enable click preview', 'Preview X-Ray-Sample.sql', 'Switch to hover preview']);
+  const checks = steps.filter(step => step.type === 'check').map(step => [step.selector, step.text]);
+  assert.deepEqual(checks, [
+    ['[data-xray-toggle][data-mode="click"]', undefined],
+    ['[data-xray] .xray-title', 'X-Ray-Sample.sql'],
+    ['[data-xray-toggle][data-mode="hover"]', undefined],
+    ['[data-xray] .xray-title', 'X-Ray-Sample.ps1']
+  ]);
 });
 
 test('capture clicks include the focus transition between pressing and releasing', () => {

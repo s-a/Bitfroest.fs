@@ -2,7 +2,7 @@ const js = require('@eslint/js');
 const globals = require('globals');
 
 module.exports = [
-  { ignores: ['node_modules/**', 'coverage/**', 'design/**', 'native/build/**', 'native/out/**', 'media/xray-editor.js', 'media/xray-editor-worker.js'] },
+  { ignores: ['node_modules/**', 'coverage/**', 'design/**', '.tmp/**', 'native/build/**', 'native/out/**', 'media/xray-editor.js', 'media/xray-editor-worker.js'] },
   js.configs.recommended,
   {
     files: ['**/*.{js,cjs}'],
@@ -19,6 +19,14 @@ module.exports = [
   {
     files: ['media/**/*.js'],
     languageOptions: { sourceType: 'script', globals: { ...globals.browser, module: 'readonly', require: 'readonly' } }
+  },
+  {
+    files: ['scripts/showcases/surface-recorder.cjs', 'scripts/xray-editor.mjs'],
+    languageOptions: { globals: globals.browser }
+  },
+  {
+    files: ['scripts/showcases/run.cjs', 'scripts/showcases/sequence.cjs', 'scripts/showcases/surface-recorder.cjs'],
+    rules: { 'no-control-regex': 'off' }
   },
   {
     files: ['media/app.js', 'media/webview-bootstrap.js', 'media/startup-diagnostics.js', 'media/configuration-view.js'],
