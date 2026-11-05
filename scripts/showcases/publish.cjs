@@ -48,12 +48,15 @@ function updateReadme(text, manifest, catalog = []) {
     if (at < 0) throw new Error('The README configuration section was not found.');
     text = text.slice(0, at) + gallery + '\n\n' + text.slice(at);
   }
-  const overview = manifest.sections.find(section => section.id === 'main' && section.status === 'rendered')?.images[0];
+  const overview = manifest.sections.find(section => section.id === 'new-file' && section.status === 'rendered')?.images[0];
   if (overview) {
-    const image = `![Bitfroest.fs with two folders, native Windows icons and file colors](${mediaDirectory}/${galleryFile(overview)})`;
-    const pattern = /!\[[^\]]*\]\(media\/marketplace\/(?:product-overview\.png|showcases\/\d{4}-windows-en-dark-main-overview\.(?:png|gif))\)/;
-    if (pattern.test(text)) text = text.replace(pattern, image);
-    else text = text.replace(/(\*\*A two-panel file manager[^\n]*\n)/, `$1\n${image}\n`);
+    const image = `![Create and organize handover notes](${mediaDirectory}/${galleryFile(overview)})`;
+    const pattern = /!\[[^\]]*\]\(media\/marketplace\/(?:product-overview\.png|showcases\/\d{4}-windows-en-dark-(?:main-overview|new-file-story)\.(?:png|gif))\)/;
+    const galleryStart = text.indexOf(begin);
+    let introduction = text.slice(0, galleryStart);
+    if (pattern.test(introduction)) introduction = introduction.replace(pattern, image);
+    else introduction = introduction.replace(/(\*\*A two-panel file manager[^\n]*\n)/, `$1\n${image}\n`);
+    text = introduction + text.slice(galleryStart);
   }
   if (!text.includes('| Ctrl+L |')) text = text.replace('| Ctrl+T / Ctrl+W |', '| Ctrl+L | Edit the active folder path |\n| Ctrl+T / Ctrl+W |');
   return text;
@@ -61,7 +64,7 @@ function updateReadme(text, manifest, catalog = []) {
 function publish(root = path.resolve(__dirname, '../..')) {
   const input = path.join(root, '.tmp/showcases'), output = path.join(root, mediaDirectory);
   const manifest = JSON.parse(fs.readFileSync(path.join(input, 'showcases.json'), 'utf8'));
-  const images = manifest.sections.filter(section => section.status === 'rendered' && (section.id === 'main' || galleryScenes.has(section.id))).flatMap(section => section.images).map(image => ({ file: galleryFile(image) }));
+  const images = manifest.sections.filter(section => section.status === 'rendered' && galleryScenes.has(section.id)).flatMap(section => section.images).map(image => ({ file: galleryFile(image) }));
   if (!images.length) throw new Error('No recorded media are available to publish.');
   for (const image of images) {
     const bytes = fs.readFileSync(path.join(input, mediaName(image.file)));

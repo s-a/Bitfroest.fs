@@ -5,7 +5,7 @@ const { renderGallery } = require('../scripts/showcases/publish.cjs');
 test('default capture selects the same basic file-operation walkthroughs', () => {
   const { selectScenes } = require('../scripts/showcases/run.cjs');
   const catalog = ['main', 'new-folder', 'new-file', 'delete-confirmations', 'archive-options'].map(id => ({ id }));
-  assert.deepEqual(selectScenes(catalog).map(scene => scene.id), ['main', 'new-folder', 'new-file', 'delete-confirmations']);
+  assert.deepEqual(selectScenes(catalog).map(scene => scene.id), ['new-folder', 'new-file', 'delete-confirmations']);
   assert.deepEqual(selectScenes(catalog, 'archive-options').map(scene => scene.id), ['archive-options']);
 });
 
@@ -18,12 +18,14 @@ test('gallery includes only the selected basic file-operation walkthroughs', () 
   for (const id of ['archive-options', 'main']) assert.ok(!output.includes(id));
 });
 
-test('overview animation remains above the gallery', () => {
+test('handover animation appears above and inside the gallery after repeated publication', () => {
   const { updateReadme } = require('../scripts/showcases/publish.cjs');
-  const manifest = { sections: [{ id: 'main', status: 'rendered', images: [{ file: '0001-windows-en-dark-main-overview.gif' }] }] };
-  const before = '**A two-panel file manager for Visual Studio Code.** Example.\n\n<!-- showcase-gallery:start -->\n<!-- showcase-gallery:end -->';
-  const after = updateReadme(before, manifest);
-  assert.match(after, /main-overview\.gif\)[\s\S]*<!-- showcase-gallery:start -->/);
+  const manifest = { sections: [{ id: 'new-file', title: 'Create and organize handover notes', status: 'rendered', images: [{ file: '0010-windows-en-dark-new-file-story.gif', alt: 'Create and organize handover notes' }] }] };
+  const before = '**A two-panel file manager for Visual Studio Code.** Example.\n\n![Overview](media/marketplace/showcases/0001-windows-en-dark-main-overview.gif)\n\n<!-- showcase-gallery:start -->\n<!-- showcase-gallery:end -->';
+  const after = updateReadme(updateReadme(before, manifest), manifest);
+  assert.match(after, /new-file-story\.gif\)[\s\S]*<!-- showcase-gallery:start -->[\s\S]*new-file-story\.gif\)/);
+  assert.equal((after.match(/new-file-story\.gif/g) || []).length, 2);
+  assert.doesNotMatch(after, /main-overview\.gif/);
 });
 
 test('gallery headings lead with escaped shortcut keycaps from the catalog', () => {

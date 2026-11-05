@@ -8,7 +8,7 @@
 
 **A two-panel file manager for Visual Studio Code.** File operations, folder tabs and Git views share a compact editor window.
 
-![Bitfroest.fs with two folders, native Windows icons and file colors](media/marketplace/showcases/0001-windows-en-dark-main-overview.gif)
+![Create and organize handover notes](media/marketplace/showcases/0010-windows-en-dark-new-file-story.gif)
 
 **Beta version** — This extension is under development and may contain bugs or incomplete features.
 

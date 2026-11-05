@@ -10,7 +10,7 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 const normalize = value => value.replace(/\\/g, '/').replace(/\/$/, '').toLowerCase();
 const filename = (scene, capture) => `${String(capture?.sequence || 1).padStart(4, '0')}-windows-en-dark-${scene.id}${capture ? `-${capture.id}` : ''}.${capture?.format || 'png'}`;
 function selectScenes(catalog, selected) {
-  const ids = selected ? new Set(selected.split(',')) : new Set(['main', ...require('./publish.cjs').galleryScenes]);
+  const ids = selected ? new Set(selected.split(',')) : require('./publish.cjs').galleryScenes;
   return catalog.filter(scene => ids.has(scene.id));
 }
 function numberCatalog(catalog) {
