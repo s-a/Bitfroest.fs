@@ -1,3 +1,5 @@
+const { maskIssueMessage } = require('./operation-report-masking');
+
 const headings = {
   'recovery-incomplete': 'Wiederherstellung unvollständig.',
   'cleanup-failed': 'Dateioperation ausgeführt; Aufräumen der Sicherungen fehlgeschlagen.'
@@ -21,4 +23,34 @@ function renderOperationError(error, t) {
   const detail = cause.presentation || translated !== cause.message || Object.hasOwn(nativeMessages, cause.message) ? translated : `${t('Ursprüngliche Fehlermeldung:')}\n${cause.message}`;
   return `${t(headings[presentation.code])}\n${detail}\n${t('Sicherungen:')}\n${presentation.paths.join('\n')}`;
 }
-module.exports = { createOperationError, renderOperationError };
+
+const reportOperations = new Set(['filesystem-apply', 'filesystem-delete', 'filesystem-navigate', 'filesystem-prepare', 'filesystem-refresh', 'shell-context-menu', 'clipboard-read', 'clipboard-write', 'clipboard-ack', 'clipboard-reset', 'clipboard-status']);
+
+function operationIssueUrl(destination, report, environment) {
+  const error = typeof report.error === 'string' && report.error.length <= 16000
+    ? maskIssueMessage(report.error).trim().slice(0, 500)
+    : '';
+  const operation = reportOperations.has(report.operation) ? report.operation : '';
+  const codes = new Set();
+  for (let failure = report.failure, depth = 0; failure && depth < 4; failure = failure.cause, depth++) {
+    if (typeof failure.code === 'string' && /^(?:[A-Z][A-Z0-9_]{1,39}|FileNotFound|FileExists|FileIsADirectory|FileNotADirectory|NoPermissions|Unavailable)$/.test(failure.code)) codes.add(failure.code);
+    if (typeof failure.nativeCode === 'string' && /^-?\d{1,10}$/.test(failure.nativeCode)) codes.add(failure.nativeCode);
+  }
+  const body = [
+    '## What happened?', '', '<!-- Describe the steps, expected result and actual result. Review the report before submitting. -->', '',
+    '## Diagnostics', '',
+    `- Bitfroest.fs: ${environment.extensionVersion}`,
+    ...(environment.vscodeVersion ? [`- VS Code: ${environment.vscodeVersion}`] : []),
+    `- Platform: ${environment.platform} ${environment.osRelease} (${environment.architecture})`,
+    `- Runtime: ${environment.runtimeVersion}`,
+    ...(operation ? [`- Operation: ${operation}`] : []),
+    ...(codes.size ? [`- Error codes: ${[...codes].join(', ')}`] : []),
+    ...(error ? ['', ...error.split(/\r?\n/).map(line => `    ${line}`)] : [])
+  ].join('\n');
+  const url = new URL(destination);
+  url.searchParams.set('title', '[Bug] File operation failed');
+  url.searchParams.set('body', body);
+  return url.toString();
+}
+
+module.exports = { createOperationError, renderOperationError, operationIssueUrl };

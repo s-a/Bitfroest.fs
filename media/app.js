@@ -2095,7 +2095,7 @@
     uiActionRequests.delete(result.requestId);
     statusTask(result.requestId, null);
     if (result.gitChanged) { gitBindings.clear(); gitDirectories.clear(); directoryCache.clearGit(); refreshGitDisplay(); if (request.type === 'git-ignore') action('refresh'); else requestGitStatus(); }
-    const labels = { edit: 'Datei zum Bearbeiten geöffnet.', open: 'Datei geöffnet.', preview: 'Datei angezeigt.', 'open-settings': 'Einstellungen geöffnet.', 'show-licenses': 'Lizenzen geöffnet.', 'open-help-link': 'Link geöffnet.', 'open-trash': 'Papierkorb geöffnet.', 'open-terminal': 'Terminal geöffnet.', 'git-diff': 'Git-Diff geöffnet.', 'git-history': 'Git History geöffnet.', 'git-history-directory': 'Git History geöffnet.', 'git-untrack': 'Datei aus Git entfernt; lokal erhalten.', 'git-ignore': 'Datei aus Git entfernt und ignoriert; lokal erhalten.' };
+    const labels = { edit: 'Datei zum Bearbeiten geöffnet.', open: 'Datei geöffnet.', preview: 'Datei angezeigt.', 'open-settings': 'Einstellungen geöffnet.', 'show-licenses': 'Lizenzen geöffnet.', 'open-help-link': 'Link geöffnet.', 'report-operation-error': 'GitHub-Entwurf geöffnet.', 'open-trash': 'Papierkorb geöffnet.', 'open-terminal': 'Terminal geöffnet.', 'git-diff': 'Git-Diff geöffnet.', 'git-history': 'Git History geöffnet.', 'git-history-directory': 'Git History geöffnet.', 'git-untrack': 'Datei aus Git entfernt; lokal erhalten.', 'git-ignore': 'Datei aus Git entfernt und ignoriert; lokal erhalten.' };
     reportStatus(result.cancelled ? t('Aktion abgebrochen.') : result.ok ? t(labels[request.type]) : result.error || t('Dateiaktion fehlgeschlagen.'), result.cancelled ? 'cancelled' : result.ok ? 'success' : result.unsupported ? 'info' : 'error', request.statusVersion);
   });
   function rememberSelection(p = pane()) {
@@ -2420,7 +2420,7 @@
     document.querySelector('.operation-error')?.remove();
     if (!operationFailure) return;
     const area = document.createElement('section'); area.className = 'operation-error'; area.setAttribute('role', 'alert');
-    area.innerHTML = `${$('#operation-error-art').innerHTML}<p class="operation-error-intro">${t('Es ist ein unvorhergesehener Fehler aufgetreten.')}</p><details class="operation-error-details"><summary>${t('Details')}</summary><h3>${t('Details für Computer-Nerds')}</h3><label for="operation-error-text">${t('Fehlerdetails und Wiederherstellungspfade')}</label><textarea id="operation-error-text" class="operation-error-text" readonly rows="6"></textarea><button type="button" data-select-error>${t('Details auswählen')}</button></details><div class="operation-error-actions"><button type="button" data-copy-error>${t('Fehlerdetails kopieren')}</button>${operationErrorDialog ? '' : `<button type="button" data-dismiss-error>${t('Fehler bestätigen')}</button>`}</div>`;
+    area.innerHTML = `${$('#operation-error-art').innerHTML}<p class="operation-error-intro">${t('Es ist ein unvorhergesehener Fehler aufgetreten.')}</p><details class="operation-error-details"><summary>${t('Details')}</summary><h3>${t('Details für Computer-Nerds')}</h3><label for="operation-error-text">${t('Fehlerdetails und Wiederherstellungspfade')}</label><textarea id="operation-error-text" class="operation-error-text" readonly rows="6"></textarea><button type="button" data-select-error>${t('Details auswählen')}</button></details><div class="operation-error-actions"><button type="button" data-copy-error>${t('Fehlerdetails kopieren')}</button>${host && !operationFailureInline ? `<button type="button" data-report-error title="${t('Öffnet einen GitHub-Entwurf mit maskierten Pfaden und URLs.')}">${t('Auf GitHub melden')}</button>` : ''}${operationErrorDialog ? '' : `<button type="button" data-dismiss-error>${t('Fehler bestätigen')}</button>`}</div>`;
     area.querySelector('textarea').value = operationFailureReport();
     if (operationFailureInline) { area.classList.add('operation-error-inline'); $('#statusbar').before(area); }
     else $('#modal-body').prepend(area);
@@ -3952,6 +3952,14 @@
   }
   document.addEventListener('click', event => {
     if (event.target.closest('[data-copy-error]')) { if (operationFailure) selectionIO('copy', operationFailureReport(), undefined, t('Fehlerdetails kopiert.')); return; }
+    if (event.target.closest('[data-report-error]')) {
+      if (operationFailure && $('#modal').open) hostAction('report-operation-error', {
+        error: operationFailure,
+        operation: operationFailureDiagnostic?.request?.type,
+        failure: operationFailureDiagnostic?.failure
+      });
+      return;
+    }
     if (event.target.closest('[data-select-error]')) { const text = $('#operation-error-text'); text.focus(); text.select(); return; }
     if (event.target.closest('[data-dismiss-error]')) { operationFailure = null; operationFailureDiagnostic = null; document.querySelector('.operation-error')?.remove(); if (failureFocus?.isConnected) failureFocus.focus(); return; }
     const button = event.target.closest('[data-browser-action]');

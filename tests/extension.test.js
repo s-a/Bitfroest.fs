@@ -943,6 +943,58 @@ test('error details copy passes through actual host HTML to the public clipboard
   panel.dispose();
 });
 
+test('the error dialog opens a GitHub issue draft with masked paths and URLs', async t => {
+  const initial = clipboardFixture();
+  initial.panes.forEach(pane => { pane.filter = ''; pane.sort = 'name'; });
+  const error = Object.assign(new Error([
+    'Could not create "C:\\PrivatePerson\\Projects\\Demo\\Secret Folder\\report.txt"',
+    'Source: /home/local-user/another-secret',
+    'Network: \\\\private-server\\private-share\\secret.txt',
+    'Service: https://example.com/private?token=secret&scope=hidden#section',
+    'Credentials: https://private-user:private-password@private.example?token=private-token'
+  ].join('\n')), { code: 'EACCES', path: 'C:/another-private-path' });
+  error.stack = 'Error at /private-stack/secret.js:1:2';
+  const app = harness(t, { language: 'en', filesystemLoad: async () => initial, filesystemApply: async () => { throw error; } });
+  await app.command('bitfroest.openPrototype');
+  const panel = app.panels[0];
+  const view = require('./support/webview.cjs').createApp(t, initial, { html: panel.webview.html });
+  view.action('mkdir');
+  view.document.querySelector('#value').value = 'new';
+  view.document.querySelector('#modal-form').dispatchEvent(new view.window.Event('submit', { bubbles: true, cancelable: true }));
+  await panel.receive(view.messages.find(message => message.type === 'filesystem-apply'));
+  const result = panel.messages.findLast(message => message.type === 'filesystem-result');
+  assert.equal(result.ok, false);
+  const deliver = data => view.window.dispatchEvent(new view.window.MessageEvent('message', { data }));
+  deliver(result);
+  assert.equal(app.calls.some(call => call.id === 'openExternal'), false);
+  const button = view.document.querySelector('dialog[open] [data-report-error]');
+  assert.equal(button?.textContent, 'Report on GitHub');
+  view.click(button);
+  const request = view.messages.findLast(message => message.type === 'report-operation-error');
+  assert.ok(request);
+  await panel.receive({ ...request, href: 'https://example.invalid/' });
+  const [opened] = app.calls.filter(call => call.id === 'openExternal');
+  const url = new URL(opened.args[0]);
+  assert.equal(url.origin + url.pathname, 'https://github.com/s-a/Bitfroest.fs/issues/new');
+  assert.match(url.searchParams.get('title'), /file operation failed/i);
+  const body = url.searchParams.get('body');
+  assert.match(body, /filesystem-apply/);
+  assert.match(body, /EACCES/);
+  assert.match(body, /VS Code/);
+  assert.ok(body.includes('Could not create "...\\Demo\\Secret Folder\\report.txt"'));
+  assert.ok(body.includes('Network: ...\\secret.txt'));
+  assert.ok(body.includes('Service: https://********.****/********?******=******&******=******#********'));
+  assert.doesNotMatch(body, /PrivatePerson|local-user|another-secret|private[.-]|C:\/tmp|example\.com|Credentials:/i);
+  assert.equal(app.clipboardCalls.length, 0);
+
+  app.env.openExternal = async () => false;
+  await panel.receive(request);
+  const refused = panel.messages.findLast(message => message.type === 'ui-action-result' && message.requestId === request.requestId);
+  assert.equal(refused.ok, false);
+  assert.match(refused.error, /could not be opened/i);
+  assert.equal(view.document.querySelector('#modal').open, true);
+});
+
 test('selection text requests pass through the actual host HTML and public clipboard API', async t => {
   const initial = clipboardFixture(); initial.panes[0].selected = ['a'];
   initial.panes.forEach(pane => { pane.filter = ''; pane.sort = 'name'; });

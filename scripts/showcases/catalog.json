@@ -1355,16 +1355,17 @@
     "id": "operation-error",
     "parentId": "main",
     "title": "Inspect a failed operation",
-    "description": "Show the actual operation error and any retained editing context.",
+    "description": "Inspect a file operation error and open a GitHub draft with masked diagnostic details.",
     "paths": [
       "${demo}/left",
       "${demo}/right"
     ],
     "sources": [
-      "media/app.js"
+      "media/app.js",
+      "operation-report-masking.js"
     ],
     "status": "pending",
-    "reason": "Requires a controlled real failure; errors must not be injected.",
+    "reason": "Requires a controlled file operation failure and verification of the draft using demo data.",
     "captures": [],
     "category": "Transfers & Conflicts"
   },

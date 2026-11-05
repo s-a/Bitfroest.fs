@@ -32,7 +32,7 @@ const { createReadonlyResources } = require('./readonly-files');
 const { createClipboardProvider } = require('./clipboard-provider');
 const { create } = require('./media/bitfroest-i18n');
 const { columnSetsFromTables, columnSetFromPreferences, catalog, normalizeColumnSets, columnTitle, isColumnAvailable } = require('./media/bitfroest-column-settings');
-const { renderOperationError } = require('./operation-errors');
+const { renderOperationError, operationIssueUrl } = require('./operation-errors');
 const { openTrash } = require('./open-trash');
 const { openTerminal } = require('./open-terminal');
 const { openAssociatedFile } = require('./open-file');
@@ -1143,10 +1143,19 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
         if (panel === messagePanel && panelReady && messagePanel.active && entry?.editable && resolved?.entry?.id === entry.id && entry.source !== 'local') await vscode.commands.executeCommand(entry.command, entry.args);
         return;
       }
-      if (message?.type === 'open-help-link') {
+      if (message?.type === 'open-help-link' || message?.type === 'report-operation-error') {
         try {
-          if (typeof message.id !== 'string' || !Object.hasOwn(helpLinks, message.id)) throw new Error(t('Link konnte nicht geöffnet werden.'));
-          if (!await vscode.env.openExternal(vscode.Uri.parse(helpLinks[message.id]))) throw new Error(t('Link konnte nicht geöffnet werden.'));
+          let url;
+          if (message.type === 'report-operation-error') {
+            if (typeof message.requestId !== 'string' || !/^ui-action-\d{1,15}$/.test(message.requestId) || !messagePanel.visible) return;
+            url = operationIssueUrl(helpLinks.issue, message, { extensionVersion, vscodeVersion: vscode.version, platform: process.platform, architecture: process.arch, osRelease: os.release(), runtimeVersion: process.version });
+          } else {
+            if (typeof message.id !== 'string' || !Object.hasOwn(helpLinks, message.id)) throw new Error(t('Link konnte nicht geöffnet werden.'));
+            url = helpLinks[message.id];
+          }
+          // Keep the issue query encoded. Parsing it as a URI decodes separators inside the report body.
+          const target = message.type === 'report-operation-error' ? url : vscode.Uri.parse(url);
+          if (!await vscode.env.openExternal(target)) throw new Error(t('Link konnte nicht geöffnet werden.'));
           await replyUiAction(message, { ok: true });
         } catch (error) { await replyUiAction(message, { ok: false, error: t(error.message) }); }
         return;
