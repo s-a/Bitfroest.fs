@@ -27,11 +27,17 @@ test('Marketplace metadata identifies the extension as a beta preview', () => {
   assert.equal(lock.packages[''].version, manifest.version);
 });
 
-test('both Marketplace descriptions start with the beta label', () => {
-  for (const file of ['package.nls.json', 'package.nls.de.json']) {
-    assert.match(JSON.parse(read(file))['extension.description'], /^Beta\b/);
+test('localized Marketplace summaries lead with the file manager features', () => {
+  const key = manifest.description.match(/^%([^%]+)%$/)?.[1];
+  assert.ok(key, 'the manifest must reference a localized description');
+  for (const [file, features, warning] of [
+    ['package.nls.json', /side by side.*VS Code.*tabs.*search.*Git/i, /\b(?:beta|data loss|backup)\b/i],
+    ['package.nls.de.json', /nebeneinander.*VS Code.*Tab.*Suche.*Git/i, /\b(?:beta|Datenverlust|Sicherung)\b/i],
+  ]) {
+    const description = JSON.parse(read(file))[key];
+    assert.match(description, features, file);
+    assert.doesNotMatch(description, warning, file);
   }
-  assert.match(read('README.md').split('## Development')[0], /\*\*Beta version\*\*/);
 });
 
 test('publishing and packaging select the pre-release channel', () => {
@@ -51,15 +57,10 @@ test('release packaging resolves product links against the repository and exclud
   assert.doesNotMatch(read('README.md'), /\]\(Docs\//);
 });
 
-test('Marketplace descriptions warn about data loss and require backups', () => {
+test('the Marketplace README identifies the beta and explains data loss and backup requirements', () => {
   const intro = read('README.md').split('## Beta packaging')[0];
+  assert.match(intro, /\*\*Beta version\*\*/);
   for (const pattern of [/may contain bugs/, /data loss/, /Git repository/, /committed/, /untracked or ignored files/, /does not replace a backup/, /production data/, /current backup that can be restored/]) {
     assert.match(intro, pattern);
   }
-  const de = JSON.parse(read('package.nls.de.json'))['extension.description'];
-  const en = JSON.parse(read('package.nls.json'))['extension.description'];
-  assert.match(de, /Datenverlust/);
-  assert.match(de, /Sicherung/);
-  assert.match(en, /data loss/);
-  assert.match(en, /backup/);
 });

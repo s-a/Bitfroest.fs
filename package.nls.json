@@ -28,7 +28,7 @@
   "command.bitfroest.chooseLanguage.title": "Switch Language",
   "language.description": "File manager display language. The default follows the VS Code language; other languages fall back to English.",
   "language.auto": "Use VS Code language (default)",
-  "extension.description": "Beta dual-pane file manager with folder tabs, search and local Git status. File operations can cause data loss; a current backup is required.",
+  "extension.description": "Keep two folders side by side in VS Code as you copy and move files. Switch folders with tabs, search for files, and see local Git status at a glance.",
   "command.bitfroest.openPrototype.title": "Bitfroest.fs: Show/hide file manager",
   "command.bitfroest.view.title": "View",
   "command.bitfroest.edit.title": "Edit",

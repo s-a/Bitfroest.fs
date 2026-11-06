@@ -28,7 +28,7 @@
   "command.bitfroest.chooseLanguage.title": "Sprache wechseln",
   "language.description": "Oberflächensprache der Dateiverwaltung. Der Standard folgt der VS-Code-Sprache; für andere Sprachen wird Englisch verwendet.",
   "language.auto": "VS-Code-Sprache verwenden (Standard)",
-  "extension.description": "Beta: Zweispaltiger Dateimanager. Fehler und Datenverlust möglich. Nur mit aktueller Sicherung verwenden.",
+  "extension.description": "Öffne zwei Ordner nebeneinander in VS Code und kopiere oder verschiebe Dateien direkt zwischen ihnen. Wechsle per Tab den Ordner, nutze die Dateisuche und prüfe den lokalen Git-Status.",
   "command.bitfroest.openPrototype.title": "Bitfroest.fs: Dateimanager ein-/ausblenden",
   "command.bitfroest.view.title": "Anzeigen",
   "command.bitfroest.edit.title": "Bearbeiten",
