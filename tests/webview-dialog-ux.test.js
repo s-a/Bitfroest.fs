@@ -47,22 +47,29 @@ test('copy and move put the localized category and action on one heading line', 
 test('transfer confirmation separates the heading from the body using theme colors', t => {
   const app = createApp(t, fixture());
   const style = app.document.createElement('style');
-  style.textContent = resolveThemeCss(fs.readFileSync(path.join(__dirname, '../media/app.css'), 'utf8'), {
-    'banner-background': '#16334b',
-    'banner-foreground': '#eff7ff',
-    contrastBorder: '#89a5bf'
-  });
+  const css = fs.readFileSync(path.join(__dirname, '../media/app.css'), 'utf8');
   app.document.head.append(style);
-  app.document.body.className = 'vscode-dark';
   copy(app);
   const computed = selector => app.window.getComputedStyle(app.document.querySelector(selector));
-  assert.equal(computed('.modal-heading').backgroundColor, 'rgb(22, 51, 75)');
-  assert.equal(computed('.modal-heading').paddingBlock, '8px');
-  assert.equal(computed('#modal-close').height, '28px');
-  assert.equal(computed('.modal-heading').borderBottomWidth, '1px');
-  assert.equal(computed('.modal-heading').borderBottomColor, 'rgb(137, 165, 191)');
-  for (const selector of ['#modal-eyebrow', '#modal-title', '#modal-close']) {
-    assert.equal(computed(selector).color, 'rgb(239, 247, 255)');
+  for (const [theme, background, foreground] of [
+    ['vscode-dark', 'rgb(41, 122, 160)', 'rgb(255, 255, 255)'],
+    ['vscode-high-contrast-light', 'rgb(255, 241, 176)', 'rgb(32, 32, 32)']
+  ]) {
+    app.document.body.className = theme;
+    style.textContent = resolveThemeCss(css, {
+      'banner-background': '#303132',
+      'button-background': background,
+      'button-foreground': foreground,
+      contrastBorder: '#89a5bf'
+    });
+    assert.equal(computed('.modal-heading').backgroundColor, background);
+    assert.equal(computed('.modal-heading').paddingBlock, '4px');
+    assert.equal(computed('#modal-close').height, '28px');
+    assert.equal(computed('.modal-heading').borderBottomWidth, '1px');
+    assert.equal(computed('.modal-heading').borderBottomColor, 'rgb(137, 165, 191)');
+    for (const selector of ['#modal-eyebrow', '#modal-title', '#modal-close']) {
+      assert.equal(computed(selector).color, foreground);
+    }
   }
 });
 
