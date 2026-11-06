@@ -109,3 +109,49 @@ test('content measurement retains the native sizing margin and uses the styled s
     assert.equal(grid.getGridOption('scrollbarWidth'), parseFloat(app.rule('[data-file-grid] ::-webkit-scrollbar').width));
   }
 });
+
+test('Quick Diff defers file column measurement until both file lists are visible again', async t => {
+  const observers = new Map();
+  const extraWidth = 40;
+  let updated = false;
+  const app = styledApp(t, {
+    ResizeObserver: class {
+      constructor(callback) { this.callback = callback; }
+      observe(target) { observers.set(target, this.callback); }
+      unobserve(target) { observers.delete(target); }
+      disconnect() {}
+    },
+    beforeApp({ window }) {
+      const prototype = window.HTMLElement.prototype;
+      const { get } = Object.getOwnPropertyDescriptor(prototype, 'offsetWidth');
+      Object.defineProperty(prototype, 'offsetWidth', { configurable: true, get() {
+        const pane = this.closest('[data-pane]');
+        if (pane?.matches('.quick-diff-source, .has-quick-diff')) return 0;
+        const width = get.call(this);
+        return updated && pane && this.matches('form[style*="position: fixed"]') ? width + extraWidth : width;
+      } });
+    }
+  });
+  await new Promise(resolve => setTimeout(resolve, 80));
+  const grids = [app.grid(0), app.grid(1)];
+  const widths = () => grids.map(grid => grid.getColumn('date').getActualWidth());
+  const before = widths();
+  const button = app.document.querySelector('[data-pane="0"] [data-quick-diff-toggle]');
+  app.click(button);
+  assert.equal(button.dataset.mode, 'folder');
+
+  updated = true;
+  app.window.dispatchEvent(new app.window.MessageEvent('message', {
+    data: { type: 'file-settings', settings: { iconSize: 28 } }
+  }));
+  await new Promise(resolve => setTimeout(resolve, 80));
+  assert.deepEqual(widths(), before, 'hidden grids retain their measured column widths');
+
+  button.dispatchEvent(new app.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }));
+  assert.equal(button.dataset.mode, 'off');
+  for (const target of app.document.querySelectorAll('[data-file-grid]')) {
+    observers.get(target)?.([{ target }]);
+  }
+  await new Promise(resolve => setTimeout(resolve, 80));
+  assert.deepEqual(widths(), before.map(width => width + extraWidth));
+});

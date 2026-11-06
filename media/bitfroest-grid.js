@@ -7,6 +7,12 @@
   function create(options) {
     const library = root.agGrid;
     if (!library?.createGrid) throw new Error('The file grid could not be loaded.');
+    const resize = new ResizeObserver(entries => {
+      for (const { target } of entries) {
+        const record = instances.get(target);
+        if (record) measureWhenReady(record);
+      }
+    });
 
     function marks(record) { record.selected = new Set(record.p.selected); record.spaces = new Set(options.spaceMarks(record.p)); }
 
@@ -202,7 +208,7 @@
         measureWhenReady(record);
         return;
       }
-      record = { section, p, path: options.path(p), view: options.view(p), manual: new Set(), updating: true, ready, measurePending: true };
+      record = { section, container, p, path: options.path(p), view: options.view(p), manual: new Set(), updating: true, ready, measurePending: true };
       record.source = source; record.font = font(container); record.history = history;
       record.count = rows.length; record.signature = currentSignature; marks(record);
       const nonce = document.querySelector('script[nonce]')?.nonce;
@@ -261,6 +267,7 @@
           if (event.source === 'autosizeColumns' && event.finished && record.measuring) {
             record.measuring = false;
             record.api.setGridOption('rowBuffer', 10);
+            if (!container.offsetWidth) record.measurePending = true;
             const filename = record.p.columns.find(column => column.visible !== false && options.isFilename(column));
             if (filename && !record.manual.has(filename.key)) record.api.applyColumnState({ state: [{ colId: filename.key, flex: 1 }] });
           }
@@ -272,6 +279,7 @@
       record.updating = false;
       updateAddress(record);
       instances.set(container, record);
+      resize.observe(container);
       sync(section, p);
       options.decorate(record.section, record.p);
     }
@@ -299,7 +307,7 @@
       record.api.autoSizeColumns(keys);
     }
     function measureWhenReady(record) {
-      if (!record.rendered || !record.ready || !record.measurePending) return;
+      if (!record.rendered || !record.ready || !record.measurePending || !record.container.offsetWidth) return;
       record.measurePending = false;
       measureAll(record);
     }
@@ -318,7 +326,7 @@
     }
     function prune() {
       for (const [container, record] of instances) {
-        if (!container.isConnected) { record.api.destroy(); instances.delete(container); }
+        if (!container.isConnected) { resize.unobserve(container); record.api.destroy(); instances.delete(container); }
       }
     }
     function compact(section, enabled) {
@@ -336,7 +344,11 @@
         if (changed) record.api.refreshCells({ force: true });
       } finally { record.updating = false; }
     }
-    function dispose() { for (const record of instances.values()) { record.addressHost?.remove(); record.api.destroy(); } instances.clear(); }
+    function dispose() {
+      resize.disconnect();
+      for (const record of instances.values()) { record.addressHost?.remove(); record.api.destroy(); }
+      instances.clear();
+    }
     root.addEventListener('pagehide', dispose, { once: true });
     return { mount, sync, ensure, prepareAutosize, remeasure, compact, prune, dispose, api };
   }
