@@ -20,6 +20,10 @@ test('transfer dialog exposes its accessible name, source, description and selec
   assert.equal(dialog.getAttribute('aria-labelledby'), 'modal-title');
   assert.equal(dialog.getAttribute('aria-describedby'), 'modal-description');
   assert.equal(app.document.querySelector('[data-transfer-source]').textContent, '/left');
+  assert.ok(app.document.querySelector('.vscode-form-group > [data-transfer-source]'));
+  assert.ok(app.document.querySelector('#modal-confirm.vscode-button'));
+  assert.ok(app.document.querySelector('#modal-cancel.vscode-button.secondary'));
+  assert.ok(app.document.querySelector('#modal-close.vscode-action-button'));
   assert.match(app.document.querySelector('#modal-description').textContent, /1/);
   const input = app.document.querySelector('#value');
   assert.equal(app.document.activeElement, input);
@@ -31,22 +35,30 @@ test('transfer options use separate aligned checkbox rows and localized tooltips
   for (const theme of ['vscode-light', 'vscode-dark', 'vscode-high-contrast', 'vscode-high-contrast-light']) for (const language of ['de', 'en']) {
     const app = createApp(t, fixture(), { language });
     const style = app.document.createElement('style');
-    style.textContent = resolveThemeCss(fs.readFileSync(path.join(__dirname, '../media/app.css'), 'utf8'));
+    const media = path.join(__dirname, '../media');
+    const imports = fs.readFileSync(path.join(media, 'transfer-controls.css'), 'utf8').matchAll(/@import url\("([^"\n]+)"\)/g);
+    const css = [...imports].map(([, href]) => fs.readFileSync(path.resolve(media, href), 'utf8'));
+    css.push(fs.readFileSync(path.join(media, 'app.css'), 'utf8'));
+    style.textContent = resolveThemeCss(css.join('\n'));
     app.document.head.append(style); app.document.body.className = theme;
     copy(app);
     const body = app.document.querySelector('#modal-body');
-    const group = body.querySelector('.transfer-checks'); assert.ok(group);
-    assert.equal(app.window.getComputedStyle(group).display, 'grid');
+    assert.equal(app.window.getComputedStyle(body.querySelector('.transfer-source')).display, 'flex');
+    const group = body.querySelector('.vscode-checkbox-group.vertical'); assert.ok(group);
+    assert.equal(app.window.getComputedStyle(group).flexDirection, 'column');
     for (const id of ['transfer-verify', 'transfer-individual']) {
-      const checkbox = body.querySelector(`#${id}`), label = checkbox.closest('label');
-      assert.equal(label.parentElement, group);
-      assert.equal(app.window.getComputedStyle(label).display, 'grid');
-      assert.equal(app.window.getComputedStyle(label.querySelector('span')).overflowWrap, 'anywhere');
+      const checkbox = body.querySelector(`#${id}`), label = checkbox.labels[0];
+      assert.equal(label.parentElement.parentElement, group);
+      assert.ok(label.parentElement.classList.contains('vscode-checkbox'));
+      assert.equal(app.window.getComputedStyle(label.querySelector('.text')).overflowWrap, 'anywhere');
       assert.ok(checkbox.title.length > 25);
       assert.equal(label.title, checkbox.title);
       assert.equal(checkbox.getAttribute('aria-description'), checkbox.title);
       assert.equal(checkbox.checked, false);
-      app.click(label.querySelector('span')); assert.equal(checkbox.checked, true);
+      const mark = label.querySelector('.icon-checked');
+      assert.equal(app.window.getComputedStyle(mark).display, 'none');
+      app.click(label.querySelector('.text')); assert.equal(checkbox.checked, true);
+      assert.equal(app.window.getComputedStyle(mark).display, 'block');
       checkbox.focus(); assert.equal(app.document.activeElement, checkbox);
     }
     assert.equal(body.querySelectorAll('.dialog-hint').length, 0);

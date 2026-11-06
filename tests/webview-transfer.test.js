@@ -301,7 +301,7 @@ test('individual transfer names retain extensions and show the source, target an
     const app = createApp(t, fixture(), { language });
     choose(app, 'same.txt'); app.action(mode);
     const option = app.document.querySelector('#transfer-individual');
-    assert.equal(option.closest('label').textContent.trim(), language === 'de' ? 'Dateinamen im Ziel einzeln festlegen' : 'Set each destination filename');
+    assert.equal(option.labels[0].textContent.trim(), language === 'de' ? 'Dateinamen im Ziel einzeln festlegen' : 'Set each destination filename');
     assert.equal(option.getAttribute('aria-description'), option.title);
     assert.ok(option.title.length > 20);
     assert.equal(app.document.querySelector('#transfer-individual-hint'), null);

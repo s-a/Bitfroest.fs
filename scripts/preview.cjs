@@ -29,6 +29,7 @@ const files = {
   '/': ['index.html', 'text/html; charset=utf-8'],
   '/index.html': ['index.html', 'text/html; charset=utf-8'],
   '/app.css': ['app.css', 'text/css; charset=utf-8'],
+  '/transfer-controls.css': ['transfer-controls.css', 'text/css; charset=utf-8'],
   '/bitfroest-file-names.js': ['bitfroest-file-names.js', 'text/javascript; charset=utf-8'],
   '/app.js': ['app.js', 'text/javascript; charset=utf-8'],
   '/bitfroest-i18n.js': ['bitfroest-i18n.js', 'text/javascript; charset=utf-8'],
@@ -39,6 +40,10 @@ const files = {
   '/bitfroest-contrast.js': ['bitfroest-contrast.js', 'text/javascript; charset=utf-8'],
   '/bitfroest-transfer.js': ['bitfroest-transfer.js', 'text/javascript; charset=utf-8']
 };
+for (const component of ['action-button', 'button', 'checkbox', 'form-group']) {
+  const css = `node_modules/@vscode-elements/elements-lite/components/${component}/${component}.css`;
+  files[`/${css}`] = [`../${css}`, 'text/css; charset=utf-8'];
+}
 const port = Number(process.env.PROTOTYPE_PORT || 4173);
 http.createServer((request, response) => {
   const file = files[new URL(request.url, 'http://127.0.0.1').pathname];

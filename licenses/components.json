@@ -309,5 +309,20 @@
       "de": "Benachrichtigungskomponente für die Webview.",
       "en": "Notification component for the webview."
     }
+  },
+  {
+    "name": "VSCode Elements Lite",
+    "version": "0.4.0",
+    "author": "VSCode Elements",
+    "license": "MIT",
+    "licenseUrl": "https://github.com/vscode-elements/elements-lite/blob/main/LICENSE",
+    "source": "https://github.com/vscode-elements/elements-lite",
+    "files": [
+      "node_modules/@vscode-elements/elements-lite/LICENSE"
+    ],
+    "description": {
+      "de": "Stylesheets für Bedienelemente im Kopier- und Verschiebedialog.",
+      "en": "Stylesheets for controls in the copy and move dialog."
+    }
   }
 ]

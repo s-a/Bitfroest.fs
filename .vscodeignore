@@ -22,6 +22,11 @@ node_modules/**
 !node_modules/notyf/notyf.min.js
 !node_modules/notyf/notyf.min.css
 !node_modules/notyf/LICENSE.md
+!node_modules/@vscode-elements/elements-lite/components/action-button/action-button.css
+!node_modules/@vscode-elements/elements-lite/components/button/button.css
+!node_modules/@vscode-elements/elements-lite/components/checkbox/checkbox.css
+!node_modules/@vscode-elements/elements-lite/components/form-group/form-group.css
+!node_modules/@vscode-elements/elements-lite/LICENSE
 package-lock.json
 AGENTS.md
 .vscode/**

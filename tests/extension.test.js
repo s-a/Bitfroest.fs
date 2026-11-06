@@ -2675,13 +2675,23 @@ test('fresh and restored views authorize existing stylesheets inside their resou
     const mediaRoot = path.join(root, 'media');
     assert.ok(options.localResourceRoots.some(uri => uri.fsPath === mediaRoot));
     const links = [...dom.window.document.querySelectorAll('link[rel="stylesheet"]')];
-    assert.equal(links.length, 7);
+    assert.equal(links.length, 8);
+    const elementsRoot = path.join(root, 'node_modules', '@vscode-elements', 'elements-lite', 'components');
+    assert.ok(options.localResourceRoots.some(uri => uri.fsPath === elementsRoot));
+    const transferCss = fs.readFileSync(path.join(mediaRoot, 'transfer-controls.css'), 'utf8');
+    const imports = [...transferCss.matchAll(/@import url\("([^"\n]+)"\)/g)];
+    assert.equal(imports.length, 4);
+    for (const [, href] of imports) {
+      const imported = path.resolve(mediaRoot, href);
+      assert.ok(imported.startsWith(elementsRoot + path.sep));
+      assert.ok(fs.statSync(imported).size > 0);
+    }
     const notyfRoot = path.join(root, 'node_modules', 'notyf');
     assert.ok(options.localResourceRoots.some(uri => uri.fsPath === notyfRoot));
     assert.ok(links.some(link => link.getAttribute('href') === `webview-resource:${path.join(notyfRoot, 'notyf.min.css')}`));
     const notyfScript = [...dom.window.document.querySelectorAll('script[src]')].find(script => script.getAttribute('src').endsWith('/notyf/notyf.min.js') || script.getAttribute('src').endsWith('\\notyf\\notyf.min.js'));
     assert.ok(notyfScript?.nonce && policy.includes(`'nonce-${notyfScript.nonce}'`));
-    for (const name of ['workbench-vendor.css', 'codicons.css', 'app.css', 'file-search.css', 'xray-editor.css', 'bitfroest-notifications.css']) {
+    for (const name of ['workbench-vendor.css', 'codicons.css', 'app.css', 'file-search.css', 'xray-editor.css', 'bitfroest-notifications.css', 'transfer-controls.css']) {
       assert.ok(links.some(link => link.getAttribute('href') === `webview-resource:${path.join(mediaRoot, name)}`));
       assert.ok(fs.statSync(path.join(mediaRoot, name)).size > 0);
     }

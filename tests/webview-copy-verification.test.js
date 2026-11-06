@@ -19,7 +19,7 @@ for (const language of ['de', 'en']) test(`content verification defaults off and
   const app = createApp(t, fixture(), { language });
   app.click(app.row('file.bin').querySelector('[data-filename]')); app.action('copy');
   const checkbox = app.document.querySelector('#transfer-verify'); assert.ok(checkbox); assert.equal(checkbox.checked, false);
-  assert.match(checkbox.closest('label').textContent, language === 'de' ? /Dateiinhalt.*vergleichen/ : /Compare.*contents/);
+  assert.match(checkbox.labels[0].textContent, language === 'de' ? /Dateiinhalt.*vergleichen/ : /Compare.*contents/);
   checkbox.checked = true; checkbox.dispatchEvent(new app.window.Event('change', { bubbles: true }));
   assert.equal(app.messages.find(message => message.type === 'copy-verification-setting')?.enabled, true);
   app.click(app.document.querySelector('#modal-cancel')); app.action('copy');

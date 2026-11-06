@@ -752,7 +752,7 @@
     "id": "new-folder",
     "parentId": "main",
     "title": "Prepare a project handover",
-    "description": "Create a folder, copy a project file and rename the copy.",
+    "description": "Create a folder, review the source and destination in the copy dialog, and rename the copied file.",
     "paths": [
       "${demo}/left",
       "${demo}/right"
@@ -837,8 +837,8 @@
           },
           {
             "type": "check",
-            "selector": "dialog[open]",
-            "text": "Copy"
+            "selector": "dialog[open].transfer-confirmation .transfer-source",
+            "text": "Source"
           },
           {
             "type": "pause",
