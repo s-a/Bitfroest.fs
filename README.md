@@ -89,6 +89,57 @@ When an operating system function is unavailable, the file manager reports it in
 
 **Risk of data loss.** File operations modify real data and may cause unintended data loss. Use copies or test data when evaluating this beta. Where possible, work in a Git repository as an additional safety net, with important changes committed before file operations. Git does not protect untracked or ignored files and does not replace a backup. Only use production data if a current backup that can be restored is available. If there is any doubt about the backup, do not use this extension on production data.
 
+## Features and default shortcuts
+
+Shortcuts apply to the file manager unless a different context is stated. They can be customized in **Configuration → Shortcuts**. A dash indicates that no default shortcut is assigned.
+
+| Area | Feature | Default shortcut |
+| --- | --- | --- |
+| File operations | Create a folder | `F7` |
+| File operations | Create a folder in the opposite pane | `Shift+F7` |
+| File operations | Create a text file | `Shift+F4` |
+| File operations | Copy / move selected entries | `F5` / `F6` |
+| File operations | Copy in the current folder | `Shift+F5` |
+| File operations | Rename an entry / multi-rename | `F2` or `Shift+F6` / `Ctrl+M` |
+| File operations | Delete / use the alternate deletion mode | `F8` or `Delete` / `Shift+F8` or `Shift+Delete` |
+| File operations | Copy, cut and paste files | `Ctrl+C` / `Ctrl+X` / `Ctrl+V` |
+| File operations | Open the recycle bin | — |
+| File operations | Inspect folder locks and references | — |
+| File operations | Open the operating system context menu (Windows; when enabled in settings) | `Shift+F10` |
+| Navigation | Switch panes / open an entry / go to the parent folder | `Tab` / `Enter` / `Backspace` |
+| Navigation | Enter a path / open a path from the clipboard | `Ctrl+L` / `Ctrl+Shift+L` |
+| Navigation | Previous / next folder in history | `Alt+Left` / `Alt+Right` |
+| Navigation | Open favorites | `Ctrl+D` |
+| Navigation | Create / close a folder tab | `Ctrl+T` / `Ctrl+W` |
+| Navigation | Next / previous folder tab | `Ctrl+Tab` / `Ctrl+Shift+Tab` |
+| Navigation | Open the folder under the cursor in a new tab / in the opposite pane | `Ctrl+Up` / `Ctrl+Shift+Up` |
+| Navigation | Create a background folder tab | `Ctrl+Shift+T` |
+| Navigation | Swap current paths / swap panes | `Ctrl+U` / `Ctrl+Shift+U` |
+| Navigation | Refresh the file list | `Ctrl+R` |
+| Selection | Toggle selection / toggle and move to the next entry | `Space` / `Insert` |
+| Selection | Select all / clear selection | `Ctrl+A` / `Ctrl+Numpad-` |
+| Selection | Select / unselect a group | `Numpad+` / `Numpad-` |
+| Selection | Invert / restore selection | `Numpad*` / `Numpad/` |
+| Selection | Select / unselect files with the same extension | `Ctrl+Numpad+` or `Alt+Numpad+` / `Alt+Numpad-` |
+| Selection | Save a selection in memory or a file; load a saved selection | — |
+| Selection | Copy selected names, paths or details as text | `Ctrl+Y` for paths; `Ctrl+Shift+Y` for paths with forward slashes |
+| Search | Find files / search in a separate window | `Alt+F7` / `Alt+Shift+F7` |
+| Search | Search the current file list | `Ctrl+F` |
+| Search | Select matches / show only matches | `Ctrl+B` / `Ctrl+Shift+F` |
+| Archives | Browse ZIP archives | — |
+| Archives | Pack / pack and remove sources | `Alt+F5` / `Alt+Shift+F5` |
+| Archives | Unpack / test ZIP archives | `Alt+F9` or `Alt+F6` / `Alt+Shift+F9` |
+| View | View / edit a file | `F3` / `F4` |
+| View | Search within the file viewer | `F7` or `Ctrl+F` in the viewer |
+| View | X-Ray preview / Quick Diff | — |
+| View | Sort by name, extension, date or size | — |
+| View | Calculate folder sizes | `Alt+Shift+Enter` |
+| View | Configure columns and file colors | — |
+| Git | Show repository status, branches, diff and history | — |
+| Git | Remove a file from the Git index or remove it and add it to the ignore list | — |
+| Tools | Open a terminal in the current folder | `F9` |
+| Tools | Show / hide the file manager | `Ctrl+Alt+Shift+F12` |
+
 ## License and support
 
 Licensed under the [Apache License 2.0](LICENSE). Project attribution is recorded in [NOTICE](NOTICE); third-party component licenses are included under `licenses`. Use the [GitHub issue tracker](https://github.com/s-a/Bitfroest.fs/issues) for project support and bug reports.
