@@ -23,6 +23,49 @@ test('opening a child remains available while a parent directory is being revali
 const send = (app, data) => app.window.dispatchEvent(new app.window.MessageEvent('message', { data }));
 const enter = app => { app.click(app.row('child').querySelector('[data-filename]')); app.key('Enter'); };
 
+for (const input of ['double-click', 'middle-click', 'keyboard', 'context menu', 'keyboard during refresh']) {
+  test(`closing a tab via ${input} loads the newly active directory`, t => {
+    const state = fixture();
+    state.panes[0].tabs.push('/root/child');
+    state.unloadedFolders = ['/root/child'];
+    state.folders['/root/child'] = [];
+    const app = createApp(t, state);
+    const tab = app.document.querySelector('[data-pane="0"] [data-tab="0"]');
+    const navigationRequests = () => app.messages.filter(message => message.type === 'filesystem-navigate');
+
+    if (input === 'double-click') {
+      app.click(tab);
+      app.click(tab);
+      tab.dispatchEvent(new app.window.MouseEvent('dblclick', { bubbles: true, detail: 2 }));
+    } else if (input === 'middle-click') {
+      tab.dispatchEvent(new app.window.MouseEvent('auxclick', { bubbles: true, cancelable: true, button: 1 }));
+    } else if (input === 'context menu') {
+      tab.dispatchEvent(new app.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }));
+      app.click(app.document.querySelector('[data-context-action="close-tab"]'));
+    } else {
+      if (input === 'keyboard during refresh') send(app, { type: 'window-focus' });
+      app.key('w', { ctrlKey: true });
+    }
+
+    assert.deepEqual(Array.from(app.state().panes[0].tabs), ['/root/child']);
+    if (input === 'keyboard during refresh') {
+      assert.equal(navigationRequests().length, 0);
+      const refresh = app.messages.find(message => message.type === 'filesystem-refresh');
+      assert.ok(refresh);
+      send(app, { type: 'filesystem-result', ok: true, state: structuredClone(refresh.state) });
+    }
+    assert.equal(navigationRequests().length, 1);
+    const [request] = navigationRequests();
+    assert.equal(request.path, '/root/child');
+    assert.equal(request.navigationTabId, app.state().panes[0].tabStates[0].id);
+    const loaded = fixture();
+    send(app, { type: 'filesystem-directory', navigationRequestId: request.navigationRequestId, path: request.path, rows: loaded.folders[request.path] });
+    assert.ok(app.row('nested.txt'));
+    send(app, { type: 'filesystem-result', navigationRequestId: request.navigationRequestId, ok: true, state: loaded });
+    assert.ok(app.row('nested.txt'));
+  });
+}
+
 for (const input of ['keyboard', 'context menu']) test(`deleting a newly streamed folder via ${input} starts without preparation before the unfinished listing completes`, t => {
   const app = createApp(t, fixture());
   enter(app); app.key('Backspace');

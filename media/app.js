@@ -838,6 +838,13 @@
     deferredQueueJob = null; deferredQueueRun = null;
     try { run(); } catch (error) { operationQueue.complete(job.id, { ok: false, error: error.message }); }
   }
+  function deferNavigationRead(message, resume, rollback) {
+    const origin = state.panes[message.side];
+    if (!origin) return;
+    const tabId = origin.tabStates[origin.tab].id;
+    for (const [key, pending] of deferredNavigationReads) if (pending.message.side === message.side && pending.tabId !== tabId) deferredNavigationReads.delete(key);
+    deferredNavigationReads.set(`${message.side}:${tabId}`, { message: { ...message }, resume, rollback, tabId });
+  }
   function flushDeferredNavigationReads() {
     if (filesystemPending || transferJob || transferPlanning || transferPending || !deferredNavigationReads.size) return;
     const pending = [...deferredNavigationReads.values()]; deferredNavigationReads.clear();
@@ -1024,12 +1031,7 @@
     if (filesystemPending && !(operationQueue?.active && message.type === 'filesystem-navigate')) return true;
     if (message.type === 'filesystem-navigate') {
       if (transferPlanning) {
-        const origin = state.panes[message.side];
-        if (origin) {
-          const tabId = origin.tabStates[origin.tab].id;
-          for (const [key, pending] of deferredNavigationReads) if (pending.message.side === message.side && pending.tabId !== tabId) deferredNavigationReads.delete(key);
-          deferredNavigationReads.set(`${message.side}:${tabId}`, { message: { ...message }, resume, rollback, tabId });
-        }
+        deferNavigationRead(message, resume, rollback);
         statusbar.setStatus(t('Verzeichnisanfrage wartet auf Kopierplanung.'), 'info');
         return true;
       }
@@ -3305,7 +3307,7 @@
     if (fileSearch.contains(document.activeElement)) return;
     if (command === 'search-duplicates') { markDuplicateResults(); return; }
     if (command === 'search-normal') command = 'refresh';
-    if (command === 'close-tab' && leaveResults()) return;
+    if (command === 'close-tab' && (!contextSelection?.tabId || contextSelection.tabId === pane().tabStates[pane().tab].id) && leaveResults()) return;
     if (lister.run(command)) return;
     if (command === 'shell-context-menu') { requestShellMenu(true); return; }
     if (command === 'inspect-folder-locks') { requestShellMenu(true, true); return; }
@@ -3375,7 +3377,11 @@
       };
       if (host && state.realFilesystem && !resultView(pane()) && (state.unloadedFolders?.includes(currentPath(pane())) || currentPath(pane()) !== previousPath || pane().tabStates[pane().tab].id !== previousTab || state.active !== previousSide)) {
         render(true, previousViews, false);
-        requestFilesystem({ type: 'filesystem-navigate', path: currentPath(pane()), side: state.active }, () => { focusSelection(); restoreHistoryPreview(); toast(t('Ordner-Tab geändert.'), 'success'); }, navigationRollback); return;
+        const message = { type: 'filesystem-navigate', path: currentPath(pane()), side: state.active };
+        const resume = () => { focusSelection(); restoreHistoryPreview(); toast(t('Ordner-Tab geändert.'), 'success'); };
+        if (command === 'close-tab' && filesystemPending && !operationQueue?.active) deferNavigationRead(message, resume);
+        else requestFilesystem(message, resume, navigationRollback);
+        return;
       }
       render(true, previousViews); restoreHistoryPreview(); toast(t('Ordner-Tab geändert.'), 'success'); return;
     }
@@ -3494,15 +3500,15 @@
     const section = event.target.closest('[data-pane]'); if (!section) return;
     state.active = Number(section.dataset.pane);
     const tab = event.target.closest('[data-tab]');
-    if (tab) { rememberScroll(); tabs.close(pane(), Number(tab.dataset.tab)); render(true); return; }
+    if (tab) { run('close-tab', false, { tabId: pane().tabStates[Number(tab.dataset.tab)].id }); return; }
     if (event.target.closest('[data-parent]')) return goUp();
     const row = event.target.closest('[data-id]'); if (row) openFile(files(pane()).find(file => file.id === row.dataset.id), true);
   });
   $('#panes').addEventListener('auxclick', event => {
     const tab = event.target.closest('[data-tab]');
     if (!tab || event.button !== 1) return;
-    event.preventDefault(); rememberScroll(); state.active = Number(tab.closest('[data-pane]').dataset.pane);
-    tabs.close(pane(), Number(tab.dataset.tab)); render(true);
+    event.preventDefault(); state.active = Number(tab.closest('[data-pane]').dataset.pane);
+    run('close-tab', false, { tabId: pane().tabStates[Number(tab.dataset.tab)].id });
   });
   let dragged;
   function pointerFileDrop(source, destination, mode) {
