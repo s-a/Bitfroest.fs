@@ -42,14 +42,14 @@ test('file-action right clicks suppress all popup menus and retain text editing 
   assert.equal(event.defaultPrevented, false);
 });
 
-test('ordinary file names have no empty marker gutter and parent rows contain only an ellipsis', t => {
+test('ordinary file names have no empty marker gutter and parent rows contain the parent marker', t => {
   const app = styledApp(t);
   assert.equal(app.document.querySelector('.file-table').style.getPropertyValue('--file-marker-width'), '0px');
   assert.equal(app.rule('.filename::before').width, 'var(--file-marker-width, 0px)');
   assert.equal(app.rule('.file-table .ag-header-cell.filename-column button').paddingLeft, app.rule('.parent-row .filename').paddingLeft);
   assert.match(app.rule('.file-table .ag-header-cell.filename-column button').paddingLeft, /var\(--icon-base-size\)/);
   for (const parent of app.document.querySelectorAll('[data-parent]')) {
-    assert.equal(parent.querySelector('.filename').textContent, '…');
+    assert.equal(parent.querySelector('.filename').textContent, '..');
     assert.equal(parent.querySelector('[data-icon-reviewed]'), null);
   }
   assert.equal(app.rule('.cut-marker, .hidden-marker').position, 'absolute');

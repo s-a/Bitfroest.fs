@@ -183,12 +183,12 @@ test('file type and Git colors coexist and react to theme changes without replac
   assert.equal(row.style.getPropertyValue('--git-text-color'), '');
 });
 
-test('parent entry uses a labelled ellipsis and keeps existing navigation', t => {
+test('parent entry uses a labelled parent marker and keeps existing navigation', t => {
   const app = createApp(t, fixture());
   const parent = app.document.querySelector('.pane.active [data-parent]');
   assert.equal(parent.querySelector('.fileicon.folder'), null);
   assert.equal(parent.querySelector('[data-parent-icon]'), null);
-  assert.equal(parent.querySelector('.filename').textContent, '…');
+  assert.equal(parent.querySelector('.filename').textContent, '..');
   assert.equal(parent.getAttribute('aria-label'), 'Übergeordnetes Verzeichnis');
   parent.dispatchEvent(new app.window.MouseEvent('dblclick', { bubbles: true }));
   assert.equal(app.state().panes[0].tabs[0], '/');

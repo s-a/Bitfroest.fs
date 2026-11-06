@@ -12,17 +12,18 @@ async function copying(t) {
   return app;
 }
 
-test('copying keeps selection commands and loaded folder tabs usable without starting another filesystem operation', async t => {
+test('copying keeps selection commands and folder navigation usable without starting another transfer', async t => {
   const app = await copying(t);
   app.action('select-all'); assert.deepEqual(Array.from(app.state().panes[0].selected), ['a', 'b']);
   app.action('next-tab'); assert.equal(app.state().panes[0].tab, 1);
-  app.action('next-tab'); assert.equal(app.state().panes[0].tab, 1, 'an unloaded tab cannot start a concurrent navigation request');
+  app.action('next-tab'); assert.equal(app.state().panes[0].tab, 2);
   app.click(app.document.querySelector('[data-pane="0"] [data-tab="0"]'));
   assert.equal(app.state().panes[0].tab, 0);
   app.click(app.document.querySelector('[data-pane="0"] [data-tab="2"]'));
-  assert.equal(app.state().panes[0].tab, 0);
+  assert.equal(app.state().panes[0].tab, 2);
   assert.equal(app.messages.filter(message => message.type === 'filesystem-apply').length, 1);
-  assert.equal(app.messages.some(message => ['filesystem-navigate', 'filesystem-prepare'].includes(message.type)), false);
+  assert.ok(app.messages.some(message => message.type === 'filesystem-navigate' && message.path === 'C:/tmp/unloaded'));
+  assert.equal(app.messages.some(message => message.type === 'filesystem-prepare'), false);
 });
 
 test('reading during copying cannot enter inline rename or start a second drop transfer', async t => {

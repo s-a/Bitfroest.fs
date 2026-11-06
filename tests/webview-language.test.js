@@ -3,11 +3,12 @@ const assert = require('node:assert/strict');
 const { createApp } = require('./support/webview.cjs');
 const send = (app, data) => app.window.dispatchEvent(new app.window.MessageEvent('message', { data }));
 
-test('language icon precedes notifications and requests the native language picker', t => {
+test('language icon precedes jobs and notifications and requests the native language picker', t => {
   const app = createApp(t);
   const button = app.document.querySelector('#language-toggle');
   assert.ok(button);
-  assert.equal(button.nextElementSibling.id, 'notifications-toggle');
+  assert.equal(button.nextElementSibling.id, 'jobs-toggle');
+  assert.equal(button.nextElementSibling.nextElementSibling.id, 'notifications-toggle');
   assert.ok(button.querySelector('svg'));
   assert.equal(button.getAttribute('aria-label'), 'Sprache wechseln');
   app.click(button);

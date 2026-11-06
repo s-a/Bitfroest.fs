@@ -84,7 +84,7 @@ test('copy and move reject invalid targets and require decisions for name confli
     ['copy', '/left/sample.zip!', 'sample.zip', false], ['move', '/right', 'A.md', true]
   ]) {
     const saved = fixture();
-    if (conflict) saved.folders['/right'].push({ id: '90', name: 'a.MD', type: 'markdown', size: 0 });
+    if (conflict) saved.folders['/right'].push({ id: '90', name: 'A.md', type: 'markdown', size: 0 });
     const app = createApp(t, saved);
     choose(app, selectedName); const before = JSON.stringify(app.state().folders);
     app.action(command); value(app, 'value', destination); submit(app); await tick();

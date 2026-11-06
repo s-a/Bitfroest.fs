@@ -23,7 +23,7 @@ test('completed selections show a themed success icon while invalid filters show
     assert.equal(outcome(app), 'success');
     assert.ok(app.document.querySelector('#status-message [data-status-icon] svg'));
     assert.match(app.document.querySelector('#status-message').textContent, language === 'de' ? /markiert/ : /selected/);
-    assert.equal(app.document.querySelector('#status-message [data-status-icon]').getAttribute('aria-hidden'), 'true');
+    assert.equal(app.document.querySelector('#status-message [data-status-icon] svg').getAttribute('aria-hidden'), 'true');
     app.action('select-group'); app.document.querySelector('#value').value = '<[';
     app.document.querySelector('#modal-form').dispatchEvent(new app.window.Event('submit', { bubbles: true, cancelable: true }));
     assert.equal(outcome(app), 'error');
@@ -256,17 +256,19 @@ test('running transfer shows aligned overall and current-file tracks without ope
   assert.match(app.document.querySelector('#notifications-center').textContent, /cancelled|Cancelled/);
 });
 
-test('Escape cancels the active transfer once from the list or notification details until its matching acknowledgment', async t => {
+test('Escape does not cancel a background transfer; explicit cancellation waits for its acknowledgment', async t => {
   for (const focus of ['list', 'notification']) {
     const app = createApp(t, fixture()), request = await start(app);
     if (focus === 'notification') { app.click(app.document.querySelector('#notifications-toggle')); app.document.querySelector('#notifications-center [tabindex="0"]')?.focus(); }
     const target = focus === 'list' ? app.document.querySelector('.list') : app.document.querySelector('#notifications-center');
     app.key('Escape', {}, target);
+    assert.equal(app.messages.filter(message => message.type === 'filesystem-cancel').length, 0);
+    app.key('Escape', {}, target);
+    assert.equal(app.messages.filter(message => message.type === 'filesystem-cancel').length, 0);
+    app.click(app.document.querySelector('#status-cancel'));
     assert.equal(app.messages.filter(message => message.type === 'filesystem-cancel').length, 1);
     assert.equal(app.document.querySelector('[data-cancel-transfer]').disabled, true);
     assert.equal(app.document.querySelector('#status-cancel').disabled, true);
-    app.key('Escape', {}, target);
-    assert.equal(app.messages.filter(message => message.type === 'filesystem-cancel').length, 1);
     assert.ok(app.document.querySelector('.transfer-progress'), 'pending cancel keeps progress visible');
     send(app, { type: 'filesystem-result', operationId: `foreign-${request.operationId}`, ok: true, state: fixture(), operationOutcome: { cancelled: true } });
     assert.ok(app.document.querySelector('.transfer-progress'), 'foreign acknowledgment does not complete the operation');
@@ -275,16 +277,21 @@ test('Escape cancels the active transfer once from the list or notification deta
   }
 });
 
-test('Escape during modal transfer preparation requests cancellation without closing the modal', async t => {
+test('Escape during background transfer preparation leaves it running until explicitly cancelled', async t => {
   const state = fixture(); state.unloadedFolders = ['/right'];
   const app = createApp(t, state);
   app.action('copy'); app.document.querySelector('#modal-form').dispatchEvent(new app.window.Event('submit', { bubbles: true, cancelable: true }));
   await tick();
   const request = app.messages.find(message => message.type === 'filesystem-prepare'); assert.ok(request);
-  app.key('Escape', {}, app.document.querySelector('#value'));
-  app.document.querySelector('#modal').dispatchEvent(new app.window.Event('cancel', { bubbles: false, cancelable: true }));
-  assert.equal(app.document.querySelector('#modal').open, false, 'headless dialog does not model native Escape dismissal');
+  app.key('Escape', {}, app.document.querySelector('.list'));
+  const event = new app.window.Event('cancel', { bubbles: false, cancelable: true });
+  app.document.querySelector('#modal').dispatchEvent(event);
+  assert.equal(event.defaultPrevented, false);
+  assert.equal(app.document.querySelector('#modal').open, false);
+  assert.equal(app.messages.filter(message => message.type === 'filesystem-cancel').length, 0);
+  app.click(app.document.querySelector('#status-cancel'));
   assert.equal(app.messages.filter(message => message.type === 'filesystem-cancel').length, 1);
+  assert.equal(app.messages.find(message => message.type === 'filesystem-cancel').operationId, request.operationId);
   assert.equal(app.document.querySelector('[data-cancel-transfer]').disabled, true);
 });
 

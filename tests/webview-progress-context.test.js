@@ -113,7 +113,7 @@ test('individual folder preparation keeps cancellation inside its modal and sett
   const request = app.messages.find(message => message.type === 'filesystem-prepare'); assert.ok(request);
   assert.ok(app.document.querySelector('.transfer-progress').closest('#modal-body'));
   assert.equal(app.document.querySelector('#value').disabled, true); assert.equal(app.document.querySelector('#modal-confirm').disabled, true);
-  app.click(app.document.querySelector('#modal-cancel'));
+  app.click(app.document.querySelector('[data-cancel-transfer]'));
   assert.equal(app.document.querySelector('#modal').open, true);
   assert.equal(app.messages.at(-1).type, 'filesystem-cancel');
   send(app, { type: 'filesystem-result', operationId: request.operationId, ok: true, cancelled: true, state }); await tick();

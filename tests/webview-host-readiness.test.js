@@ -109,6 +109,8 @@ test('the actual startup script sequence acquires the host once and announces re
   };
   window.HTMLElement.prototype.scrollIntoView = function () {};
   window.HTMLCanvasElement.prototype.getContext = () => ({ measureText: text => ({ width: String(text).length * 8 }) });
+  window.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
+  window.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
   window.TextEncoder = TextEncoder;
   for (const script of document.querySelectorAll('script[src]')) {
     const file = path.join(media, script.getAttribute('src'));
@@ -153,6 +155,8 @@ test('window focus during initial rendering defers refresh until host readiness 
   };
   window.HTMLElement.prototype.scrollIntoView = function () {};
   window.HTMLCanvasElement.prototype.getContext = () => ({ measureText: text => ({ width: String(text).length * 8 }) });
+  window.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
+  window.ResizeObserver = class { observe() {} unobserve() {} disconnect() {} };
   window.TextEncoder = TextEncoder;
   for (const script of document.querySelectorAll('script[src]')) {
     const file = path.join(media, script.getAttribute('src'));
