@@ -28,6 +28,7 @@ test('folder tab shortcuts work on breadcrumbs and tab controls without changing
 
 test('address context excludes generic file commands and native text copy duplicates', t => {
   const app = createApp(t, fixture());
+  assert.equal(pane(app).querySelector('.path-address bitfroest-path'), null);
   const crumb = pane(app).querySelector('[data-breadcrumb]');
   const context = JSON.parse(crumb.closest('[data-vscode-context]').dataset.vscodeContext);
   assert.equal(context.webviewSection, 'address');

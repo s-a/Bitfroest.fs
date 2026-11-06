@@ -1,7 +1,7 @@
 <!doctype html>
-<html lang="de"><head><meta charset="utf-8"><!--POLICY--><meta name="viewport" content="width=device-width, initial-scale=1"><title>Ordnersperren</title><link rel="stylesheet" href="lock-inspector.css"></head>
+<html lang="de"><head><meta charset="utf-8"><!--POLICY--><meta name="viewport" content="width=device-width, initial-scale=1"><title>Ordnersperren</title><link rel="stylesheet" href="lock-inspector.css"><link rel="stylesheet" href="path-field.css"></head>
 <body>
-  <header><h1 data-label="title">Ordnersperren untersuchen</h1><p id="target"></p></header>
+  <header><h1 data-label="title">Ordnersperren untersuchen</h1><bitfroest-path id="target"></bitfroest-path></header>
   <main>
     <p id="reference-notice" hidden></p>
     <section id="availability" hidden aria-label="Verfügbarkeit"><h2 id="availability-title"></h2><ul></ul></section>
@@ -11,5 +11,6 @@
   </main>
   <footer><button data-action="unlock" data-label="unlock">Freigeben</button><button data-action="delete" data-label="delete">Löschen…</button><button data-action="other" data-label="other">Weitere Aktionen…</button><button data-action="close" data-label="close">Schließen</button></footer>
   <script src="bitfroest-paths.js"></script>
+  <script src="path-field.js"></script>
   <script src="lock-inspector.js"></script>
 </body></html>

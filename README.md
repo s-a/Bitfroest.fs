@@ -30,7 +30,7 @@ Windows examples with isolated sample files.
 <details>
 <summary><kbd>F7</kbd> <kbd>F5</kbd> <kbd>F2</kbd> Prepare a project handover</summary>
 
-![Create a handover folder, review the copy dialog, and rename the copied file](media/marketplace/showcases/0009-windows-en-dark-new-folder-handover.gif)
+![Create a handover folder, open the copy destination for editing, and rename the copied file](media/marketplace/showcases/0009-windows-en-dark-new-folder-handover.gif)
 
 </details>
 

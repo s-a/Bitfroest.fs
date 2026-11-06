@@ -50,6 +50,7 @@ test('Unix capabilities are visible, unsupported actions cannot be confirmed and
   const dom = new JSDOM(panel.webview.html, { runScripts: 'outside-only' }); t.after(() => dom.window.close());
   dom.window.acquireVsCodeApi = () => ({ postMessage() {} });
   if (!dom.window.BitfroestPaths) new vm.Script(fs.readFileSync(path.join(__dirname, '..', 'media', 'bitfroest-paths.js'), 'utf8')).runInContext(dom.getInternalVMContext());
+  new vm.Script(fs.readFileSync(path.join(__dirname, '..', 'media', 'path-field.js'), 'utf8')).runInContext(dom.getInternalVMContext());
   new vm.Script(fs.readFileSync(path.join(__dirname, '..', 'media', 'lock-inspector.js'), 'utf8')).runInContext(dom.getInternalVMContext());
   for (const data of panel.messages) dom.window.dispatchEvent(new dom.window.MessageEvent('message', { data }));
   assert.equal(dom.window.document.querySelector('[data-action="unlock"]').disabled, true);
@@ -72,7 +73,7 @@ test('missing installed view files cannot leave a blank panel and a later comple
   t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
   fs.mkdirSync(path.join(directory, 'media'));
   const { inspector, panels, calls } = fixture(t, { extensionPath: directory });
-  for (const missing of ['lock-inspector.html', 'lock-inspector.css', 'bitfroest-paths.js', 'lock-inspector.js']) {
+  for (const missing of ['lock-inspector.html', 'lock-inspector.css', 'path-field.css', 'bitfroest-paths.js', 'path-field.js', 'lock-inspector.js']) {
     assert.throws(() => inspector.open('C:\\temp\\target'), error => error.code === 'ENOENT');
     assert.equal(panels.length, 0, `missing ${missing} cannot create a blank tab`);
     assert.equal(calls.length, 0);
@@ -138,6 +139,7 @@ test('actual host HTML renders process children safely, warns about incomplete a
   const dom = new JSDOM(panel.webview.html, { runScripts: 'outside-only', pretendToBeVisual: true }); t.after(() => dom.window.close());
   const messages = []; dom.window.acquireVsCodeApi = () => ({ postMessage: value => messages.push(value) });
   if (!dom.window.BitfroestPaths) new vm.Script(fs.readFileSync(path.join(__dirname, '..', 'media', 'bitfroest-paths.js'), 'utf8')).runInContext(dom.getInternalVMContext());
+  new vm.Script(fs.readFileSync(path.join(__dirname, '..', 'media', 'path-field.js'), 'utf8')).runInContext(dom.getInternalVMContext());
   new vm.Script(fs.readFileSync(path.join(__dirname, '..', 'media', 'lock-inspector.js'), 'utf8')).runInContext(dom.getInternalVMContext());
   assert.equal(messages[0].type, 'locks-ready');
   await panel.receive(messages[0]);
@@ -155,6 +157,7 @@ test('main actions request all listed processes while the process context keeps 
   const dom = new JSDOM(panel.webview.html, { runScripts: 'outside-only' }); t.after(() => dom.window.close());
   const messages = []; dom.window.acquireVsCodeApi = () => ({ postMessage: value => messages.push(value) });
   if (!dom.window.BitfroestPaths) new vm.Script(fs.readFileSync(path.join(__dirname, '..', 'media', 'bitfroest-paths.js'), 'utf8')).runInContext(dom.getInternalVMContext());
+  new vm.Script(fs.readFileSync(path.join(__dirname, '..', 'media', 'path-field.js'), 'utf8')).runInContext(dom.getInternalVMContext());
   new vm.Script(fs.readFileSync(path.join(__dirname, '..', 'media', 'lock-inspector.js'), 'utf8')).runInContext(dom.getInternalVMContext());
   dom.window.dispatchEvent(new dom.window.MessageEvent('message', { data: { type: 'locks-state', path: 'target', rows: [...rows, { ...rows[0], id: 'two', pid: 9999 }], inaccessible: 0 } }));
   dom.window.document.querySelector('[data-process]').checked = true;
@@ -175,6 +178,7 @@ test('lock inspector displays native Windows paths without changing action targe
   dom.window.acquireVsCodeApi = () => ({ postMessage() {} });
   new vm.Script(fs.readFileSync(path.join(__dirname, '..', 'media', 'bitfroest-paths.js'), 'utf8')).runInContext(dom.getInternalVMContext());
   if (!dom.window.BitfroestPaths) new vm.Script(fs.readFileSync(path.join(__dirname, '..', 'media', 'bitfroest-paths.js'), 'utf8')).runInContext(dom.getInternalVMContext());
+  new vm.Script(fs.readFileSync(path.join(__dirname, '..', 'media', 'path-field.js'), 'utf8')).runInContext(dom.getInternalVMContext());
   new vm.Script(fs.readFileSync(path.join(__dirname, '..', 'media', 'lock-inspector.js'), 'utf8')).runInContext(dom.getInternalVMContext());
   for (const data of panel.messages) dom.window.dispatchEvent(new dom.window.MessageEvent('message', { data }));
   assert.equal(dom.window.document.querySelector('#target').textContent, 'C:\\tmp\\target');

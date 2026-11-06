@@ -51,7 +51,7 @@ ul ul { padding-left: 16px; }
 form, [data-directory-fields] { display: flex; flex-direction: column; gap: 10px; }
 form label { display: flex; flex-direction: column; gap: 4px; }
 .path-field { display: flex; gap: 6px; }
-.path-field input { flex: 1; width: 0; }
+.path-field > bitfroest-path { flex: 1; }
 .path-field button { flex-shrink: 0; }
 .table-container { overflow-x: auto; }
 table { border-collapse: collapse; width: 100%; text-align: left; }

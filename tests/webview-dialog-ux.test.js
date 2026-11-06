@@ -15,6 +15,75 @@ function fixture(real = false) {
 function copy(app) { app.click(app.row('same.txt').querySelector('[data-filename]')); app.action('copy'); }
 function submit(app) { app.document.querySelector('#modal-form').dispatchEvent(new app.window.Event('submit', { bubbles: true, cancelable: true })); }
 
+test('folder paths use the full value until the middle needs to be shortened', t => {
+  const app = createApp(t, fixture());
+  const shorten = app.window.BitfroestPathField.middleEllipsis;
+  const measure = text => Array.from(text).length;
+  assert.equal(shorten('/one/two/three', 20, measure), '/one/two/three');
+  assert.equal(shorten('/one/two/three', 9, measure), '/one…hree');
+  assert.equal(shorten('a👩‍💻xyzcd', 5, text => [...new Intl.Segmenter().segment(text)].length), 'a👩‍💻…cd');
+});
+
+test('copy target enters editing by activation and Escape restores the original path', t => {
+  const app = createApp(t, fixture(), { language: 'en' }); copy(app);
+  const target = app.document.querySelector('bitfroest-path input#value');
+  assert.ok(target);
+  const button = target.parentElement.querySelector('button');
+  const style = app.document.createElement('style');
+  style.textContent = fs.readFileSync(path.join(__dirname, '../media/path-field.css'), 'utf8');
+  app.document.head.append(style);
+  assert.equal(app.window.getComputedStyle(button).paddingLeft, '0px');
+  assert.equal(app.window.getComputedStyle(button).borderLeftWidth, '0px');
+  assert.equal(app.window.getComputedStyle(button).cursor, 'pointer');
+  const pathRule = selector => [...style.sheet.cssRules].find(rule => rule.selectorText?.endsWith(selector)).style;
+  assert.equal(pathRule('button.path-field-display:hover').textDecoration, 'none');
+  assert.equal(pathRule('button.path-field-display:focus-visible').outline, 'none');
+  assert.equal(pathRule('input.path-field-input:focus-visible').outline, 'none');
+  assert.equal(target.hidden, true);
+  assert.equal(button.textContent, '/right');
+  assert.equal(app.document.activeElement, button);
+  app.click(button);
+  assert.equal(app.document.activeElement, target);
+  assert.equal(app.window.getComputedStyle(target).paddingLeft, '0px');
+  assert.equal(app.window.getComputedStyle(target).borderLeftWidth, '0px');
+  assert.equal(target.value, '/right');
+  target.value = '/temporary';
+  app.key('Escape', {}, target);
+  assert.equal(target.value, '/right');
+  assert.equal(target.hidden, true);
+  assert.equal(app.document.querySelector('#modal').open, true);
+  app.click(button);
+  target.value = '/edited';
+  assert.equal(app.key('Enter', {}, target), false);
+  assert.equal(button.textContent, '/edited');
+  assert.equal(app.document.activeElement, app.document.querySelector('#modal-confirm'));
+  assert.equal(app.document.querySelector('#modal').open, true);
+});
+
+test('the path component restores the complete display as space returns and keeps the edit value intact', t => {
+  const observers = new Map();
+  class ResizeObserver {
+    constructor(callback) { this.callback = callback; }
+    observe(target) { observers.set(target, this.callback); }
+    unobserve(target) { observers.delete(target); }
+    disconnect() {}
+  }
+  const app = createApp(t, fixture(), { ResizeObserver }); copy(app);
+  app.window.HTMLCanvasElement.prototype.getContext = () => ({ measureText: value => ({ width: value.length }) });
+  const field = app.document.querySelector('bitfroest-path:has(#value)'), button = field.querySelector('button');
+  let width = 4;
+  Object.defineProperty(button, 'clientWidth', { get: () => width });
+  const resize = () => observers.get(field)([{ target: field }]);
+  resize();
+  assert.equal(button.textContent, '/r…t');
+  assert.equal(field.title, '/right');
+  app.click(button);
+  assert.equal(field.querySelector('input').value, '/right');
+  app.key('Escape', {}, field.querySelector('input'));
+  width = 6; resize();
+  assert.equal(button.textContent, '/right');
+});
+
 test('a folder dialog uses the shared heading with only the localized title', t => {
   const app = createApp(t, fixture(), { language: 'en' });
   app.action('mkdir');
@@ -22,6 +91,26 @@ test('a folder dialog uses the shared heading with only the localized title', t 
   assert.ok(heading);
   assert.equal(heading.textContent.trim(), 'New folder');
   assert.equal(heading.querySelector('#modal-title').textContent, 'New folder');
+});
+
+test('folder and text file creation show their destination with a full path tooltip', t => {
+  const archive = 'zip:/project.zip!/nested';
+  const data = fixture();
+  data.panes[0].tabs = [archive];
+  data.folders[archive] = [];
+  data.archiveLocations = { [archive]: { archive: '/project.zip' } };
+  for (const [state, expected] of [[fixture(), '/left'], [data, '/project.zip!/nested']]) {
+    for (const action of ['mkdir', 'new-file']) {
+      const app = createApp(t, state, { language: 'en' });
+      app.action(action);
+      const destination = app.document.querySelector('#modal[open] .path-field-row bitfroest-path');
+      assert.ok(destination, action);
+      assert.equal(destination.title, expected);
+      assert.equal(destination.textContent, expected);
+      assert.equal(destination.querySelector('input'), null);
+      assert.equal(app.document.activeElement.id, 'value');
+    }
+  }
 });
 
 test('copy and move show only the localized title in compact regular type', t => {
@@ -84,13 +173,14 @@ test('transfer dialog exposes its accessible name, source, description and selec
   assert.equal(dialog.getAttribute('aria-labelledby'), 'modal-title');
   assert.equal(dialog.getAttribute('aria-describedby'), 'modal-selection-count');
   assert.equal(app.document.querySelector('[data-transfer-source]').textContent, '/left');
-  assert.ok(app.document.querySelector('.vscode-form-group > [data-transfer-source]'));
+  assert.ok(app.document.querySelector('.path-field-row > [data-transfer-source] > bitfroest-path'));
   assert.ok(app.document.querySelector('#modal-confirm.vscode-button'));
   assert.ok(app.document.querySelector('#modal-cancel.vscode-button.secondary'));
   assert.ok(app.document.querySelector('#modal-close.vscode-action-button'));
   assert.match(app.document.querySelector('.dialog-heading #modal-selection-count').textContent, /^\(1 .+\)$/);
   assert.equal(app.document.querySelector('#modal-body #modal-description'), null);
   const input = app.document.querySelector('#value');
+  app.click(input.parentElement.querySelector('button'));
   assert.equal(app.document.activeElement, input);
   assert.equal(input.selectionEnd - input.selectionStart, input.value.length);
   assert.ok(app.document.querySelector('details.dialog-options #transfer-policy'));
@@ -126,7 +216,7 @@ test('transfer options use separate aligned checkbox rows and localized tooltips
     app.document.head.append(style); app.document.body.className = theme;
     copy(app);
     const body = app.document.querySelector('#modal-body');
-    assert.equal(app.window.getComputedStyle(body.querySelector('.transfer-source')).display, 'flex');
+    assert.equal(app.window.getComputedStyle(body.querySelector('.transfer-source')).display, 'grid');
     const group = body.querySelector('.vscode-checkbox-group.vertical'); assert.ok(group);
     assert.equal(app.window.getComputedStyle(group).flexDirection, 'column');
     for (const id of ['transfer-verify', 'transfer-individual']) {

@@ -363,9 +363,9 @@ h1, h2 { font-size: 1.2em; font-weight: 500; margin: 0; }
 .transfer-confirmation .vscode-button { justify-content: center; min-width: 88px; min-height: 28px; max-width: 100%; white-space: normal; }
 .transfer-confirmation button[hidden] { display: none; }
 .transfer-dialog { display: grid; gap: 16px; min-width: 0; }
-.transfer-dialog .transfer-source { flex-wrap: nowrap; align-items: baseline; margin: 0; }
-.transfer-source .vscode-label { flex: 0 0 auto; width: auto; text-align: start; }
-.transfer-source [data-transfer-source] { min-width: 0; white-space: pre-wrap; }
+.path-field-row { display: grid; grid-template-columns: minmax(5.5em, max-content) minmax(0, 1fr); align-items: baseline; gap: 8px; }
+.path-field-row > * { min-width: 0; }
+.transfer-dialog .path-field-row + .path-field-row { margin-top: -8px; }
 .transfer-dialog .field { margin: 0; min-width: 0; }
 .transfer-dialog .field input, .transfer-dialog .field select { width: 100%; min-width: 0; }
 .transfer-options { display: grid; gap: 16px; min-width: 0; margin: 0; padding: 14px 0 0; border: 0; border-top: 1px solid var(--vscode-widget-border, var(--line)); }

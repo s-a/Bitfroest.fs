@@ -788,7 +788,7 @@
     "id": "new-folder",
     "parentId": "main",
     "title": "Prepare a project handover",
-    "description": "Create a folder, review the copy dialog with its separate operation header, and rename the copied file.",
+    "description": "Create a folder, open the destination path for editing in the copy dialog, and rename the copied file.",
     "paths": [
       "${demo}/left",
       "${demo}/right"
@@ -885,6 +885,23 @@
           {
             "type": "pause",
             "duration": 900
+          },
+          {
+            "type": "move",
+            "target": { "selector": "dialog[open] bitfroest-path > button.path-field-display" }
+          },
+          {
+            "type": "click",
+            "effect": "Edit the destination path"
+          },
+          {
+            "type": "check",
+            "selector": "dialog[open] #value",
+            "focused": true
+          },
+          {
+            "type": "pause",
+            "duration": 800
           },
           {
             "type": "confirm",

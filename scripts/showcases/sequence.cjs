@@ -75,7 +75,8 @@ function assertSafePointer(element) {
   const cancellation = element.closest('#modal-cancel, [data-search-close], [data-lister-close]');
   const field = element.closest('input:not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="file"]), textarea, select, [contenteditable="true"]');
   const tab = element.closest('[role="tab"]:not([aria-disabled="true"])');
-  if (confirmation || inDialog && !cancellation && !field && !tab) throw new Error('Recording cannot press a confirmation control.');
+  const pathEditor = element.closest('bitfroest-path > button[type="button"].path-field-display');
+  if (confirmation || inDialog && !cancellation && !field && !tab && !pathEditor) throw new Error('Recording cannot press a confirmation control.');
 }
 
 async function executeSequence(steps, driver) {

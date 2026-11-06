@@ -1,0 +1,33 @@
+bitfroest-path { display: block; min-width: 0; }
+bitfroest-path > .path-field-display {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  white-space: pre;
+  text-align: start;
+  line-height: 1.4;
+}
+bitfroest-path > button.path-field-display {
+  border: 0;
+  background: transparent;
+  color: var(--vscode-textLink-foreground, inherit);
+  font: inherit;
+  padding: 3px 0;
+  min-height: 28px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+bitfroest-path > button.path-field-display:focus-visible {
+  outline: none;
+  background: var(--vscode-toolbar-hoverBackground, transparent);
+  text-decoration-thickness: 2px;
+}
+bitfroest-path > button.path-field-display:hover {
+  color: var(--vscode-textLink-activeForeground, var(--vscode-textLink-foreground, inherit));
+  text-decoration: none;
+}
+bitfroest-path > input.path-field-input { width: 100%; min-width: 0; min-height: 28px; padding-left: 0; border-left-width: 0; }
+bitfroest-path > input.path-field-input:focus-visible { outline: none; border-bottom-color: var(--vscode-focusBorder, currentColor); }
+bitfroest-path > [hidden] { display: none !important; }

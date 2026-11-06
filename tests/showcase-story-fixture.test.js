@@ -123,7 +123,7 @@ test('fixture completion rejects host failure and cancellation', () => {
 });
 
 test('confirmation snapshot reads the active pane, selected file and real dialog controls', () => {
-  const dom = new JSDOM('<dialog id="modal" open><h1 id="modal-title">Copy</h1><div data-transfer-source>C:/demo/left</div><input id="value" value="C:/demo/right"><input id="transfer-filter" value="*.*"><select id="transfer-policy"><option value="ask">Ask</option></select><input id="transfer-individual" type="checkbox"><button id="modal-confirm">Copy</button></dialog>');
+  const dom = new JSDOM('<dialog id="modal" open><h1 id="modal-title">Copy</h1><div data-transfer-source><bitfroest-path value="C:/demo/left"></bitfroest-path></div><input id="value" value="C:/demo/right"><input id="transfer-filter" value="*.*"><select id="transfer-policy"><option value="ask">Ask</option></select><input id="transfer-individual" type="checkbox"><button id="modal-confirm">Copy</button></dialog>');
   try {
     dom.window.BitfroestHost = { getState: () => ({ active: 0, panes: [{ tabs: ['C:/demo/left'], tab: 0, selected: ['id-1'] }, { tabs: ['C:/demo/right'], tab: 0 }], folders: { 'C:/demo/left': [{ id: 'id-1', fsSource: 'C:/demo/left/Project-Plan.md' }] } }) };
     assert.deepEqual(fixtureSnapshot('copy', dom.window.document), { activeDirectory: 'C:/demo/left', otherDirectory: 'C:/demo/right', selected: ['C:/demo/left/Project-Plan.md'], dialog: 'Copy', input: 'C:/demo/right', controlReady: true, filter: '*.*', policy: 'ask', transferSource: 'C:/demo/left', individualNames: false });

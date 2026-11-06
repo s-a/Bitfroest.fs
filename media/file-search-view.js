@@ -30,12 +30,13 @@
       const prefix = `file-search-${++sequence}`;
       const attrs = (name, caption) => { const key = /&(.)/.exec(caption)?.[1]?.toLowerCase(); return `name="${name}" id="${prefix}-${name}" ${key ? `data-access-key="${key}"` : ''}`; };
       const input = (name, caption, type = 'text') => `<label class="search-field" for="${prefix}-${name}"><span>${label(caption)}</span><input ${attrs(name, caption)} type="${type}" autocomplete="off" ${['name', 'searchIn', 'text'].includes(name) ? `list="${prefix}-history-${name}"` : ''}></label>${['name', 'searchIn', 'text'].includes(name) ? `<datalist data-search-history="${name}" id="${prefix}-history-${name}"></datalist>` : ''}`;
+      const searchPath = `<div class="search-field"><label for="${prefix}-searchIn">${label('Suchen &in:')}</label><bitfroest-path submit-on-enter label="${escape(t('Suchen in:'))}"><input ${attrs('searchIn', 'Suchen &in:')} autocomplete="off" spellcheck="false" list="${prefix}-history-searchIn"></bitfroest-path></div><datalist data-search-history="searchIn" id="${prefix}-history-searchIn"></datalist>`;
       const check = (name, caption, extra = '') => `<label class="search-check"><input ${attrs(name, caption)} type="checkbox" ${extra}><span>${label(caption)}</span></label>`;
       const select = (name, caption, entries) => `<label class="search-field" for="${prefix}-${name}"><span>${label(caption)}</span><select ${attrs(name, caption)}>${entries.map(([value, caption]) => `<option value="${value}">${escape(t(caption))}</option>`).join('')}</select></label>`;
       const units = [['hours', 'Stunde(n)'], ['days', 'Tag(e)'], ['weeks', 'Woche(n)'], ['months', 'Monat(e)'], ['years', 'Jahr(e)']];
       dialog.innerHTML = `<form><header class="dialog-heading"><h2 class="dialog-heading-title">${escape(t(separate ? 'Dateien suchen (separat)' : 'Dateien suchen'))}</h2><button type="button" class="dialog-heading-close" data-search-close aria-label="${escape(t('Dialog schließen'))}">${window.BitfroestIcons.font('close')}</button></header><div role="tablist">${labels.map((text, i) => `<button type="button" role="tab" data-page="${i}" id="${prefix}-tab-${i}" aria-controls="${prefix}-page-${i}" aria-selected="${i === 0}" tabindex="${i === 0 ? 0 : -1}">${escape(t(text))}</button>`).join('')}</div>
         <fieldset data-search-settings><section role="tabpanel" id="${prefix}-page-0" aria-labelledby="${prefix}-tab-0" data-search-page="0">
-        ${input('name', 'Such&en nach:')}${input('searchIn', 'Suchen &in:')}<div class="search-inline"><button type="button" data-browse>${t('Verzeichnis wählen')}…</button><button type="button" data-drives data-access-key="l">${label('&Laufwerke')}</button></div>
+        ${input('name', 'Such&en nach:')}${searchPath}<div class="search-inline"><button type="button" data-browse>${t('Verzeichnis wählen')}…</button><button type="button" data-drives data-access-key="l">${label('&Laufwerke')}</button></div>
         <div class="search-grid">${check('nameRegex', 'RegE&x')}${check('selectedOnly', 'Nur in &markierten Verzeichnissen/Dateien suchen')}${check('archives', 'A&rchive durchsuchen')}${select('depth', 'Unter&verzeichnisse durchsuchen:', [[-1, 'Alle Unterverzeichnisse (unbegrenzt)'], [0, 'Nur aktuelles Verzeichnis'], [1, '1 Ebene'], [2, '2 Ebenen'], [3, '3 Ebenen'], [5, '5 Ebenen'], [10, '10 Ebenen'], ['custom', 'Eigene Tiefe festlegen']])}<div data-custom-depth hidden>${input('depthCustom', 'Anzahl der Ebenen', 'number')}</div></div>
         <hr>${check('textEnabled', '&Text suchen:')}${input('text', 'Suchtext')}<div class="search-grid">${check('wholeWords', 'n&ur ganze Wörter')}${check('caseSensitive', 'Groß-/&Kleinschreibung beachten')}${check('textRegex', 'Reg.Ausdruck (RegEx &2)')}${check('hex', '&Hex')}${check('notContaining', '&Finde Dateien, die den Text NICHT enthalten')}${check('encoding-ansi', 'Windows-&Zeichensatz (ANSI)')}${check('encoding-dos', '&DOS-Zeichensatz (ASCII)')}${check('encoding-utf-16le', 'Unicode UTF&16')}${check('encoding-utf-8', 'UTF&8')}${check('office', '&Office-xml (docx, xlsx, odt usw.)+EPUB')}</div>
         </section><section role="tabpanel" id="${prefix}-page-1" aria-labelledby="${prefix}-tab-1" data-search-page="1" hidden>
@@ -78,6 +79,7 @@
           else if (!['preset', 'presetName', 'depthCustom'].includes(el.name) && settings[el.name] !== undefined) { if (el.type === 'checkbox') el.checked = Boolean(settings[el.name]); else el.value = Array.isArray(settings[el.name]) ? settings[el.name].join(', ') : settings[el.name]; }
         }
         $('[name=searchIn]').value = displaySearchPaths($('[name=searchIn]').value);
+        $('[name=searchIn]').parentElement.refresh();
         const depth = Number(settings.depth ?? -1), choice = $('[name=depth]');
         choice.value = [...choice.options].some(option => option.value === String(depth)) ? String(depth) : 'custom';
         $('[name=depthCustom]').value = depth > 0 ? depth : 1;
@@ -141,9 +143,9 @@
         if (event.target?.matches('[role=tab]') && ['arrowleft', 'arrowright'].includes(key)) { handled(); s.pageTo(s.page + (key === 'arrowleft' ? -1 : 1)); $('[data-page="' + s.page + '"]').focus(); return; }
         if (event.altKey && !event.ctrlKey) {
           if (['arrowleft', 'arrowright'].includes(key)) { handled(); history(key === 'arrowleft' ? -1 : 1); return; }
-          const target = [...dialog.querySelectorAll('[data-access-key]')].find(el => el.dataset.accessKey === key && !el.matches(':disabled') && !el.closest('[hidden]'));
+          const target = [...dialog.querySelectorAll('[data-access-key]')].find(el => el.dataset.accessKey === key && !el.matches(':disabled') && !(el.closest('bitfroest-path') || el).closest('[hidden]'));
           if (target?.name === 'textEnabled') { handled(); target.checked = true; updateContentEnabled(); $('[name=text]').focus(); $('[name=text]').select(); return; }
-          if (target) { handled(); if (target.matches('button,input[type=checkbox]')) target.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, shiftKey: event.shiftKey })); else { target.focus(); target.select?.(); } }
+          if (target) { handled(); if (target.matches('button,input[type=checkbox]')) target.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, shiftKey: event.shiftKey })); else { target.closest('bitfroest-path')?.edit(); target.focus(); target.select?.(); } }
           return;
         }
         if (!event.ctrlKey && !event.altKey && key === 'f2' && !s.running && s.results.length) { handled(); const el = $('[name=inResults]'); el.checked = !el.checked; return; }
@@ -165,7 +167,7 @@
       if (m.type === 'search-presets') { presets = m.values || {}; for (const waiter of presetWaiters.splice(0)) waiter.resolve(); for (const s of sessions) { const select = s.$('[name=preset]'); select.replaceChildren(...Object.keys(presets).sort().map(name => { const option = document.createElement('option'); option.textContent = name; option.value = name; return option; })); for (const field of ['name', 'searchIn', 'text']) s.$(`[data-search-history="${field}"]`).replaceChildren(...(m.histories?.[field] || []).map(value => { const option = document.createElement('option'); option.value = field === 'searchIn' ? displaySearchPaths(value) : value; return option; })); } return; }
       if (m.type === 'search-complete' && filtering.has(m.searchId)) { const request = filtering.get(m.searchId); filtering.delete(m.searchId); send({ type: 'search-release', ids: [m.searchId] }); if (m.error) request.reject(new Error(m.error)); else request.resolve(m.results); return; }
       for (const s of sessions) {
-        if (m.type === 'search-browsed' && m.dialogId === s.prefix) { if (m.paths?.length) s.$('[name=searchIn]').value = m.paths.map(value => paths.displayPath(value)).join('; '); s.$('[name=searchIn]').focus(); continue; }
+        if (m.type === 'search-browsed' && m.dialogId === s.prefix) { const input = s.$('[name=searchIn]'); if (m.paths?.length) input.value = m.paths.map(value => paths.displayPath(value)).join('; '); input.parentElement.edit(); input.focus(); continue; }
         if (m.searchId !== s.id) continue;
         if (m.type === 'search-error') { task(s.id, null); s.$('[data-search-status]').textContent = m.error; report(m.error, 'error', s.statusVersion); }
         if (m.type === 'search-progress' && s.running) { s.currentPath = m.path; s.$('[data-search-status]').textContent = `${paths.displayPath(m.path || '')} · ${m.count || 0}`; if (m.version === 1) task(s.id, t('Suche wird ausgeführt…') + ` · ${paths.displayPath(m.path || '')}`, Progress.read(m)); }

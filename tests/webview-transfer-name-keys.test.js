@@ -5,7 +5,7 @@ const fixture = () => ({ version: 1, active: 0, panes: [{ tabs: ['/left'], tab: 
 test('documented copy and move keys select the target stem then the name including extension', t => {
   for (const [mode, key] of [['copy', 'F5'], ['move', 'F6']]) {
     const app = createApp(t, fixture()); app.action(mode);
-    const input = app.document.querySelector('#value'); input.value = 'C:\\temp\\new.name.txt'; input.setSelectionRange(0, input.value.length);
+    const input = app.document.querySelector('#value'); input.parentElement.querySelector('button').click(); input.value = 'C:\\temp\\new.name.txt'; input.setSelectionRange(0, input.value.length);
     assert.equal(app.key(key, {}, input), false);
     assert.equal(input.value.slice(input.selectionStart, input.selectionEnd), 'new.name');
     app.key(key, {}, input); assert.equal(input.value.slice(input.selectionStart, input.selectionEnd), 'new.name.txt');
@@ -15,7 +15,7 @@ test('documented copy and move keys select the target stem then the name includi
 });
 test('native name selection commands only affect the active transfer name field', t => {
   const app = createApp(t, fixture()); app.action('copy');
-  const input = app.document.querySelector('#value'); input.value = '/right/target.txt'; input.setSelectionRange(0, input.value.length);
+  const input = app.document.querySelector('#value'); input.parentElement.querySelector('button').click(); input.value = '/right/target.txt'; input.setSelectionRange(0, input.value.length);
   const focus = app.messages.filter(item => item.type === 'inputFocus').at(-1); assert.equal(focus.transferName, true);
   app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'action', action: 'transfer-name-parts', key: 'F5' } }));
   assert.equal(input.value.slice(input.selectionStart, input.selectionEnd), 'target');
@@ -26,7 +26,7 @@ test('native name selection commands only affect the active transfer name field'
 });
 test('name selection leaves directory targets, unrelated fields and modified shortcuts unchanged', t => {
   const app = createApp(t, fixture()); app.action('copy');
-  const input = app.document.querySelector('#value'); input.value = '/right'; input.setSelectionRange(1, 2);
+  const input = app.document.querySelector('#value'); input.parentElement.querySelector('button').click(); input.value = '/right'; input.setSelectionRange(1, 2);
   app.key('F5', {}, input); assert.deepEqual([input.selectionStart, input.selectionEnd], [1, 2]);
   input.value = '/right/target.txt'; input.setSelectionRange(1, 2);
   app.key('F5', { ctrlKey: true }, input); assert.deepEqual([input.selectionStart, input.selectionEnd], [1, 2]);
@@ -36,7 +36,7 @@ test('name selection leaves directory targets, unrelated fields and modified sho
 });
 test('Ctrl Home positions the caret after the final path separator without modifying the target', t => {
   for (const [value, position] of [['C:\\temp\\target.txt', 8], ['C:/temp/target.txt', 8], ['C:\\temp/target.txt', 8], ['C:/temp/', 8], ['C:/', 3], ['/right', 1], ['target.txt', 0], ['', 0]]) {
-    const app = createApp(t, fixture()); app.action('copy'); const input = app.document.querySelector('#value');
+    const app = createApp(t, fixture()); app.action('copy'); const input = app.document.querySelector('#value'); input.parentElement.querySelector('button').click();
     input.value = value; input.setSelectionRange(value.length, value.length);
     assert.equal(app.key('Home', { ctrlKey: true }, input), false);
     assert.deepEqual([input.selectionStart, input.selectionEnd], [position, position]); assert.equal(input.value, value);

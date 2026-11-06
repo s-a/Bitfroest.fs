@@ -95,10 +95,10 @@ function fixtureSnapshot(action, root = document) {
   const deleteList = ['trash', 'delete-permanent'].includes(action) ? modal?.querySelector('#modal-body > p:last-child') : null;
   return { activeDirectory, otherDirectory, selected, dialog: action === 'rename' && !modal ? 'inline-rename' : modal?.querySelector('#modal-title')?.textContent,
     input: field?.value, controlReady: Boolean(control && !control.disabled && !control.hidden && (action !== 'rename' || root.activeElement === field)),
-    ...(['mkdir', 'create-notes'].includes(action) ? { targetDirectory: modal?.querySelector('#modal-body strong')?.textContent } : {}),
+    ...(['mkdir', 'create-notes'].includes(action) ? { targetDirectory: modal?.querySelector('#modal-body .path-field-row bitfroest-path')?.getAttribute('value') } : {}),
     ...(['trash', 'delete-permanent'].includes(action) ? { dialogFiles: deleteList && deleteList.children.length === 0 ? [deleteList.textContent.trim()] : [] } : {}),
     ...(['copy', 'move-notes'].includes(action) ? { filter: modal?.querySelector('#transfer-filter')?.value, policy: modal?.querySelector('#transfer-policy')?.value,
-      transferSource: modal?.querySelector('[data-transfer-source]')?.textContent, individualNames: modal?.querySelector('#transfer-individual')?.checked } : {}),
+      transferSource: modal ? [...modal.querySelectorAll('[data-transfer-source] bitfroest-path')].map(path => path.getAttribute('value')).join('\n') : undefined, individualNames: modal?.querySelector('#transfer-individual')?.checked } : {}),
     ...(action === 'batch-rename' ? { mask: modal?.querySelector('#mask')?.value, counter: modal?.querySelector('#counter')?.value,
       search: modal?.querySelector('#search')?.value, replacement: modal?.querySelector('#replacement')?.value, casing: modal?.querySelector('#casing')?.value,
       preview: [...(modal?.querySelectorAll('#rename-preview tr') || [])].map(row => [...row.querySelectorAll('td')].map(cell => cell.textContent)) } : {}) };
@@ -531,6 +531,9 @@ async function recordGesture({ capture, scene, page, target, evaluate, invoke, r
           const read = action => evaluate(new Function('action', `return (${require('./archive-state.cjs').archiveSnapshot.toString()})(action, document);`), action);
           const snapshot = await read(isDialog ? 'unpack' : 'show-unpacked-folder');
           if (isDialog) await fixture.validateUnpackInput(snapshot); else await fixture.validatePathEdit(snapshot);
+          if (isDialog && await evaluate(selector => document.querySelector(selector)?.hidden, step.selector)) {
+            await click(await point('dialog[open] bitfroest-path > .path-field-display'), 'left', 0, 'Edit the destination path');
+          }
           const focused = await evaluate(selector => document.querySelector(selector) === document.activeElement, step.selector);
           if (!focused) throw new Error('Fixture path input is not focused.');
           await keyEvent('keyDown', 'Control', 'ControlLeft', 17, 2);

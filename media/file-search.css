@@ -18,7 +18,8 @@
 .file-search fieldset { min-width: 0; border: 0; padding: 12px 0; margin: 0; }
 .file-search .search-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 16px; align-items: center; }
 .file-search .search-field { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.file-search .search-field > span { flex: 0 0 150px; }
+.file-search .search-field > :is(span, label) { flex: 0 0 150px; }
+.file-search .search-field > bitfroest-path { flex: 1; }
 .file-search .search-check { display: flex; flex-direction: row; align-items: center; gap: 6px; min-width: 0; }
 .file-search .search-check > span { display: block; min-width: 0; line-height: 1.4; letter-spacing: normal; }
 .file-search .search-check u { display: inline; }
@@ -40,5 +41,5 @@
 .result-source { color: var(--vscode-descriptionForeground); margin-left: 12px; font-size: 0.9em; overflow: hidden; text-overflow: ellipsis; }
 @media (max-width: 700px) {
   .file-search .search-grid { grid-template-columns: minmax(0, 1fr); }
-  .file-search .search-field > span { flex-basis: 130px; }
+  .file-search .search-field > :is(span, label) { flex-basis: 130px; }
 }

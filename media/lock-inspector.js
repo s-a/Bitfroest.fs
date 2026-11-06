@@ -64,7 +64,7 @@
       if (data.capabilities) capabilities = data.capabilities;
       for (const node of document.querySelectorAll('[data-label]')) node.textContent = labels[node.dataset.label][english ? 1 : 0];
       if (capabilities?.referencesOnly) document.querySelector('[data-label="processes"]').textContent = text('Prozesse mit offenen Referenzen', 'Processes with open references');
-      region.setAttribute('aria-label', document.querySelector('[data-label="processes"]').textContent); document.querySelector('#target').textContent = paths.displayPath(data.path);
+      region.setAttribute('aria-label', document.querySelector('[data-label="processes"]').textContent); document.querySelector('#target').setAttribute('value', paths.displayPath(data.path));
       const notice = document.querySelector('#reference-notice'); notice.hidden = !capabilities?.referencesOnly;
       notice.textContent = text('Offene Dateireferenzen beweisen unter Linux und macOS keine Datei- oder Löschsperre. Untersucht werden nur die zugänglichen Prozesse; das Ergebnis kann unvollständig sein.', 'Open file references on Linux and macOS do not prove a file or deletion lock. Only accessible processes are inspected; results may be incomplete.');
       const availability = document.querySelector('#availability'), items = Object.entries(capabilities?.actions || {}).filter(([, action]) => !action.available);

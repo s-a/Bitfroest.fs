@@ -81,6 +81,9 @@
     $('[data-directory-fields]').hidden = node.type === 'group';
     $('#favorite-path').required = node.type === 'favorite';
     $('#favorite-path').value = paths.displayPath(node.path || '');
+    const pathField = $('#favorite-path').parentElement;
+    pathField.setAttribute('label', t('Verzeichnis'));
+    pathField.refresh();
     const select = $('#favorite-parent'); select.replaceChildren(new Option(t('Hauptebene'), ''));
     function append(parent, depth) {
       for (const group of data.favorites.filter(item => item.type === 'group' && item.parent === parent)) {
