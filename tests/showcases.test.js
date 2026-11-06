@@ -6,11 +6,11 @@ const scene = () => ({ id: 'new-folder', title: 'Create a folder', description: 
 
 test('gallery entries show current catalog headings and media without duplicate explanations', () => {
   const { renderGallery } = require('../scripts/showcases/publish.cjs');
-  const manifest = { sections: [{ id: 'path-copy', title: 'Copy a folder path', description: 'Old capture description.', status: 'rendered',
-    host: { commit: 'recorded' }, images: [{ file: '0002-windows-en-dark-path-copy-gesture.gif', alt: 'Copy a folder path' }] }] };
+  const manifest = { sections: [{ id: 'new-folder', title: 'Create a folder', description: 'Old capture description.', status: 'rendered',
+    host: { commit: 'recorded' }, images: [{ file: '0002-windows-en-dark-new-folder.gif', alt: 'Create a folder' }] }] };
   const original = JSON.stringify(manifest);
-  const text = renderGallery(manifest, [{ id: 'path-copy', title: 'Copy folder path to clipboard' }]);
-  assert.match(text, /<summary>Copy folder path to clipboard<\/summary>\n\n!\[Copy folder path to clipboard\]/);
+  const text = renderGallery(manifest, [{ id: 'new-folder', title: 'Prepare a project handover' }]);
+  assert.match(text, /<summary>Prepare a project handover<\/summary>\n\n!\[Prepare a project handover\]/);
   assert.doesNotMatch(text, /<small>|Old capture description|Copy the current folder path/);
   assert.equal(JSON.stringify(manifest), original);
 });
@@ -182,8 +182,8 @@ test('updating one scene preserves the other recorded scenes and their provenanc
 test('the README gallery includes recorded media only and preserves surrounding documentation', () => {
   const { updateReadme, mediaName } = require('../scripts/showcases/publish.cjs');
   const manifest = { sections: [
-    { id: 'gesture', title: 'Enter a path', description: 'Ctrl+L focuses the path.', status: 'rendered', images: [{ file: '0002-windows-en-dark-shortcut-ctrl-l-gesture.gif', alt: 'Ctrl+L' }] },
-    { id: 'pending', title: 'Not captured', status: 'pending', images: [] }
+    { id: 'new-folder', title: 'Create a folder', status: 'rendered', images: [{ file: '0002-windows-en-dark-new-folder.gif', alt: 'Create a folder' }] },
+    { id: 'new-file', title: 'Not captured', status: 'pending', images: [] }
   ] };
   const readme = '# Product\n\nExisting introduction.\n\n## Configuration\n\nExisting settings.\n';
   const result = updateReadme(readme, manifest);
@@ -293,12 +293,12 @@ test('publishing renumbered media removes previous gallery references and preser
   try {
     fs.mkdirSync(path.join(root, '.tmp/showcases'), { recursive: true });
     fs.mkdirSync(path.join(root, 'media/marketplace/showcases'), { recursive: true });
-    const manifest = { sections: [{ id: 'next', title: 'Next', description: 'Next view.', status: 'rendered', images: [{ file: current, alt: 'Next' }] }] };
+    const manifest = { sections: [{ id: 'new-folder', title: 'Next', description: 'Next view.', status: 'rendered', images: [{ file: current, alt: 'Next' }] }] };
     const earlier = { sections: [{ ...manifest.sections[0], images: [{ file: old, alt: 'Old' }] }] };
     fs.writeFileSync(path.join(root, 'README.md'), updateReadme('# Product\n\n## Configuration\n', earlier));
     fs.writeFileSync(path.join(root, '.tmp/showcases/showcases.json'), JSON.stringify(manifest));
     fs.mkdirSync(path.join(root, 'scripts/showcases'), { recursive: true });
-    fs.writeFileSync(path.join(root, 'scripts/showcases/catalog.json'), JSON.stringify([{ id: 'next', title: 'Current catalog title' }]));
+    fs.writeFileSync(path.join(root, 'scripts/showcases/catalog.json'), JSON.stringify([{ id: 'new-folder', title: 'Current catalog title' }]));
     fs.writeFileSync(path.join(root, '.tmp/showcases', current), Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
     fs.writeFileSync(path.join(root, 'media/marketplace/showcases', old), 'old');
     fs.writeFileSync(path.join(root, 'media/marketplace/showcases/keep.png'), 'unrelated');
