@@ -103,6 +103,7 @@
       "${demo}/right"
     ],
     "sources": [
+      "media/dialog-heading.css",
       "extension.js",
       "media/webview-bootstrap.js"
     ],
@@ -758,6 +759,7 @@
       "${demo}/right"
     ],
     "sources": [
+      "media/dialog-heading.css",
       "media/app.js"
     ],
     "captures": [
@@ -842,8 +844,8 @@
           },
           {
             "type": "check",
-            "selector": "dialog[open].transfer-confirmation #modal-eyebrow",
-            "text": "FILE OPERATION:"
+            "selector": "dialog[open].transfer-confirmation .dialog-heading-title",
+            "text": "Copy"
           },
           {
             "type": "pause",
@@ -948,6 +950,7 @@
       "${demo}/right"
     ],
     "sources": [
+      "media/dialog-heading.css",
       "media/app.js",
       "media/bitfroest-file-names.js",
       "filesystem-provider.js"
@@ -1162,6 +1165,7 @@
       "${demo}/right"
     ],
     "sources": [
+      "media/dialog-heading.css",
       "media/app.js",
       "filesystem-provider.js"
     ],
@@ -1386,6 +1390,7 @@
       "${demo}/right"
     ],
     "sources": [
+      "media/dialog-heading.css",
       "media/file-search-view.js",
       "media/lister-view.js"
     ],
@@ -1536,6 +1541,7 @@
       "${demo}/right"
     ],
     "sources": [
+      "media/dialog-heading.css",
       "media/file-search-view.js"
     ],
     "captures": [
@@ -3011,6 +3017,7 @@
       "${demo}/right"
     ],
     "sources": [
+      "media/dialog-heading.css",
       "media/shortcut-configuration.js"
     ],
     "status": "pending",
@@ -3081,6 +3088,7 @@
       "${demo}/right"
     ],
     "sources": [
+      "media/dialog-heading.css",
       "lock-inspector.js",
       "media/lock-inspector.js",
       "filesystem-provider.js"

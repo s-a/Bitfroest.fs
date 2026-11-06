@@ -12,9 +12,8 @@
 .file-search::backdrop { background: var(--vscode-widget-shadow); }
 .file-search form, .file-search [role=tabpanel] { display: flex; flex-direction: column; gap: 10px; }
 .file-search [hidden] { display: none !important; }
-.file-search header, .file-search footer, .file-search .search-inline, .file-search [role=tablist] { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.file-search header { justify-content: space-between; }
-.file-search h2 { font-size: 1.2em; margin: 0; }
+.file-search footer, .file-search .search-inline, .file-search [role=tablist] { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.file-search .dialog-heading { margin: -16px -16px 0; }
 .file-search footer { justify-content: flex-end; }
 .file-search fieldset { min-width: 0; border: 0; padding: 12px 0; margin: 0; }
 .file-search .search-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 16px; align-items: center; }

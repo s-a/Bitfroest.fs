@@ -74,7 +74,6 @@
     const labels = JSON.parse(decodeURIComponent(document.body.dataset.startupLabels || '{}'));
     const dialog = document.querySelector('#modal');
     document.querySelector('#modal-title').textContent = status.textContent;
-    document.querySelector('#modal-eyebrow').textContent = '';
     document.querySelector('#modal-confirm').hidden = true;
     document.querySelector('#modal-cancel').textContent = labels.close || 'Close';
     document.querySelector('#modal-close').setAttribute('aria-label', labels.close || 'Close');

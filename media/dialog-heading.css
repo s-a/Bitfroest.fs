@@ -1,0 +1,58 @@
+.dialog-heading {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 37px;
+  padding-block: 4px;
+  padding-inline: 20px;
+  background-color: var(--vscode-button-background, var(--vscode-titleBar-activeBackground, var(--vscode-editorWidget-background)));
+  color: var(--vscode-button-foreground, var(--vscode-titleBar-activeForeground, var(--vscode-foreground)));
+  border-bottom: 1px solid var(--vscode-contrastBorder, var(--vscode-widget-border, var(--vscode-panel-border)));
+}
+
+.dialog-heading-label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 .4em;
+  min-width: 0;
+}
+
+.dialog-heading :is(.dialog-heading-title, .dialog-heading-count) {
+  min-width: 0;
+  margin: 0;
+  color: inherit;
+  font-size: .78em;
+  font-weight: 400;
+  letter-spacing: .04em;
+  overflow-wrap: anywhere;
+}
+
+.dialog-heading-title { text-transform: uppercase; }
+
+.dialog-heading .dialog-heading-close {
+  --vscode-icon-foreground: currentColor;
+  display: inline-flex;
+  flex: 0 0 28px;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+}
+
+.dialog-heading .dialog-heading-close:hover:not(:disabled) {
+  background: var(--vscode-button-hoverBackground, transparent);
+  border-color: var(--vscode-toolbar-hoverOutline, transparent);
+}
+
+.dialog-heading .dialog-heading-close:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder, currentColor);
+  outline-offset: -1px;
+}

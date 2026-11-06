@@ -196,6 +196,7 @@ test('ZIP-F10 unpack dialog exposes mask, paths and separate archive folders bef
   const saved = state(); saved.folders['C:/tmp'][0] = { id: 'archive', name: 'sample.zip', fsSource: 'C:/tmp/sample.zip', type: 'archive' };
   const app = createApp(t, saved); app.click(app.row('sample.zip')); app.action('unpack');
   assert.equal(app.document.querySelector('#modal').open, true);
+  assert.equal(app.document.querySelector('.dialog-heading #modal-selection-count').textContent, '(1 ausgewählter Eintrag)');
   app.document.querySelector('#zip-filter').value = '*.txt'; app.document.querySelector('#zip-paths').checked = false;
   app.document.querySelector('#zip-separate').checked = true; submit(app);
   const request = app.messages.find(message => message.type === 'zip-unpack');

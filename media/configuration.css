@@ -77,6 +77,7 @@ footer button { min-width: 88px; }
 [role="alert"]:empty, [role="status"]:empty { display: none; }
 #shortcut-dialog { color: var(--vscode-foreground); background: var(--vscode-editor-background); border: 1px solid var(--vscode-focusBorder); box-shadow: 0 4px 16px var(--vscode-widget-shadow); width: 540px; max-width: calc(100vw - 32px); max-height: calc(100vh - 32px); overflow: auto; padding: 16px; }
 #shortcut-dialog::backdrop { background: var(--vscode-widget-shadow); }
+#shortcut-dialog .dialog-heading { margin: -16px -16px 12px; }
 #shortcut-capture { display: block; width: 100%; margin: 8px 0; }
 #shortcut-dialog .toolbar { justify-content: flex-end; margin: 12px 0 0; }
 [hidden] { display: none !important; }

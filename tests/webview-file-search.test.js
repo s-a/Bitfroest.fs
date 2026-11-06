@@ -9,6 +9,8 @@ function open(t) { const app = createApp(t, fixture()); app.document.querySelect
 
 test('search mnemonics focus and select the complete name and search text', t => {
   const app = open(t), dialog = app.document.querySelector('[data-file-search]');
+  assert.ok(dialog.querySelector('.dialog-heading h2.dialog-heading-title'));
+  assert.ok(dialog.querySelector('.dialog-heading [data-search-close].dialog-heading-close'));
   const name = dialog.querySelector('[name=name]'), text = dialog.querySelector('[name=text]');
   name.value = 'existing name'; text.value = 'existing content';
   app.key('e', { altKey: true });

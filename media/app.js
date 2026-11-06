@@ -2438,23 +2438,26 @@
     }
     mountOperationFailure();
   }
-  function modal(title, body, label, callback, eyebrow = t('DATEIAKTION')) {
+  function modal(title, body, label, callback) {
     filePointerGesture?.cancel(); cancelPointerDrag();
     clearPendingRenameCue();
     document.querySelectorAll('.modal-actions [data-dialog-secondary]').forEach(button => button.remove());
+    $('#modal-selection-count')?.remove();
     operationErrorDialog = false; operationFailureInline = false;
     $('#modal-title').textContent = title; $('#modal-body').innerHTML = body;
     $('#modal').classList.toggle('conflict-dialog', Boolean($('#modal-body').querySelector('[data-conflict-layout]')));
     const transfer = Boolean($('#modal-body').querySelector('.transfer-dialog'));
-    $('#modal-eyebrow').textContent = transfer ? `${eyebrow}:` : eyebrow;
     $('#modal').classList.toggle('transfer-confirmation', transfer);
     $('#modal-confirm').classList.toggle('vscode-button', transfer);
     $('#modal-cancel').classList.toggle('vscode-button', transfer);
     $('#modal-cancel').classList.toggle('secondary', transfer);
     $('#modal-close').classList.toggle('vscode-action-button', transfer);
     $('#modal-confirm').textContent = label; $('#modal-confirm').hidden = !label; $('#modal-cancel').hidden = false; $('#modal-cancel').textContent = label ? t('Abbrechen') : t('Schließen');
+    const selectionCount = $('#modal-selection-count');
+    if (selectionCount) $('#modal-title').parentElement.append(selectionCount);
     const description = $('#modal-body').querySelector('#modal-description');
-    if (description) $('#modal').setAttribute('aria-describedby', 'modal-description');
+    const descriptionIds = [selectionCount?.id, description?.id].filter(Boolean);
+    if (descriptionIds.length) $('#modal').setAttribute('aria-describedby', descriptionIds.join(' '));
     else $('#modal').removeAttribute('aria-describedby');
     confirmAction = callback; $('#modal').showModal();
     const input = $('#modal-body').querySelector('input:not([type="checkbox"]):not([type="radio"]), textarea');
@@ -2462,6 +2465,7 @@
     if (operationFailure) mountOperationFailure();
   }
   function field(label, value, id = 'value') { return `<div class="field"><label for="${id}">${label}</label><input id="${id}" value="${escape(paths.isWindowsPath(value) ? displayPath(value) : value)}" required autocomplete="off"></div>`; }
+  function selectionCount(length) { return `<span id="modal-selection-count" class="dialog-heading-count">(${count('selectedEntry', length)})</span>`; }
   function showBlockedDeletion({ path, inUse, deletedCount, canInspect }, operationId) {
     const name = path.split('/').at(-1) || path;
     const partial = deletedCount > 0 ? `<p>${escape(t('Bereits gelöscht: {count}', { count: deletedCount }))}</p>` : '';
@@ -2500,7 +2504,7 @@
       const lines = (file.content || '').split('\n');
       body = `<article class="markdown-preview">${lines.map(line => line.startsWith('## ') ? `<h2>${escape(line.slice(3))}</h2>` : line.startsWith('# ') ? `<h1>${escape(line.slice(2))}</h1>` : line.startsWith('- ') ? `<ul><li>${escape(line.slice(2))}</li></ul>` : `<p>${escape(line)}</p>`).join('')}</article>`;
     } else body = `<pre class="preview-text">${escape(file.content || t('Keine Textvorschau verfügbar.'))}</pre>`;
-    modal(file.name, body, edit ? t('Mockup speichern') : null, () => { file.content = $('.editor').value; file.size = new TextEncoder().encode(file.content).length; render(); toast(t('Beispieldatei aktualisiert'), 'success'); return true; }, edit ? t('BEARBEITEN · F4') : t('VORSCHAU · F3'));
+    modal(file.name, body, edit ? t('Mockup speichern') : null, () => { file.content = $('.editor').value; file.size = new TextEncoder().encode(file.content).length; render(); toast(t('Beispieldatei aktualisiert'), 'success'); return true; });
   }
   function conflictMetadata(file) {
     const known = (key, text = String(key)) => ({ key, text });
@@ -2557,7 +2561,7 @@
         const reason = samePathDisabled ? t('Quelle und Ziel sind identisch. Zum Kopieren einen neuen Namen wählen.') : appendDisabled ? t('Anhängen ist für diese Dateien nicht verfügbar.') : '';
         return `<button type="button" data-conflict-action="${value}" ${value.startsWith('overwrite') || value === 'append' ? 'data-destructive="true"' : ''} ${reason ? `disabled title="${escape(reason)}" aria-describedby="conflict-limitations"` : ''}>${labels[value]}</button>`;
       };
-      modal(t('Datei bereits vorhanden'), `<section class="conflict-layout" data-conflict-layout>${conflictComparison(conflict)}${conflict.samePath ? `<p class="dialog-notice">${t('Quelle und Ziel sind identisch. Zum Kopieren einen neuen Namen wählen.')}</p>` : ''}<div class="conflict-rename-grid">${field(t('Neuer Name für Kopie oder Ziel'), window.BitfroestTransfer.uniqueName([conflict.source, conflict.target], conflict.source.name), 'conflict-name')}<div class="conflict-rename-actions">${['rename-source', 'rename-target'].map(button).join('')}</div></div><details class="dialog-options"><summary>${t('Weitere Konfliktentscheidungen')}</summary><div class="conflict-actions">${['overwrite-all', 'skip-all', 'autorename-source', 'autorename-target', 'overwrite-older', 'overwrite-older-equal', 'rename-older-target', 'larger', 'smaller'].map(button).join('')}</div></details><p id="conflict-limitations" class="sr-only">${conflict.samePath ? t('Quelle und Ziel sind identisch. Zum Kopieren einen neuen Namen wählen.') : t('Entscheidungen für alle Dateien gelten für weitere Konflikte dieses Auftrags.')}</p><button type="button" id="conflict-compare" class="dialog-link" ${typeof conflict.source.content !== 'string' || typeof conflict.target.content !== 'string' || ['folder', 'archive'].includes(conflict.source.type) || ['folder', 'archive'].includes(conflict.target.type) ? `disabled title="${t('Keine vollständigen Textdaten für einen Vergleich vorhanden')}"` : ''}>${t('Inhalt vergleichen')}</button><pre id="conflict-comparison" class="preview-text" hidden></pre></section>`, null, () => false, t('KOPIER-/VERSCHIEBEKONFLIKT'));
+      modal(t('Datei bereits vorhanden'), `<section class="conflict-layout" data-conflict-layout>${conflictComparison(conflict)}${conflict.samePath ? `<p class="dialog-notice">${t('Quelle und Ziel sind identisch. Zum Kopieren einen neuen Namen wählen.')}</p>` : ''}<div class="conflict-rename-grid">${field(t('Neuer Name für Kopie oder Ziel'), window.BitfroestTransfer.uniqueName([conflict.source, conflict.target], conflict.source.name), 'conflict-name')}<div class="conflict-rename-actions">${['rename-source', 'rename-target'].map(button).join('')}</div></div><details class="dialog-options"><summary>${t('Weitere Konfliktentscheidungen')}</summary><div class="conflict-actions">${['overwrite-all', 'skip-all', 'autorename-source', 'autorename-target', 'overwrite-older', 'overwrite-older-equal', 'rename-older-target', 'larger', 'smaller'].map(button).join('')}</div></details><p id="conflict-limitations" class="sr-only">${conflict.samePath ? t('Quelle und Ziel sind identisch. Zum Kopieren einen neuen Namen wählen.') : t('Entscheidungen für alle Dateien gelten für weitere Konflikte dieses Auftrags.')}</p><button type="button" id="conflict-compare" class="dialog-link" ${typeof conflict.source.content !== 'string' || typeof conflict.target.content !== 'string' || ['folder', 'archive'].includes(conflict.source.type) || ['folder', 'archive'].includes(conflict.target.type) ? `disabled title="${t('Keine vollständigen Textdaten für einen Vergleich vorhanden')}"` : ''}>${t('Inhalt vergleichen')}</button><pre id="conflict-comparison" class="preview-text" hidden></pre></section>`, null, () => false);
       const primary = document.createElement('fieldset'); primary.className = 'conflict-single conflict-footer-actions'; primary.dataset.dialogSecondary = '';
       primary.innerHTML = `<legend>${t('Für diese Datei')}</legend><div class="conflict-actions">${['overwrite', 'skip', 'append'].map(button).join('')}</div>`;
       $('.modal-actions').prepend(primary);
@@ -2808,7 +2812,7 @@
   }
   function runZipCopy(sourceSide, sourcePath, picked, targetPath) {
     if (!picked.length) return;
-    modal(t('Archiv entpacken'), `<p>${count('selectedEntry', picked.length)}</p>${zipUnpackFields(targetPath || currentPath(state.panes[1 - sourceSide]))}`, t('Entpacken'), () => {
+    modal(t('Archiv entpacken'), `${selectionCount(picked.length)}${zipUnpackFields(targetPath || currentPath(state.panes[1 - sourceSide]))}`, t('Entpacken'), () => {
       const enteredTarget = $('#value').value.trim();
       const target = enteredTarget ? inputPath(enteredTarget, targetPath || currentPath(state.panes[1 - sourceSide])) : '';
       if (state.archiveLocations?.[target]) { toast(t('Ein Zielordner ist erforderlich.')); return false; }
@@ -2849,7 +2853,7 @@
     const targetLocation = state.archiveLocations?.[targetPath];
     const archiveName = (picked.length === 1 ? columns.splitName(picked[0]).name : base(sourcePath)) + '.zip';
     const archive = targetLocation?.archive || join(targetPath, archiveName);
-    modal(t('Auswahl packen'), `<p id="modal-description" class="dialog-description">${count('selectedEntry', picked.length)}</p>${field(t('Archivname'), archive)}<fieldset class="zip-pack-group"><legend>${t('Kompression und Verschlüsselung')}</legend><div class="zip-pack-settings"><div class="field"><label for="zip-level">${t('Kompressionsrate')}</label><input id="zip-level" type="number" min="0" max="9" value="6"></div><div class="field"><label for="zip-encryption">${t('Verschlüsselung')}</label><select id="zip-encryption"><option value="none">${t('Keine')}</option><option value="zipcrypto">ZIP2.0</option><option value="aes128">AES-128</option><option value="aes192">AES-192</option><option value="aes256">AES-256</option></select></div></div></fieldset><fieldset class="zip-pack-group"><legend>${t('Dateioptionen')}</legend><label class="zip-pack-check"><input id="zip-paths" type="checkbox" checked><span>${t('Pfade speichern')}</span></label><label class="zip-pack-check"><input id="zip-recursive" type="checkbox" checked><span>${t('Unterverzeichnisse rekursiv speichern')}</span></label><label class="zip-pack-check"><input id="zip-move" type="checkbox" ${move ? 'checked' : ''}><span>${t('Nach dem Packen Quellen entfernen')}</span></label></fieldset>`, t('Packen'), () => {
+    modal(t('Auswahl packen'), `${selectionCount(picked.length)}${field(t('Archivname'), archive)}<fieldset class="zip-pack-group"><legend>${t('Kompression und Verschlüsselung')}</legend><div class="zip-pack-settings"><div class="field"><label for="zip-level">${t('Kompressionsrate')}</label><input id="zip-level" type="number" min="0" max="9" value="6"></div><div class="field"><label for="zip-encryption">${t('Verschlüsselung')}</label><select id="zip-encryption"><option value="none">${t('Keine')}</option><option value="zipcrypto">ZIP2.0</option><option value="aes128">AES-128</option><option value="aes192">AES-192</option><option value="aes256">AES-256</option></select></div></div></fieldset><fieldset class="zip-pack-group"><legend>${t('Dateioptionen')}</legend><label class="zip-pack-check"><input id="zip-paths" type="checkbox" checked><span>${t('Pfade speichern')}</span></label><label class="zip-pack-check"><input id="zip-recursive" type="checkbox" checked><span>${t('Unterverzeichnisse rekursiv speichern')}</span></label><label class="zip-pack-check"><input id="zip-move" type="checkbox" ${move ? 'checked' : ''}><span>${t('Nach dem Packen Quellen entfernen')}</span></label></fieldset>`, t('Packen'), () => {
       const entered = $('#value').value.trim();
       if (!entered) return false;
       const normalized = inputPath(entered, parent(archive));
@@ -2887,7 +2891,7 @@
       return `<div class="vscode-checkbox"><input type="checkbox" id="${id}" title="${help}" aria-description="${help}"><label for="${id}" title="${help}"><span class="icon" aria-hidden="true"><span class="icon-checked">${window.BitfroestIcons.font('check')}</span></span><span class="text">${escape(t(label))}</span></label></div>`;
     };
     modal(mode === 'move' ? t('Verschieben') : t('Kopieren'), `<section class="transfer-dialog">
-      <p id="modal-description" class="dialog-description">${count('selectedEntry', picked.length)}</p>
+      ${selectionCount(sourceGroups?.length ? sourceGroups.reduce((sum, group) => sum + group.ids.length, 0) : picked.length)}
       <div class="vscode-form-group transfer-source"><span class="vscode-label">${t('Quelle')}</span><div data-transfer-source>${escape(displayPath(sourcePath))}</div></div>
       ${field(mode === 'move' ? t('Verschieben nach') : t('Kopieren nach'), targetPath || currentPath(state.panes[1 - sourceSide]))}
       <fieldset class="transfer-options"><legend>${t('Optionen')}</legend>
@@ -2922,7 +2926,7 @@
       executeTransfer(options).catch(error => failTransferExecution(error, onComplete));
       return false;
     });
-    if (sourceGroups?.length) { $('#modal-description').textContent = count('selectedEntry', sourceGroups.reduce((sum, group) => sum + group.ids.length, 0)); document.querySelector('[data-transfer-source]').textContent = sourceGroups.map(group => displayPath(group.sourcePath)).join('\n'); }
+    if (sourceGroups?.length) document.querySelector('[data-transfer-source]').textContent = sourceGroups.map(group => displayPath(group.sourcePath)).join('\n');
     $('#value').dataset.transferName = mode;
     const targetHint = t('Bei einer einzelnen Datei kann das Ziel auch einen neuen Dateinamen enthalten. Filter unterstützen * und ? sowie Ausschlüsse hinter |.');
     for (const input of [$('#value'), $('#transfer-filter')]) { input.title = targetHint; input.setAttribute('aria-description', targetHint); }
@@ -2986,11 +2990,11 @@
     if (state.realFilesystem && kind === 'test-archives') return sendZipWrite({ messageType: 'zip-test', path: source, sourcePath: source, sourceSide: state.active, targetSide: state.active, ids: picked.map(row => row.id) });
     if (state.realFilesystem && kind === 'unpack') {
       if (!picked.length || picked.some(row => !/\.zip$/i.test(row.name))) return toast(t('Zum Entpacken zuerst ein ZIP-Archiv markieren.'));
-      modal(t('Archiv entpacken'), zipUnpackFields(currentPath(state.panes[1 - state.active]), true), t('Entpacken'), () => { const target = $('#value').value.trim(); sendZipWrite({ messageType: 'zip-unpack', sourcePath: source, sourceSide: state.active, targetSide: 1 - state.active, ids: picked.map(row => row.id), target: target ? inputPath(target, currentPath(state.panes[1 - state.active])) : '', ...zipUnpackOptions() }); return true; }); $('#value').required = false; return;
+      modal(t('Archiv entpacken'), selectionCount(picked.length) + zipUnpackFields(currentPath(state.panes[1 - state.active]), true), t('Entpacken'), () => { const target = $('#value').value.trim(); sendZipWrite({ messageType: 'zip-unpack', sourcePath: source, sourceSide: state.active, targetSide: 1 - state.active, ids: picked.map(row => row.id), target: target ? inputPath(target, currentPath(state.panes[1 - state.active])) : '', ...zipUnpackOptions() }); return true; }); $('#value').required = false; return;
     }
     if (state.archiveLocations?.[source] && ['delete', 'delete-alternate', 'delete-permanently'].includes(kind)) {
       if (!picked.length) return;
-      return modal(t('Auswahl löschen'), `<p>${count('selectedEntry', picked.length)}</p>`, t('Löschen'), () => { sendZipWrite({ action: 'remove', path: source, ids: picked.map(row => row.id) }); return true; });
+      return modal(t('Auswahl löschen'), `${selectionCount(picked.length)}<p>${picked.map(file => escape(file.name)).join('<br>')}</p>`, t('Löschen'), () => { sendZipWrite({ action: 'remove', path: source, ids: picked.map(row => row.id) }); return true; });
     }
     if (state.archiveLocations?.[source] && !['copy', 'swap', 'mkdir', 'new-file', 'view', 'edit'].includes(kind)) return toast(t('Diese Aktion ist innerhalb eines ZIP-Archivs nicht verfügbar.'));
     if (state.archiveLocations?.[source] && kind === 'copy') return state.archiveLocations?.[currentPath(state.panes[1 - state.active])] ? zipPack(picked, source, currentPath(state.panes[1 - state.active])) : runZipCopy(frozen?.side ?? state.active, source, picked);
@@ -3047,7 +3051,7 @@
       const mixed = useTrash && networkPaths.length > 0;
       const warningText = networkPaths.length ? t('Netzwerkpfade werden endgültig gelöscht und nicht in den Papierkorb verschoben.') : t('Die ausgewählten Einträge werden nicht in den Papierkorb verschoben, sondern endgültig gelöscht.');
       const warning = state.realFilesystem && (!useTrash || mixed) ? `<p id="modal-description">${warningText}</p>${mixed ? `<p>${networkPaths.map(target => escape(target)).join('<br>')}</p>` : ''}` : '';
-      modal(state.realFilesystem ? t(mixed ? 'Auswahl löschen?' : useTrash ? 'In den Papierkorb verschieben?' : 'Endgültig löschen?') : t('Auswahl löschen?'), ui`<p>${mixed ? t('Lokale Einträge werden in den Papierkorb verschoben. Netzwerkpfade werden endgültig gelöscht.') : `${count('entry', picked.length)} ${state.realFilesystem ? t(useTrash ? picked.length === 1 ? 'wird in den Papierkorb verschoben.' : 'werden in den Papierkorb verschoben.' : picked.length === 1 ? 'wird endgültig gelöscht.' : 'werden endgültig gelöscht.') : t(picked.length === 1 ? 'wird aus den Beispieldaten entfernt.' : 'werden aus den Beispieldaten entfernt.')}`}</p>${warning}<p>${picked.map(file => escape(file.name)).join('<br>')}</p>`, state.realFilesystem ? t(mixed ? 'Löschen' : useTrash ? 'In den Papierkorb' : 'Endgültig löschen') : t('Mockup löschen'), function removeSelection() {
+      modal(state.realFilesystem ? t(mixed ? 'Auswahl löschen?' : useTrash ? 'In den Papierkorb verschieben?' : 'Endgültig löschen?') : t('Auswahl löschen?'), selectionCount(picked.length) + ui`<p>${mixed ? t('Lokale Einträge werden in den Papierkorb verschoben. Netzwerkpfade werden endgültig gelöscht.') : `${count('entry', picked.length)} ${state.realFilesystem ? t(useTrash ? picked.length === 1 ? 'wird in den Papierkorb verschoben.' : 'werden in den Papierkorb verschoben.' : picked.length === 1 ? 'wird endgültig gelöscht.' : 'werden endgültig gelöscht.') : t(picked.length === 1 ? 'wird aus den Beispieldaten entfernt.' : 'werden aus den Beispieldaten entfernt.')}`}</p>${warning}<p>${picked.map(file => escape(file.name)).join('<br>')}</p>`, state.realFilesystem ? t(mixed ? 'Löschen' : useTrash ? 'In den Papierkorb' : 'Endgültig löschen') : t('Mockup löschen'), function removeSelection() {
         if (frozen && !validDraggedFiles(frozen)) { toast(t('Die gezogene Auswahl wurde geändert. Bitte erneut ziehen.')); return false; }
         if (state.realFilesystem) {
           const paths = selectedPaths;
@@ -3096,7 +3100,7 @@
   }
   function rename(picked, source) {
     const directories = picked.map(file => resultView(pane()) ? parent(file.fsSource) : source);
-    modal(t('Mehrfach-Umbenennen'), ui(['<p>Die Vorschau wird beim Eingeben aktualisiert. [N] = Name, [C] = Zähler.</p><div class="field-row">']) + field(t('Namensmaske'), '[N]_[C]', 'mask') + field(t('Zähler beginnt bei'), '1', 'counter') + '</div><div class="field-row">' + field(t('Suchen (optional)'), '', 'search') + field(t('Ersetzen durch'), '', 'replacement') + ui(['</div><div class="field"><label for="casing">Groß-/Kleinschreibung</label><select id="casing"><option value="keep">Unverändert</option><option value="lower">kleinbuchstaben</option><option value="upper">GROSSBUCHSTABEN</option></select></div><table class="rename-table"><thead><tr><th>Alter Name</th><th>Neuer Name</th></tr></thead><tbody id="rename-preview"></tbody></table>']), t('Umbenennen'), function applyNames() {
+    modal(t('Mehrfach-Umbenennen'), selectionCount(picked.length) + ui(['<p>Die Vorschau wird beim Eingeben aktualisiert. [N] = Name, [C] = Zähler.</p><div class="field-row">']) + field(t('Namensmaske'), '[N]_[C]', 'mask') + field(t('Zähler beginnt bei'), '1', 'counter') + '</div><div class="field-row">' + field(t('Suchen (optional)'), '', 'search') + field(t('Ersetzen durch'), '', 'replacement') + ui(['</div><div class="field"><label for="casing">Groß-/Kleinschreibung</label><select id="casing"><option value="keep">Unverändert</option><option value="lower">kleinbuchstaben</option><option value="upper">GROSSBUCHSTABEN</option></select></div><table class="rename-table"><thead><tr><th>Alter Name</th><th>Neuer Name</th></tr></thead><tbody id="rename-preview"></tbody></table>']), t('Umbenennen'), function applyNames() {
       if (prepareFolders(picked.flatMap((file, index) => file.type === 'folder' ? [join(directories[index], file.name)] : []), 'rename', applyNames)) return false;
       const current = picked.map((file, index) => (state.folders[directories[index]] || []).find(row => row.id === file.id && row.name === file.name && row.type === file.type));
       if (current.some(file => !file)) { toast(t('Die gezogene Auswahl wurde geändert. Bitte erneut ziehen.')); return false; }
@@ -3116,7 +3120,7 @@
       const pending = state.realFilesystem && JSON.stringify(state.folders) !== confirmedFolders;
       if (pending) filesystemResume = completed;
       $('#modal').close(); render(); if (!pending) completed(); return true;
-    }, t('WERKZEUGE · STRG M'));
+    });
     $('#search').required = false; $('#replacement').required = false; $('#counter').type = 'number'; $('#counter').min = '0';
     function renamedNames() {
       return picked.map((file, index) => {
@@ -3369,7 +3373,7 @@
       }
       render(true, undefined, false); return;
     }
-    if (command === 'help') modal(t('Tastatur & Prototyp'), ui(['<p>Tab wechselt die Dateiliste. Pfeiltasten navigieren. Enter öffnet Ordner und Archive. Rücktaste geht eine Ebene nach oben. Leertaste markiert; Strg-Klick und Umschalt-Klick erweitern die Auswahl.</p><p>F3–F8 bedienen die Dateiaktionen. Strg+M öffnet das Mehrfach-Umbenennen. Alt+F5 packt, Alt+F9 entpackt.</p><p>Alle Dateiaktionen verändern ausschließlich Beispieldaten. Im VS-Code-Host öffnet F4 ein ungespeichertes Dokument. Aufruf der Erweiterung: Strg+Alt+Umschalt+F12.</p>']), null, null, t('BEDIENUNG'));
+    if (command === 'help') modal(t('Tastatur & Prototyp'), ui(['<p>Tab wechselt die Dateiliste. Pfeiltasten navigieren. Enter öffnet Ordner und Archive. Rücktaste geht eine Ebene nach oben. Leertaste markiert; Strg-Klick und Umschalt-Klick erweitern die Auswahl.</p><p>F3–F8 bedienen die Dateiaktionen. Strg+M öffnet das Mehrfach-Umbenennen. Alt+F5 packt, Alt+F9 entpackt.</p><p>Alle Dateiaktionen verändern ausschließlich Beispieldaten. Im VS-Code-Host öffnet F4 ein ungespeichertes Dokument. Aufruf der Erweiterung: Strg+Alt+Umschalt+F12.</p>']), null, null);
     else action(command);
   }
   document.addEventListener('click', event => {

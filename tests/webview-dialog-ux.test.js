@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { createApp, resolveThemeCss } = require('./support/webview.cjs');
 const tick = () => new Promise(resolve => setImmediate(resolve));
+const dialogCss = ['app.css', 'dialog-heading.css'].map(name => fs.readFileSync(path.join(__dirname, '../media', name), 'utf8')).join('\n');
 function fixture(real = false) {
   const pane = path => ({ tabs: [path], tab: 0, selected: [], cursor: null, filter: '', sort: 'name' });
   return { version: 1, active: 0, realFilesystem: real, panes: [pane('/left'), pane('/right')], folders: {
@@ -14,31 +15,36 @@ function fixture(real = false) {
 function copy(app) { app.click(app.row('same.txt').querySelector('[data-filename]')); app.action('copy'); }
 function submit(app) { app.document.querySelector('#modal-form').dispatchEvent(new app.window.Event('submit', { bubbles: true, cancelable: true })); }
 
-test('copy and move put the localized category and action on one heading line', t => {
-  for (const [language, category, actions] of [
-    ['de', 'DATEIAKTION:', ['Kopieren', 'Verschieben']],
-    ['en', 'FILE OPERATION:', ['Copy', 'Move']]
+test('a folder dialog uses the shared heading with only the localized title', t => {
+  const app = createApp(t, fixture(), { language: 'en' });
+  app.action('mkdir');
+  const heading = app.document.querySelector('#modal[open] .dialog-heading');
+  assert.ok(heading);
+  assert.equal(heading.textContent.trim(), 'New folder');
+  assert.equal(heading.querySelector('#modal-title').textContent, 'New folder');
+});
+
+test('copy and move show only the localized title in compact regular type', t => {
+  for (const [language, actions] of [
+    ['de', ['Kopieren', 'Verschieben']],
+    ['en', ['Copy', 'Move']]
   ]) {
     const app = createApp(t, fixture(), { language });
     const style = app.document.createElement('style');
-    style.textContent = resolveThemeCss(fs.readFileSync(path.join(__dirname, '../media/app.css'), 'utf8'));
+    style.textContent = resolveThemeCss(dialogCss);
     app.document.head.append(style);
     app.click(app.row('same.txt').querySelector('[data-filename]'));
     for (const [index, action] of ['copy', 'move'].entries()) {
       app.action(action);
-      const prefix = app.document.querySelector('#modal-eyebrow');
       const title = app.document.querySelector('#modal-title');
-      assert.equal(prefix.textContent, category);
       assert.equal(title.textContent, actions[index]);
-      assert.equal(prefix.parentElement, title.parentElement);
+      const selection = title.parentElement.querySelector('#modal-selection-count');
+      assert.equal(selection.textContent, language === 'de' ? '(1 ausgewählter Eintrag)' : '(1 selected entry)');
       assert.equal(app.window.getComputedStyle(title.parentElement).display, 'flex');
-      const prefixStyle = app.window.getComputedStyle(prefix), titleStyle = app.window.getComputedStyle(title);
-      assert.equal(titleStyle.fontFamily, prefixStyle.fontFamily);
-      assert.equal(titleStyle.fontSize, prefixStyle.fontSize);
-      assert.equal(titleStyle.color, prefixStyle.color);
-      assert.equal(titleStyle.letterSpacing, prefixStyle.letterSpacing);
-      assert.equal(prefixStyle.fontWeight, '400');
-      assert.equal(titleStyle.fontWeight, '700');
+      const titleStyle = app.window.getComputedStyle(title);
+      assert.equal(titleStyle.fontWeight, '400');
+      assert.equal(titleStyle.textTransform, 'uppercase');
+      assert.ok(parseFloat(titleStyle.fontSize) < parseFloat(app.window.getComputedStyle(title.parentElement).fontSize));
       app.click(app.document.querySelector('#modal-cancel'));
     }
   }
@@ -47,7 +53,6 @@ test('copy and move put the localized category and action on one heading line', 
 test('transfer confirmation separates the heading from the body using theme colors', t => {
   const app = createApp(t, fixture());
   const style = app.document.createElement('style');
-  const css = fs.readFileSync(path.join(__dirname, '../media/app.css'), 'utf8');
   app.document.head.append(style);
   copy(app);
   const computed = selector => app.window.getComputedStyle(app.document.querySelector(selector));
@@ -56,7 +61,7 @@ test('transfer confirmation separates the heading from the body using theme colo
     ['vscode-high-contrast-light', 'rgb(255, 241, 176)', 'rgb(32, 32, 32)']
   ]) {
     app.document.body.className = theme;
-    style.textContent = resolveThemeCss(css, {
+    style.textContent = resolveThemeCss(dialogCss, {
       'banner-background': '#303132',
       'button-background': background,
       'button-foreground': foreground,
@@ -67,7 +72,7 @@ test('transfer confirmation separates the heading from the body using theme colo
     assert.equal(computed('#modal-close').height, '28px');
     assert.equal(computed('.modal-heading').borderBottomWidth, '1px');
     assert.equal(computed('.modal-heading').borderBottomColor, 'rgb(137, 165, 191)');
-    for (const selector of ['#modal-eyebrow', '#modal-title', '#modal-close']) {
+    for (const selector of ['#modal-title', '#modal-close']) {
       assert.equal(computed(selector).color, foreground);
     }
   }
@@ -77,17 +82,36 @@ test('transfer dialog exposes its accessible name, source, description and selec
   const app = createApp(t, fixture()); copy(app);
   const dialog = app.document.querySelector('dialog');
   assert.equal(dialog.getAttribute('aria-labelledby'), 'modal-title');
-  assert.equal(dialog.getAttribute('aria-describedby'), 'modal-description');
+  assert.equal(dialog.getAttribute('aria-describedby'), 'modal-selection-count');
   assert.equal(app.document.querySelector('[data-transfer-source]').textContent, '/left');
   assert.ok(app.document.querySelector('.vscode-form-group > [data-transfer-source]'));
   assert.ok(app.document.querySelector('#modal-confirm.vscode-button'));
   assert.ok(app.document.querySelector('#modal-cancel.vscode-button.secondary'));
   assert.ok(app.document.querySelector('#modal-close.vscode-action-button'));
-  assert.match(app.document.querySelector('#modal-description').textContent, /1/);
+  assert.match(app.document.querySelector('.dialog-heading #modal-selection-count').textContent, /^\(1 .+\)$/);
+  assert.equal(app.document.querySelector('#modal-body #modal-description'), null);
   const input = app.document.querySelector('#value');
   assert.equal(app.document.activeElement, input);
   assert.equal(input.selectionEnd - input.selectionStart, input.value.length);
   assert.ok(app.document.querySelector('details.dialog-options #transfer-policy'));
+  app.click(app.document.querySelector('#modal-cancel'));
+  app.action('mkdir');
+  assert.equal(app.document.querySelector('#modal-selection-count'), null);
+});
+
+test('operations with a known selection use the same count beside the heading', t => {
+  const state = fixture(true);
+  state.folders['/left'].push({ id: 'c', name: 'other.txt', type: 'text', size: 1, content: 'a' });
+  const app = createApp(t, state, { language: 'en' });
+  app.click(app.row('same.txt').querySelector('[data-filename]'));
+  app.click(app.row('other.txt').querySelector('[data-filename]'), { ctrlKey: true });
+  for (const action of ['copy', 'move', 'rename', 'pack', 'delete']) {
+    app.action(action);
+    const count = app.document.querySelector('.dialog-heading #modal-selection-count');
+    assert.equal(count?.textContent, '(2 selected entries)', action);
+    assert.match(app.document.querySelector('#modal').getAttribute('aria-describedby'), /\bmodal-selection-count\b/);
+    app.click(app.document.querySelector('#modal-cancel'));
+  }
 });
 
 test('transfer options use separate aligned checkbox rows and localized tooltips in every theme', t => {

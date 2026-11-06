@@ -126,6 +126,8 @@ test('shortcut capture reports conflicts immediately and clears them when the ca
   app.editor.open('shortcuts'); await app.flush();
   const row = app.document.querySelector('[data-command="bitfroest.copy"][data-default-key="f5"]');
   row.querySelector('[data-shortcut-edit]').click();
+  assert.ok(app.document.querySelector('#shortcut-dialog[open] .dialog-heading #shortcut-dialog-title'));
+  assert.ok(app.document.querySelector('link[href^="webview-resource:"][href$="dialog-heading.css"]'));
   const capture = app.document.querySelector('#shortcut-capture');
   capture.dispatchEvent(new app.window.KeyboardEvent('keydown', { key: 'F6', bubbles: true, cancelable: true }));
   assert.match(app.document.querySelector('#shortcut-capture-error').textContent, /F6.*Move/);

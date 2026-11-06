@@ -30,6 +30,7 @@ const files = {
   '/index.html': ['index.html', 'text/html; charset=utf-8'],
   '/app.css': ['app.css', 'text/css; charset=utf-8'],
   '/transfer-controls.css': ['transfer-controls.css', 'text/css; charset=utf-8'],
+  '/dialog-heading.css': ['dialog-heading.css', 'text/css; charset=utf-8'],
   '/bitfroest-file-names.js': ['bitfroest-file-names.js', 'text/javascript; charset=utf-8'],
   '/app.js': ['app.js', 'text/javascript; charset=utf-8'],
   '/bitfroest-i18n.js': ['bitfroest-i18n.js', 'text/javascript; charset=utf-8'],

@@ -53,6 +53,8 @@ Windows examples with isolated sample files.
 <details>
 <summary><kbd>Shift+F8</kbd> <kbd>F5</kbd> Find the process using a locked file</summary>
 
+This recording shows the previous confirmation dialog style.
+
 ![Find the process using a locked file](media/marketplace/showcases/0022-windows-en-dark-folder-locks-story.gif)
 
 </details>
