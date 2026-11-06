@@ -2095,7 +2095,7 @@
     uiActionRequests.delete(result.requestId);
     statusTask(result.requestId, null);
     if (result.gitChanged) { gitBindings.clear(); gitDirectories.clear(); directoryCache.clearGit(); refreshGitDisplay(); if (request.type === 'git-ignore') action('refresh'); else requestGitStatus(); }
-    const labels = { edit: 'Datei zum Bearbeiten geöffnet.', open: 'Datei geöffnet.', preview: 'Datei angezeigt.', 'open-settings': 'Einstellungen geöffnet.', 'show-licenses': 'Lizenzen geöffnet.', 'open-help-link': 'Link geöffnet.', 'report-operation-error': 'GitHub-Entwurf geöffnet.', 'open-trash': 'Papierkorb geöffnet.', 'open-terminal': 'Terminal geöffnet.', 'git-diff': 'Git-Diff geöffnet.', 'git-history': 'Git History geöffnet.', 'git-history-directory': 'Git History geöffnet.', 'git-untrack': 'Datei aus Git entfernt; lokal erhalten.', 'git-ignore': 'Datei aus Git entfernt und ignoriert; lokal erhalten.' };
+    const labels = { edit: 'Datei zum Bearbeiten geöffnet.', open: 'Datei geöffnet.', preview: 'Datei angezeigt.', 'open-settings': 'Einstellungen geöffnet.', 'show-licenses': 'Lizenzen geöffnet.', 'open-help-link': 'Link geöffnet.', 'inspect-delete-locks': 'Sperrenuntersuchung geöffnet.', 'report-operation-error': 'GitHub-Entwurf geöffnet.', 'open-trash': 'Papierkorb geöffnet.', 'open-terminal': 'Terminal geöffnet.', 'git-diff': 'Git-Diff geöffnet.', 'git-history': 'Git History geöffnet.', 'git-history-directory': 'Git History geöffnet.', 'git-untrack': 'Datei aus Git entfernt; lokal erhalten.', 'git-ignore': 'Datei aus Git entfernt und ignoriert; lokal erhalten.' };
     reportStatus(result.cancelled ? t('Aktion abgebrochen.') : result.ok ? t(labels[request.type]) : result.error || t('Dateiaktion fehlgeschlagen.'), result.cancelled ? 'cancelled' : result.ok ? 'success' : result.unsupported ? 'info' : 'error', request.statusVersion);
   });
   function rememberSelection(p = pane()) {
@@ -2455,6 +2455,17 @@
     if (operationFailure) mountOperationFailure();
   }
   function field(label, value, id = 'value') { return `<div class="field"><label for="${id}">${label}</label><input id="${id}" value="${escape(paths.isWindowsPath(value) ? displayPath(value) : value)}" required autocomplete="off"></div>`; }
+  function showBlockedDeletion({ path, inUse, deletedCount, canInspect }, operationId) {
+    const name = path.split('/').at(-1) || path;
+    const partial = deletedCount > 0 ? `<p>${escape(t('Bereits gelöscht: {count}', { count: deletedCount }))}</p>` : '';
+    modal(t(inUse ? 'Datei wird verwendet' : 'Eintrag konnte nicht gelöscht werden'),
+      `<p id="modal-description" data-blocked-delete>${escape(name)}</p>${partial}`,
+      canInspect ? t('Dateisperren untersuchen') : null,
+      canInspect ? () => hostAction('inspect-delete-locks', { operationId }) : null);
+    const close = $('#modal-cancel');
+    close.textContent = t('Schließen');
+    close.focus();
+  }
   function validName(name) { return name.trim() && !/[\\/:*?"<>|]/.test(name) && !['.', '..'].includes(name) && !/[. ]$/.test(name); }
   function uniqueName(items, name) { return !items.some(file => file.name.toLocaleLowerCase() === name.toLocaleLowerCase()); }
   function copyTree(from, to) {
@@ -4160,7 +4171,10 @@
       if (!event.data.ok && failedTransferPreparation) failedTransferPreparation();
       if (event.data.cancelled && failedTransferPreparation) failedTransferPreparation(true);
       if (!event.data.ok) {
-        if (completedFilesystemKind === 'filesystem-delete' && event.data.errorPresentation === 'status') statusbar.setStatus(error, 'error');
+        if (completedFilesystemKind === 'filesystem-delete' && event.data.blockedDeletion) {
+          statusbar.setStatus(error, 'error');
+          showBlockedDeletion(event.data.blockedDeletion, event.data.operationId);
+        }
         else showOperationFailure(error, { inline: Boolean(failedRename && restoreRename(failedRename)), diagnostic: event.data.diagnostic, notify: !operationQueue?.active });
       }
       if (pendingGitDiff) { const selection = pendingGitDiff; pendingGitDiff = null; if (event.data.ok) requestGitDiff(selection.selection, selection.action); else { gitMenuSelection = null; toast(t(selection.action === 'git-history' ? 'Ungültige Auswahl für Git History.' : 'Ungültige Dateiauswahl für Git Diff.'), 'error'); } }

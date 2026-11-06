@@ -1066,7 +1066,7 @@ function createProvider(options = {}) {
     if (typeof options.deletePath !== 'function') throw new Error('Die native Löschfunktion ist nicht verfügbar.');
     busy = true;
     let completed = 0;
-    let deleting = false;
+    let deleting;
     try {
       throwIfAborted(settings.signal);
       const permanentPaths = new Set(typeof options.prepareDelete === 'function' ? await options.prepareDelete(targets.map(item => item.path), request.useTrash, request.confirmedNetworkPaths) : []);
@@ -1077,9 +1077,9 @@ function createProvider(options = {}) {
         settings.onProgress?.(Progress.event({ phase: 'deleting', path: item.path, overall: Progress.known('items', completed, targets.length), current: Progress.unknown('items', 0, 'native-operation') }));
         await validateEntries(baseline, [item], settings.signal, false);
         throwIfAborted(settings.signal);
-        deleting = true;
+        deleting = item;
         await options.deletePath(item.path, { recursive: true, useTrash: request.useTrash && !permanentPaths.has(item.path) });
-        deleting = false;
+        deleting = undefined;
         completed++;
         settings.onProgress?.(Progress.event({ phase: 'deleting', path: item.path, overall: Progress.known('items', completed, targets.length), current: Progress.known('items', 1, 1) }));
       }
@@ -1094,7 +1094,7 @@ function createProvider(options = {}) {
       if (error.name === 'AbortError') throw error;
       const failure = new Error(`Löschen fehlgeschlagen nach ${completed} Einträgen: ${error.message}`, { cause: error });
       failure.deletedCount = completed;
-      failure.deletePathFailed = deleting;
+      if (deleting) failure.deleteTarget = { path: deleting.path, folder: deleting.type === 'folder' };
       throw failure;
     } finally { busy = false; }
   }

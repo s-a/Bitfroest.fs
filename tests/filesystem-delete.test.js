@@ -164,7 +164,9 @@ test('partial native deletion reports the completed count and invalidates its st
   let calls = 0;
   const { provider, left } = await fixture(t, async target => { if (++calls === 2) throw new Error('Locked'); await fs.unlink(target); });
   const before = await provider.load();
-  await assert.rejects(provider.remove(before, { paths: [`${left}/a.txt`, `${left}/b.txt`], useTrash: true }), /1/);
+  await assert.rejects(provider.remove(before, { paths: [`${left}/a.txt`, `${left}/b.txt`], useTrash: true }), {
+    deletedCount: 1, deleteTarget: { path: `${left}/b.txt`, folder: false }
+  });
   assert.equal(await fs.readFile(`${left}/b.txt`, 'utf8'), 'b');
   await assert.rejects(provider.remove(before, { paths: [`${left}/b.txt`], useTrash: true }));
 });

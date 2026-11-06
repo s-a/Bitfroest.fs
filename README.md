@@ -18,7 +18,7 @@ Requires Visual Studio Code 1.100.0 or later within the declared compatible vers
 
 The default shortcut is `Ctrl+Alt+Shift+F12` on Windows and Linux. Repeating the command closes the window. Each panel has its own folder tabs and navigation history. Keyboard shortcuts can be customized in VS Code.
 
-The file manager reports a refused deletion in its status bar, for example when another process is using the file.
+When the file system refuses a deletion, the file manager identifies the affected entry and reports how many entries were already deleted. **Inspect file locks** opens the lock inspector on Windows and Linux.
 
 <!-- showcase-gallery:start -->
 ## Feature walkthrough
@@ -45,6 +45,15 @@ Windows examples with isolated sample files.
 <summary><kbd>F8</kbd> <kbd>Shift+F8</kbd> Remove temporary files</summary>
 
 ![Remove temporary files](media/marketplace/showcases/0011-windows-en-dark-delete-confirmations-cleanup.gif)
+
+</details>
+
+### File &amp; Folder Locks
+
+<details>
+<summary><kbd>Shift+F8</kbd> <kbd>F5</kbd> Find the process using a locked file</summary>
+
+![Find the process using a locked file](media/marketplace/showcases/0022-windows-en-dark-folder-locks-story.gif)
 
 </details>
 

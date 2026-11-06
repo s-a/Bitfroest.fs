@@ -53,4 +53,12 @@ function operationIssueUrl(destination, report, environment) {
   return url.toString();
 }
 
-module.exports = { createOperationError, renderOperationError, operationIssueUrl };
+function deletionBlockedByUse(error) {
+  for (let failure = error, depth = 0; failure && depth < 8; failure = failure.cause, depth++) {
+    if (['EBUSY', 'ERROR_SHARING_VIOLATION', 'ERROR_LOCK_VIOLATION'].includes(failure.code) ||
+        /^(?:Error:\s*)*(?:EBUSY:\s*resource busy or locked|(?:sharing|lock) violation|the process cannot access the file because it is being used by another process)\b/i.test(failure.message)) return true;
+  }
+  return false;
+}
+
+module.exports = { createOperationError, renderOperationError, operationIssueUrl, deletionBlockedByUse };

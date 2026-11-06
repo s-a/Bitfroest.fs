@@ -4,17 +4,17 @@ const { renderGallery } = require('../scripts/showcases/publish.cjs');
 
 test('default capture selects the same basic file-operation walkthroughs', () => {
   const { selectScenes } = require('../scripts/showcases/run.cjs');
-  const catalog = ['main', 'new-folder', 'new-file', 'delete-confirmations', 'archive-options'].map(id => ({ id }));
+  const catalog = ['main', 'new-folder', 'new-file', 'delete-confirmations', 'folder-locks', 'archive-options'].map(id => ({ id }));
   assert.deepEqual(selectScenes(catalog).map(scene => scene.id), ['new-folder', 'new-file', 'delete-confirmations']);
   assert.deepEqual(selectScenes(catalog, 'archive-options').map(scene => scene.id), ['archive-options']);
 });
 
-test('gallery includes only the selected basic file-operation walkthroughs', () => {
-  const sections = ['new-folder', 'new-file', 'delete-confirmations', 'archive-options', 'main'].map((id, i) => ({
+test('gallery includes the basic walkthroughs and the targeted file-lock recording', () => {
+  const sections = ['new-folder', 'new-file', 'delete-confirmations', 'folder-locks', 'archive-options', 'main'].map((id, i) => ({
     id, title: id, status: 'rendered', images: [{ file: `${String(i + 1).padStart(4, '0')}-windows-en-dark-${id}-story.gif`, alt: id }]
   }));
   const output = renderGallery({ sections });
-  for (const id of ['new-folder', 'new-file', 'delete-confirmations']) assert.ok(output.includes(id));
+  for (const id of ['new-folder', 'new-file', 'delete-confirmations', 'folder-locks']) assert.ok(output.includes(id));
   for (const id of ['archive-options', 'main']) assert.ok(!output.includes(id));
 });
 

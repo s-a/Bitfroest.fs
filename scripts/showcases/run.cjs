@@ -10,7 +10,7 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 const normalize = value => value.replace(/\\/g, '/').replace(/\/$/, '').toLowerCase();
 const filename = (scene, capture) => `${String(capture?.sequence || 1).padStart(4, '0')}-windows-en-dark-${scene.id}${capture ? `-${capture.id}` : ''}.${capture?.format || 'png'}`;
 function selectScenes(catalog, selected) {
-  const ids = selected ? new Set(selected.split(',')) : require('./publish.cjs').galleryScenes;
+  const ids = selected ? new Set(selected.split(',')) : require('./publish.cjs').defaultScenes;
   return catalog.filter(scene => ids.has(scene.id));
 }
 function numberCatalog(catalog) {
@@ -223,7 +223,7 @@ async function main() {
   fs.writeFileSync(path.join(driver, 'package.json'), JSON.stringify({ name: 'showcase-host', publisher: 'bitfroest', version: '0.0.1', engines: { vscode: '^1.100.0' }, activationEvents: ['onStartupFinished'], main: './extension.cjs' }));
   fs.writeFileSync(path.join(driver, 'extension.cjs'), `exports.activate=()=>{require(${JSON.stringify(path.join(__dirname, 'host-tests.cjs'))}).run().catch(error=>require('node:fs').writeFileSync(${JSON.stringify(path.join(run, 'driver-error.log'))},error.stack||String(error)));};`);
   const previousFile = path.join(output, 'showcases.json');
-  const original = selected && fs.existsSync(previousFile) ? JSON.parse(fs.readFileSync(previousFile, 'utf8')) : undefined;
+  const original = fs.existsSync(previousFile) ? JSON.parse(fs.readFileSync(previousFile, 'utf8')) : undefined;
   const previous = original && renumberManifest(catalog, original);
   const port = await new Promise(resolve => { const server = net.createServer(); server.listen(0, '127.0.0.1', () => { const address = server.address(); server.close(() => resolve(address.port)); }); });
   fs.writeFileSync(path.join(run, 'launch.json'), JSON.stringify({ code, repository, demo, tests: path.join(__dirname, 'host-tests.cjs'), port }));

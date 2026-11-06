@@ -19,7 +19,7 @@ const { createGitStatusProvider } = require('./git-status-provider');
 const { allowedGitPath } = require('./git-status-paths');
 const fs = require('node:fs');
 const path = require('node:path');
-const { normalizePath, displayPath, identity: pathIdentity } = require('./media/bitfroest-paths');
+const { normalizePath, displayPath, parentPath, identity: pathIdentity } = require('./media/bitfroest-paths');
 const crypto = require('node:crypto');
 const { loadIconTheme } = require('./icon-theme');
 const { getFilesystemIcons, clearFilesystemIconCache } = require('./filesystem-icons');
@@ -32,7 +32,7 @@ const { createReadonlyResources } = require('./readonly-files');
 const { createClipboardProvider } = require('./clipboard-provider');
 const { create } = require('./media/bitfroest-i18n');
 const { columnSetsFromTables, columnSetFromPreferences, catalog, normalizeColumnSets, columnTitle, isColumnAvailable } = require('./media/bitfroest-column-settings');
-const { renderOperationError, operationIssueUrl } = require('./operation-errors');
+const { renderOperationError, operationIssueUrl, deletionBlockedByUse } = require('./operation-errors');
 const { openTrash } = require('./open-trash');
 const { openTerminal } = require('./open-terminal');
 const { openAssociatedFile } = require('./open-file');
@@ -728,6 +728,7 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
       changed() { if (panel === messagePanel) messagePanel.webview.postMessage({ type: 'action', action: 'refresh' }); }
     });
     panel.onDidDispose(() => lockInspector.dispose());
+    let deleteLockInspection;
     context.subscriptions.push(shellMenu);
     let shellMenuBusy = false;
     let auxiliaryMoveCompleted = false, auxiliaryReady = false, auxiliaryCheckSent = false, auxiliaryCompactApplied = false;
@@ -1141,6 +1142,20 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
         const entry = shortcutCatalog.find(item => item.id === message.id);
         const resolved = typeof message.key === 'string' && resolveShortcut(shortcutCatalog, shortcutBindings, message.key, shortcutContext, process.platform);
         if (panel === messagePanel && panelReady && messagePanel.active && entry?.editable && resolved?.entry?.id === entry.id && entry.source !== 'local') await vscode.commands.executeCommand(entry.command, entry.args);
+        return;
+      }
+      if (message?.type === 'inspect-delete-locks') {
+        if (typeof message.requestId !== 'string' || !/^ui-action-\d{1,15}$/.test(message.requestId) || !messagePanel.visible) return;
+        const inspection = deleteLockInspection;
+        if (!inspection || message.operationId !== inspection.operationId || !provider.contains(inspection.directory)) {
+          await replyUiAction(message, { ok: false, error: t('Die Sperrenuntersuchung ist für diesen Löschversuch nicht verfügbar.') });
+          return;
+        }
+        deleteLockInspection = undefined;
+        try {
+          lockInspector.open(inspection.directory);
+          await replyUiAction(message, { ok: true });
+        } catch (error) { await replyUiAction(message, { ok: false, error: t(error.message) }); }
         return;
       }
       if (message?.type === 'open-help-link' || message?.type === 'report-operation-error') {
@@ -1757,7 +1772,8 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
           const initialNavigationRevision = navigationRevision;
           let ok = true;
           let cancelled = false;
-          let operationError, errorPresentation;
+          let operationError, blockedDeletion;
+          if (message.type === 'filesystem-delete') deleteLockInspection = undefined;
           let diagnostic;
           let updatedDirectories;
           let navigationReplyPath;
@@ -1850,7 +1866,13 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
             diagnostic = operationDiagnostic(error, message, message.state || filesystemState);
             const detail = Number.isInteger(error.deletedCount) ? t('Löschen fehlgeschlagen nach {count} Einträgen: {error}', { count: error.deletedCount, error: renderOperationError(error.cause, t) }) : renderOperationError(error, t);
             operationError = detail;
-            if (message.type === 'filesystem-delete' && error.deletePathFailed) errorPresentation = 'status';
+            if (message.type === 'filesystem-delete' && error.deleteTarget) {
+              const { path: target, folder } = error.deleteTarget;
+              const directory = folder ? target : parentPath(target, { platform: process.platform });
+              const canInspect = Boolean(operationId && ['win32', 'linux'].includes(process.platform) && directory && provider.contains(directory));
+              if (canInspect) deleteLockInspection = { operationId, directory };
+              blockedDeletion = { path: target, inUse: !folder && deletionBlockedByUse(error.cause), deletedCount: error.deletedCount, canInspect };
+            }
             if (message.type !== 'filesystem-prepare' && message.type !== 'filesystem-navigate' && !(message.type === 'filesystem-refresh' && [0, 1].includes(message.side))) {
               try { filesystemState = retainView(await loadView(savedState), savedState); } catch { /* Preserve the last confirmed state. */ }
             }
@@ -1859,7 +1881,7 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
           if (job) transferJobs.delete(operationId);
           if (directoryJob && directoryJobs.get(directoryKey) === directoryJob) directoryJobs.delete(directoryKey);
           if (refreshController && refreshRead === refreshController) refreshRead = null;
-          if (current && panel === current) await current.webview.postMessage({ type: 'filesystem-result', ok, state: filesystemState, ...(typeof message.refreshRequestId === 'string' ? { refreshRequestId: message.refreshRequestId } : {}), ...(message.taskRequestId ? { taskRequestId: message.taskRequestId } : {}), ...(message.navigationRequestId ? { navigationRequestId: message.navigationRequestId } : {}), ...(updatedDirectories?.length ? { refreshGitDirectories: updatedDirectories } : {}), ...(cancelled ? { cancelled: true } : {}), ...(operationId ? { operationId, operationOutcome: filesystemState?.operationOutcome } : {}), ...(!ok ? { error: operationError, diagnostic, ...(errorPresentation ? { errorPresentation } : {}) } : {}), ...(ok && !cancelled && message.type === 'filesystem-navigate' && navigationReplyPath ? { resumeNavigation: { path: navigationReplyPath, side: message.side } } : {}), ...(ok && !cancelled && message.type === 'filesystem-navigate' && openReplyPath ? { resumeOpen: { path: openReplyPath } } : {}), ...(ok && !cancelled && message.type === 'filesystem-prepare' ? { resumeAction: message.action } : {}) });
+          if (current && panel === current) await current.webview.postMessage({ type: 'filesystem-result', ok, state: filesystemState, ...(typeof message.refreshRequestId === 'string' ? { refreshRequestId: message.refreshRequestId } : {}), ...(message.taskRequestId ? { taskRequestId: message.taskRequestId } : {}), ...(message.navigationRequestId ? { navigationRequestId: message.navigationRequestId } : {}), ...(updatedDirectories?.length ? { refreshGitDirectories: updatedDirectories } : {}), ...(cancelled ? { cancelled: true } : {}), ...(operationId ? { operationId, operationOutcome: filesystemState?.operationOutcome } : {}), ...(!ok ? { error: operationError, diagnostic, ...(blockedDeletion ? { blockedDeletion } : {}) } : {}), ...(ok && !cancelled && message.type === 'filesystem-navigate' && navigationReplyPath ? { resumeNavigation: { path: navigationReplyPath, side: message.side } } : {}), ...(ok && !cancelled && message.type === 'filesystem-navigate' && openReplyPath ? { resumeOpen: { path: openReplyPath } } : {}), ...(ok && !cancelled && message.type === 'filesystem-prepare' ? { resumeAction: message.action } : {}) });
         }).finally(() => { filesystemRequests--; });
         if (!isolatedNavigation) {
           filesystemQueue = Promise.all([filesystemQueue, execution]).then(() => {}, () => {});

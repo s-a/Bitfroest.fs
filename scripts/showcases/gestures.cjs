@@ -85,12 +85,6 @@ function fixtureSnapshot(action, root = document) {
   const state = root.defaultView.BitfroestHost.getState(), pane = state.panes[state.active];
   const activeDirectory = pane.tabs[pane.tab], other = state.panes[1 - state.active], otherDirectory = other.tabs[other.tab], rows = state.folders[activeDirectory] || [];
   const selected = pane.selected.map(id => rows.find(row => row.id === id)?.fsSource || '');
-  if (action === 'lock-inspect') {
-    const item = root.querySelector('[data-context-menu] [data-context-action="inspect-folder-locks"]');
-    const rect = item?.getBoundingClientRect();
-    return { activeDirectory, selected, dialog: 'folder-context-menu', realFilesystem: state.realFilesystem === true,
-      controlReady: Boolean(item && !item.disabled && !item.hidden && rect?.width && rect.height) };
-  }
   if (action === 'lock-delete') action = 'delete-permanent';
   if (action === 'open') {
     return { activeDirectory, otherDirectory, selected, entryType: rows.find(row => row.id === pane.selected[0])?.type,
@@ -135,11 +129,14 @@ function inspectLockScan(root = document) {
 }
 
 function inspectLockFailureView(root = document) {
-  const status = root.querySelector('#status-message');
-  const text = status?.querySelector('[data-status-text]');
-  const rect = text?.getBoundingClientRect();
-  if (status?.dataset.outcome !== 'error' || !rect?.width || !rect.height) return false;
-  return { statusText: text.textContent, dialogOpen: Boolean(root.querySelector('dialog[open], .operation-error')) };
+  const dialog = root.querySelector('dialog[open]#modal'), target = dialog?.querySelector('[data-blocked-delete]');
+  const action = dialog?.querySelector('#modal-confirm'), rect = action?.getBoundingClientRect();
+  if (!target) return false;
+  return {
+    title: dialog.querySelector('#modal-title')?.textContent, file: target.textContent,
+    controlReady: Boolean(rect?.width && rect.height && !action.hidden && !action.disabled && action.textContent === 'Inspect file locks'),
+    genericError: Boolean(dialog.querySelector('.operation-error'))
+  };
 }
 
 function installFixtureCompletion(root = document) {
@@ -377,7 +374,8 @@ async function recordGesture({ capture, scene, page, target, evaluate, invoke, r
       }
       let lockController;
       if (scene.fixture === 'file-lock') {
-        const readLock = action => evaluate(new Function('action', `return (${fixtureSnapshot.toString()})(action, document);`), action);
+        const readFailure = () => evaluate(new Function(`return (${inspectLockFailureView.toString()})(document);`));
+        const readLock = action => action === 'lock-inspect' ? readFailure() : evaluate(new Function('action', `return (${fixtureSnapshot.toString()})(action, document);`), action);
         const clients = new Map();
         let inspector;
         const inspectorEval = async (fn, ...args) => {
@@ -419,7 +417,7 @@ async function recordGesture({ capture, scene, page, target, evaluate, invoke, r
               waitStarted: () => waitFor(() => evaluate(new Function('file', `return (${inspectLockProgress.toString()})(file, document);`), fixture.file)),
               wait: async id => {
                 const event = await waitFor(() => evaluate(new Function('id', `return (${inspectLockResult.toString()})(id, document);`), id));
-                const view = await waitFor(() => evaluate(new Function(`return (${inspectLockFailureView.toString()})(document);`)));
+                const view = await waitFor(readFailure);
                 return { event, view };
               }, dispose: () => evaluate(() => window.__showcaseLockObservation?.dispose())
             };
@@ -433,11 +431,14 @@ async function recordGesture({ capture, scene, page, target, evaluate, invoke, r
             await mouse('mousePressed', position, 'left', 0, effect); await mouse('mouseReleased', position, 'left', 0, effect);
           },
           openInspector: async (effect, snapshot) => {
-            const selector = '[data-context-menu] [data-context-action="inspect-folder-locks"]';
+            const selector = 'dialog[open]#modal:has([data-blocked-delete]) #modal-confirm';
             await move(await point(selector, 0));
-            if (JSON.stringify(await readLock('lock-inspect')) !== JSON.stringify(snapshot)) throw new Error('Lock inspector selection changed.');
+            if (JSON.stringify(await readFailure()) !== JSON.stringify(snapshot)) throw new Error('The blocked deletion dialog changed.');
             await fixture.assertIntact();
-            const valid = await evaluate(p => document.elementFromPoint(p.x, p.y)?.closest('[data-context-action="inspect-folder-locks"]') === document.querySelector('[data-context-menu] [data-context-action="inspect-folder-locks"]'), { x: position.x - offset.x, y: position.y - offset.y });
+            const valid = await evaluate(({ x, y, selector }) => {
+              const button = document.querySelector(selector);
+              return Boolean(button && document.elementFromPoint(x, y)?.closest('#modal-confirm') === button);
+            }, { x: position.x - offset.x, y: position.y - offset.y, selector });
             if (!valid) throw new Error('The lock inspector target changed.');
             await mouse('mousePressed', position, 'left', 0, effect); await mouse('mouseReleased', position, 'left', 0, effect);
             inspector = await findInspector();

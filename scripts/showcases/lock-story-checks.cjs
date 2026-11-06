@@ -15,7 +15,7 @@ async function validateLockDeleteSnapshot(fixture, snapshot) {
 
 function failureIndicatesFileUse(failure) {
   for (let item = failure, depth = 0; item && depth < 8; item = item.cause, depth++) {
-    if (['EPERM', 'EBUSY', 'EACCES', 'ERROR_SHARING_VIOLATION'].includes(item.code) ||
+    if (['EPERM', 'EBUSY', 'EACCES', 'NoPermissions', 'ERROR_SHARING_VIOLATION', 'ERROR_LOCK_VIOLATION'].includes(item.code) ||
         /\bEBUSY:\s*resource busy or locked\b|sharing violation|being used by another process|used by another process|zugriff.*andere[nm] prozess/i.test(String(item.message || ''))) return true;
   }
   return false;
@@ -26,8 +26,11 @@ async function validateLockDeleteFailure(fixture, event, view) {
   if (event?.type !== 'filesystem-result' || event.ok !== false || event.cancelled || typeof event.operationId !== 'string' || !event.operationId.startsWith('delete-')) throw new Error('The deletion failure response is invalid.');
   if (request?.type !== 'filesystem-delete' || request.operationId !== event.operationId || !Array.isArray(request.paths) || request.paths.length !== 1 || !equalPath(request.paths[0], fixture.file)) throw new Error('The deletion failure request does not match the fixture.');
   if (!failureIndicatesFileUse(event.diagnostic?.failure)) throw new Error('The deletion failure diagnostic does not identify a file lock.');
-  if (typeof event.error !== 'string' || !event.error || view?.dialogOpen !== false || view.statusText !== event.error) {
-    throw new Error('The status bar must show the deletion failure without opening an error dialog.');
+  const failure = event.blockedDeletion;
+  const title = failure?.inUse ? 'File is in use' : 'Could not delete the entry';
+  if (!equalPath(failure?.path, fixture.file) || failure.deletedCount !== 0 || failure.canInspect !== true ||
+      view?.title !== title || view.file !== path.basename(fixture.file) || view.controlReady !== true || view.genericError !== false) {
+    throw new Error('The blocked deletion dialog does not offer inspection of the fixture file.');
   }
   await fixture.assertIntact();
 }

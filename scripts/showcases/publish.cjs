@@ -3,7 +3,8 @@ const path = require('node:path');
 
 const begin = '<!-- showcase-gallery:start -->', end = '<!-- showcase-gallery:end -->';
 const mediaDirectory = 'media/marketplace/showcases';
-const galleryScenes = new Set(['new-folder', 'new-file', 'delete-confirmations']);
+const defaultScenes = new Set(['new-folder', 'new-file', 'delete-confirmations']);
+const galleryScenes = new Set([...defaultScenes, 'folder-locks']);
 function escapeHtml(value) { return String(value).replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]); }
 function mediaName(value) {
   if (!/^\d{4}-windows-en-dark-[a-z0-9-]+\.(png|gif|webm)$/.test(value)) throw new Error('Invalid showcase media filename.');
@@ -86,5 +87,5 @@ function publish(root = path.resolve(__dirname, '../..')) {
   console.log(`Updated README with ${images.length} recorded images and animations in ${mediaDirectory}.`);
 }
 
-module.exports = { mediaName, renderGallery, updateReadme, publish, galleryScenes };
+module.exports = { mediaName, renderGallery, updateReadme, publish, defaultScenes };
 if (require.main === module) { try { publish(); } catch (error) { console.error(error.message); process.exitCode = 1; } }

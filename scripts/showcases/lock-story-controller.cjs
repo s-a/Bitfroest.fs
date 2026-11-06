@@ -6,15 +6,9 @@ const same = (a, b) => typeof a === 'string' && typeof b === 'string' && (proces
 
 function createLockStoryController({ fixture, readSnapshot, observeDelete, clickConfirm, observeInspector, openInspector, refreshInspector }) {
   if (!fixture || typeof readSnapshot !== 'function') throw new TypeError('A lock fixture and snapshot reader are required.');
-  let stage = 'initial', busy = false;
+  let stage = 'initial', busy = false, failedDeleteView;
   async function unchanged(action, before) {
     if (JSON.stringify(await readSnapshot(action)) !== JSON.stringify(before)) throw new Error('Lock story confirmation state changed.');
-  }
-  async function validateInspectorSnapshot(snapshot) {
-    if (!snapshot || snapshot.realFilesystem !== true || snapshot.controlReady !== true || snapshot.dialog !== 'folder-context-menu' ||
-        !same(snapshot.activeDirectory, path.dirname(fixture.folder)) || !Array.isArray(snapshot.selected) ||
-        snapshot.selected.length !== 1 || !same(snapshot.selected[0], fixture.folder)) throw new Error('The selected folder is not the fixture folder.');
-    await fixture.assertIntact();
   }
   async function confirm(action, effect) {
     if (busy) throw new Error('Lock story operation is busy.');
@@ -39,6 +33,7 @@ function createLockStoryController({ fixture, readSnapshot, observeDelete, click
           const observed = await observer.wait(id);
           if (observed?.event?.operationId !== id) throw new Error('Delete operation identity does not match the reply.');
           await validateLockDeleteFailure(fixture, observed.event, observed.view);
+          failedDeleteView = observed.view;
           stage = 'failed-delete';
         } finally { await observer.dispose(); }
         return;
@@ -48,9 +43,9 @@ function createLockStoryController({ fixture, readSnapshot, observeDelete, click
             typeof observeInspector !== 'function' || typeof refreshInspector !== 'function' ||
             action === 'lock-inspect' && typeof openInspector !== 'function') throw new Error('Invalid lock story sequence.');
         if (action === 'lock-inspect') {
-          const snapshot = await readSnapshot(action);
-          await validateInspectorSnapshot(snapshot); await unchanged(action, snapshot); await validateInspectorSnapshot(snapshot);
-          await openInspector(effect, snapshot);
+          await unchanged(action, failedDeleteView);
+          await fixture.assertIntact();
+          await openInspector(effect, failedDeleteView);
         } else await fixture.assertIntact();
         const observer = await observeInspector(action);
         if (!observer || typeof observer.wait !== 'function' || typeof observer.dispose !== 'function') throw new Error('Lock scan observer is unavailable.');

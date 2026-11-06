@@ -3068,7 +3068,7 @@
     "id": "folder-locks",
     "parentId": "main",
     "title": "Find the process using a locked file",
-    "description": "Try to delete a demo file, investigate the failure, and identify the process holding it open.",
+    "description": "Open the lock inspector from a blocked deletion and identify the process holding the demo file open.",
     "category": "File & Folder Locks",
     "fixture": "file-lock",
     "paths": [
@@ -3129,8 +3129,8 @@
           },
           {
             "type": "check",
-            "selector": "#status-message[data-outcome=error]",
-            "text": "Deletion failed"
+            "selector": "dialog[open] [data-blocked-delete]",
+            "text": "Locked.txt"
           },
           {
             "type": "pause",
@@ -3138,34 +3138,13 @@
           },
           {
             "type": "check",
-            "selector": "dialog[open]",
-            "absent": true
-          },
-          {
-            "type": "move",
-            "target": {
-              "name": "Build-Output",
-              "side": 1
-            }
-          },
-          {
-            "type": "click",
-            "effect": "Select the containing folder"
-          },
-          {
-            "type": "click",
-            "button": "right",
-            "effect": "Open folder actions"
-          },
-          {
-            "type": "check",
-            "selector": "[data-context-menu] [data-context-action=\"inspect-folder-locks\"]",
-            "text": "Inspect folder locks"
+            "selector": "dialog[open] #modal-confirm",
+            "text": "Inspect file locks"
           },
           {
             "type": "confirm",
             "action": "lock-inspect",
-            "effect": "Inspect folder locks"
+            "effect": "Inspect file locks"
           },
           {
             "type": "pause",
