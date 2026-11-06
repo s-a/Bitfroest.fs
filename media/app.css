@@ -439,7 +439,7 @@ dialog button:disabled { color: var(--vscode-disabledForeground, var(--muted)); 
 .vscode-dark dialog { border-color: var(--vscode-widget-border, var(--line)); box-shadow: 0 8px 24px var(--vscode-widget-shadow, #0005); }
 .vscode-dark .modal-heading { border-bottom: 0; padding-bottom: 4px; }
 .transfer-confirmation .modal-heading {
-  padding-block: 12px;
+  padding-block: 8px;
   background-color: var(--vscode-banner-background, var(--vscode-titleBar-activeBackground, var(--surface)));
   color: var(--vscode-banner-foreground, var(--vscode-titleBar-activeForeground, var(--text)));
   border-bottom: 1px solid var(--vscode-contrastBorder, var(--vscode-widget-border, var(--line)));

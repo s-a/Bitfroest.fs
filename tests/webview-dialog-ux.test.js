@@ -57,6 +57,8 @@ test('transfer confirmation separates the heading from the body using theme colo
   copy(app);
   const computed = selector => app.window.getComputedStyle(app.document.querySelector(selector));
   assert.equal(computed('.modal-heading').backgroundColor, 'rgb(22, 51, 75)');
+  assert.equal(computed('.modal-heading').paddingBlock, '8px');
+  assert.equal(computed('#modal-close').height, '28px');
   assert.equal(computed('.modal-heading').borderBottomWidth, '1px');
   assert.equal(computed('.modal-heading').borderBottomColor, 'rgb(137, 165, 191)');
   for (const selector of ['#modal-eyebrow', '#modal-title', '#modal-close']) {
