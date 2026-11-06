@@ -481,7 +481,7 @@ function activate(context) {
   }
   let activeDirectory;
   const title = () => activeDirectory || `Bitfroest.fs · ${t(scope === 'global' ? 'Global' : 'Arbeitsbereich')}`;
-  const status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 101);
+  const status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, Number.MAX_SAFE_INTEGER);
   status.text = productIcon('folder');
   status.name = 'Bitfroest.fs';
   status.show();

@@ -1580,7 +1580,7 @@ function harness(t, options = {}) {
     ExtensionKind: { UI: 1, Workspace: 2 },
     Uri: { parse: value => ({ toString: () => value }), file: uri, joinPath: (base, ...parts) => uri(path.resolve(base.fsPath, ...parts)) },
     ConfigurationTarget: { Global: 1, Workspace: 2, WorkspaceFolder: 3 },
-    StatusBarAlignment: { Right: 2 }, ViewColumn: { Active: -1, Beside: -2, One: 1 }, ExtensionMode: { Development: 2 },
+    StatusBarAlignment: { Left: 1, Right: 2 }, ViewColumn: { Active: -1, Beside: -2, One: 1 }, ExtensionMode: { Development: 2 },
     commands: {
       registerCommand(id, callback) { commands.set(id, callback); return disposable(); },
       async executeCommand(id, ...args) {
@@ -2422,12 +2422,12 @@ test('lister host protocol opens only known files, renders generated HTML, copie
   panel.dispose();
 });
 
-test('activation registers a right-aligned show entry after initialization without opening a production window', async t => {
+test('activation places the file manager entry at the start of the left status bar', async t => {
   const app = harness(t);
   assert.equal(app.status.command, undefined);
   await tick();
-  assert.equal(app.status.alignment, 2);
-  assert.equal(app.status.priority, 101);
+  assert.equal(app.status.alignment, 1);
+  assert.equal(app.status.priority, Number.MAX_SAFE_INTEGER);
   assert.equal(app.status.shown, true);
   assert.equal(app.status.command, 'bitfroest.show');
   assert.equal(app.panels.length, 0);
