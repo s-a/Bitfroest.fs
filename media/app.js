@@ -1808,7 +1808,7 @@
     });
     const outsideClick = event => {
       if (!input.isConnected) { stopEditing(); return; }
-      if (event.target === input || event.target.closest('.operation-error')) return;
+      if (event.target === input || event.target.closest('.operation-error, [data-text-menu]')) return;
       finish(true, undefined, false);
       if (!finished) { event.preventDefault(); event.stopPropagation(); }
     };
@@ -3987,7 +3987,8 @@
   $('#modal-close').onclick = dismissModal;
   $('#modal-cancel').onclick = () => { if (jobDialogOpen()) return; $('#modal').close(); if (!$('#modal').open) focusSelection(); };
   window.BitfroestWebviewInteractions.dismissOnBackdrop($('#modal'), dismissModal);
-  if (host) window.BitfroestWebviewInteractions.installPathTextMenu(t);
+  if (host) window.BitfroestWebviewInteractions.installTextMenu(t, (field, command) =>
+    field.matches('[data-lister] textarea') && lister.run(command === 'selectAll' ? 'select-all' : 'clipboard-copy'));
   $('#modal').addEventListener('close', () => {
     if ($('#modal').open) return;
     if (operationFailureInline && document.querySelector('.inline-rename')) return;

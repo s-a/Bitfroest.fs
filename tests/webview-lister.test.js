@@ -130,6 +130,19 @@ test('whole file selection survives keyup with text cursor enabled and buttons r
   assert.equal(space.defaultPrevented, false);
 });
 
+test('the text menu selects and copies the full Lister file across loaded windows', t => {
+  const app = realApp(t), area = app.document.querySelector('.lister textarea');
+  area.focus();
+  const choose = command => {
+    area.dispatchEvent(new app.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }));
+    const menu = app.document.querySelector('[data-text-menu]');
+    assert.equal(app.document.activeElement, area);
+    menu.querySelector(`[data-text-command="${command}"]`).click();
+  };
+  choose('selectAll'); choose('copy');
+  assert.equal(app.messages.filter(message => message.type === 'lister-copy').at(-1)?.settings.end, 100000);
+});
+
 test('jumping to the file end reveals the last loaded line rather than the start of the final window', t => {
   const app = realApp(t), area = app.document.querySelector('.lister textarea');
   Object.defineProperty(area, 'scrollHeight', { value: 2000, configurable: true });

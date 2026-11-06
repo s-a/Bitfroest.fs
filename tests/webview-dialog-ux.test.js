@@ -62,7 +62,7 @@ test('right-click on selected path text opens an in-view menu without moving foc
   input.setSelectionRange(1, 4);
   const event = new app.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 });
   assert.equal(input.dispatchEvent(event), false);
-  const menu = app.document.querySelector('[data-path-text-menu]');
+  const menu = app.document.querySelector('[data-text-menu]');
   assert.ok(menu);
   const copyItem = menu.querySelector('[data-text-command="copy"]');
   const command = [];
@@ -78,6 +78,24 @@ test('right-click on selected path text opens an in-view menu without moving foc
     input.dispatchEvent(new app.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }));
     app.document.querySelector(`[data-text-command="${id}"]`).click();
     assert.deepEqual(command.at(-1), [id, input, 1, 4]);
+  }
+});
+
+test('ordinary name fields and read-only text use the same text menu', t => {
+  const app = createApp(t, fixture()); app.action('mkdir');
+  const input = app.document.querySelector('#modal #value');
+  const readOnly = app.document.createElement('textarea');
+  readOnly.readOnly = true;
+  app.document.querySelector('#modal-body').append(readOnly);
+  for (const field of [input, readOnly]) {
+    field.value = 'example'; field.focus(); field.setSelectionRange(1, 5);
+    const event = new app.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 });
+    assert.equal(field.dispatchEvent(event), false);
+    const menu = app.document.querySelector('[data-text-menu]');
+    assert.equal(app.document.activeElement, field);
+    assert.equal(menu.querySelector('[data-text-command="copy"]').disabled, false);
+    assert.equal(menu.querySelector('[data-text-command="cut"]').disabled, field.readOnly);
+    assert.equal(menu.querySelector('[data-text-command="paste"]').disabled, field.readOnly);
   }
 });
 

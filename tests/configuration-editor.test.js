@@ -38,6 +38,17 @@ test('configuration tree icons use the central output and local font policy', as
   assert.match(app.panel.webview.html, /font-src webview-resource:/);
 });
 
+test('configuration search fields retain their selection while the text menu is open', async t => {
+  const app = await setup(t), input = app.document.querySelector('#settings-search');
+  input.value = 'example'; input.focus(); input.setSelectionRange(1, 4);
+  const event = new app.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 });
+  assert.equal(input.dispatchEvent(event), false);
+  assert.equal(app.document.activeElement, input);
+  assert.deepEqual([input.selectionStart, input.selectionEnd], [1, 4]);
+  app.click('[data-text-command="selectAll"]');
+  assert.deepEqual([input.selectionStart, input.selectionEnd], [0, input.value.length]);
+});
+
 test('the shortcut recorder discards its draft when dismissed from the backdrop', async t => {
   const app = await setup(t); app.editor.open('shortcuts'); await app.flush();
   const edit = app.document.querySelector('[data-command="bitfroest.copy"][data-default-key="f5"] [data-shortcut-edit]');

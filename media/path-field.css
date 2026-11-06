@@ -31,7 +31,7 @@ bitfroest-path > button.path-field-display:hover {
 bitfroest-path > input.path-field-input { width: 100%; min-width: 0; min-height: 28px; padding-left: 0; border-left-width: 0; }
 bitfroest-path > input.path-field-input:focus-visible { outline: none; border-bottom-color: var(--vscode-focusBorder, currentColor); }
 bitfroest-path > [hidden] { display: none !important; }
-[data-path-text-menu] {
+[data-text-menu] {
   position: fixed;
   inset: auto;
   margin: 0;
@@ -44,7 +44,7 @@ bitfroest-path > [hidden] { display: none !important; }
   color: var(--vscode-menu-foreground, var(--vscode-foreground));
   box-shadow: 0 3px 8px var(--vscode-widget-shadow);
 }
-[data-path-text-menu] > button[role="menuitem"] {
+[data-text-menu] > button[role="menuitem"] {
   display: block;
   width: 100%;
   border: 0;
@@ -54,9 +54,9 @@ bitfroest-path > [hidden] { display: none !important; }
   text-align: start;
   white-space: nowrap;
 }
-[data-path-text-menu] > button[role="menuitem"]:is(:hover, :focus-visible):enabled {
+[data-text-menu] > button[role="menuitem"]:is(:hover, :focus-visible):enabled {
   color: var(--vscode-menu-selectionForeground, var(--vscode-foreground));
   background: var(--vscode-menu-selectionBackground, var(--vscode-toolbar-hoverBackground));
 }
-[data-path-text-menu] > button:disabled { color: var(--vscode-disabledForeground, var(--vscode-descriptionForeground)); }
-[data-path-text-menu] .menu-icon { display: none; }
+[data-text-menu] > button:disabled { color: var(--vscode-disabledForeground, var(--vscode-descriptionForeground)); }
+[data-text-menu] .menu-icon { display: none; }

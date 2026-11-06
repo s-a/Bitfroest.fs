@@ -105,6 +105,7 @@ This recording shows the previous confirmation dialog style.
 | Where | Gesture | Result |
 | --- | --- | --- |
 | Outside a modal dialog | Click | Dismiss the dialog. |
+| Editable text, including a file name during rename | Right-click | Open the text menu and keep the selection highlighted. |
 | Jobs counter | Click | Show running and queued operations. Select a job to reveal its destination, or use its cancel button to cancel it. |
 | Status message icon | Click | Copy the status message and its work log. |
 

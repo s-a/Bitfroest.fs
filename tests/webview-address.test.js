@@ -92,7 +92,7 @@ test('the text menu leaves the edited address focused and operates on its select
   assert.deepEqual([input.selectionStart, input.selectionEnd], [1, 5]);
   assert.ok(input.closest('.path-address').classList.contains('is-editing'));
   assert.equal(app.key('Escape', {}, input), false);
-  assert.equal(app.document.querySelector('[data-path-text-menu]'), null);
+  assert.equal(app.document.querySelector('[data-text-menu]'), null);
   assert.equal(input.value, '/unsubmitted');
   input.dispatchEvent(new app.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }));
   app.document.querySelector('[data-text-command="selectAll"]').click();
@@ -190,7 +190,7 @@ test('address keyboard context and editable text never trigger full path copy', 
   const event = new app.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 });
   input.dispatchEvent(event);
   assert.equal(event.defaultPrevented, true);
-  assert.ok(app.document.querySelector('[data-path-text-menu]'));
+  assert.ok(app.document.querySelector('[data-text-menu]'));
   assert.equal(app.messages.some(message => message.type === 'selection-io'), false);
 });
 

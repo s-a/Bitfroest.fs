@@ -4,7 +4,7 @@
   let pathEditor;
 
   function leaveOnOutsideInteraction(event) {
-    if (!pathEditor || event.target === pathEditor.input || event.target.closest?.('[data-path-text-menu]')) return;
+    if (!pathEditor || event.target === pathEditor.input || event.target.closest?.('[data-text-menu]')) return;
     const { input, leave } = pathEditor;
     pathEditor = undefined;
     if (input.isConnected) leave();
@@ -19,8 +19,10 @@
     return () => { if (pathEditor === editor) pathEditor = undefined; };
   }
 
-  function installPathTextMenu(t) {
+  function installTextMenu(t, runFieldCommand) {
     let menu, input;
+    const isTextField = field => field === document.activeElement && !field.disabled && !field.closest('.monaco-editor') &&
+      (field.matches('textarea') || field.matches('input') && ['text', 'search', 'url', 'tel', 'email', 'number'].includes(field.type));
     function close(restoreFocus = false) {
       menu?.remove();
       menu = undefined;
@@ -28,22 +30,21 @@
       input = undefined;
     }
 
-    document.addEventListener('contextmenu', event => {
-      if (!event.target.matches('input.path-input, input.path-field-input') || event.target !== document.activeElement) return;
-      event.preventDefault();
+    function open(field, x) {
       close();
-      input = event.target;
-      const field = input, selected = field.selectionStart !== field.selectionEnd;
+      input = field;
+      const selected = field.selectionStart === null ? Boolean(field.value) : field.selectionStart !== field.selectionEnd;
       const entries = [
-        ['cut', 'Text ausschneiden', !selected], ['copy', 'Text kopieren', !selected],
-        ['paste', 'Text einfügen', false], ['selectAll', 'Gesamten Text auswählen', !field.value]
+        ['cut', 'Text ausschneiden', field.readOnly || !selected], ['copy', 'Text kopieren', !selected],
+        ['paste', 'Text einfügen', field.readOnly], ['selectAll', 'Gesamten Text auswählen', !field.value]
       ];
       menu = root.BitfroestMenus.create({
         items: entries.map(([id, label, disabled]) => ({ id, label: t(label), disabled, icon: null, attrs: { 'data-text-command': id } })),
         label: t('Text bearbeiten'), focusOnHover: false, onClose: close,
         onAction: ({ id }) => {
           close(true);
-          if (id === 'selectAll') field.select();
+          if (runFieldCommand?.(field, id)) return;
+          if (id === 'selectAll' && field.selectionStart !== null) field.select();
           else if (!document.execCommand(id) && id === 'paste' && navigator.clipboard) {
             const value = field.value, start = field.selectionStart, end = field.selectionEnd;
             navigator.clipboard.readText().then(text => {
@@ -54,19 +55,30 @@
           }
         }
       });
-      menu.dataset.pathTextMenu = '';
+      menu.dataset.textMenu = '';
       menu.setAttribute('popover', 'manual');
       menu.addEventListener('pointerdown', press => press.preventDefault());
       menu.addEventListener('contextmenu', secondary => secondary.preventDefault());
       (field.closest('dialog') || document.body).append(menu);
       menu.showPopover?.();
-      const pointer = event.button === 2;
-      root.BitfroestMenus.place(menu, { anchor: field, x: pointer ? event.clientX : undefined });
-      if (!pointer) (menu.querySelector('button:not(:disabled)') || menu).focus();
+      root.BitfroestMenus.place(menu, { anchor: field, x });
+      if (x === undefined) (menu.querySelector('button:not(:disabled)') || menu).focus();
+    }
+    document.addEventListener('contextmenu', event => {
+      if (event.defaultPrevented || !isTextField(event.target)) return;
+      event.preventDefault();
+      open(event.target, event.button === 2 ? event.clientX : undefined);
     });
     document.addEventListener('pointerdown', event => { if (menu && !menu.contains(event.target)) close(); }, true);
     document.addEventListener('focusin', event => { if (menu && event.target !== input && !menu.contains(event.target)) close(); }, true);
     document.addEventListener('keydown', event => {
+      if ((event.key === 'ContextMenu' || event.key === 'F10' && event.shiftKey) && !event.ctrlKey && !event.altKey && !event.metaKey &&
+          event.target.id !== 'shortcut-capture' && isTextField(event.target)) {
+        event.preventDefault();
+        event.stopPropagation();
+        open(event.target);
+        return;
+      }
       if (!menu || event.target !== input) return;
       if (['Escape', 'ArrowDown', 'ArrowUp'].includes(event.key)) {
         event.preventDefault();
@@ -101,5 +113,5 @@
     });
   }
 
-  root.BitfroestWebviewInteractions = { watchPathEditor, installPathTextMenu, dismissOnBackdrop };
+  root.BitfroestWebviewInteractions = { watchPathEditor, installTextMenu, dismissOnBackdrop };
 })(window);

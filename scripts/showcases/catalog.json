@@ -796,7 +796,8 @@
     ],
     "sources": [
       "media/dialog-heading.css",
-      "media/app.js"
+      "media/app.js",
+      "media/webview-interactions.js"
     ],
     "captures": [
       {
