@@ -98,47 +98,108 @@ Shortcuts apply to the file manager unless a different context is stated. They c
 | File operations | Create a folder | `F7` |
 | File operations | Create a folder in the opposite pane | `Shift+F7` |
 | File operations | Create a text file | `Shift+F4` |
-| File operations | Copy / move selected entries | `F5` / `F6` |
+| File operations | Copy selected entries | `F5` |
+| File operations | Move selected entries | `F6` |
 | File operations | Copy in the current folder | `Shift+F5` |
-| File operations | Rename an entry / multi-rename | `F2` or `Shift+F6` / `Ctrl+M` |
-| File operations | Delete / use the alternate deletion mode | `F8` or `Delete` / `Shift+F8` or `Shift+Delete` |
-| File operations | Copy, cut and paste files | `Ctrl+C` / `Ctrl+X` / `Ctrl+V` |
+| File operations | Rename an entry | `F2` or `Shift+F6` |
+| File operations | Rename multiple entries | `Ctrl+M` |
+| File operations | Delete selected entries | `F8` or `Delete` |
+| File operations | Delete selected entries permanently | `Shift+F8` or `Shift+Delete` |
+| File operations | Copy files to the clipboard | `Ctrl+C` |
+| File operations | Cut files to the clipboard | `Ctrl+X` |
+| File operations | Paste files from the clipboard | `Ctrl+V` |
+| File operations | Copy or move files by drag and drop | — |
 | File operations | Open the recycle bin | — |
 | File operations | Inspect folder locks and references | — |
+| File operations | Open the file context menu | `Context Menu` |
 | File operations | Open the operating system context menu (Windows; when enabled in settings) | `Shift+F10` |
-| Navigation | Switch panes / open an entry / go to the parent folder | `Tab` / `Enter` / `Backspace` |
-| Navigation | Enter a path / open a path from the clipboard | `Ctrl+L` / `Ctrl+Shift+L` |
-| Navigation | Previous / next folder in history | `Alt+Left` / `Alt+Right` |
+| Navigation | Switch panes | `Tab` |
+| Navigation | Open an entry | `Enter` |
+| Navigation | Go to the parent folder | `Backspace` |
+| Navigation | Enter a path | `Ctrl+L` |
+| Navigation | Open a path from the clipboard | `Ctrl+Shift+L` |
+| Navigation | Previous folder in history | `Alt+Left` |
+| Navigation | Next folder in history | `Alt+Right` |
 | Navigation | Open favorites | `Ctrl+D` |
-| Navigation | Create / close a folder tab | `Ctrl+T` / `Ctrl+W` |
-| Navigation | Next / previous folder tab | `Ctrl+Tab` / `Ctrl+Shift+Tab` |
-| Navigation | Open the folder under the cursor in a new tab / in the opposite pane | `Ctrl+Up` / `Ctrl+Shift+Up` |
+| Navigation | Create a folder tab | `Ctrl+T` |
+| Navigation | Close a folder tab | `Ctrl+W` |
+| Navigation | Next folder tab | `Ctrl+Tab` |
+| Navigation | Previous folder tab | `Ctrl+Shift+Tab` |
+| Navigation | Open the folder under the cursor in a new tab | `Ctrl+Up` |
+| Navigation | Open the folder under the cursor in a tab in the opposite pane | `Ctrl+Shift+Up` |
 | Navigation | Create a background folder tab | `Ctrl+Shift+T` |
-| Navigation | Swap current paths / swap panes | `Ctrl+U` / `Ctrl+Shift+U` |
+| Navigation | Swap current paths | `Ctrl+U` |
+| Navigation | Swap panes | `Ctrl+Shift+U` |
+| Navigation | Move the cursor through the file list | `Up` / `Down`, `Home` / `End`, `Page Up` / `Page Down` |
 | Navigation | Refresh the file list | `Ctrl+R` |
-| Selection | Toggle selection / toggle and move to the next entry | `Space` / `Insert` |
-| Selection | Select all / clear selection | `Ctrl+A` / `Ctrl+Numpad-` |
-| Selection | Select / unselect a group | `Numpad+` / `Numpad-` |
-| Selection | Invert / restore selection | `Numpad*` / `Numpad/` |
-| Selection | Select / unselect files with the same extension | `Ctrl+Numpad+` or `Alt+Numpad+` / `Alt+Numpad-` |
-| Selection | Save a selection in memory or a file; load a saved selection | — |
-| Selection | Copy selected names, paths or details as text | `Ctrl+Y` for paths; `Ctrl+Shift+Y` for paths with forward slashes |
-| Search | Find files / search in a separate window | `Alt+F7` / `Alt+Shift+F7` |
+| Selection | Toggle selection | `Space` |
+| Selection | Toggle selection and move to the next entry | `Insert` |
+| Selection | Select entries with mouse clicks or right-button dragging | — |
+| Selection | Select all | `Ctrl+A` |
+| Selection | Clear selection | `Ctrl+Numpad-` |
+| Selection | Select a group | `Numpad+` |
+| Selection | Unselect a group | `Numpad-` |
+| Selection | Invert selection | `Numpad*` |
+| Selection | Temporarily reverse the folder-selection setting for group selection or inversion | `Shift+Numpad+` / `Shift+Numpad*` |
+| Selection | Unselect a group without clearing folder selections | `Shift+Numpad-` |
+| Selection | Clear selection while retaining folder selections | `Ctrl+Shift+Numpad-` |
+| Selection | Select files with the same extension | `Ctrl+Numpad+` or `Alt+Numpad+` |
+| Selection | Unselect files with the same extension | `Alt+Numpad-` |
+| Selection | Save the selection in memory | — |
+| Selection | Restore the saved selection | `Numpad/` |
+| Selection | Save the selection to a file | — |
+| Selection | Load a selection from a file | — |
+| Selection | Copy selected names | — |
+| Selection | Copy selected names with full paths | `Ctrl+Y` |
+| Selection | Copy selected full paths with forward slashes | `Ctrl+Shift+Y` |
+| Selection | Copy selected names with details | — |
+| Selection | Copy selected names with paths and details | — |
+| Search | Find files | `Alt+F7` |
+| Search | Find files in a separate window | `Alt+Shift+F7` |
 | Search | Search the current file list | `Ctrl+F` |
-| Search | Select matches / show only matches | `Ctrl+B` / `Ctrl+Shift+F` |
+| Search | Select matches | `Ctrl+B` |
+| Search | Show only matches | `Ctrl+Shift+F` |
+| Search | Clear the current file-list filter | `Escape` in the file list |
+| Search | Select duplicate search results | `Numpad+` in search results |
 | Archives | Browse ZIP archives | — |
-| Archives | Pack / pack and remove sources | `Alt+F5` / `Alt+Shift+F5` |
-| Archives | Unpack / test ZIP archives | `Alt+F9` or `Alt+F6` / `Alt+Shift+F9` |
-| View | View / edit a file | `F3` / `F4` |
+| Archives | Pack files | `Alt+F5` |
+| Archives | Pack files and remove sources | `Alt+Shift+F5` |
+| Archives | Unpack files | `Alt+F9` or `Alt+F6` |
+| Archives | Test ZIP archives | `Alt+Shift+F9` |
+| View | View a file | `F3` |
+| View | Edit a file | `F4` |
 | View | Search within the file viewer | `F7` or `Ctrl+F` in the viewer |
-| View | X-Ray preview / Quick Diff | — |
+| File viewer | Reload / edit the current file | `F2` / `F4` |
+| File viewer | Next / previous search match | `F3` or `F5` or `Shift+F7` / `Shift+F3` or `Shift+F5` |
+| File viewer | Reverse the search direction | `Ctrl+F3` or `Ctrl+F5` |
+| File viewer | Toggle the text cursor | `F6` |
+| File viewer | Select all / copy selection / copy as hexadecimal | `Ctrl+A` / `Ctrl+C` / `Ctrl+Shift+C` |
+| File viewer | Go to the beginning / end | `Ctrl+Home` / `Ctrl+End` |
+| File viewer | Select to the beginning / end | `Ctrl+Shift+Home` / `Ctrl+Shift+End` |
+| File viewer | Close the viewer | `Escape` |
+| View | X-Ray preview | — |
+| View | Quick Diff | — |
 | View | Sort by name, extension, date or size | — |
 | View | Calculate folder sizes | `Alt+Shift+Enter` |
 | View | Configure columns and file colors | — |
-| Git | Show repository status, branches, diff and history | — |
-| Git | Remove a file from the Git index or remove it and add it to the ignore list | — |
+| View | Inspect and cancel running operations | — |
+| Git | Show repository status and branches | — |
+| Git | Show a file diff | — |
+| Git | Show file or folder history | — |
+| Git | Remove a file from the Git index and keep it locally | — |
+| Git | Remove a file from the Git index and add it to the ignore list | — |
+| Copy and move conflicts | View the destination / source | `F3` / `Shift+F3` |
+| Copy and move conflicts | View the destination / source without a preview provider | `Alt+F3` / `Alt+Shift+F3` |
+| Copy and move conflicts | Compare files / compare internally | `Ctrl+F3` / `Ctrl+Shift+F3` |
+| Copy and move dialogs | Select file name parts | `F5` / `F6` in the destination field |
+| Copy and move dialogs | Move to the start of the file name | `Ctrl+Home` in the destination field |
 | Tools | Open a terminal in the current folder | `F9` |
 | Tools | Show / hide the file manager | `Ctrl+Alt+Shift+F12` |
+| Tools | Configure favorites, columns, shortcuts and folder-tab storage | — |
+| Tools | Change the interface language | — |
+| Tools | Open licenses and acknowledgements | — |
+
+File-search dialog access keys depend on the interface language. Platform and desktop-session restrictions are described under [Platform support](#platform-support).
 
 ## License and support
 
