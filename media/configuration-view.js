@@ -3,6 +3,7 @@
   const host = acquireVsCodeApi(), model = window.ConfigurationModel, paths = window.BitfroestPaths;
   const $ = selector => document.querySelector(selector);
   let t = window.BitfroestI18n.create('de').t;
+  window.BitfroestWebviewInteractions.installPathTextMenu(key => t(key));
   let data = null, scope = 'user', revision, section = 'favorites', selected = null, dirty = false, saving = false, pendingBrowse = null;
   const expanded = new Set();
   const clone = value => JSON.parse(JSON.stringify(value));

@@ -166,7 +166,7 @@
     "id": "shortcut-ctrl-l",
     "parentId": "main",
     "title": "Edit folder path",
-    "description": "Press Ctrl+L and edit the selected path in the active address bar.",
+    "description": "Press Ctrl+L to edit the active address. Right-click selected text to open its editing menu without losing the highlight.",
     "paths": [
       "${demo}/left",
       "${demo}/right"

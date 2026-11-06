@@ -31,3 +31,32 @@ bitfroest-path > button.path-field-display:hover {
 bitfroest-path > input.path-field-input { width: 100%; min-width: 0; min-height: 28px; padding-left: 0; border-left-width: 0; }
 bitfroest-path > input.path-field-input:focus-visible { outline: none; border-bottom-color: var(--vscode-focusBorder, currentColor); }
 bitfroest-path > [hidden] { display: none !important; }
+[data-path-text-menu] {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  padding: 4px 0;
+  overflow: auto;
+  z-index: 110;
+  min-width: min(180px, calc(100vw - 8px));
+  border: 1px solid var(--vscode-menu-border, var(--vscode-contrastBorder, transparent));
+  background: var(--vscode-menu-background, var(--vscode-editorWidget-background));
+  color: var(--vscode-menu-foreground, var(--vscode-foreground));
+  box-shadow: 0 3px 8px var(--vscode-widget-shadow);
+}
+[data-path-text-menu] > button[role="menuitem"] {
+  display: block;
+  width: 100%;
+  border: 0;
+  padding: 3px 8px;
+  color: inherit;
+  background: transparent;
+  text-align: start;
+  white-space: nowrap;
+}
+[data-path-text-menu] > button[role="menuitem"]:is(:hover, :focus-visible):enabled {
+  color: var(--vscode-menu-selectionForeground, var(--vscode-foreground));
+  background: var(--vscode-menu-selectionBackground, var(--vscode-toolbar-hoverBackground));
+}
+[data-path-text-menu] > button:disabled { color: var(--vscode-disabledForeground, var(--vscode-descriptionForeground)); }
+[data-path-text-menu] .menu-icon { display: none; }

@@ -70,7 +70,7 @@ This recording shows the previous confirmation dialog style.
 | Address bar breadcrumb | Ctrl-click | Open that folder in a new tab in the same panel. |
 | Address bar breadcrumb | Right-click | Copy the full current address to the clipboard. |
 | Space after the breadcrumbs | Click | Edit the current address. |
-| Address text field | Right-click | Open the VS Code text menu while editing the address. |
+| Address text field | Right-click | Open the text menu while keeping the selected part of the address highlighted. |
 | Address bar icon | Click | Open favorites and any Git or ZIP actions available for the current location. On Windows, drive roots such as `C:\` appear at the bottom, starting with the system drive. A divider separates the drives from up to ten recently visited UNC share roots. |
 | Back or forward arrow | Right-click | Show the current tab's full history, including forward entries. |
 | Folder tab | Double-click or middle-click | Close the tab. Each panel keeps at least one tab. |

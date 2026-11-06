@@ -52,7 +52,7 @@
     menu.style.left = `${left}px`; menu.style.top = `${top}px`;
     return menu;
   }
-  function create({ items, label, decorateKeys, onAction, onClose, emptyLabel = '' }) {
+  function create({ items, label, decorateKeys, onAction, onClose, emptyLabel = '', focusOnHover = true }) {
     function build(entries, parent = null, owner = null) {
       const menu = document.createElement('div'); menu.className = 'menu-surface'; menu.setAttribute('role', 'menu');
       menu.setAttribute('aria-label', owner?.querySelector('.menu-label')?.textContent || label); menu.tabIndex = -1;
@@ -75,7 +75,7 @@
         item.textContent = entry.label; item.disabled = Boolean(entry.disabled);
         for (const [key, value] of Object.entries(entry.attrs || {})) item.setAttribute(key, value);
         if (entry.keys?.length) decorateKeys?.(item, entry.keys);
-        decorate(item, entry.id || '', entry.icon);
+        decorate(item, entry.id || '', entry.icon, focusOnHover);
         if (entry.children) {
           item.setAttribute('aria-haspopup', 'menu'); item.setAttribute('aria-expanded', 'false');
           item.append(root.BitfroestIcons.element('chevron-right', { 'data-submenu-arrow': '' }));

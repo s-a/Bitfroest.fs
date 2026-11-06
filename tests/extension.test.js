@@ -5563,11 +5563,11 @@ test('address breadcrumbs and flat editing operate in generated host HTML with i
   assert.match(panel.webview.html, /<script nonce="[^"]+" src="[^"]*webview-interactions\.js"/);
   input.value = 'C:\\draft'; input.setSelectionRange(3, 8);
   assert.equal(input.dispatchEvent(new view.window.MouseEvent('mousedown', { button: 2, bubbles: true, cancelable: true })), true);
-  assert.equal(input.dispatchEvent(new view.window.MouseEvent('contextmenu', { button: 2, bubbles: true, cancelable: true })), true);
-  input.blur();
-  input.focus();
+  assert.equal(input.dispatchEvent(new view.window.MouseEvent('contextmenu', { button: 2, bubbles: true, cancelable: true })), false);
+  assert.ok(view.document.querySelector('[data-path-text-menu]'));
   assert.equal(view.document.activeElement, input);
   assert.deepEqual([input.value, input.selectionStart, input.selectionEnd], ['C:\\draft', 3, 8]);
+  view.key('Escape', {}, input);
   view.key('Escape', {}, input);
   view.click(section.querySelector('[data-breadcrumb="C:/"]'), { ctrlKey: true });
   const request = view.messages.find(message => message.type === 'filesystem-navigate');

@@ -3987,6 +3987,7 @@
   $('#modal-close').onclick = dismissModal;
   $('#modal-cancel').onclick = () => { if (jobDialogOpen()) return; $('#modal').close(); if (!$('#modal').open) focusSelection(); };
   window.BitfroestWebviewInteractions.dismissOnBackdrop($('#modal'), dismissModal);
+  if (host) window.BitfroestWebviewInteractions.installPathTextMenu(t);
   $('#modal').addEventListener('close', () => {
     if ($('#modal').open) return;
     if (operationFailureInline && document.querySelector('.inline-rename')) return;

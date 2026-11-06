@@ -82,20 +82,22 @@ test('path command exposes the flat input and breadcrumbs retain keyboard activa
   assert.match(css, /\.path input:focus-visible\s*\{[^}]*outline:\s*none[^}]*box-shadow:\s*none/);
 });
 
-test('the native text menu leaves an edited address and its selection available', t => {
+test('the text menu leaves the edited address focused and operates on its selection', t => {
   const app = createApp(t, fixture()); app.action('path');
   const input = app.document.activeElement;
   input.value = '/unsubmitted'; input.setSelectionRange(1, 5);
-  const menu = new app.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true });
-  assert.equal(input.dispatchEvent(menu), true);
-  input.blur();
-  assert.equal(input.value, '/unsubmitted');
-  assert.ok(input.closest('.path-address').classList.contains('is-editing'));
-  app.window.dispatchEvent(new app.window.Event('focus'));
-  assert.equal(app.document.activeElement, app.document.body);
-  input.focus();
+  const menu = new app.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 });
+  assert.equal(input.dispatchEvent(menu), false);
   assert.equal(app.document.activeElement, input);
   assert.deepEqual([input.selectionStart, input.selectionEnd], [1, 5]);
+  assert.ok(input.closest('.path-address').classList.contains('is-editing'));
+  assert.equal(app.key('Escape', {}, input), false);
+  assert.equal(app.document.querySelector('[data-path-text-menu]'), null);
+  assert.equal(input.value, '/unsubmitted');
+  input.dispatchEvent(new app.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }));
+  app.document.querySelector('[data-text-command="selectAll"]').click();
+  assert.deepEqual([input.selectionStart, input.selectionEnd], [0, input.value.length]);
+  assert.equal(app.document.activeElement, input);
   input.closest('[data-pane]').querySelector('[data-refresh]').focus();
   assert.equal(input.value, '/work/one/two');
   assert.equal(input.closest('.path-address').classList.contains('is-editing'), false);
@@ -187,7 +189,8 @@ test('address keyboard context and editable text never trigger full path copy', 
   const input = pane(app).querySelector('.path-input');
   const event = new app.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 });
   input.dispatchEvent(event);
-  assert.equal(event.defaultPrevented, false);
+  assert.equal(event.defaultPrevented, true);
+  assert.ok(app.document.querySelector('[data-path-text-menu]'));
   assert.equal(app.messages.some(message => message.type === 'selection-io'), false);
 });
 

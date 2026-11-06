@@ -15,14 +15,12 @@ function fixture(real = false) {
 function copy(app) { app.click(app.row('same.txt').querySelector('[data-filename]')); app.action('copy'); }
 function submit(app) { app.document.querySelector('#modal-form').dispatchEvent(new app.window.Event('submit', { bubbles: true, cancelable: true })); }
 
-test('the path editor keeps the text and selection while the native text menu takes focus', t => {
+test('a temporary loss of window focus leaves the path editor and native selection intact', t => {
   const app = createApp(t, fixture()); copy(app);
   const input = app.document.querySelector('#value'), field = input.parentElement;
   field.querySelector('button').click();
   input.value = '/edited'; input.setSelectionRange(1, 5);
   assert.equal(input.dispatchEvent(new app.window.MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 2 })), true);
-  const menu = new app.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 });
-  assert.equal(input.dispatchEvent(menu), true);
   input.blur();
   assert.equal(input.hidden, false);
   app.window.dispatchEvent(new app.window.Event('focus'));
@@ -55,6 +53,32 @@ test('a click on the backdrop dismisses a dialog without submitting or activatin
   assert.equal(dialog.open, false);
   assert.equal(bubbled, false);
   assert.equal(app.state().folders['/right'].length, 1);
+});
+
+test('right-click on selected path text opens an in-view menu without moving focus or changing the range', t => {
+  const app = createApp(t, fixture()); copy(app);
+  const input = app.document.querySelector('#value');
+  input.parentElement.querySelector('button').click();
+  input.setSelectionRange(1, 4);
+  const event = new app.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 });
+  assert.equal(input.dispatchEvent(event), false);
+  const menu = app.document.querySelector('[data-path-text-menu]');
+  assert.ok(menu);
+  const copyItem = menu.querySelector('[data-text-command="copy"]');
+  const command = [];
+  app.document.execCommand = id => { command.push([id, app.document.activeElement, input.selectionStart, input.selectionEnd]); return true; };
+  copyItem.dispatchEvent(new app.window.MouseEvent('mouseenter'));
+  assert.equal(app.document.activeElement, input);
+  assert.equal(copyItem.dispatchEvent(new app.window.MouseEvent('pointerdown', { bubbles: true, cancelable: true })), false);
+  assert.equal(input.hidden, false);
+  copyItem.click();
+  assert.deepEqual(command, [['copy', input, 1, 4]]);
+  assert.equal(menu.isConnected, false);
+  for (const id of ['cut', 'paste']) {
+    input.dispatchEvent(new app.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }));
+    app.document.querySelector(`[data-text-command="${id}"]`).click();
+    assert.deepEqual(command.at(-1), [id, input, 1, 4]);
+  }
 });
 
 test('folder paths use the full value until the middle needs to be shortened', t => {
