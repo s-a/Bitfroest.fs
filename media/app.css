@@ -339,10 +339,10 @@ h1, h2 { font-size: 1.2em; font-weight: 500; margin: 0; }
 #modal-body { padding: 12px 20px 16px; max-height: calc(100vh - 170px); overflow: auto; }
 #modal-body p { line-height: 1.5; margin: 0 0 12px; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--vscode-widget-border, var(--line)); }
-.modal-actions button { min-width: 88px; min-height: 28px; padding: 4px 12px; border: 1px solid var(--vscode-button-border, transparent); background: var(--vscode-button-secondaryBackground, #3a3d41); color: var(--vscode-button-secondaryForeground, var(--text)); }
-.modal-actions button:not(.primary):hover { background: var(--vscode-button-secondaryHoverBackground, var(--hover)); }
-.modal-actions button.primary { background: var(--vscode-button-background, #0e639c); color: var(--vscode-button-foreground, #fff); }
-.modal-actions button.primary:hover { background: var(--vscode-button-hoverBackground, #1177bb); }
+.modal-actions button:not(.vscode-button) { min-width: 88px; min-height: 28px; padding: 4px 12px; border: 1px solid var(--vscode-button-border, transparent); background: var(--vscode-button-secondaryBackground, #3a3d41); color: var(--vscode-button-secondaryForeground, var(--text)); }
+.modal-actions button:not(.vscode-button, .primary):hover { background: var(--vscode-button-secondaryHoverBackground, var(--hover)); }
+.modal-actions button.primary:not(.vscode-button) { background: var(--vscode-button-background, #0e639c); color: var(--vscode-button-foreground, #fff); }
+.modal-actions button.primary:not(.vscode-button):hover { background: var(--vscode-button-hoverBackground, #1177bb); }
 .field { display: flex; flex-direction: column; gap: 6px; margin: 14px 0; }
 .field label { color: inherit; }
 .field input, .field select { min-height: 28px; padding: 4px 7px; }
@@ -357,18 +357,32 @@ h1, h2 { font-size: 1.2em; font-weight: 500; margin: 0; }
 .zip-pack-check input[type="checkbox"] { width: 16px; height: 16px; margin: 2px 0 0; padding: 0; }
 .zip-pack-check span { min-width: 0; overflow-wrap: anywhere; }
 .dialog-description { color: var(--muted); }
+.transfer-confirmation { border-radius: 8px; }
+.transfer-confirmation::backdrop { backdrop-filter: blur(2px); }
+.transfer-confirmation #modal-form { display: flex; flex-direction: column; max-height: calc(100dvh - 36px); }
+.transfer-confirmation .modal-heading, .transfer-confirmation .modal-actions { flex: 0 0 auto; }
+.transfer-confirmation #modal-title { font-weight: 600; }
+.transfer-confirmation #modal-body { min-height: 0; }
+.transfer-confirmation .modal-actions { flex-wrap: wrap; background: var(--vscode-editor-background, var(--surface)); }
+.transfer-confirmation .vscode-button { justify-content: center; min-width: 88px; min-height: 28px; max-width: 100%; white-space: normal; }
+.transfer-confirmation .vscode-action-button { justify-content: center; }
+.transfer-confirmation .vscode-action-button:hover:not(:focus-visible) { border-color: var(--vscode-toolbar-hoverOutline, transparent); }
+.transfer-confirmation button[hidden] { display: none; }
 .transfer-dialog { display: grid; gap: 16px; min-width: 0; }
 #modal-body .transfer-dialog > .dialog-description { margin: 0; }
-.transfer-dialog .transfer-source { padding: 0; border: 0; }
+.transfer-dialog .transfer-source { flex-wrap: nowrap; align-items: baseline; margin: 0; }
+.transfer-source .vscode-label { flex: 0 0 auto; width: auto; text-align: start; }
+.transfer-source [data-transfer-source] { min-width: 0; white-space: pre-wrap; }
 .transfer-dialog .field { margin: 0; min-width: 0; }
 .transfer-dialog .field input, .transfer-dialog .field select { width: 100%; min-width: 0; }
 .transfer-options { display: grid; gap: 16px; min-width: 0; margin: 0; padding: 14px 0 0; border: 0; border-top: 1px solid var(--vscode-widget-border, var(--line)); }
 .transfer-options legend { padding: 0 8px 0 0; font-weight: 600; }
-.transfer-checks { display: grid; gap: 10px; }
-.transfer-check { display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 10px; align-items: start; line-height: 1.5; cursor: pointer; }
-.transfer-check input[type="checkbox"] { width: 16px; height: 16px; margin: 2px 0 0; padding: 0; }
-.transfer-check span { min-width: 0; overflow-wrap: anywhere; }
-.transfer-check:has(input:focus-visible) { outline: 1px solid var(--vscode-focusBorder, var(--accent)); outline-offset: 3px; }
+.transfer-dialog .vscode-checkbox-group { gap: 10px; }
+.transfer-dialog .vscode-checkbox-group .vscode-checkbox { margin: 0; }
+.transfer-dialog .vscode-checkbox label { display: flex; align-items: flex-start; }
+.transfer-dialog .vscode-checkbox .icon { --icon-size: 16px; flex-shrink: 0; }
+.transfer-dialog .vscode-checkbox .text { min-width: 0; overflow-wrap: anywhere; opacity: 1; }
+.transfer-dialog .vscode-checkbox input:focus-visible + label .icon { outline: 1px solid var(--vscode-focusBorder, var(--accent)); outline-offset: 2px; }
 .transfer-options .dialog-options { margin: 0; padding-top: 12px; }
 .transfer-options .dialog-options[open] .field { margin-top: 12px; }
 .individual-rename { min-width: 0; }
@@ -382,8 +396,7 @@ h1, h2 { font-size: 1.2em; font-weight: 500; margin: 0; }
 .rename-preview > span, .rename-preview output { display: block; overflow-wrap: anywhere; }
 .rename-preview output { font-weight: 600; line-height: 1.5; user-select: text; }
 .modal-actions #transfer-skip { margin-inline-end: auto; }
-.transfer-source { padding: 8px 0 12px; border-bottom: 1px solid var(--vscode-widget-border, var(--line)); }
-.transfer-source > span, .file-comparison h3 { display: block; color: var(--muted); font-size: .92em; font-weight: 400; margin: 0 0 5px; }
+.file-comparison h3 { display: block; color: var(--muted); font-size: .92em; font-weight: 400; margin: 0 0 5px; }
 [data-transfer-source], .comparison-path { overflow-wrap: anywhere; line-height: 1.4; }
 .file-comparison-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); border: 1px solid var(--vscode-widget-border, var(--line)); }
 .file-comparison { min-width: 0; padding: 12px; }

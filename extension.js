@@ -716,7 +716,7 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
     if (panel) { clearTimeout(startupWatchdog); panel.reveal(); return; }
     const webviewOptions = {
       enableScripts: true,
-      localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, 'media'), vscode.Uri.joinPath(context.extensionUri, 'node_modules', 'ag-grid-community', 'dist'), vscode.Uri.joinPath(context.extensionUri, 'node_modules', 'notyf'), ...icons.roots]
+      localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, 'media'), vscode.Uri.joinPath(context.extensionUri, 'node_modules', 'ag-grid-community', 'dist'), vscode.Uri.joinPath(context.extensionUri, 'node_modules', 'notyf'), vscode.Uri.joinPath(context.extensionUri, 'node_modules', '@vscode-elements', 'elements-lite', 'components'), ...icons.roots]
     };
     panel = loadingPanel;
     panel.webview.options = webviewOptions;

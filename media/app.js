@@ -2445,6 +2445,12 @@
     operationErrorDialog = false; operationFailureInline = false;
     $('#modal-title').textContent = title; $('#modal-eyebrow').textContent = eyebrow; $('#modal-body').innerHTML = body;
     $('#modal').classList.toggle('conflict-dialog', Boolean($('#modal-body').querySelector('[data-conflict-layout]')));
+    const transfer = Boolean($('#modal-body').querySelector('.transfer-dialog'));
+    $('#modal').classList.toggle('transfer-confirmation', transfer);
+    $('#modal-confirm').classList.toggle('vscode-button', transfer);
+    $('#modal-cancel').classList.toggle('vscode-button', transfer);
+    $('#modal-cancel').classList.toggle('secondary', transfer);
+    $('#modal-close').classList.toggle('vscode-action-button', transfer);
     $('#modal-confirm').textContent = label; $('#modal-confirm').hidden = !label; $('#modal-cancel').hidden = false; $('#modal-cancel').textContent = label ? t('Abbrechen') : t('Schließen');
     const description = $('#modal-body').querySelector('#modal-description');
     if (description) $('#modal').setAttribute('aria-describedby', 'modal-description');
@@ -2875,14 +2881,17 @@
     if (!picked.length) { toast(t('Zuerst eine Datei oder einen Ordner auswählen.')); onComplete?.({ confirmed: false, completed: 0, completedIds: [], errors: [], cancelled: true }); return; }
     const policies = [['ask', t('Bei Konflikten nachfragen')], ['overwrite-all', t('Alle überschreiben')], ['skip-all', t('Alle vorhandenen überspringen')], ['overwrite-older', t('Alle älteren überschreiben')], ['overwrite-older-equal', t('Alle älteren und gleich alten überschreiben')], ['rename-older-target', t('Ältere Ziele umbenennen, neuere überspringen')], ['autorename-source', t('Kopien automatisch umbenennen')], ['autorename-target', t('Vorhandene Ziele automatisch umbenennen')], ['larger', t('Nur größere Dateien kopieren')], ['smaller', t('Nur kleinere Dateien kopieren')]];
     const cancelled = () => { if ($('#modal').open) return; $('#modal').removeEventListener('close', cancelled); onComplete?.({ confirmed: false, completed: 0, completedIds: [], errors: [], cancelled: true }); };
-    const option = (id, label, hint) => `<label class="transfer-check" title="${escape(t(hint))}"><input type="checkbox" id="${id}" title="${escape(t(hint))}" aria-description="${escape(t(hint))}"><span>${t(label)}</span></label>`;
+    const option = (id, label, hint) => {
+      const help = escape(t(hint));
+      return `<div class="vscode-checkbox"><input type="checkbox" id="${id}" title="${help}" aria-description="${help}"><label for="${id}" title="${help}"><span class="icon" aria-hidden="true"><span class="icon-checked">${window.BitfroestIcons.font('check')}</span></span><span class="text">${escape(t(label))}</span></label></div>`;
+    };
     modal(mode === 'move' ? t('Verschieben') : t('Kopieren'), `<section class="transfer-dialog">
       <p id="modal-description" class="dialog-description">${count('selectedEntry', picked.length)}</p>
-      <div class="transfer-source"><span>${t('Quelle')}</span><div data-transfer-source>${escape(displayPath(sourcePath))}</div></div>
+      <div class="vscode-form-group transfer-source"><span class="vscode-label">${t('Quelle')}</span><div data-transfer-source>${escape(displayPath(sourcePath))}</div></div>
       ${field(mode === 'move' ? t('Verschieben nach') : t('Kopieren nach'), targetPath || currentPath(state.panes[1 - sourceSide]))}
       <fieldset class="transfer-options"><legend>${t('Optionen')}</legend>
         ${field(t('Nur Dateien dieses Typs'), '*.*', 'transfer-filter')}
-        <div class="transfer-checks">
+        <div class="vscode-checkbox-group vertical">
           ${option('transfer-verify', 'Dateiinhalt nach dem Kopieren vergleichen', 'Vergleicht Quell- und Zielinhalt nach dem Kopieren. Dateiidentitäts- und Sicherheitsprüfungen bleiben aktiv.')}
           ${option('transfer-individual', 'Dateinamen im Ziel einzeln festlegen', 'Fragt vor jeder Datei nach dem Namen im Zielordner. Der bisherige Name kann übernommen werden.')}
         </div>
