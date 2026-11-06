@@ -2,7 +2,7 @@ const Progress = require('./media/bitfroest-progress');
 const OPERATIONS = Object.freeze([
   'files.copy', 'files.rename', 'files.readDirectory', 'clipboard.readFiles', 'clipboard.writeFiles',
   'clipboard.acknowledge', 'clipboard.cancelFiles', 'shell.showContextMenu', 'shell.openAssociated',
-  'shell.openTrash', 'shell.openTerminal', 'icons.resolve', 'metadata.query', 'paths.resolveNetwork',
+  'shell.openTrash', 'shell.openTerminal', 'icons.resolve', 'metadata.query', 'paths.resolveNetwork', 'paths.listDrives',
   'encoding.describe', 'encoding.decodeBlock', 'encoding.decodeChunk', 'windows.resolveOwner',
   'windows.maximize', 'windows.inspect', 'locks.scan', 'locks.releaseHandles', 'locks.unloadModules', 'locks.rename', 'git.status', 'git.info', 'git.untrack',
   'processes.terminate', 'restartDeletion.prepare', 'restartDeletion.commit'

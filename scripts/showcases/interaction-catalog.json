@@ -72,6 +72,16 @@
     "sceneId": "path-copy"
   },
   {
+    "id": "drive-and-unc-menu",
+    "kind": "mouse",
+    "title": "Open drive roots and recent UNC share roots with a right click on Windows",
+    "sources": [
+      "media/app.js",
+      "extension.js"
+    ],
+    "sceneId": "drive-and-unc-menu"
+  },
+  {
     "id": "left-selection",
     "kind": "mouse",
     "title": "Select one entry with a left click",

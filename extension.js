@@ -13,7 +13,8 @@ const helpLinks = Object.freeze({
 const iconLayout = require('./media/icon-layout');
 const { createSelectionIO } = require('./selection-io');
 const { selectStartupRoots, existingDirectories } = require('./startup-paths');
-const { resolveUncPaths, findNetworkPaths, prepareNetworkDeletion } = require('./network-paths');
+const { resolveUncPaths, findNetworkPaths, prepareNetworkDeletion, recentUncRoots } = require('./network-paths');
+const { loadNativeApi } = require('./native-api');
 const defaultFileColors = Object.fromEntries(require('./file-type-colors.json').flatMap(group => group.patterns.map(pattern => [pattern, group.color])));
 const { createGitStatusProvider } = require('./git-status-provider');
 const { allowedGitPath } = require('./git-status-paths');
@@ -299,6 +300,20 @@ function activate(context) {
   let opening = false, pendingOpen = Promise.resolve();
   let scope = context.workspaceState.get('tabScope', vscode.workspace.workspaceFolders?.length ? 'workspace' : 'global');
   const storage = () => scope === 'global' ? context.globalState : context.workspaceState;
+  let recentUncWrites = Promise.resolve();
+  const readRecentUncRoots = () => {
+    const saved = context.globalState.get('recentUncRoots', []);
+    return Array.isArray(saved) ? recentUncRoots(saved) : [];
+  };
+  function rememberUncRoot(directory) {
+    if (process.platform !== 'win32') return;
+    const [root] = recentUncRoots([directory]);
+    if (!root) return;
+    recentUncWrites = recentUncWrites.then(() => {
+      const previous = readRecentUncRoots();
+      if (root !== previous[0]) return context.globalState.update('recentUncRoots', recentUncRoots([root, ...previous]));
+    }).catch(() => console.warn('Could not save recent UNC shares.'));
+  }
   let savedState = storage().get('fileManagerState');
   const fileRoots = selectStartupRoots(process.platform === 'win32' ? ['C:/tmp', 'C:/temp'] : [path.join(os.homedir(), 'tmp'), path.join(os.homedir(), 'temp')], os.homedir());
   const favoriteRoots = () => Object.values(favoriteSettings().entries);
@@ -1049,6 +1064,20 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
     panel.webview.onDidReceiveMessage(async message => {
       if (panel !== messagePanel) return;
       let resolvedFileLink = false;
+      if (message?.type === 'location-destinations') {
+        if (process.platform !== 'win32' || !Number.isSafeInteger(message.requestId)) return;
+        let drives = [], drivesUnavailable = false;
+        try {
+          const session = loadNativeApi().openSession();
+          try { ({ drives } = await session.invoke('paths.listDrives', {})); }
+          finally { session.close(); }
+        } catch { drivesUnavailable = true; }
+        await recentUncWrites;
+        if (panel === messagePanel && !listerDisposed) await messagePanel.webview.postMessage({
+          type: 'location-destinations-result', requestId: message.requestId, drives, drivesUnavailable, recent: readRecentUncRoots()
+        });
+        return;
+      }
       if (message?.type === 'status-log-copy') {
         if (typeof message.requestId !== 'string' || !/^status-log-\d{1,15}$/.test(message.requestId)) return;
         let result;
@@ -1881,6 +1910,7 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
           if (job) transferJobs.delete(operationId);
           if (directoryJob && directoryJobs.get(directoryKey) === directoryJob) directoryJobs.delete(directoryKey);
           if (refreshController && refreshRead === refreshController) refreshRead = null;
+          if (ok && !cancelled && navigationReplyPath) rememberUncRoot(navigationReplyPath);
           if (current && panel === current) await current.webview.postMessage({ type: 'filesystem-result', ok, state: filesystemState, ...(typeof message.refreshRequestId === 'string' ? { refreshRequestId: message.refreshRequestId } : {}), ...(message.taskRequestId ? { taskRequestId: message.taskRequestId } : {}), ...(message.navigationRequestId ? { navigationRequestId: message.navigationRequestId } : {}), ...(updatedDirectories?.length ? { refreshGitDirectories: updatedDirectories } : {}), ...(cancelled ? { cancelled: true } : {}), ...(operationId ? { operationId, operationOutcome: filesystemState?.operationOutcome } : {}), ...(!ok ? { error: operationError, diagnostic, ...(blockedDeletion ? { blockedDeletion } : {}) } : {}), ...(ok && !cancelled && message.type === 'filesystem-navigate' && navigationReplyPath ? { resumeNavigation: { path: navigationReplyPath, side: message.side } } : {}), ...(ok && !cancelled && message.type === 'filesystem-navigate' && openReplyPath ? { resumeOpen: { path: openReplyPath } } : {}), ...(ok && !cancelled && message.type === 'filesystem-prepare' ? { resumeAction: message.action } : {}) });
         }).finally(() => { filesystemRequests--; });
         if (!isolatedNavigation) {

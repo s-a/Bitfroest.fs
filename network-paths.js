@@ -1,6 +1,21 @@
 'use strict';
 const { loadNativeApi } = require('./native-api');
 
+function recentUncRoots(paths) {
+  const roots = new Map();
+  for (const path of paths) {
+    if (typeof path !== 'string') continue;
+    const value = path.replaceAll('\\', '/').replace(/^\/\/\?\/UNC\//i, '//');
+    const match = /^\/\/([^/]+)\/([^/]+)(?:\/|$)/.exec(value);
+    if (!match || match.slice(1).some(part => /^[.]{1,2}$/.test(part) || /[<>:"|?*\x00-\x1f]/.test(part))) continue;
+    const root = `//${match[1]}/${match[2]}`;
+    const key = root.toLowerCase();
+    if (!roots.has(key)) roots.set(key, root);
+    if (roots.size === 10) break;
+  }
+  return [...roots.values()];
+}
+
 async function resolveUncPaths(paths, options = {}) {
   if ((options.platform || process.platform) !== 'win32') return [...paths];
   const driveOf = value => /^[a-z]:[\\/]/i.test(value) ? value.slice(0, 2).toUpperCase() : null;
@@ -47,4 +62,4 @@ async function prepareNetworkDeletion(paths, useTrash, options = {}) {
   return targets;
 }
 
-module.exports = { resolveUncPaths, findNetworkPaths, prepareNetworkDeletion };
+module.exports = { resolveUncPaths, findNetworkPaths, prepareNetworkDeletion, recentUncRoots };

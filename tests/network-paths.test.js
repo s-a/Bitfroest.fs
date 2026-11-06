@@ -111,3 +111,9 @@ test('an explicitly supplied native API failure preserves paths and closes its s
   assert.deepEqual(await resolveUncPaths(originals, { platform: 'win32', nativeApi }), originals);
   assert.equal(closed, 1);
 });
+test('recent UNC targets are distinct share roots ordered by last visit and limited to ten', () => {
+  const { recentUncRoots } = require('../network-paths');
+  const previous = ['//server/first/nested', ...Array.from({ length: 10 }, (_, i) => `//server/share${i}`)];
+  const actual = recentUncRoots(['\\\\SERVER\\First\\new', 'C:/local', '//?/UNC/other/share/sub', '//./device', '//incomplete', ...previous]);
+  assert.deepEqual(actual, ['//SERVER/First', '//other/share', ...previous.slice(1, 9)]);
+});

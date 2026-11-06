@@ -63,6 +63,13 @@
       }
       const enabled = () => [...menu.children].filter(item => item.matches('button:not(:disabled)'));
       for (const entry of entries) {
+        if (entry.separator) {
+          const divider = document.createElement('div');
+          divider.className = 'menu-divider';
+          divider.setAttribute('role', 'separator');
+          menu.append(divider);
+          continue;
+        }
         const item = document.createElement('button'); item.type = 'button'; item.setAttribute('role', 'menuitem');
         item.textContent = entry.label; item.disabled = Boolean(entry.disabled);
         for (const [key, value] of Object.entries(entry.attrs || {})) item.setAttribute(key, value);

@@ -47,7 +47,7 @@ namespace {
 constexpr const char* operations[] = {
   "files.copy", "files.rename", "files.readDirectory", "clipboard.readFiles", "clipboard.writeFiles",
   "clipboard.acknowledge", "clipboard.cancelFiles", "shell.showContextMenu", "shell.openAssociated",
-  "shell.openTrash", "shell.openTerminal", "icons.resolve", "metadata.query", "paths.resolveNetwork",
+  "shell.openTrash", "shell.openTerminal", "icons.resolve", "metadata.query", "paths.resolveNetwork", "paths.listDrives",
   "encoding.describe", "encoding.decodeBlock", "encoding.decodeChunk", "windows.resolveOwner",
   "windows.maximize", "windows.inspect", "locks.scan", "locks.releaseHandles", "locks.unloadModules", "locks.rename",
   "processes.terminate", "restartDeletion.prepare", "restartDeletion.commit", "git.status", "git.info", "git.untrack"
@@ -493,7 +493,7 @@ napi_value Init(napi_env env, napi_value exports) {
   napi_value version, major, minor, capabilities;
   CHECK(napi_create_object(env, &version));
   CHECK(napi_create_uint32(env, 1, &major));
-  CHECK(napi_create_uint32(env, 9, &minor));
+  CHECK(napi_create_uint32(env, 10, &minor));
   CHECK(napi_set_named_property(env, version, "major", major));
   CHECK(napi_set_named_property(env, version, "minor", minor));
   CHECK(napi_object_freeze(env, version));

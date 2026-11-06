@@ -11,6 +11,45 @@ function git(app) {
   send(app, { ...request, type: 'git-status-result', directories: { '/repo': { ok: true, repository: true, branch: 'main', statuses: {} }, '/plain': { ok: true, repository: false } } });
 }
 
+function rightClick(app, target) {
+  const event = new app.window.MouseEvent('contextmenu', { button: 2, bubbles: true, cancelable: true });
+  target.dispatchEvent(event);
+  assert.equal(event.defaultPrevented, true);
+}
+
+test('the address icon opens drives above recent UNC roots and navigates the originating panel', t => {
+  const app = createApp(t, fixture('C:/left', 'C:/right'), { platform: 'win32', language: 'en' });
+  const trigger = app.document.querySelector('[data-pane="1"] [data-favorites]');
+  rightClick(app, trigger.querySelector('[data-location-icon]'));
+  const request = app.messages.find(message => message.type === 'location-destinations');
+  assert.ok(request);
+  send(app, { ...request, type: 'location-destinations-result', drives: ['C:/', 'Z:/'], recent: ['//server/share'] });
+  const menu = app.document.querySelector('[role="menu"][aria-label="Drives and recent UNC shares"]');
+  assert.deepEqual([...menu.children].map(item => item.getAttribute('role')), ['menuitem', 'menuitem', 'separator', 'menuitem']);
+  assert.deepEqual([...menu.querySelectorAll('.menu-label')].map(label => label.textContent), ['C:\\', 'Z:\\', '\\\\server\\share']);
+  app.key('End');
+  app.key('Enter');
+  const navigation = app.messages.filter(message => message.type === 'filesystem-navigate').at(-1);
+  assert.equal(navigation.path, '//server/share');
+  assert.equal(navigation.side, 1);
+  assert.equal(app.state().panes[0].tabs[0], 'C:/left');
+  assert.equal(app.document.querySelector('[role="menu"][aria-label="Drives and recent UNC shares"]'), null);
+});
+
+test('Escape dismisses the pending drive menu and ignores a late host reply', t => {
+  const app = createApp(t, fixture(), { platform: 'win32' });
+  const trigger = app.document.querySelector('[data-favorites]');
+  rightClick(app, trigger);
+  const request = app.messages.find(message => message.type === 'location-destinations');
+  assert.ok(request);
+  app.key('Escape');
+  assert.equal(app.document.activeElement, trigger);
+  send(app, { ...request, type: 'location-destinations-result', drives: ['C:/'], recent: [] });
+  assert.equal(trigger.getAttribute('aria-expanded'), 'false');
+  app.click(trigger);
+  assert.ok(app.document.querySelector('[data-favorite-toggle]'));
+});
+
 for (const side of [0, 1]) for (const kind of ['plain', 'git']) test(`${kind} location menu opens outside the grid in panel ${side + 1}`, t => {
   const app = createApp(t, fixture());
   if (kind === 'git') git(app);

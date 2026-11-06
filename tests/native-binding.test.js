@@ -43,7 +43,8 @@ test('a missing marked window reports the native search stage without a desktop 
 
 test('compiled binding exposes an honest versioned capability contract', () => {
   const binding = require(binary);
-  assert.deepEqual(binding.apiVersion, { major: 1, minor: 9 });
+  assert.deepEqual(binding.apiVersion, { major: 1, minor: 10 });
+  assert.equal(binding.capabilities['paths.listDrives'].status, process.platform === 'win32' ? 'supported' : 'unsupported');
   assert.equal(binding.capabilities['git.status'].dirtySummary, true);
   assert.ok(Object.keys(binding.capabilities).length >= 20);
   for (const [operation, capability] of Object.entries(binding.capabilities)) {
@@ -58,7 +59,7 @@ test('compiled binding exposes an honest versioned capability contract', () => {
       assert.equal(capability.reason, 'SingleDoubleByteUtf8AndGB18030Codepages');
     } else if (['git.status', 'git.info'].includes(operation) || (process.platform === 'win32' && ['metadata.query', 'paths.resolveNetwork', 'encoding.describe', 'icons.resolve', 'files.copy', 'shell.openAssociated', 'shell.openTrash', 'shell.openTerminal', 'shell.showContextMenu', 'windows.maximize', 'clipboard.readFiles', 'clipboard.writeFiles', 'clipboard.acknowledge', 'clipboard.cancelFiles'].includes(operation))) {
       assert.equal(capability.status, 'supported');
-    } else if (process.platform === 'win32' && ['windows.inspect', 'files.readDirectory', 'git.untrack'].includes(operation)) {
+    } else if (process.platform === 'win32' && ['windows.inspect', 'files.readDirectory', 'git.untrack', 'paths.listDrives'].includes(operation)) {
       assert.equal(capability.status, 'supported');
     } else if (process.platform === 'linux' && operation === 'files.copy') {
       assert.equal(capability.status, 'supported');

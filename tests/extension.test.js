@@ -11,6 +11,33 @@ const manifest = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'ut
 const tick = () => new Promise(resolve => setImmediate(resolve));
 const Progress = require('../media/bitfroest-progress');
 
+test('successful UNC navigation remembers only the share root and exposes it below the drives', async t => {
+  const initial = clipboardFixture();
+  const app = harness(t, {
+    globalState: { recentUncRoots: ['//server/older'] },
+    nativeDriveList: ['C:/', 'Z:/'],
+    filesystemLoad: async () => structuredClone(initial),
+    containsPath: () => true,
+    filesystemPrepare: async (before, settings) => {
+      const [directory] = settings.directories;
+      if (directory.includes('/offline')) throw new Error('Share unavailable.');
+      return { ...before, folders: { ...before.folders, [directory]: [] } };
+    }
+  });
+  await app.command('bitfroest.openPrototype');
+  const panel = app.panels[0];
+  for (const directory of ['//server/share/docs', '//server/offline/docs']) {
+    await panel.receive({ type: 'filesystem-navigate', path: directory, side: 0, state: initial });
+  }
+  await panel.receive({ type: 'location-destinations', requestId: 1 });
+  assert.deepEqual(panel.messages.findLast(message => message.type === 'location-destinations-result'), {
+    type: 'location-destinations-result', requestId: 1, drives: ['C:/', 'Z:/'], drivesUnavailable: false,
+    recent: ['//server/share', '//server/older']
+  });
+  assert.deepEqual(app.context.globalState.get('recentUncRoots'), ['//server/share', '//server/older']);
+  panel.dispose();
+});
+
 test('symbolic folder context reaches native menus and clipboard as the current directory', async t => {
   const initial = clipboardFixture();
   const app = harness(t, { filesystemLoad: async () => initial });
@@ -1629,6 +1656,7 @@ function harness(t, options = {}) {
       if (request === './open-terminal') return { openTerminal: async target => { if (options.terminalOpen) return options.terminalOpen(target); throw new Error('Terminal unavailable'); } };
       if (request === './license-information' && options.licenseOpenError) return { createLicenseInformation: () => ({ dispose() {}, async open() { throw new Error(options.licenseOpenError); } }) };
       if (request === './network-paths') return { prepareNetworkDeletion: require('../network-paths').prepareNetworkDeletion,
+        recentUncRoots: require('../network-paths').recentUncRoots,
         findNetworkPaths: paths => require('../network-paths').findNetworkPaths(paths, { resolvePaths: options.resolveUncPaths || (async paths => paths) }),
         resolveUncPaths: options.resolveUncPaths || (async paths => paths) };
       if (request === './lock-inspector') return { createLockInspector: () => ({ open: folder => options.lockInspectorOpen?.(folder), dispose() {} }) };
@@ -1656,6 +1684,9 @@ function harness(t, options = {}) {
         reset: async selection => { clipboardCalls.push({ action: 'reset', selection }); return true; }, dispose() {}
       })) };
       if (request === './startup-paths') return { selectStartupRoots: preferred => options.startupRoots || preferred, existingDirectories: directories => directories.filter(value => !options.missingDirectories?.includes(value)) };
+      if (request === './native-api' && options.nativeDriveList) return { loadNativeApi: () => ({ openSession: () => ({
+        invoke: async operation => { assert.equal(operation, 'paths.listDrives'); return { drives: options.nativeDriveList }; }, close() {}
+      }) }) };
       if (request === './filesystem-provider') return { createProvider: creation => { providerOptions = creation; return options.providerFactory ? options.providerFactory(creation) : ({
         load: async optionsForLoad => options.filesystemLoad ? options.filesystemLoad(optionsForLoad) : null,
         prepare: async (before, preparation) => options.filesystemPrepare ? options.filesystemPrepare(before, preparation) : before,

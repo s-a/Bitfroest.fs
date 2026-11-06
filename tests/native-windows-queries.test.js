@@ -5,6 +5,18 @@ const binary = process.env.NATIVE_BINDING_TEST_PATH || path.join(__dirname, '../
 const windows = { skip: process.platform !== 'win32' };
 function session() { return require(binary).openSession(); }
 
+test('Windows drive enumeration returns assigned roots in drive-letter order', windows, async () => {
+  const binding = require(binary);
+  assert.equal(binding.capabilities['paths.listDrives']?.status, 'supported');
+  const s = binding.openSession();
+  try {
+    const { drives } = await s.invoke('paths.listDrives', {});
+    assert.ok(drives.includes(path.parse(__filename).root.replace('\\', '/').toUpperCase()));
+    assert.ok(drives.every(drive => /^[A-Z]:\/$/.test(drive)));
+    assert.deepEqual(drives, [...new Set(drives)].sort());
+  } finally { s.close(); }
+});
+
 test('native codepage output and byte maps match established decoder vectors', windows, async () => {
   const vectors = require('./fixtures/native-codepage-vectors.json');
   const s = session();

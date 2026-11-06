@@ -383,6 +383,14 @@ void Execute(napi_env, void* data) {
   auto* query = static_cast<Query*>(data);
   try {
     if (query->operation == "paths.resolveNetwork") { ResolveNetwork(query); return; }
+    if (query->operation == "paths.listDrives") {
+      const DWORD mask = GetLogicalDrives();
+      if (!mask) { query->native_error = GetLastError(); query->error = "NativeFailure"; return; }
+      for (unsigned index = 0; index < 26; ++index) {
+        if (mask & (1u << index)) query->drives.push_back(std::wstring(1, static_cast<wchar_t>(L'A' + index)) + L":/");
+      }
+      return;
+    }
     if (!GetCPInfoExW(query->codepage, 0, &query->info)) {
       query->native_error = GetLastError();
       query->error = "UnsupportedEncoding";
@@ -397,7 +405,14 @@ void Execute(napi_env, void* data) {
 napi_value Result(napi_env env, const Query& query) {
   napi_value result;
   CHECK(napi_create_object(env, &result));
-  if (query.operation == "paths.resolveNetwork") {
+  if (query.operation == "paths.listDrives") {
+    napi_value drives;
+    CHECK(napi_create_array_with_length(env, query.drives.size(), &drives));
+    for (uint32_t index = 0; index < query.drives.size(); ++index) {
+      CHECK(napi_set_element(env, drives, index, Wide(env, query.drives[index])));
+    }
+    CHECK(napi_set_named_property(env, result, "drives", drives));
+  } else if (query.operation == "paths.resolveNetwork") {
     napi_value mappings;
     CHECK(napi_create_object(env, &mappings));
     for (size_t i = 0; i < query.drives.size(); ++i) {
@@ -460,7 +475,7 @@ void Complete(napi_env env, napi_status status, void* data) {
 }
 
 bool IsWindowsQuery(const char* operation) {
-  return std::strcmp(operation, "paths.resolveNetwork") == 0 || std::strcmp(operation, "encoding.describe") == 0 ||
+  return std::strcmp(operation, "paths.resolveNetwork") == 0 || std::strcmp(operation, "paths.listDrives") == 0 || std::strcmp(operation, "encoding.describe") == 0 ||
     std::strcmp(operation, "encoding.decodeBlock") == 0 || std::strcmp(operation, "encoding.decodeChunk") == 0;
 }
 
@@ -485,7 +500,7 @@ napi_value StartWindowsQuery(napi_env env, const std::shared_ptr<SessionState>& 
       if (drive[0] >= L'a' && drive[0] <= L'z') drive[0] -= L'a' - L'A';
       if (std::find(query->drives.begin(), query->drives.end(), drive) == query->drives.end()) query->drives.push_back(drive);
     }
-  } else {
+  } else if (query->operation != "paths.listDrives") {
     double cp;
     if (!Number(env, request, "codepage", &cp) || cp < 0 || cp > 65535) return Fail(env, "InvalidRequest", "An integer codepage identifier is required.");
     query->codepage = static_cast<UINT>(cp);

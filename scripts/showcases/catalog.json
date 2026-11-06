@@ -541,6 +541,24 @@
     ]
   },
   {
+    "id": "drive-and-unc-menu",
+    "parentId": "main",
+    "title": "Drives and recent UNC shares",
+    "description": "Right-click the address bar icon on Windows to switch to a drive root or a recent UNC share root in that panel.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "media/app.js",
+      "media/bitfroest-menu.js"
+    ],
+    "status": "pending",
+    "reason": "Recording requires an isolated Windows profile with sample UNC shares and approval for desktop capture.",
+    "captures": [],
+    "category": "Navigation & Selection"
+  },
+  {
     "id": "history-menu",
     "parentId": "main",
     "title": "Navigation history",
