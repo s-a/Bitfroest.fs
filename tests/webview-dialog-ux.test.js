@@ -14,6 +14,32 @@ function fixture(real = false) {
 function copy(app) { app.click(app.row('same.txt').querySelector('[data-filename]')); app.action('copy'); }
 function submit(app) { app.document.querySelector('#modal-form').dispatchEvent(new app.window.Event('submit', { bubbles: true, cancelable: true })); }
 
+test('copy and move put the localized category and action on one heading line', t => {
+  for (const [language, category, actions] of [
+    ['de', 'DATEIAKTION:', ['Kopieren', 'Verschieben']],
+    ['en', 'FILE OPERATION:', ['Copy', 'Move']]
+  ]) {
+    const app = createApp(t, fixture(), { language });
+    const style = app.document.createElement('style');
+    style.textContent = resolveThemeCss(fs.readFileSync(path.join(__dirname, '../media/app.css'), 'utf8'));
+    app.document.head.append(style);
+    app.click(app.row('same.txt').querySelector('[data-filename]'));
+    for (const [index, action] of ['copy', 'move'].entries()) {
+      app.action(action);
+      const prefix = app.document.querySelector('#modal-eyebrow');
+      const title = app.document.querySelector('#modal-title');
+      assert.equal(prefix.textContent, category);
+      assert.equal(title.textContent, actions[index]);
+      assert.equal(prefix.parentElement, title.parentElement);
+      assert.equal(app.window.getComputedStyle(title.parentElement).display, 'flex');
+      const prefixStyle = app.window.getComputedStyle(prefix), titleStyle = app.window.getComputedStyle(title);
+      assert.ok(parseFloat(prefixStyle.fontSize) < parseFloat(titleStyle.fontSize));
+      assert.equal(titleStyle.fontWeight, '600');
+      app.click(app.document.querySelector('#modal-cancel'));
+    }
+  }
+});
+
 test('transfer dialog exposes its accessible name, source, description and selected destination', t => {
   const app = createApp(t, fixture()); copy(app);
   const dialog = app.document.querySelector('dialog');

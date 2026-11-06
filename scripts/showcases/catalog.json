@@ -841,6 +841,11 @@
             "text": "Source"
           },
           {
+            "type": "check",
+            "selector": "dialog[open].transfer-confirmation #modal-eyebrow",
+            "text": "FILE OPERATION:"
+          },
+          {
             "type": "pause",
             "duration": 900
           },

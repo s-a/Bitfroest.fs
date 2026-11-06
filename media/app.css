@@ -361,6 +361,8 @@ h1, h2 { font-size: 1.2em; font-weight: 500; margin: 0; }
 .transfer-confirmation::backdrop { backdrop-filter: blur(2px); }
 .transfer-confirmation #modal-form { display: flex; flex-direction: column; max-height: calc(100dvh - 36px); }
 .transfer-confirmation .modal-heading, .transfer-confirmation .modal-actions { flex: 0 0 auto; }
+.transfer-confirmation .modal-heading > div { display: flex; align-items: baseline; gap: .5em; min-width: 0; }
+.transfer-confirmation #modal-eyebrow { margin: 0; }
 .transfer-confirmation #modal-title { font-weight: 600; }
 .transfer-confirmation #modal-body { min-height: 0; }
 .transfer-confirmation .modal-actions { flex-wrap: wrap; background: var(--vscode-editor-background, var(--surface)); }

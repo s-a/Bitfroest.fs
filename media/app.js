@@ -2443,9 +2443,10 @@
     clearPendingRenameCue();
     document.querySelectorAll('.modal-actions [data-dialog-secondary]').forEach(button => button.remove());
     operationErrorDialog = false; operationFailureInline = false;
-    $('#modal-title').textContent = title; $('#modal-eyebrow').textContent = eyebrow; $('#modal-body').innerHTML = body;
+    $('#modal-title').textContent = title; $('#modal-body').innerHTML = body;
     $('#modal').classList.toggle('conflict-dialog', Boolean($('#modal-body').querySelector('[data-conflict-layout]')));
     const transfer = Boolean($('#modal-body').querySelector('.transfer-dialog'));
+    $('#modal-eyebrow').textContent = transfer ? `${eyebrow}:` : eyebrow;
     $('#modal').classList.toggle('transfer-confirmation', transfer);
     $('#modal-confirm').classList.toggle('vscode-button', transfer);
     $('#modal-cancel').classList.toggle('vscode-button', transfer);
