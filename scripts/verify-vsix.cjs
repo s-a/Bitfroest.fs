@@ -17,7 +17,17 @@ async function main() {
     const entries = await reader.getEntries();
     validatePackageEntries(entries.map(entry => entry.filename));
     const vsixManifest = entries.find(entry => entry.filename === 'extension.vsixmanifest');
-    if (!(await vsixManifest.getData(new zip.TextWriter())).includes(`TargetPlatform="${target}"`)) throw new Error('VSIX platform does not match the build target.');
+    const manifestXml = await vsixManifest.getData(new zip.TextWriter());
+    if (!manifestXml.includes(`TargetPlatform="${target}"`)) throw new Error('VSIX platform does not match the build target.');
+    if (context.release || fs.existsSync('CHANGELOG.md')) {
+      const changelog = entries.find(entry => entry.filename === 'extension/changelog.md');
+      if (!changelog || !manifestXml.includes('Type="Microsoft.VisualStudio.Services.Content.Changelog" Path="extension/changelog.md"')) {
+        throw new Error('VSIX Marketplace changelog is missing.');
+      }
+      const notes = fs.readFileSync(path.join('.github', 'release-notes', `${context.version}.md`), 'utf8');
+      const packaged = await changelog.getData(new zip.TextWriter());
+      if (packaged.replace(/\r\n/g, '\n') !== notes.replace(/\r\n/g, '\n')) throw new Error('VSIX changelog differs from the versioned release notes.');
+    }
     for (const entry of entries.filter(entry => entry.filename.startsWith('extension/'))) {
       const destination = path.join(extracted, entry.filename);
       if (entry.directory) { fs.mkdirSync(destination, { recursive: true }); continue; }

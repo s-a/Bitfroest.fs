@@ -97,6 +97,9 @@ jobs:
       - name: Package the pre-release extension
         run: |
           VERSION=$(node -p "require('./package.json').version")
+          if [[ -f ".github/release-notes/$VERSION.md" ]]; then
+            cp ".github/release-notes/$VERSION.md" CHANGELOG.md
+          fi
           npm exec --yes --package @vscode/vsce@4.1.0 -- vsce package --pre-release --target "$BUILD_TARGET" --baseContentUrl "https://github.com/s-a/Bitfroest.fs/blob/$GITHUB_SHA/" --baseImagesUrl "https://raw.githubusercontent.com/s-a/Bitfroest.fs/$GITHUB_SHA/" --out "$RUNNER_TEMP/bitfroest-fs-$VERSION-$BUILD_TARGET.vsix"
       - name: Verify the isolated package and create checksums
         run: node scripts/verify-vsix.cjs

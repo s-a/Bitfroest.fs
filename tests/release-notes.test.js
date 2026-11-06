@@ -126,3 +126,13 @@ test('platform builds check release notes before dependencies and native builds 
   assert.ok(gate < workflow.indexOf('run: node scripts/ci-native-build.cjs'));
   assert.match(workflow, /node --test[^\n]*tests\/release-notes\.test\.js/);
 });
+
+test('platform packages expose the versioned release notes as the Marketplace changelog', () => {
+  const workflow = fs.readFileSync(path.join(root, '.github/workflows/build-vsix.yml'), 'utf8');
+  const stage = workflow.indexOf('cp ".github/release-notes/$VERSION.md" CHANGELOG.md');
+  assert.ok(stage > workflow.indexOf('VERSION=$(node'));
+  assert.ok(stage < workflow.indexOf('vsce package --pre-release'));
+  const verifier = fs.readFileSync(path.join(root, 'scripts/verify-vsix.cjs'), 'utf8');
+  assert.match(verifier, /Microsoft\.VisualStudio\.Services\.Content\.Changelog/);
+  assert.match(verifier, /extension\/changelog\.md/);
+});
