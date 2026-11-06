@@ -2334,15 +2334,16 @@
       const shown = displayArchivePath(value), previous = index ? displayArchivePath(segments[index - 1]) : '';
       const label = previous && shown.startsWith(previous) ? shown.slice(previous.length).replace(/^[\\/]/, '') : shown;
       const separator = index && !/[\\/]$/.test(previous) ? `<span aria-hidden="true">${paths.isWindowsPath(shown) ? '\\' : '/'}</span>` : '';
-      return `${separator}<button type="button" data-breadcrumb="${escape(value)}" title="${escape(displayArchivePath(currentPath(p)) + '\n' + t('Rechtsklick: Pfad kopieren'))}"${value === currentPath(p) ? ' aria-current="location"' : ''}>${escape(label)}</button>`;
+      const title = [displayArchivePath(currentPath(p)), t('Strg+Klick: In neuem Tab öffnen'), t('Rechtsklick: Pfad kopieren')].join('\n');
+      return `${separator}<button type="button" data-breadcrumb="${escape(value)}" title="${escape(title)}"${value === currentPath(p) ? ' aria-current="location"' : ''}>${escape(label)}</button>`;
     }).join('');
   }
   function openBreadcrumb(path, newTab) {
     if (!newTab) { go(path); return; }
     const side = state.active, sourcePane = pane(), sourceTab = sourcePane.tabStates[sourcePane.tab].id;
-    const open = () => {
-      if (backgroundNavigation || state.panes[side] !== sourcePane || sourcePane.tabStates[sourcePane.tab].id !== sourceTab) return;
-      state.active = side; rememberScroll(); tabs.openPath(sourcePane, path); go(path);
+    const open = ({ path: destination = path, kind = 'directory' } = {}) => {
+      if (kind !== 'directory' || backgroundNavigation || state.panes[side] !== sourcePane || sourcePane.tabStates[sourcePane.tab].id !== sourceTab) return;
+      state.active = side; rememberScroll(); tabs.openPath(sourcePane, destination); go(destination);
     };
     if (host && state.realFilesystem && !state.archiveLocations?.[path]) requestFilesystem({ type: 'filesystem-navigate', path, side }, open);
     else open();

@@ -125,7 +125,10 @@ test('address right-click copies the complete clicked pane path and confirms onl
     const app = createApp(t, saved, { language });
     const section = app.document.querySelector(`[data-pane="${side}"]`), target = section.querySelector(selector);
     const directory = saved.panes[side].tabs[0];
-    assert.equal(target.getAttribute('title') || target.closest('[title]')?.title, directory + '\n' + (language === 'de' ? 'Rechtsklick: Pfad kopieren' : 'Right-click: copy path'));
+    const hints = [directory];
+    if (selector === '[data-breadcrumb]') hints.push(language === 'de' ? 'Strg+Klick: In neuem Tab öffnen' : 'Ctrl-click: Open in a new tab');
+    hints.push(language === 'de' ? 'Rechtsklick: Pfad kopieren' : 'Right-click: copy path');
+    assert.equal(target.getAttribute('title') || target.closest('[title]')?.title, hints.join('\n'));
     const event = new app.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 });
     target.dispatchEvent(event);
     assert.equal(event.defaultPrevented, true);

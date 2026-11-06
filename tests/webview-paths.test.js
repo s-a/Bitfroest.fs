@@ -28,6 +28,26 @@ test('up navigation stops at Windows drive and UNC share roots', t => {
   }
 });
 
+test('Ctrl-click opens the breadcrumb directory in a new tab in the clicked pane', t => {
+  const initial = fixture('/workspace/link/child');
+  const app = createApp(t, initial, { platform: 'linux' });
+  const breadcrumb = app.document.querySelector('[data-pane="1"] [data-breadcrumb="/workspace/link"]');
+  app.click(breadcrumb, { ctrlKey: true });
+  const request = app.messages.findLast(message => message.type === 'filesystem-navigate');
+  assert.equal(request.path, '/workspace/link');
+  assert.equal(request.side, 1);
+  assert.deepEqual(Array.from(app.state().panes[1].tabs), ['/workspace/link/child']);
+  const canonical = '/workspace/real';
+  const state = { ...initial, folders: { ...initial.folders, [canonical]: [] } };
+  app.window.dispatchEvent(new app.window.MessageEvent('message', { data: {
+    type: 'filesystem-result', navigationRequestId: request.navigationRequestId, ok: true, state,
+    resumeNavigation: { path: canonical, side: 1 }
+  } }));
+  assert.deepEqual(Array.from(app.state().panes[1].tabs), ['/workspace/link/child', canonical]);
+  assert.equal(app.state().panes[1].tab, 1);
+  assert.deepEqual(Array.from(app.state().panes[0].tabs), ['/workspace/link/child']);
+});
+
 test('transfer dialog presents Windows source and target paths in native notation', t => {
   const state = fixture(), source = state.panes[0].tabs[0];
   state.folders[source] = [{ id: 'file', name: 'a.txt', type: 'text', size: 1, fsSource: source + '/a.txt' }];

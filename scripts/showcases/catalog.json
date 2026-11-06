@@ -541,6 +541,23 @@
     ]
   },
   {
+    "id": "breadcrumb-new-tab",
+    "parentId": "main",
+    "title": "Open a breadcrumb in a new tab",
+    "description": "Ctrl-click an address bar breadcrumb to open that folder in a new tab in the same panel.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "media/app.js"
+    ],
+    "status": "pending",
+    "reason": "The Ctrl-click sequence has yet to be recorded with sample folders.",
+    "captures": [],
+    "category": "Navigation & Selection"
+  },
+  {
     "id": "drive-and-unc-menu",
     "parentId": "main",
     "title": "Drives and recent UNC shares",

@@ -77,6 +77,7 @@
     'Laufwerke und letzte UNC-Freigaben': 'Drives and recent UNC shares',
     'Rechtsklick: Laufwerke und letzte UNC-Freigaben': 'Right-click: drives and recent UNC shares',
     'Laufwerke konnten nicht ermittelt werden.': 'Could not list drives.',
+    'Strg+Klick: In neuem Tab öffnen': 'Ctrl-click: Open in a new tab',
     'Git-Status aktualisieren': 'Refresh Git status',
     'Git-Änderungsstatus prüfen': 'Check Git dirty state',
     'Dateiverwaltung öffnen oder nach vorn holen': 'Open or reveal the file manager',

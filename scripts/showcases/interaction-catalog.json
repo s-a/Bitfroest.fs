@@ -72,6 +72,15 @@
     "sceneId": "path-copy"
   },
   {
+    "id": "breadcrumb-new-tab",
+    "kind": "mouse",
+    "title": "Open a breadcrumb folder in a new tab with Ctrl-click",
+    "sources": [
+      "media/app.js"
+    ],
+    "sceneId": "breadcrumb-new-tab"
+  },
+  {
     "id": "drive-and-unc-menu",
     "kind": "mouse",
     "title": "Open drive roots and recent UNC share roots with a right click on Windows",
