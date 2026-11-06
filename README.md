@@ -69,9 +69,11 @@ The **Configuration** menu opens settings for file operations, favorites, column
 | --- | --- |
 | Windows | Primary supported platform, including native Windows integrations |
 | Linux | Native file copy, symbolic links, Git index actions, supported desktop capabilities and portable file operations. File clipboard access uses X11, supported Wayland data-control protocols or an existing XWayland connection. The Windows shell context menu is unavailable |
-| macOS | Not supported |
+| macOS | Experimental Marketplace pre-release for Apple Silicon (ARM64). Build and package checks run in CI. Desktop workflows are open for community testing |
 
 Published Windows and Linux packages target x64 processors. Linux packages target Ubuntu 24.04 or a compatible newer runtime.
+
+On Apple Silicon, select **Install Pre-Release Version** in the VS Code Extensions view. Use disposable files for testing. The system file clipboard, native context menu, opening files in their associated applications, and the Trash view are unavailable on macOS. Include the macOS, VS Code, and extension versions and steps to reproduce when reporting an issue. [Report a bug](https://github.com/s-a/Bitfroest.fs/issues/new?template=bug-report.yml)
 
 Native folder icons on Linux require GIO, GdkPixbuf and installed image loaders. SVG icons require the librsvg loader. On Ubuntu, these runtime components are provided by `libglib2.0-0t64`, `libgdk-pixbuf-2.0-0`, `librsvg2-common` and `shared-mime-info`.
 

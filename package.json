@@ -2,7 +2,7 @@
   "name": "bitfroest-fs-prototype",
   "displayName": "Bitfroest.fs (Beta)",
   "description": "%extension.description%",
-  "version": "0.0.51",
+  "version": "0.0.52",
   "preview": true,
   "publisher": "bitfroest",
   "author": "Stephan Ahlf",

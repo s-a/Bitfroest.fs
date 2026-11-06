@@ -15,6 +15,8 @@ test('feature branch pushes run validation while publication remains restricted 
   assert.match(push, /^ {4}branches: \[main, 'sa\/\*\*'\]$/m);
   const release = workflow.match(/^ {2}release:\r?\n([\s\S]*?)(?=^ {2}marketplace:)/m)?.[1];
   assert.match(release, /^ {4}if: github\.event_name == 'push' && startsWith\(github\.ref, 'refs\/tags\/v'\)$/m);
+  assert.match(release, /^ {4}needs: \[build, experimental-macos\]$/m);
+  assert.match(release, /^ {10}name: experimental-vsix-darwin-arm64$/m);
   assert.ok(workflow.includes("needs.release.result == 'success'"));
 });
 
