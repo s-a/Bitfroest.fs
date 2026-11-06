@@ -1085,9 +1085,12 @@ function createProvider(options = {}) {
         completed++;
         settings.onProgress?.(Progress.event({ phase: 'deleting', path: item.path, overall: Progress.known('items', completed, targets.length), current: Progress.known('items', 1, 1) }));
       }
-      const remainingDirectories = (baseline.visibleOnly ? activeDirectories(before) : baseline.loadedDirectories).filter(directory => !targets.some(item => below(directory, item.path)));
-      const state = inheritedPanes(await load({ directories: await availableViewDirectories(remainingDirectories), ...(baseline.visibleOnly ? { visibleOnly: true, deferredDirectories: deferredDirectories(before) } : {}) }), before);
-      state.updatedDirectories = activeDirectories(before).filter(directory => targets.some(target => below(target.path, directory)));
+      const view = settings.getView?.() || before;
+      const visibleDirectories = activeDirectories(view).filter(directory => canNavigate(directory));
+      const remainingDirectories = [...new Set([...(baseline.visibleOnly ? [] : baseline.loadedDirectories), ...visibleDirectories])]
+        .filter(directory => !targets.some(item => below(directory, item.path)));
+      const state = inheritedPanes(await load({ directories: await availableViewDirectories(remainingDirectories), ...(baseline.visibleOnly ? { visibleOnly: true, deferredDirectories: deferredDirectories(view) } : {}) }), view);
+      state.updatedDirectories = visibleDirectories.filter(directory => targets.some(target => below(target.path, directory)));
       snapshot.state = clone(state);
       return state;
     } catch (error) {

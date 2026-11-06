@@ -3606,6 +3606,59 @@ test('real provider deletes a streamed folder without preparation before the pen
   assert.equal(panel.messages.findLast(message => message.navigationRequestId === 'directory-101')?.cancelled, true);
 });
 
+test('deleting from a streamed directory keeps the remaining files visible before navigation resumes', { timeout: 10000 }, async t => {
+  const disk = require('node:fs/promises'), { createProvider } = require('../filesystem-provider');
+  const root = (await disk.mkdtemp(path.join(os.tmpdir(), 'stream-delete-view-'))).replaceAll('\\', '/');
+  const left = `${root}/left`, right = `${root}/right`, folder = `${left}/nested`, target = `${folder}/delete.txt`;
+  const streamed = deferred(), release = deferred();
+  t.after(() => { release.resolve(); return disk.rm(root, { recursive: true, force: true }); });
+  await disk.mkdir(folder, { recursive: true }); await disk.mkdir(right);
+  await disk.writeFile(target, 'remove'); await disk.writeFile(`${folder}/keep.txt`, 'keep');
+  await disk.writeFile(`${right}/opposite.txt`, 'opposite');
+  const app = harness(t, { startupRoots: [left, right], providerFactory: creation => {
+    const provider = createProvider({ ...creation, roots: [left, right], readDirectory: undefined, readAttributes: undefined,
+      networkPaths: async () => [], deletePath: file => disk.unlink(file) });
+    const prepare = provider.prepare;
+    provider.prepare = (before, settings) => prepare(before, { ...settings, onDirectory: async update => {
+      await settings.onDirectory?.(update);
+      if (update.path === folder && update.rows?.some(row => row.name === 'delete.txt')) {
+        streamed.resolve(); await release.promise;
+      }
+    } });
+    return provider;
+  } });
+  await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
+  assert.match(panel.webview.html, /Content-Security-Policy/);
+  const view = require('./support/webview.cjs').createApp(t, undefined, { html: panel.webview.html });
+  const deliver = data => view.window.dispatchEvent(new view.window.MessageEvent('message', { data: structuredClone(data) }));
+  const latest = type => view.messages.findLast(message => message.type === type);
+  view.click(view.row('nested')); view.action('open-dir-tab');
+  const navigation = latest('filesystem-navigate');
+  assert.equal(navigation.path, folder);
+  const listing = panel.receive(navigation);
+  await Promise.race([streamed.promise, listing.then(() => assert.fail(JSON.stringify(panel.messages.findLast(message => message.navigationRequestId === navigation.navigationRequestId))))]);
+  try {
+    for (const message of panel.messages.filter(message => message.type === 'filesystem-directory')) deliver(message);
+    assert.ok(view.row('keep.txt'));
+    view.click(view.row('delete.txt')); view.action('delete');
+    view.document.querySelector('#modal-form').dispatchEvent(new view.window.Event('submit', { bubbles: true, cancelable: true }));
+    await panel.receive(latest('filesystem-read-cancel'));
+    const deletion = latest('filesystem-delete');
+    assert.deepEqual(Array.from(deletion.paths), [target]);
+    await panel.receive(deletion);
+    const result = panel.messages.findLast(message => message.type === 'filesystem-result' && message.operationId === deletion.operationId);
+    assert.equal(result.ok, true, result.error);
+    assert.deepEqual(await disk.readdir(folder), ['keep.txt']);
+    deliver(result);
+    assert.equal(view.state().panes[0].tabs[view.state().panes[0].tab], folder);
+    assert.ok(view.row('keep.txt'), 'the deletion response retains the surviving row');
+    assert.ok(Array.from(view.document.querySelectorAll('[data-pane="1"] [data-file-row][data-id]'))
+      .some(row => row.querySelector('[data-cell]')?.title === 'opposite.txt'));
+    assert.equal(view.row('delete.txt'), undefined);
+    assert.equal(latest('filesystem-refresh'), undefined);
+  } finally { release.resolve(); await listing; }
+});
+
 test('folder tabs and their active positions survive a fresh extension instance and provider', async t => {
   const fs = require('node:fs/promises'), os = require('node:os'), { createProvider } = require('../filesystem-provider');
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'tab-restart-')), left = path.join(root, 'left').replaceAll('\\', '/'), right = path.join(root, 'right').replaceAll('\\', '/'), inactive = `${left}/nested/archive`;

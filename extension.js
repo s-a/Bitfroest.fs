@@ -1788,6 +1788,7 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
         const directoryKey = `${message.side}:${navigationTabId || ''}`;
         if (directoryJob) { directoryJobs.get(directoryKey)?.controller.abort(); directoryJobs.set(directoryKey, directoryJob); }
         const directoryView = () => directoryJob && navigationTabId && Array.isArray(savedState?.panes?.[message.side]?.tabStates) ? savedState : message.state || savedState;
+        const operationView = () => viewRevision === requestedViewRevision ? message.state || savedState : savedState;
         if (job) transferJobs.set(operationId, job);
         const onProgress = progress => {
           if (!job || transferJobs.get(operationId) !== job || panel !== current) return;
@@ -1817,7 +1818,7 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
             if (!filesystemState) throw new Error(t('Kein Dateisystem geladen.'));
             let fresh;
             if (message.type === 'filesystem-apply') fresh = await provider.apply(filesystemState, message.state, { verifyAfterCopy: typeof message.transfer?.verifyAfterCopy === 'boolean' ? message.transfer.verifyAfterCopy : fileSettings().verifyAfterCopy, ...(job ? { signal: job.controller.signal, transfer: message.transfer, onProgress } : {}) });
-            else if (message.type === 'filesystem-delete') fresh = await provider.remove(filesystemState, { paths: message.paths, useTrash: message.useTrash, ...(typeof message.currentDirectory === 'string' ? { currentDirectory: message.currentDirectory } : {}), ...(Array.isArray(message.confirmedNetworkPaths) ? { confirmedNetworkPaths: message.confirmedNetworkPaths } : {}) }, { ...(job ? { signal: job.controller.signal } : {}), onProgress: progress => { if (panel === current) current.webview.postMessage({ type: 'filesystem-task-progress', operationId, taskRequestId: message.taskRequestId, progress: Progress.read(progress) }); } });
+            else if (message.type === 'filesystem-delete') fresh = await provider.remove(filesystemState, { paths: message.paths, useTrash: message.useTrash, ...(typeof message.currentDirectory === 'string' ? { currentDirectory: message.currentDirectory } : {}), ...(Array.isArray(message.confirmedNetworkPaths) ? { confirmedNetworkPaths: message.confirmedNetworkPaths } : {}) }, { getView: operationView, ...(job ? { signal: job.controller.signal } : {}), onProgress: progress => { if (panel === current) current.webview.postMessage({ type: 'filesystem-task-progress', operationId, taskRequestId: message.taskRequestId, progress: Progress.read(progress) }); } });
             else if (message.type === 'filesystem-navigate' || message.type === 'filesystem-prepare') {
               let directories = message.type === 'filesystem-navigate' ? [message.path] : message.paths;
               if (!Array.isArray(directories) || directories.length > 128 || directories.some(target => typeof target !== 'string' || target.length > 4096 || !provider.canNavigate(target, message.type === 'filesystem-navigate'))) throw new Error(t('Ungültiger Datei- oder Ordnername.'));
@@ -1870,7 +1871,7 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
                   fresh = { ...filesystemState, ...fresh, folders, archiveLocations: { ...filesystemState.archiveLocations, ...fresh.archiveLocations } };
                 }
               }
-              filesystemState = retainView(fresh, directoryJob ? directoryView() : viewRevision === requestedViewRevision ? message.state || savedState : savedState);
+              filesystemState = retainView(fresh, directoryJob ? directoryView() : operationView());
               if (message.type === 'filesystem-navigate') {
                 const panes = (message.state || savedState)?.panes;
                 const previousPath = panes?.[message.side]?.tabs[panes[message.side].tab];
