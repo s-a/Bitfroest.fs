@@ -368,7 +368,7 @@ h1, h2 { font-size: 1.2em; font-weight: 500; margin: 0; }
 .transfer-confirmation #modal-body { min-height: 0; }
 .transfer-confirmation .modal-actions { flex-wrap: wrap; background: var(--vscode-editor-background, var(--surface)); }
 .transfer-confirmation .vscode-button { justify-content: center; min-width: 88px; min-height: 28px; max-width: 100%; white-space: normal; }
-.transfer-confirmation .vscode-action-button { justify-content: center; }
+.transfer-confirmation .vscode-action-button { --vscode-icon-foreground: currentColor; color: inherit; justify-content: center; }
 .transfer-confirmation .vscode-action-button:hover:not(:focus-visible) { border-color: var(--vscode-toolbar-hoverOutline, transparent); }
 .transfer-confirmation button[hidden] { display: none; }
 .transfer-dialog { display: grid; gap: 16px; min-width: 0; }
@@ -438,6 +438,13 @@ dialog button:disabled { color: var(--vscode-disabledForeground, var(--muted)); 
 .vscode-dark .conflict-actions button[data-conflict-action]:disabled { color: var(--vscode-disabledForeground, var(--muted)); background: var(--vscode-button-secondaryBackground, var(--surface)); }
 .vscode-dark dialog { border-color: var(--vscode-widget-border, var(--line)); box-shadow: 0 8px 24px var(--vscode-widget-shadow, #0005); }
 .vscode-dark .modal-heading { border-bottom: 0; padding-bottom: 4px; }
+.transfer-confirmation .modal-heading {
+  padding-block: 12px;
+  background-color: var(--vscode-banner-background, var(--vscode-titleBar-activeBackground, var(--surface)));
+  color: var(--vscode-banner-foreground, var(--vscode-titleBar-activeForeground, var(--text)));
+  border-bottom: 1px solid var(--vscode-contrastBorder, var(--vscode-widget-border, var(--line)));
+}
+.transfer-confirmation :is(#modal-eyebrow, #modal-title) { color: inherit; }
 .vscode-dark .modal-actions { border-top: 0; background: var(--vscode-editor-background, var(--surface)); }
 .vscode-dark .dialog-options { border-top: 0; padding-top: 6px; }
 .rename-table { width: 100%; border-collapse: collapse; margin-top: 10px; }

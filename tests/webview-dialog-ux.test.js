@@ -44,6 +44,26 @@ test('copy and move put the localized category and action on one heading line', 
   }
 });
 
+test('transfer confirmation separates the heading from the body using theme colors', t => {
+  const app = createApp(t, fixture());
+  const style = app.document.createElement('style');
+  style.textContent = resolveThemeCss(fs.readFileSync(path.join(__dirname, '../media/app.css'), 'utf8'), {
+    'banner-background': '#16334b',
+    'banner-foreground': '#eff7ff',
+    contrastBorder: '#89a5bf'
+  });
+  app.document.head.append(style);
+  app.document.body.className = 'vscode-dark';
+  copy(app);
+  const computed = selector => app.window.getComputedStyle(app.document.querySelector(selector));
+  assert.equal(computed('.modal-heading').backgroundColor, 'rgb(22, 51, 75)');
+  assert.equal(computed('.modal-heading').borderBottomWidth, '1px');
+  assert.equal(computed('.modal-heading').borderBottomColor, 'rgb(137, 165, 191)');
+  for (const selector of ['#modal-eyebrow', '#modal-title', '#modal-close']) {
+    assert.equal(computed(selector).color, 'rgb(239, 247, 255)');
+  }
+});
+
 test('transfer dialog exposes its accessible name, source, description and selected destination', t => {
   const app = createApp(t, fixture()); copy(app);
   const dialog = app.document.querySelector('dialog');
