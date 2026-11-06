@@ -1069,7 +1069,12 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
         let drives = [], drivesUnavailable = false;
         try {
           const session = loadNativeApi().openSession();
-          try { ({ drives } = await session.invoke('paths.listDrives', {})); }
+          try {
+            ({ drives } = await session.invoke('paths.listDrives', {}));
+            const systemRoot = `${process.env.SystemDrive?.toUpperCase()}/`;
+            const index = drives.indexOf(systemRoot);
+            if (index > 0) drives = [systemRoot, ...drives.filter(drive => drive !== systemRoot)];
+          }
           finally { session.close(); }
         } catch { drivesUnavailable = true; }
         await recentUncWrites;

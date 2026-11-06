@@ -17,29 +17,33 @@ function rightClick(app, target) {
   assert.equal(event.defaultPrevented, true);
 }
 
-test('the address icon opens drives above recent UNC roots and navigates the originating panel', t => {
+test('left click appends drive roots and recent UNC roots below the existing actions', t => {
   const app = createApp(t, fixture('C:/left', 'C:/right'), { platform: 'win32', language: 'en' });
   const trigger = app.document.querySelector('[data-pane="1"] [data-favorites]');
-  rightClick(app, trigger.querySelector('[data-location-icon]'));
+  rightClick(app, trigger);
+  assert.equal(app.messages.some(message => message.type === 'location-destinations'), false);
+  app.click(trigger.querySelector('[data-location-icon]'));
+  const menu = app.document.querySelector('[data-favorite-menu]');
+  const focused = app.document.activeElement;
   const request = app.messages.find(message => message.type === 'location-destinations');
   assert.ok(request);
   send(app, { ...request, type: 'location-destinations-result', drives: ['C:/', 'Z:/'], recent: ['//server/share'] });
-  const menu = app.document.querySelector('[role="menu"][aria-label="Drives and recent UNC shares"]');
-  assert.deepEqual([...menu.children].map(item => item.getAttribute('role')), ['menuitem', 'menuitem', 'separator', 'menuitem']);
-  assert.deepEqual([...menu.querySelectorAll('.menu-label')].map(label => label.textContent), ['C:\\', 'Z:\\', '\\\\server\\share']);
+  assert.equal(app.document.activeElement, focused);
+  assert.deepEqual([...menu.children].map(item => item.getAttribute('role')), ['menuitem', 'menuitem', 'separator', 'menuitem', 'menuitem', 'separator', 'menuitem']);
+  assert.deepEqual([...menu.querySelectorAll('.menu-label')].slice(-3).map(label => label.textContent), ['C:\\', 'Z:\\', '\\\\server\\share']);
   app.key('End');
   app.key('Enter');
   const navigation = app.messages.filter(message => message.type === 'filesystem-navigate').at(-1);
   assert.equal(navigation.path, '//server/share');
   assert.equal(navigation.side, 1);
   assert.equal(app.state().panes[0].tabs[0], 'C:/left');
-  assert.equal(app.document.querySelector('[role="menu"][aria-label="Drives and recent UNC shares"]'), null);
+  assert.equal(app.document.querySelector('[data-favorite-menu]'), null);
 });
 
 test('Escape dismisses the pending drive menu and ignores a late host reply', t => {
   const app = createApp(t, fixture(), { platform: 'win32' });
   const trigger = app.document.querySelector('[data-favorites]');
-  rightClick(app, trigger);
+  app.click(trigger);
   const request = app.messages.find(message => message.type === 'location-destinations');
   assert.ok(request);
   app.key('Escape');
@@ -48,6 +52,17 @@ test('Escape dismisses the pending drive menu and ignores a late host reply', t 
   assert.equal(trigger.getAttribute('aria-expanded'), 'false');
   app.click(trigger);
   assert.ok(app.document.querySelector('[data-favorite-toggle]'));
+});
+
+test('a missing drive capability leaves the favorites menu usable and reports the failure in the status bar', t => {
+  const app = createApp(t, fixture(), { platform: 'win32', language: 'en' });
+  app.click(app.document.querySelector('[data-favorites]'));
+  const request = app.messages.find(message => message.type === 'location-destinations');
+  assert.ok(request);
+  send(app, { ...request, type: 'location-destinations-result', drives: [], recent: [], drivesUnavailable: true });
+  assert.ok(app.document.querySelector('[data-favorite-toggle]'));
+  assert.equal(app.document.querySelector('[data-favorite-menu] .menu-empty'), null);
+  assert.equal(app.document.querySelector('#status-message').textContent, 'Could not list drives.');
 });
 
 for (const side of [0, 1]) for (const kind of ['plain', 'git']) test(`${kind} location menu opens outside the grid in panel ${side + 1}`, t => {

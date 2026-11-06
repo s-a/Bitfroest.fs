@@ -209,7 +209,7 @@
   }
   function showFavorites(trigger) {
     if (favoritesBlocked() || $('#modal').open) return;
-    const wasOpen = trigger === favoriteTrigger && !destinationRequest;
+    const wasOpen = trigger === favoriteTrigger;
     closeFavorites(false); if (wasOpen) return;
     window.dispatchEvent(new CustomEvent('bitfroest-menu-open', { detail: 'favorites' }));
     favoriteTrigger = trigger; trigger.setAttribute('aria-expanded', 'true');
@@ -260,6 +260,11 @@
     const popup = menus.create({ items: definitions, label: t(kind ? 'Ortsmenü: Favoriten und Aktionen' : 'Favoriten'), emptyLabel: t('Keine Einträge'),
       onClose: restore => closeFavorites(restore), onAction: item => {
         if (state.panes[side] !== origin || currentPath(origin) !== originPath || origin.tabStates[origin.tab].id !== originTab || favoritesBlocked()) { closeFavorites(false); return; }
+        if (item.destination) {
+          closeFavorites(false);
+          state.active = side; go(item.destination);
+          return;
+        }
         if (item.attrs?.['data-location-action']) {
           closeFavorites();
           if (item.id === 'git-history-directory') hostAction('git-history-directory', { directory: originPath, snapshotId: state.snapshotId });
@@ -283,49 +288,23 @@
     });
     popup.dataset.favoriteMenu = ''; document.body.append(popup);
     menus.place(popup, { anchor: trigger }); popup.querySelector('button')?.focus();
-  }
-  function renderDestinations(request, items, emptyLabel) {
-    const { trigger, side, path, tabId } = request;
-    const popup = menus.create({
-      items, label: t('Laufwerke und letzte UNC-Freigaben'), emptyLabel,
-      onClose: closeFavorites, onAction: item => {
-        const origin = state.panes[side];
-        const valid = destinationRequest === request && trigger.isConnected && origin.tabStates[origin.tab].id === tabId &&
-          currentPath(origin) === path && !favoritesBlocked() && !$('#modal').open;
-        closeFavorites(false);
-        if (valid) { state.active = side; go(item.id); }
-      }
-    });
-    popup.dataset.favoriteMenu = '';
-    document.querySelector('[data-favorite-menu]')?.remove();
-    document.body.append(popup);
-    menus.place(popup, { anchor: trigger });
-    (popup.querySelector('button') || popup).focus();
-  }
-  function showDestinations(trigger, side) {
-    if (favoritesBlocked() || $('#modal').open) return;
-    const wasOpen = destinationRequest?.trigger === trigger;
-    closeFavorites(false);
-    if (wasOpen) { trigger.focus(); return; }
-    if (nativePlatform !== 'win32' || !host || !state.realFilesystem) {
-      toast(t('Diese Funktion wird auf diesem Betriebssystem noch nicht unterstützt.'), 'info');
-      return;
+    if (nativePlatform === 'win32' && host && state.realFilesystem) {
+      destinationRequest = { requestId: ++destinationSequence, trigger, popup };
+      host.postMessage({ type: 'location-destinations', requestId: destinationRequest.requestId });
     }
-    window.dispatchEvent(new CustomEvent('bitfroest-menu-open', { detail: 'favorites' }));
-    favoriteTrigger = trigger;
-    trigger.setAttribute('aria-expanded', 'true');
-    const origin = state.panes[side];
-    destinationRequest = { requestId: ++destinationSequence, trigger, side, path: currentPath(origin), tabId: origin.tabStates[origin.tab].id };
-    renderDestinations(destinationRequest, []);
-    host.postMessage({ type: 'location-destinations', requestId: destinationRequest.requestId });
   }
   function receiveDestinations(data) {
-    if (destinationRequest?.requestId !== data.requestId || !destinationRequest?.trigger.isConnected) return;
+    if (!destinationRequest || destinationRequest.requestId !== data.requestId || !destinationRequest.popup.isConnected) return;
+    const { popup, trigger } = destinationRequest;
+    destinationRequest = undefined;
     if (data.drivesUnavailable) toast(t('Laufwerke konnten nicht ermittelt werden.'));
-    const items = data.drives.map(path => ({ id: path, label: displayPath(path) }));
-    if (items.length && data.recent.length) items.push({ separator: true });
-    for (const path of data.recent) items.push({ id: path, label: displayPath(path) });
-    renderDestinations(destinationRequest, items, t('Keine Einträge'));
+    if (!data.drives.length && !data.recent.length) return;
+    const destination = path => ({ id: path, destination: path, label: displayPath(path) });
+    const items = [{ separator: true }, ...data.drives.map(destination)];
+    if (data.drives.length && data.recent.length) items.push({ separator: true });
+    items.push(...data.recent.map(destination));
+    menus.appendItems(popup, items);
+    menus.place(popup, { anchor: trigger });
   }
   document.addEventListener('pointerdown', event => { if (!event.target.closest('[data-favorite-menu],[data-favorites]')) closeFavorites(false); });
   window.addEventListener('blur', () => closeFavorites(false));
@@ -1458,7 +1437,7 @@
       const context = kind === 'git' ? 'Git' : kind === 'zip' ? 'ZIP' : t('Favoriten');
       button.setAttribute('aria-description', context);
       button.title = `${t('Ortsmenü: Favoriten und Aktionen')} · ${context}`;
-      if (nativePlatform === 'win32') button.title += `\n${t('Rechtsklick: Laufwerke und letzte UNC-Freigaben')}`;
+      if (nativePlatform === 'win32') button.title += `\n${t('Laufwerke und letzte UNC-Freigaben')}`;
       const desired = kind === 'git' ? '#f03c2e' : kind === 'zip' ? '#bd7900' : '#e5bc22';
       const values = {
         '--location-color': colors.readable(desired, background, foreground),
@@ -4449,12 +4428,6 @@
     if (event.target.closest('[data-lister],[data-xray],[data-quick-diff],[data-quick-diff-list]')) return;
     const section = event.target.closest('[data-pane]');
     if (!section) return;
-    const trigger = event.target.closest('[data-favorites]');
-    if (trigger) {
-      event.preventDefault(); event.stopPropagation();
-      showDestinations(trigger, Number(section.dataset.pane));
-      return;
-    }
     state.active = Number(section.dataset.pane);
     if (event.target.closest('.pathbar, .tabs')) {
       if (event.target.closest('[data-tab]')) showContextMenu(event, section, 'tabs');

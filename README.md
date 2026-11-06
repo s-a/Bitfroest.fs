@@ -70,8 +70,7 @@ This recording shows the previous confirmation dialog style.
 | Address bar breadcrumb | Ctrl-click | Open that folder in a new tab in the same panel. |
 | Address bar breadcrumb | Right-click | Copy the full current address to the clipboard. |
 | Space after the breadcrumbs | Click | Edit the current address. |
-| Address bar icon | Click | Open favorites and any Git or ZIP actions available for the current location. |
-| Address bar icon on Windows | Right-click | Open a drive root or one of the ten most recently visited UNC share roots. The share list appears below the drive list, separated by a line when both lists have entries. |
+| Address bar icon | Click | Open favorites and any Git or ZIP actions available for the current location. On Windows, drive roots such as `C:\` appear at the bottom, starting with the system drive. A divider separates the drives from up to ten recently visited UNC share roots. |
 | Back or forward arrow | Right-click | Show the current tab's full history, including forward entries. |
 | Folder tab | Double-click or middle-click | Close the tab. Each panel keeps at least one tab. |
 | Folder tab | Drag or Ctrl-drag | Drag to reorder or move a tab. Hold Ctrl while dragging to copy it. Dragging the only tab to the other panel also copies it. |

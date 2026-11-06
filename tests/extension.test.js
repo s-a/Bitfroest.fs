@@ -13,9 +13,15 @@ const Progress = require('../media/bitfroest-progress');
 
 test('successful UNC navigation remembers only the share root and exposes it below the drives', async t => {
   const initial = clipboardFixture();
+  const previousSystemDrive = process.env.SystemDrive;
+  process.env.SystemDrive = 'D:';
+  t.after(() => {
+    if (previousSystemDrive === undefined) delete process.env.SystemDrive;
+    else process.env.SystemDrive = previousSystemDrive;
+  });
   const app = harness(t, {
     globalState: { recentUncRoots: ['//server/older'] },
-    nativeDriveList: ['C:/', 'Z:/'],
+    nativeDriveList: ['A:/', 'C:/', 'D:/', 'Z:/'],
     filesystemLoad: async () => structuredClone(initial),
     containsPath: () => true,
     filesystemPrepare: async (before, settings) => {
@@ -31,7 +37,7 @@ test('successful UNC navigation remembers only the share root and exposes it bel
   }
   await panel.receive({ type: 'location-destinations', requestId: 1 });
   assert.deepEqual(panel.messages.findLast(message => message.type === 'location-destinations-result'), {
-    type: 'location-destinations-result', requestId: 1, drives: ['C:/', 'Z:/'], drivesUnavailable: false,
+    type: 'location-destinations-result', requestId: 1, drives: ['D:/', 'A:/', 'C:/', 'Z:/'], drivesUnavailable: false,
     recent: ['//server/share', '//server/older']
   });
   assert.deepEqual(app.context.globalState.get('recentUncRoots'), ['//server/share', '//server/older']);

@@ -75,7 +75,6 @@
     'Dateiverwaltung konnte nicht wiederhergestellt werden: {error}': 'Could not restore the file manager: {error}',
     'Ortsmenü: Favoriten und Aktionen': 'Location menu: favorites and actions',
     'Laufwerke und letzte UNC-Freigaben': 'Drives and recent UNC shares',
-    'Rechtsklick: Laufwerke und letzte UNC-Freigaben': 'Right-click: drives and recent UNC shares',
     'Laufwerke konnten nicht ermittelt werden.': 'Could not list drives.',
     'Strg+Klick: In neuem Tab öffnen': 'Ctrl-click: Open in a new tab',
     'Git-Status aktualisieren': 'Refresh Git status',

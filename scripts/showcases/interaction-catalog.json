@@ -83,7 +83,7 @@
   {
     "id": "drive-and-unc-menu",
     "kind": "mouse",
-    "title": "Open drive roots and recent UNC share roots with a right click on Windows",
+    "title": "Open a drive root or recent UNC share root from the location menu on Windows",
     "sources": [
       "media/app.js",
       "extension.js"

@@ -561,7 +561,7 @@
     "id": "drive-and-unc-menu",
     "parentId": "main",
     "title": "Drives and recent UNC shares",
-    "description": "Right-click the address bar icon on Windows to switch to a drive root or a recent UNC share root in that panel.",
+    "description": "Click the address bar icon on Windows and choose a drive root or recent UNC share root at the bottom of the location menu.",
     "paths": [
       "${demo}/left",
       "${demo}/right"

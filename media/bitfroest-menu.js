@@ -17,6 +17,7 @@
     copy: 'copy', 'copy-hex': 'copy', find: 'search', next: 'search', cursor: 'edit', wrap: 'word-wrap', variable: 'text-size', manual: 'symbol-string'
   };
   let sequence = 0;
+  const appenders = new WeakMap();
   function decorate(item, action, icon = icons[action], focusOnHover = true) {
     if (item.dataset.menuDecorated) return;
     item.dataset.menuDecorated = 'true';
@@ -62,13 +63,13 @@
         delete record.child.owner.dataset.openDirection; record.child.menu.remove(); record.child = null;
       }
       const enabled = () => [...menu.children].filter(item => item.matches('button:not(:disabled)'));
-      for (const entry of entries) {
+      function appendEntry(entry) {
         if (entry.separator) {
           const divider = document.createElement('div');
           divider.className = 'menu-divider';
           divider.setAttribute('role', 'separator');
           menu.append(divider);
-          continue;
+          return;
         }
         const item = document.createElement('button'); item.type = 'button'; item.setAttribute('role', 'menuitem');
         item.textContent = entry.label; item.disabled = Boolean(entry.disabled);
@@ -98,6 +99,8 @@
         });
         menu.append(item);
       }
+      appenders.set(menu, items => items.forEach(appendEntry));
+      entries.forEach(appendEntry);
       if (!entries.length && emptyLabel) { const text = document.createElement('span'); text.className = 'menu-empty'; text.setAttribute('role', 'status'); text.textContent = emptyLabel; menu.append(text); }
       menu.addEventListener('scroll', event => { if (event.target === menu) closeChild(); });
       menu.addEventListener('keydown', event => {
@@ -118,5 +121,5 @@
     }
     return build(items).menu;
   }
-  root.BitfroestMenus = { create, decorate, place };
+  root.BitfroestMenus = { create, decorate, place, appendItems: (menu, items) => appenders.get(menu)(items) };
 })(window);
