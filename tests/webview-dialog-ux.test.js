@@ -33,8 +33,12 @@ test('copy and move put the localized category and action on one heading line', 
       assert.equal(prefix.parentElement, title.parentElement);
       assert.equal(app.window.getComputedStyle(title.parentElement).display, 'flex');
       const prefixStyle = app.window.getComputedStyle(prefix), titleStyle = app.window.getComputedStyle(title);
-      assert.ok(parseFloat(prefixStyle.fontSize) < parseFloat(titleStyle.fontSize));
-      assert.equal(titleStyle.fontWeight, '600');
+      assert.equal(titleStyle.fontFamily, prefixStyle.fontFamily);
+      assert.equal(titleStyle.fontSize, prefixStyle.fontSize);
+      assert.equal(titleStyle.color, prefixStyle.color);
+      assert.equal(titleStyle.letterSpacing, prefixStyle.letterSpacing);
+      assert.equal(prefixStyle.fontWeight, '400');
+      assert.equal(titleStyle.fontWeight, '700');
       app.click(app.document.querySelector('#modal-cancel'));
     }
   }

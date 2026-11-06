@@ -334,7 +334,8 @@ dialog.conflict-dialog[open] { display: flex; flex-direction: column; width: min
 @media (max-width: 400px) { .conflict-footer-actions .conflict-actions, .conflict-layout .dialog-options .conflict-actions { grid-template-columns: minmax(0, 1fr); } }
 .modal-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 20px 12px; border-bottom: 1px solid var(--vscode-widget-border, var(--line)); }
 .modal-heading button { font-size: 20px; min-width: 28px; height: 28px; }
-.eyebrow { font-size: .78em; letter-spacing: .04em; color: var(--muted); margin-bottom: 4px; }
+.eyebrow, .transfer-confirmation #modal-title { font-size: .78em; letter-spacing: .04em; color: var(--muted); }
+.eyebrow { margin-bottom: 4px; }
 h1, h2 { font-size: 1.2em; font-weight: 500; margin: 0; }
 #modal-body { padding: 12px 20px 16px; max-height: calc(100vh - 170px); overflow: auto; }
 #modal-body p { line-height: 1.5; margin: 0 0 12px; }
@@ -363,7 +364,7 @@ h1, h2 { font-size: 1.2em; font-weight: 500; margin: 0; }
 .transfer-confirmation .modal-heading, .transfer-confirmation .modal-actions { flex: 0 0 auto; }
 .transfer-confirmation .modal-heading > div { display: flex; align-items: baseline; gap: .5em; min-width: 0; }
 .transfer-confirmation #modal-eyebrow { margin: 0; }
-.transfer-confirmation #modal-title { font-weight: 600; }
+.transfer-confirmation #modal-title { font-weight: 700; }
 .transfer-confirmation #modal-body { min-height: 0; }
 .transfer-confirmation .modal-actions { flex-wrap: wrap; background: var(--vscode-editor-background, var(--surface)); }
 .transfer-confirmation .vscode-button { justify-content: center; min-width: 88px; min-height: 28px; max-width: 100%; white-space: normal; }
