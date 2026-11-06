@@ -61,6 +61,52 @@ This recording shows the previous confirmation dialog style.
 
 <!-- showcase-gallery:end -->
 
+## Hidden features and mouse gestures
+
+### Address bar and tabs
+
+| Where | Gesture | Result |
+| --- | --- | --- |
+| Address bar breadcrumb | Ctrl-click | Open that folder in a new tab in the same panel. |
+| Address bar breadcrumb | Right-click | Copy the full current address to the clipboard. |
+| Space after the breadcrumbs | Click | Edit the current address. |
+| Address bar icon | Click | Open favorites and any Git or ZIP actions available for the current location. |
+| Address bar icon on Windows | Right-click | Open a drive root or one of the ten most recently visited UNC share roots. The share list appears below the drive list, separated by a line when both lists have entries. |
+| Back or forward arrow | Right-click | Show the current tab's full history, including forward entries. |
+| Folder tab | Double-click or middle-click | Close the tab. Each panel keeps at least one tab. |
+| Folder tab | Drag or Ctrl-drag | Drag to reorder or move a tab. Hold Ctrl while dragging to copy it. Dragging the only tab to the other panel also copies it. |
+
+### File list and drop targets
+
+| Where | Gesture | Result |
+| --- | --- | --- |
+| File list | Start dragging immediately with the right mouse button | Select entries with a rectangle. Hold Ctrl or Shift to extend the selection. |
+| File row | Hold the right mouse button until the drag indicator appears, then drag | Move the selection after confirmation. |
+| File row | Left-drag, with Shift to move | Copy by default. A folder row, the parent row (`..`) or an inactive tab can serve as the destination. |
+| Folder under the cursor | Press Space | Mark the folder and calculate its recursive size when folder sizing on Space is enabled. |
+| Column separator | Double-click | Fit the column to its contents. |
+
+### Preview controls
+
+| Where | Gesture | Result |
+| --- | --- | --- |
+| X-Ray eye in the panel footer | Click or right-click | Click to cycle through Off, Click and Hover. Right-click to turn X-Ray off. |
+| Quick Diff in the panel footer | Click or right-click | Click to cycle through the current folder, the repository and Off. Right-click to exit. |
+| Quick Diff result | Double-click | Return to the regular file list and select that entry. |
+
+### File search
+
+| Where | Gesture | Result |
+| --- | --- | --- |
+| Search field with history | Shift+Delete | Remove the current value from that field's search history. |
+
+### Operations and status
+
+| Where | Gesture | Result |
+| --- | --- | --- |
+| Jobs counter | Click | Show running and queued operations. Select a job to reveal its destination, or use its cancel button to cancel it. |
+| Status message icon | Click | Copy the status message and its work log. |
+
 ## Configuration
 
 The **Configuration** menu opens settings for file operations, favorites, columns and shortcuts. Additional options are available by searching for `Bitfroest` in VS Code Settings. Tab layouts can be stored per workspace or shared across workspaces.
