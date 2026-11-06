@@ -117,3 +117,12 @@ test('recent UNC targets are distinct share roots ordered by last visit and limi
   const actual = recentUncRoots(['\\\\SERVER\\First\\new', 'C:/local', '//?/UNC/other/share/sub', '//./device', '//incomplete', ...previous]);
   assert.deepEqual(actual, ['//SERVER/First', '//other/share', ...previous.slice(1, 9)]);
 });
+
+test('recent UNC roots reject all C0 control characters in servers and shares', () => {
+  const { recentUncRoots } = require('../network-paths');
+  const invalid = Array.from({ length: 32 }, (_, code) => {
+    const character = String.fromCharCode(code);
+    return [`//server${character}/share`, `//server/share${character}`];
+  }).flat();
+  assert.deepEqual(recentUncRoots([...invalid, '//server/share name']), ['//server/share name']);
+});

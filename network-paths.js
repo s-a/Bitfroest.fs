@@ -7,7 +7,8 @@ function recentUncRoots(paths) {
     if (typeof path !== 'string') continue;
     const value = path.replaceAll('\\', '/').replace(/^\/\/\?\/UNC\//i, '//');
     const match = /^\/\/([^/]+)\/([^/]+)(?:\/|$)/.exec(value);
-    if (!match || match.slice(1).some(part => /^[.]{1,2}$/.test(part) || /[<>:"|?*\x00-\x1f]/.test(part))) continue;
+    if (!match || match.slice(1).some(part => /^[.]{1,2}$/.test(part) || /[<>:"|?*]/.test(part) ||
+        [...part].some(character => character.charCodeAt(0) < 32))) continue;
     const root = `//${match[1]}/${match[2]}`;
     const key = root.toLowerCase();
     if (!roots.has(key)) roots.set(key, root);
