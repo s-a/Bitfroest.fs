@@ -40,7 +40,6 @@
           this.display.hidden = false;
           this.display.type = 'button';
           this.display.addEventListener('click', () => this.edit());
-          this.input.addEventListener('blur', event => root.BitfroestWebviewInteractions.leavePathEditor(event, () => this.finish()));
           this.input.addEventListener('invalid', () => this.edit());
           this.input.addEventListener('keydown', event => {
             if (!['Enter', 'Escape'].includes(event.key) || event.isComposing) return;
@@ -72,7 +71,7 @@
       this.refresh();
     }
 
-    disconnectedCallback() { observer?.unobserve(this); }
+    disconnectedCallback() { observer?.unobserve(this); this.stopEditing?.(); }
     attributeChangedCallback() { if (this.display) this.refresh(); }
 
     get fullValue() { return this.input?.value ?? this.getAttribute('value') ?? ''; }
@@ -83,11 +82,13 @@
       this.display.hidden = true;
       this.input.hidden = false;
       this.input.focus();
+      this.stopEditing = root.BitfroestWebviewInteractions.watchPathEditor(this.input, () => this.finish());
       this.input.select();
     }
 
     finish() {
       if (!this.input || this.input.hidden) return;
+      this.stopEditing?.();
       this.input.hidden = true;
       this.display.hidden = false;
       this.refresh();

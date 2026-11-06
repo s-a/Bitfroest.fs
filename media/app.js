@@ -1988,6 +1988,8 @@
     if (current.nodeType !== 1) return;
     if (current.hasAttribute('data-file-grid') && next.hasAttribute('data-file-grid')) return;
     if (current.classList.contains('pane-jobs') && next.classList.contains('pane-jobs')) return;
+    if (current.matches('.path-address.is-editing') && next.matches('.path-address') &&
+        current.querySelector('.path-input').defaultValue === next.querySelector('.path-input').defaultValue) next.classList.add('is-editing');
     const changedValue = current.matches('input') && current.getAttribute('value') !== next.getAttribute('value');
     for (const attribute of [...current.attributes]) if (!next.hasAttribute(attribute.name)) current.removeAttribute(attribute.name);
     for (const attribute of next.attributes) if (current.getAttribute(attribute.name) !== attribute.value) current.setAttribute(attribute.name, attribute.value);
@@ -3408,7 +3410,7 @@
   document.addEventListener('click', event => {
     const target = event.target;
     if (target.closest('[data-xray],[data-quick-diff]')) return;
-    if (target.closest('[data-resize]') || target.closest('.inline-rename')) return;
+    if (target.closest('[data-resize], .inline-rename, .path-input')) return;
     clearPendingRenameCue();
     const previousNameClick = lastNameClick; lastNameClick = null;
     const section = target.closest('[data-pane]');
@@ -4492,18 +4494,16 @@
     if (startupReady && event.target.closest('.list') && !event.relatedTarget?.closest('.list')) refreshClipboardAvailability();
   });
   document.addEventListener('focusin', event => {
-    if (event.target.classList?.contains('path-input')) event.target.closest('.path-address').classList.add('is-editing');
-  });
-  document.addEventListener('focusout', event => {
     if (event.target.classList?.contains('path-input')) {
-      const input = event.target, section = input.closest('[data-pane]');
-      window.BitfroestWebviewInteractions.leavePathEditor(event, () => {
+      const input = event.target, section = input.closest('[data-pane]'), address = input.closest('.path-address');
+      address.classList.add('is-editing');
+      window.BitfroestWebviewInteractions.watchPathEditor(input, () => {
         input.value = displayArchivePath(currentPath(state.panes[Number(section.dataset.pane)]));
-        input.closest('.path-address').classList.remove('is-editing');
+        address.classList.remove('is-editing');
       });
     }
-    queueMicrotask(reportFocus);
   });
+  document.addEventListener('focusout', () => queueMicrotask(reportFocus));
   $('#modal').addEventListener('close', reportFocus);
   window.BitfroestStartupResource?.step('rendering');
   window.BitfroestDiagnostics?.registerState?.(() => {

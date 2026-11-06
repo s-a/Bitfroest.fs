@@ -20,11 +20,14 @@ test('the path editor keeps the text and selection while the native text menu ta
   const input = app.document.querySelector('#value'), field = input.parentElement;
   field.querySelector('button').click();
   input.value = '/edited'; input.setSelectionRange(1, 5);
+  assert.equal(input.dispatchEvent(new app.window.MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 2 })), true);
   const menu = new app.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 });
   assert.equal(input.dispatchEvent(menu), true);
   input.blur();
   assert.equal(input.hidden, false);
   app.window.dispatchEvent(new app.window.Event('focus'));
+  assert.equal(app.document.activeElement, app.document.body);
+  input.focus();
   assert.equal(app.document.activeElement, input);
   assert.deepEqual([input.value, input.selectionStart, input.selectionEnd], ['/edited', 1, 5]);
   const display = field.querySelector('button');
@@ -32,7 +35,7 @@ test('the path editor keeps the text and selection while the native text menu ta
   const copyEvent = new app.window.Event('copy', { bubbles: true, cancelable: true });
   Object.defineProperty(copyEvent, 'clipboardData', { value: { setData() {} } });
   assert.equal(input.dispatchEvent(copyEvent), true);
-  app.document.querySelector('#transfer-filter').focus();
+  app.document.querySelector('.transfer-options legend').dispatchEvent(new app.window.MouseEvent('pointerdown', { bubbles: true }));
   assert.equal(input.hidden, true);
   assert.equal(field.fullValue, '/edited');
 });

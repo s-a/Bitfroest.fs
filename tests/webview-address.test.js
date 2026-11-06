@@ -92,11 +92,22 @@ test('the native text menu leaves an edited address and its selection available'
   assert.equal(input.value, '/unsubmitted');
   assert.ok(input.closest('.path-address').classList.contains('is-editing'));
   app.window.dispatchEvent(new app.window.Event('focus'));
+  assert.equal(app.document.activeElement, app.document.body);
+  input.focus();
   assert.equal(app.document.activeElement, input);
   assert.deepEqual([input.selectionStart, input.selectionEnd], [1, 5]);
   input.closest('[data-pane]').querySelector('[data-refresh]').focus();
   assert.equal(input.value, '/work/one/two');
   assert.equal(input.closest('.path-address').classList.contains('is-editing'), false);
+});
+test('an unrelated pane update preserves the active address editor and its selection', t => {
+  const app = createApp(t, fixture()); app.action('path');
+  const input = app.document.activeElement;
+  input.value = '/unsubmitted'; input.setSelectionRange(1, 5);
+  app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'column-settings', settings: {} } }));
+  assert.equal(app.document.activeElement, input);
+  assert.ok(input.closest('.path-address').classList.contains('is-editing'));
+  assert.deepEqual([input.value, input.selectionStart, input.selectionEnd], ['/unsubmitted', 1, 5]);
 });
 test('roots and archive segments preserve navigable identities and escaped labels', t => {
   for (const [directory, expected] of [
