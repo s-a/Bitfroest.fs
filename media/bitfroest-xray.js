@@ -4,18 +4,20 @@
   function create({ host, t, state, currentPath, files, settings, task, restoreFocus, compact, notify, beforeStart, isArchive, preview }) {
     const container = document.querySelector('#panes'), Progress = root.BitfroestProgress;
     let source = null, mode = 'off', timer = null, request = null, loadedId = null, sequence = 0, identity = null, sourceContext = null, editor = null, element = null, previousColumns = '';
+    let viewedFile = null, displayedText;
+    const context = pane => JSON.stringify([source, pane.tabStates?.[pane.tab]?.id, currentPath(pane)]);
     const instance = [...crypto.getRandomValues(new Uint8Array(8))].map(v => v.toString(16).padStart(2, '0')).join('');
     const steps = ['inspect', 'open', 'initial-check', 'read', 'final-check', 'encoding', 'decode', 'close', 'render'];
     const labels = { off: 'X-Ray aus', click: 'X-Ray bei Klick', hover: 'X-Ray Ultra: Vorschau beim Darüberfahren' };
     const icons = { off: 'eye-slash-fill', click: 'eye-fill', hover: 'eye' };
-    function cancel() {
+    function cancel(keepEditor = false) {
       clearTimeout(timer); timer = null;
       if (loadedId) { host?.postMessage({ type: 'xray-cancel', requestId: loadedId }); loadedId = null; }
       if (request) { host?.postMessage({ type: 'xray-cancel', requestId: request.id }); request.plan.terminate('cancelled'); task(request.id, null, null); request = null; }
-      editor?.dispose(); editor = null;
+      if (!keepEditor) { editor?.dispose(); editor = null; displayedText = undefined; }
     }
     function message(text) {
-      editor?.dispose(); editor = null;
+      editor?.dispose(); editor = null; displayedText = undefined;
       element.replaceChildren();
       const status = document.createElement('p'); status.role = 'status'; status.textContent = text; element.append(status);
     }
@@ -39,7 +41,7 @@
     function stop(focus = false) {
       if (source === null) return;
       const oldSource = source;
-      cancel(); identity = null; sourceContext = null; source = null; mode = 'off';
+      cancel(); identity = null; viewedFile = null; sourceContext = null; source = null; mode = 'off';
       element?.remove(); element = null;
       container.querySelectorAll('.has-xray').forEach(section => section.classList.remove('has-xray'));
       delete container.dataset.xraySource; container.style.gridTemplateColumns = previousColumns; preview?.release('xray');
@@ -48,10 +50,12 @@
     function show(file) {
       if (source === null) return;
       const pane = state().panes[source], path = currentPath(pane);
-      sourceContext = JSON.stringify([source, pane.tab, path, state().snapshotId]);
-      const key = JSON.stringify([sourceContext, file?.id, file?.fsSource, file?.size, file?.date, file?.time]);
+      const nextContext = context(pane);
+      const fileKey = file && JSON.stringify([file.id, file.fsSource, file.name]);
+      const key = JSON.stringify([nextContext, fileKey, file?.type, file?.fileRevision, file?.size, file?.mtimeMs, file?.date, file?.time]);
       if (key === identity) return;
-      cancel(); identity = key; mount();
+      const keepEditor = Boolean(editor && fileKey && viewedFile?.key === fileKey && sourceContext === nextContext);
+      cancel(keepEditor); identity = key; sourceContext = nextContext; viewedFile = file && { key: fileKey, id: file.id }; mount();
       if (!file || file.type === 'folder' || file.type === 'archive' || file.archive || isArchive(path)) { message(t('Keine Textvorschau verfügbar.')); return; }
       const configuredLimit = settings().xrayMaxFileSizeMiB;
       const maxBytes = (Number.isInteger(configuredLimit) && configuredLimit >= 1 && configuredLimit <= 100 ? configuredLimit : 5) * 1048576;
@@ -59,14 +63,20 @@
       const title = document.createElement('div'); title.className = 'xray-title'; title.textContent = file.name;
       const content = document.createElement('div'); content.className = 'xray-editor';
       function display(text) {
-        const previewId = loadedId;
+        if (editor && displayedText === text) return;
+        const saved = editor?.saveViewState?.();
+        const focused = element.contains(document.activeElement) && element !== document.activeElement;
+        editor?.dispose(); editor = null;
         element.replaceChildren(title, content);
         if (!root.BitfroestXrayEditor) { message(t('X-Ray konnte nicht geladen werden.')); return; }
         editor = root.BitfroestXrayEditor.create(content, text, file.name, {
           copyLabel: t('Kopieren'),
-          onCopy: text => { if (previewId && loadedId === previewId && typeof text === 'string') host?.postMessage({ type: 'xray-copy', requestId: previewId, text }); },
-          onOpenLine: line => { if (previewId && loadedId === previewId) host?.postMessage({ type: 'xray-open-line', requestId: previewId, line }); }
+          onCopy: text => { if (loadedId && typeof text === 'string') host?.postMessage({ type: 'xray-copy', requestId: loadedId, text }); },
+          onOpenLine: line => { if (loadedId) host?.postMessage({ type: 'xray-open-line', requestId: loadedId, line }); }
         });
+        displayedText = text;
+        if (saved) editor.restoreViewState?.(saved);
+        if (focused) editor.focus?.();
       }
       if (!host || !state().realFilesystem) { display(file.content || ''); return; }
       const id = `xray-${instance}-${++sequence}`;
@@ -75,7 +85,7 @@
       const readSteps = blocks.length ? plan.append('read', blocks) : [];
       plan.start('inspect');
       request = { id, key, file, display, plan, steps: new Set([...steps, ...readSteps]) };
-      message(t('Datei wird geöffnet…'));
+      if (!keepEditor) message(t('Datei wird geöffnet…'));
       plan.update('inspect', Progress.event({ phase: 'xray-inspect', overall: Progress.unknown('bytes', 0, 'remaining-work-unknown'), current: Progress.unknown('bytes', 0, 'remaining-work-unknown') }));
       task(id, t('Datei wird geöffnet…'), plan.snapshot());
       host.postMessage({ type: 'xray-open', requestId: id, path: file.fsSource, snapshotId: state().snapshotId, expectedSize: file.size });
@@ -85,7 +95,7 @@
       mount();
       const pane = state().panes[source], file = files(pane).find(value => value.id === pane.cursor);
       if (mode === 'click') show(file);
-      else if (sourceContext !== JSON.stringify([source, pane.tab, currentPath(pane), state().snapshotId])) { cancel(); identity = null; message(t('Keine Textvorschau verfügbar.')); }
+      else show(sourceContext === context(pane) && viewedFile ? files(pane).find(value => value.id === viewedFile.id) : undefined);
     }
     function click(event) {
       const button = event.target.closest('[data-xray-toggle]'); if (!button) return;
@@ -113,7 +123,7 @@
       if (data?.type === 'xray-action-result' && data.requestId === loadedId) { if (!data.ok) notify(data.error, 'error'); return; }
       if (!request || request.id !== data?.requestId) return;
       const pane = state().panes[source];
-      if (sourceContext !== JSON.stringify([source, pane.tab, currentPath(pane), state().snapshotId])) { cancel(); identity = null; message(t('Keine Textvorschau verfügbar.')); return; }
+      if (sourceContext !== context(pane)) { cancel(); identity = null; viewedFile = null; message(t('Keine Textvorschau verfügbar.')); return; }
       if (data.type === 'xray-step') {
         if (!request.steps.has(data.step) || data.step === 'render' || !['start', 'complete'].includes(data.state)) return;
         try { request.plan[data.state === 'start' ? 'start' : 'complete'](data.step); } catch { return; }

@@ -43,7 +43,8 @@ window.BitfroestXrayEditor = {
     }
     const theme = () => monaco.editor.setTheme(document.body.classList.contains('vscode-high-contrast-light') ? 'hc-light' : document.body.classList.contains('vscode-high-contrast') ? 'hc-black' : document.body.classList.contains('vscode-light') ? 'vs' : 'vs-dark');
     theme(); const observer = new MutationObserver(theme); observer.observe(document.body, { attributes: true, attributeFilter: ['class'] });
-    return { ready, dispose() { clearTimeout(timeout); finish(); observer.disconnect(); editor.dispose(); original.dispose(); modified.dispose(); } };
+    return { ready, saveViewState: () => editor.saveViewState(), restoreViewState: state => editor.restoreViewState(state), focus: () => editor.focus(),
+      dispose() { clearTimeout(timeout); finish(); observer.disconnect(); editor.dispose(); original.dispose(); modified.dispose(); } };
   },
   create(element, text, name, { onCopy, onOpenLine, copyLabel }) {
     const model = monaco.editor.createModel(text, names[name.split('.').pop().toLowerCase()] || 'plaintext');
@@ -62,7 +63,8 @@ window.BitfroestXrayEditor = {
     const theme = () => monaco.editor.setTheme(document.body.classList.contains('vscode-high-contrast-light') ? 'hc-light' : document.body.classList.contains('vscode-high-contrast') ? 'hc-black' : document.body.classList.contains('vscode-light') ? 'vs' : 'vs-dark');
     theme();
     const observer = new MutationObserver(theme); observer.observe(document.body, { attributes: true, attributeFilter: ['class'] });
-    return { dispose() { observer.disconnect(); editor.dispose(); model.dispose(); } };
+    return { saveViewState: () => editor.saveViewState(), restoreViewState: state => editor.restoreViewState(state), focus: () => editor.focus(),
+      dispose() { observer.disconnect(); editor.dispose(); model.dispose(); } };
   }
 };
 

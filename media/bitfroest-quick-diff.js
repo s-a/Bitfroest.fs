@@ -7,7 +7,8 @@
     const instance = [...crypto.getRandomValues(new Uint8Array(8))].map(v => v.toString(16).padStart(2, '0')).join('');
     const pending = new Map(), activity = new Set(); let readRequest = null;
     let sortColumn = 'status', sortDirection = 'ascending';
-    let restoration = null;
+    let restoration = null, listingKey = null, refreshAgain = false;
+    let displayedDiff = null, displayedRequest = null;
     const rowHeight = 32, relativeFormat = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto', style: 'short' });
     function relativeTime(timestamp) {
       const seconds = (timestamp - Date.now()) / 1000, absolute = Math.abs(seconds);
@@ -41,18 +42,18 @@
       activity.add(requestId);
       host?.postMessage({ type, requestId, generation, ...data }); return requestId;
     }
-    function cancelReads() {
-      if (readRequest) { host?.postMessage({ type: 'quick-diff-cancel', requestId: readRequest }); readRequest = null; }
-      editor?.dispose(); editor = null;
+    function cancelReads(keepEditor = false) {
+      if (readRequest) { host?.postMessage({ type: 'quick-diff-cancel', requestId: readRequest }); pending.delete(readRequest); readRequest = null; }
+      if (!keepEditor) { editor?.dispose(); editor = null; displayedDiff = null; displayedRequest = null; }
     }
     function clear() {
       cancelReads();
       for (const [requestId] of pending) host?.postMessage({ type: 'quick-diff-cancel', requestId });
       pending.clear();
       if (listId) host?.postMessage({ type: 'quick-diff-release', listId });
-      listId = null; entries = []; selected = -1; loading = false;
+      listId = null; listingKey = null; entries = []; selected = -1; loading = false; refreshAgain = false;
     }
-    function message(text) { editor?.dispose(); editor = null; if (!view) return; const p = document.createElement('p'); p.role = 'status'; p.textContent = text; view.replaceChildren(p); }
+    function message(text) { editor?.dispose(); editor = null; displayedDiff = null; displayedRequest = null; if (!view) return; const p = document.createElement('p'); p.role = 'status'; p.textContent = text; view.replaceChildren(p); }
     function focus() { sourceView?.querySelector('[role="grid"]')?.focus({ preventScroll: true }); }
     function stop(restore = false) {
       if (source === null) return;
@@ -156,18 +157,34 @@
         event.preventDefault(); event.stopImmediatePropagation(); choose(Math.max(0, Math.min(entries.length - 1, next))); grid.scrollTop = Math.max(0, selected * rowHeight - grid.clientHeight / 2); rows();
       }); rows(); autoSize();
     }
-    function choose(index) {
+    function choose(index, keepEditor = false) {
       if (index < 0 || index >= entries.length) return;
       if (selected === index && readRequest) return;
-      selected = index; cancelReads();
+      selected = index; cancelReads(keepEditor);
       sourceView.querySelectorAll('[data-diff-index]').forEach(row => row.setAttribute('aria-selected', String(Number(row.dataset.diffIndex) === selected)));
-      sourceView.querySelector('[role="grid"]').setAttribute('aria-activedescendant', `${instance}-diff-${selected}`); decorate(); message(t('Datei wird geöffnet…'));
+      sourceView.querySelector('[role="grid"]').setAttribute('aria-activedescendant', `${instance}-diff-${selected}`); decorate();
+      if (!keepEditor) message(t('Datei wird geöffnet…'));
       readRequest = send('quick-diff-read', { listId, path: entries[index].path });
     }
     function load() {
       const keep = restoration?.selectedPath || entries[selected]?.path; generation++; clear(); mount(); sourceView.replaceChildren();
       loading = true; message(t('Änderungen werden geladen…'));
       send('quick-diff-list', { directory: currentPath(state().panes[source]), mode, selectedPath: keep });
+    }
+    function checkForChanges() {
+      if (loading) { refreshAgain = true; return; }
+      loading = true;
+      send('quick-diff-list', { directory: currentPath(state().panes[source]), mode });
+    }
+    function confirmRender(requestId, saved) {
+      Promise.resolve(editor.ready).then(() => {
+        if (readRequest === requestId && saved) editor.restoreViewState?.(saved);
+      }).then(() => {
+        host?.postMessage({ type: 'quick-diff-rendered', requestId, ok: true });
+      }, () => {
+        if (readRequest === requestId) message(t('Quick Diff konnte nicht geladen werden.'));
+        host?.postMessage({ type: 'quick-diff-rendered', requestId, ok: false });
+      });
     }
     function toggle(side) {
       const path = currentPath(state().panes[side]);
@@ -198,24 +215,58 @@
       if (data?.type === 'quick-diff-progress' && activity.has(data.requestId)) { task(data.requestId, 'Quick Diff', data.progress); return; }
       if (data?.type === 'quick-diff-finished' && activity.has(data.requestId)) { activity.delete(data.requestId); task(data.requestId, null, null); return; }
       if (data?.type === 'quick-diff-action-error') { notify(data.error, 'error'); return; }
-      if (data?.type === 'quick-diff-refresh') { if (source !== null && !loading) load(); return; }
+      if (data?.type === 'quick-diff-refresh') { if (source !== null) checkForChanges(); return; }
       const request = pending.get(data?.requestId);
       if (!request) return;
       if (data.type !== 'quick-diff-result') return;
       pending.delete(data.requestId);
       if (request.generation !== generation || source === null || data.generation !== generation) return;
-      if (!data.ok) { loading = false; message(data.error); if (request.type === 'quick-diff-list') { notify(data.error, 'info'); stop(true); } return; }
+      if (!data.ok) {
+        if (request.type === 'quick-diff-list') {
+          loading = false; notify(data.error, 'info');
+          if (!listId) stop(true);
+          else if (refreshAgain) { refreshAgain = false; checkForChanges(); }
+        } else message(data.error);
+        return;
+      }
       if (request.type === 'quick-diff-list') {
-        loading = false; listId = data.result.id; repositoryRoot = data.result.root || currentPath(state().panes[source]); entries = data.result.entries; renderList();
-        if (entries.length) { const index = entries.findIndex(e => e.path === (restoration?.selectedPath || data.selectedPath)); choose(index < 0 ? 0 : index); } else message(t('Keine Änderungen vorhanden.'));
+        loading = false;
+        const rootPath = data.result.root || currentPath(state().panes[source]);
+        const nextKey = JSON.stringify([rootPath, data.result.commit, data.result.entries]);
+        if (listId && listingKey === nextKey) {
+          host?.postMessage({ type: 'quick-diff-release', listId: data.result.id });
+        } else {
+          const oldList = listId, selectedPath = entries[selected]?.path || restoration?.selectedPath || data.selectedPath;
+          listId = data.result.id; listingKey = nextKey; repositoryRoot = rootPath; entries = [...data.result.entries]; selected = -1;
+          if (oldList) {
+            const grid = sourceView.querySelector('[role="grid"]'), scrollTop = grid.scrollTop, scrollLeft = grid.scrollLeft;
+            sortEntries(); rows(); autoSize();
+            grid.scrollTop = scrollTop; grid.scrollLeft = scrollLeft;
+          }
+          else renderList();
+          if (entries.length) {
+            const index = entries.findIndex(entry => entry.path === selectedPath);
+            choose(index < 0 ? 0 : index, Boolean(oldList && index >= 0 && editor));
+          } else { cancelReads(); message(t('Keine Änderungen vorhanden.')); }
+          if (oldList) host?.postMessage({ type: 'quick-diff-release', listId: oldList });
+          else focus();
+        }
         if (restoration) { sourceView.querySelector('[role="grid"]').scrollTop = restoration.scrollTop || 0; rows(); restoration = null; }
-        focus();
+        if (refreshAgain) { refreshAgain = false; checkForChanges(); }
       } else if (request.type === 'quick-diff-read') {
         if (readRequest !== data.requestId) return;
         if (data.result.reason) { message(t('Keine Dateiversion in HEAD vorhanden.')); host?.postMessage({ type: 'quick-diff-rendered', requestId: data.requestId, ok: true }); return; }
+        displayedRequest = data.requestId;
+        if (editor && ['original', 'modified', 'commit', 'name', 'path', 'ghost'].every(key => displayedDiff[key] === data.result[key])) {
+          confirmRender(data.requestId);
+          return;
+        }
+        displayedDiff = data.result;
         const reference = [data.result.ghost ? `${t('Ghost')} · ${t(data.result.ghost === 'added' ? 'Added' : 'Deleted')}` : '', data.result.commit ? `HEAD ${data.result.commit.slice(0, 8)}` : ''].filter(Boolean).join(' · ');
         view.dataset.ghost = data.result.ghost || '';
         const title = document.createElement('div'); title.className = 'xray-title'; title.textContent = `${data.result.name} · ${reference}`;
+        const saved = editor?.saveViewState?.(), focused = view.contains(document.activeElement) && view !== document.activeElement;
+        editor?.dispose(); editor = null;
         const content = document.createElement('div'); content.className = 'xray-editor'; view.replaceChildren(title, content);
         try { editor = root.BitfroestXrayEditor.createDiff(content, data.result.original, data.result.modified, data.result.name, {
           onStatistics: counts => {
@@ -223,10 +274,11 @@
             title.title = t('Zeilen: {added} hinzugefügt, {changed} geändert, {deleted} gelöscht.', counts);
             title.dataset.diffSummary = '';
           },
-          copyLabel: t('Kopieren'), onCopy: text => host?.postMessage({ type: 'quick-diff-copy', requestId: data.requestId, text }),
-          onOpen: () => host?.postMessage({ type: 'quick-diff-open', requestId: data.requestId })
+          copyLabel: t('Kopieren'), onCopy: text => host?.postMessage({ type: 'quick-diff-copy', requestId: displayedRequest, text }),
+          onOpen: () => host?.postMessage({ type: 'quick-diff-open', requestId: displayedRequest })
         });
-          Promise.resolve(editor.ready).then(() => host?.postMessage({ type: 'quick-diff-rendered', requestId: data.requestId, ok: true }), () => { message(t('Quick Diff konnte nicht geladen werden.')); host?.postMessage({ type: 'quick-diff-rendered', requestId: data.requestId, ok: false }); });
+          if (focused) editor.focus?.();
+          confirmRender(data.requestId, saved);
         } catch { message(t('Quick Diff konnte nicht geladen werden.')); host?.postMessage({ type: 'quick-diff-rendered', requestId: data.requestId, ok: false }); }
       }
     }
@@ -235,6 +287,6 @@
     document.addEventListener('keydown', event => { if (source !== null && event.key === 'Escape' && event.target.closest('[data-quick-diff],[data-quick-diff-list]')) { event.preventDefault(); event.stopImmediatePropagation(); stop(true); } }, true);
     const theme = new MutationObserver(() => autoSize()); theme.observe(document.body, { attributes: true, attributeFilter: ['class', 'style'] });
     window.addEventListener('message', receive); window.addEventListener('pagehide', () => { stop(); clearInterval(clock); resize.disconnect(); theme.disconnect(); }, { once: true });
-    return { mount, sync, stop, snapshot, restore, copyPath, refresh() { if (source === null) return false; load(); return true; } };
+    return { mount, sync, stop, snapshot, restore, copyPath, refresh() { if (source === null) return false; checkForChanges(); return true; } };
   }
 })(globalThis);

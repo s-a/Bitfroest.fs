@@ -271,7 +271,9 @@ function createProvider(options = {}) {
         if (versionInfo?.versionString !== undefined) row.fileVersionString = versionInfo.versionString;
         const linkText = child.isSymbolicLink() && process.platform === 'linux' ? (await fs.readlink(absolute, { encoding: 'buffer' })).toString('base64') : undefined;
         if (linkText !== undefined && statSignature(await fs.lstat(absolute, { bigint: true })) !== statSignature(child)) throw new Error('Verknüpfung während der Bestandsaufnahme geändert.');
-        entries.set(identity(absolute), { path: absolute, type: child.isDirectory() ? 'folder' : 'file', signature: statSignature(child), contentSignature: contentSignature(child), ...(linkText !== undefined ? { linkText } : {}), row });
+        const signature = statSignature(child);
+        if (child.isFile()) row.fileRevision = signature;
+        entries.set(identity(absolute), { path: absolute, type: child.isDirectory() ? 'folder' : 'file', signature, contentSignature: contentSignature(child), ...(linkText !== undefined ? { linkText } : {}), row });
         folders[directory].push(row);
         settings.onProgress?.(Progress.event({ phase: settings.phase || 'preparing', filesScanned: count, path: absolute, overall: Progress.unknown('items', count, 'enumerating'), current: Progress.known('items', folders[directory].length, names.length) }));
         throwIfAborted(settings.signal);

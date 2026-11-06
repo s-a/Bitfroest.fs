@@ -1317,7 +1317,7 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
             if (typeof message.text !== 'string' || message.text.length > session.length) return;
             await writeClipboardText(message.text);
           } else {
-            if (!Number.isSafeInteger(message.line) || message.line < 1 || message.line > session.lines || session.snapshotId !== filesystemState?.snapshotId || !knownFilePath(session.path)) throw new Error('Invalid X-Ray position.');
+            if (!Number.isSafeInteger(message.line) || message.line < 1 || message.line > session.lines || !knownFilePath(session.path)) throw new Error('Invalid X-Ray position.');
             const stat = await fs.promises.lstat(session.path);
             if (!stat.isFile() || stat.isSymbolicLink() || [stat.dev, stat.ino, stat.size, stat.mtimeMs, stat.ctimeMs].join(':') !== session.identity) throw new Error('X-Ray: Datei geändert. Vorschau erneut aktivieren.');
             const document = await vscode.workspace.openTextDocument(vscode.Uri.file(session.path));
@@ -1342,7 +1342,7 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
             onProgress: progress => { if (current()) void messagePanel.webview.postMessage({ type: 'xray-progress', requestId: job.id, progress }); },
             onStep: (step, state) => { if (current()) void messagePanel.webview.postMessage({ type: 'xray-step', requestId: job.id, step, state }); } });
           if (current()) {
-            xraySession = { id: job.id, path: message.path, identity: result.identity, snapshotId: message.snapshotId, length: result.text.length, lines: result.text.split(/\r\n|\r|\n/).length };
+            xraySession = { id: job.id, path: message.path, identity: result.identity, length: result.text.length, lines: result.text.split(/\r\n|\r|\n/).length };
             await messagePanel.webview.postMessage({ type: 'xray-result', requestId: job.id, ok: true, text: result.text, encoding: result.encoding, bytes: result.bytes });
           }
         } catch (error) {

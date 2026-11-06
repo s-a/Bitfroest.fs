@@ -171,6 +171,54 @@ test('Quick Diff preserves its list and footer controls across a host-driven pan
   assert.equal(app.messages.filter(message => message.type === 'quick-diff-read').at(-1).path, 'b.sql');
 });
 
+test('Quick Diff leaves unchanged results mounted and restores list and editor scroll after a change', async t => {
+  const views = [];
+  const app = createApp(t, undefined, { beforeApp: ({ window }) => {
+    window.BitfroestXrayEditor = { createDiff(_node, original, modified) {
+      const editor = { modified, position: null, saveViewState: () => editor.position, restoreViewState: position => { editor.position = position; }, dispose() {} };
+      views.push(editor);
+      return editor;
+    } };
+  } });
+  const send = data => app.window.dispatchEvent(new app.window.MessageEvent('message', { data }));
+  const latest = type => app.messages.findLast(message => message.type === type);
+  const entries = [{ path: 'a.txt', name: 'a.txt', status: 'Modified', modifiedAt: 1 },
+    { path: 'b.txt', name: 'b.txt', status: 'Modified', modifiedAt: 2 }];
+  const list = (id, rows) => {
+    const { requestId, generation } = latest('quick-diff-list');
+    send({ type: 'quick-diff-result', requestId, generation, ok: true, result: { id, entries: rows, commit: 'head' } });
+  };
+  const comparison = modified => {
+    const { requestId, generation, path } = latest('quick-diff-read');
+    send({ type: 'quick-diff-result', requestId, generation, ok: true, result: { path, name: path, commit: 'head', original: 'original', modified } });
+  };
+  app.click(app.document.querySelector('[data-quick-diff-toggle]'));
+  list('first', entries);
+  app.click(app.document.querySelector('[data-diff-path="a.txt"]'));
+  comparison('first content');
+  views[0].position = { scrollTop: 90, scrollLeft: 14 };
+  const read = latest('quick-diff-read'), grid = app.document.querySelector('[data-quick-diff-list] [role="grid"]');
+  grid.scrollTop = 38;
+  grid.focus();
+  send({ type: 'quick-diff-refresh' });
+  assert.equal(grid.isConnected, true);
+  list('same', entries);
+  assert.equal(latest('quick-diff-read'), read);
+  assert.equal(latest('quick-diff-release').listId, 'same');
+  assert.equal(views.length, 1);
+  send({ type: 'quick-diff-refresh' });
+  list('changed', [{ ...entries[0], modifiedAt: 3 }, entries[1]]);
+  assert.equal(latest('quick-diff-read').listId, 'changed');
+  assert.equal(latest('quick-diff-read').path, 'a.txt');
+  assert.equal(grid.isConnected, true);
+  assert.equal(grid.scrollTop, 38);
+  assert.equal(app.document.activeElement, grid);
+  comparison('new content');
+  await Promise.resolve();
+  assert.equal(views.at(-1).modified, 'new content');
+  assert.deepEqual(views.at(-1).position, views[0].position);
+});
+
 test('double-clicking a Quick Diff entry exits and selects it in the restored file list', t => {
   const app = createApp(t), path = app.state().panes[0].tabs[0], original = app.row('package.json').dataset.id;
   const receive = data => app.window.dispatchEvent(new app.window.MessageEvent('message', { data }));

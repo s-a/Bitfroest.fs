@@ -64,7 +64,7 @@ function createQuickDiff({ getRepository, lister, native, io = fs, locate, platf
           if (!entry.ignored && entry.head && !changed.has(name) && !entry.conflicted) continue;
           let stat;
           try {
-            stat = await io.lstat(target);
+            stat = await io.lstat(target, { bigint: true });
             if (!stat.isFile() || stat.isSymbolicLink()) continue;
             const resolved = await io.realpath(target);
             if (!inside(root, resolved)) continue;
@@ -72,7 +72,8 @@ function createQuickDiff({ getRepository, lister, native, io = fs, locate, platf
           if (!stat && !entry.head) continue;
           seen.add(name);
           const display = platform === 'win32' ? name.replaceAll('/', '\\') : name;
-          rows.push({ path: name, name: name.includes('/') ? display : `${platform === 'win32' ? '.\\' : './'}${display}`, size: stat?.size || 0, modifiedAt: Number.isFinite(stat?.mtimeMs) ? stat.mtimeMs : null,
+          rows.push({ path: name, name: name.includes('/') ? display : `${platform === 'win32' ? '.\\' : './'}${display}`, size: Number(stat?.size || 0), modifiedAt: stat && Number.isFinite(Number(stat.mtimeMs)) ? Number(stat.mtimeMs) : null,
+            fileRevision: stat && [stat.dev, stat.ino, stat.mtimeNs, stat.ctimeNs].join(':'),
             gitStatus: entry.conflicted ? 'conflict' : !stat ? 'deleted' : !entry.head ? entry.stage ? 'added' : 'untracked' : 'modified',
             status: entry.conflicted ? 'Conflict' : entry.ignored ? 'Ignored' : !stat ? 'Deleted' : !entry.head ? 'Added' : 'Modified', hasHead: Boolean(commit && entry.head) });
         }

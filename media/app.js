@@ -1285,7 +1285,7 @@
   }
   function invalidateChangedDirectories(previousFolders, forced = []) {
     const changed = [...new Set(state.panes.filter(pane => !resultView(pane)).map(currentPath))].filter(directory => JSON.stringify(previousFolders[directory]) !== JSON.stringify(state.folders[directory]));
-    for (const directory of [...changed, ...forced]) gitBindings.delete(directory);
+    for (const directory of [...changed, ...forced]) { gitBindings.delete(directory); gitPending.delete(directory); }
     const affected = value => [...changed, ...forced].some(directory => value === directory || value.startsWith(directory + '/') || directory.startsWith(value + '/'));
     for (const directory of folderSizes.keys()) if (affected(directory)) folderSizes.delete(directory);
     for (const [operationId, request] of folderSizeRequests) if (affected(request.path)) { host?.postMessage({ type: 'filesystem-cancel', operationId }); folderSizeRequests.delete(operationId); statusTasks.delete(operationId); }
@@ -1909,7 +1909,8 @@
     document.querySelectorAll('.pane').forEach((section, index) => {
       const p = state.panes[index], active = state.active === index, selectedIds = new Set(p.selected), spaceIds = new Set(spaceMarks(p));
       section.classList.toggle('active', active);
-      section.querySelector('.pane-label span:last-child').innerHTML = active ? ui(['<i></i> AKTIV']) : t('GEGENSEITE');
+      const label = section.querySelector('.pane-label span:last-child'), caption = active ? ui(['<i></i> AKTIV']) : t('GEGENSEITE');
+      if (label.innerHTML !== caption) label.innerHTML = caption;
       if (lister.has(index)) return;
       const workbenchContext = fileSettings.useSystemContextMenu !== true || ['linux', 'darwin'].includes(document.body.dataset.platform);
       const entriesById = workbenchContext ? new Map([...(hasParent(p) ? [currentFolder(p)] : []), ...files(p)].map(file => [file.id, file])) : null;
@@ -1930,7 +1931,8 @@
         row.classList.toggle('focused', p.cursor === id);
         row.setAttribute('aria-selected', String(selectedIds.has(id)));
       });
-      section.querySelector('.pane-metrics').innerHTML = footerMetrics(p);
+      const metrics = section.querySelector('.pane-metrics'), markup = footerMetrics(p);
+      if (metrics.innerHTML !== markup) metrics.innerHTML = markup;
     });
     lister.updateMenu();
     xray.sync(); quickDiff.sync();
@@ -1998,7 +2000,12 @@
     if (changedValue) current.value = next.value;
     const key = node => node.nodeType === 1 ? node.getAttribute('data-id') || node.id || undefined : undefined;
     const keyed = new Map([...current.childNodes].filter(node => key(node)).map(node => [key(node), node]));
-    let cursor = current.firstChild;
+    const pane = current.hasAttribute('data-pane');
+    const nextViewChild = node => {
+      while (pane && node?.nodeType === 1 && node.matches('[data-xray],[data-quick-diff],[data-quick-diff-list]')) node = node.nextSibling;
+      return node;
+    };
+    let cursor = nextViewChild(current.firstChild);
     for (const child of [...next.childNodes]) {
       const childKey = key(child);
       let retained = childKey ? keyed.get(childKey) : cursor && !key(cursor) ? cursor : undefined;
@@ -2009,9 +2016,9 @@
         patchView(retained, child);
       }
       if (childKey) keyed.delete(childKey);
-      cursor = retained.nextSibling;
+      cursor = nextViewChild(retained.nextSibling);
     }
-    while (cursor) { const removed = cursor; cursor = cursor.nextSibling; removed.remove(); }
+    while (cursor) { const removed = cursor; cursor = nextViewChild(cursor.nextSibling); removed.remove(); }
   }
   function render(focusList = false, previousViews, git = true) {
     filePointerGesture?.cancel();
@@ -4139,11 +4146,15 @@
       if (pathNavigation) pathNavigation.valid = pathNavigation.generation === pathRequestGeneration && document.activeElement === pathNavigation.input && state.active === pathNavigation.side;
       rememberScroll();
       const navigatingFilesystem = completedFilesystemKind === 'filesystem-navigate';
-      const previousFolders = !refreshingFilesystem && confirmedFolders ? JSON.parse(confirmedFolders) : null;
       const previousViews = refreshingFilesystem || navigatingFilesystem ? state.panes.map(paneDisplayState) : undefined;
       const previousIcons = refreshingFilesystem ? displayedIconEntries() : undefined;
       const scopedRefreshDirectories = [0, 1].includes(refreshPlan?.side) ? refreshPlan.directories : null;
-      if (refreshingFilesystem) { if ([0, 1].includes(refreshPlan?.side)) invalidateChangedDirectories(state.folders, refreshPlan.directories); else { cancelFolderSizes(); folderSizes.clear(); gitBindings.clear(); } }
+      const focusRefresh = refreshingFilesystem && !scopedRefreshDirectories;
+      const previousFolders = !scopedRefreshDirectories && confirmedFolders ? JSON.parse(confirmedFolders) : null;
+      if (refreshingFilesystem) {
+        if (scopedRefreshDirectories) invalidateChangedDirectories(state.folders, scopedRefreshDirectories);
+        else { cancelFolderSizes(); gitBindings.clear(); gitPending.clear(); }
+      }
       const readingView = (transferJob || refreshingFilesystem || navigatingFilesystem) && { panes: clone(state.panes), active: state.active };
       if (refreshingFilesystem && refreshPlan) {
         if (!event.data.ok) { refreshPlan.progress.terminate(event.data.cancelled ? 'cancelled' : 'error'); refreshPlan = null; }
@@ -4173,7 +4184,7 @@
       if (completedFilesystemKind === 'filesystem-refresh' && scopedRefreshDirectories) { for (const path of scopedRefreshDirectories) directoryListings.delete(path); }
       else directoryListings.clear();
       cacheDirectories();
-      if (previousFolders) invalidateChangedDirectories(previousFolders, navigatingFilesystem && event.data.ok && event.data.resumeNavigation ? [event.data.resumeNavigation.path] : event.data.refreshGitDirectories || []);
+      if (previousFolders) invalidateChangedDirectories(previousFolders, focusRefresh ? [] : navigatingFilesystem && event.data.ok && event.data.resumeNavigation ? [event.data.resumeNavigation.path] : event.data.refreshGitDirectories || []);
       if (readingView) {
         state.active = readingView.active;
         readingView.panes.forEach((p, index) => {
@@ -4190,8 +4201,12 @@
           requestedIcons.delete(key); nativeIcons.delete(key);
         }
       }
-      render(!$('#modal').open && (!pathNavigation || pathNavigation.valid), previousViews);
+      const previewRefresh = completedFilesystemKind === 'filesystem-refresh' && (xray.has(0) || xray.has(1) || quickDiff.snapshot());
+      const unchangedFocus = focusRefresh && state.panes.every((pane, side) => paneDisplayState(pane, side) === previousViews[side]);
+      if (unchangedFocus) { requestIcons(); requestGitStatus(); }
+      else render(!focusRefresh && !previewRefresh && !$('#modal').open && (!pathNavigation || pathNavigation.valid), previousViews);
       if (previousViews) refreshSelection();
+      if (focusRefresh && event.data.ok && !event.data.cancelled) quickDiff.refresh();
       const error = event.data.error || t('Dateioperation fehlgeschlagen; Verzeichnisse erneut eingelesen');
       if (completion && event.data.operationOutcome) {
         const outcome = event.data.operationOutcome;

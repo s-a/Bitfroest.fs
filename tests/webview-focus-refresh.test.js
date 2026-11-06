@@ -59,6 +59,18 @@ test('returning window focus requests Git status once after the refreshed snapsh
   assert.equal(refreshes(app).length, 1);
 });
 
+test('an unchanged focus check leaves the focused control alone', t => {
+  const app = createApp(t, fixture());
+  const button = app.document.querySelector('[data-pane="0"] [data-refresh]');
+  button.focus();
+  focus(app);
+  const next = structuredClone(refreshes(app).at(-1).state);
+  next.snapshotId = 'new-snapshot';
+  result(app, next);
+  assert.equal(app.document.activeElement, button);
+  assert.equal(app.state().snapshotId, 'new-snapshot');
+});
+
 test('returning from an unconfirmed favorite keeps unchanged lists, rows, icons and scroll position', t => {
   const app = createApp(t, fixture());
   const lists = [...app.document.querySelectorAll('.list')];
@@ -102,6 +114,42 @@ test('focus refresh updates a changed directory while preserving the opposite li
   assert.equal(app.row('keep.txt').getAttribute('aria-selected'), 'true');
 });
 
+test('X-Ray keeps the focused preview on unchanged refresh and restores its position after a file change', t => {
+  const saved = fixture();
+  saved.folders['C:/tmp'][0].mtimeMs = 1000;
+  const app = createApp(t, saved), views = [];
+  app.window.BitfroestXrayEditor = { create(node, text) {
+    const editor = { text, position: null, saveViewState: () => editor.position, restoreViewState: position => { editor.position = position; }, dispose() {} };
+    views.push(editor);
+    return editor;
+  } };
+  const latest = type => app.messages.findLast(message => message.type === type);
+  const reply = text => app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'xray-result', requestId: latest('xray-open').requestId, ok: true, text } }));
+  app.click(app.document.querySelector('[data-xray-toggle]'));
+  reply('old');
+  views[0].position = { scrollTop: 240, scrollLeft: 14 };
+  const preview = app.document.querySelector('[data-xray]');
+  preview.focus();
+  const initial = latest('xray-open');
+  focus(app);
+  const next = structuredClone(latest('filesystem-refresh').state);
+  next.snapshotId = 'two';
+  next.folders['C:/temp'].push({ id: 'other', name: 'other.txt', size: 2 });
+  result(app, next);
+  assert.equal(latest('xray-open'), initial);
+  assert.equal(app.document.activeElement, preview);
+  focus(app);
+  const changed = structuredClone(latest('filesystem-refresh').state);
+  changed.snapshotId = 'three';
+  changed.folders['C:/tmp'][0].mtimeMs++;
+  result(app, changed);
+  assert.notEqual(latest('xray-open'), initial);
+  reply('new');
+  assert.equal(views.at(-1).text, 'new');
+  assert.deepEqual(views.at(-1).position, views[0].position);
+  assert.equal(app.document.activeElement, preview);
+});
+
 test('explicit refresh renews native icons even when directory contents are unchanged', t => {
   const app = createApp(t, fixture());
   const iconRequests = app.messages.filter(message => message.type === 'icons').length;
@@ -133,7 +181,7 @@ test('refresh with a lister on the opposite side preserves the visible list scro
   const viewer = app.document.querySelector('.pane [data-lister]');
   assert.ok(viewer);
   const list = app.document.querySelector('[data-pane="1"] .list');
-  app.click(list);
+  list.focus();
   list.scrollTop = 73;
   focus(app);
   result(app, structuredClone(refreshes(app).at(-1).state));

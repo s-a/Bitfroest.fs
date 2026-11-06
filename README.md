@@ -88,6 +88,8 @@ This recording shows the previous confirmation dialog style.
 
 ### Preview controls
 
+When the window regains focus, Bitfroest.fs checks the open folders and leaves unchanged views in place. X-Ray and Quick Diff keep their scroll position when the displayed file is updated.
+
 | Where | Gesture | Result |
 | --- | --- | --- |
 | X-Ray eye in the panel footer | Click or right-click | Click to cycle through Off, Click and Hover. Right-click to turn X-Ray off. |
