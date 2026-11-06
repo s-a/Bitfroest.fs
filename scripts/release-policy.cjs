@@ -22,6 +22,21 @@ function targetFor(platform, arch, experimental = false) {
   throw new Error(`Target ${target} is not configured.`);
 }
 
+function releaseTargets({ version, prerelease }) {
+  const targets = ['win32-x64', 'linux-x64'];
+  const [major, minor, patch] = version.split('.').map(Number);
+  // Published tags through 0.0.51 only have Windows and Linux assets.
+  if (prerelease && (major > 0 || minor > 0 || patch >= 52)) targets.push('darwin-arm64');
+  return targets;
+}
+
+function releaseAssetNames(context) {
+  return releaseTargets(context).flatMap(target => {
+    const name = `bitfroest-fs-${context.version}-${target}.vsix`;
+    return [name, `${name}.sha256`, `${name}.json`];
+  });
+}
+
 function validatePackageEntries(names) {
   for (const name of names) {
     if (name.startsWith('/') || name.includes('\\') || name.split('/').includes('..') || name.includes('\0')) throw new Error(`Unsafe archive path: ${name}`);
@@ -44,16 +59,16 @@ function validateMarketplaceIcon(bytes) {
 
 function verifiedReleaseAssets(directory, context, commit) {
   const assets = [];
-  for (const target of ['win32-x64', 'linux-x64']) {
+  for (const target of releaseTargets(context)) {
     const filename = path.join(directory, `bitfroest-fs-${context.version}-${target}.vsix`);
     const metadata = JSON.parse(fs.readFileSync(`${filename}.json`, 'utf8'));
     const hash = crypto.createHash('sha256').update(fs.readFileSync(filename)).digest('hex');
-    if (metadata.target !== target || metadata.experimental !== false || metadata.version !== context.version || metadata.commit !== commit || metadata.sha256 !== hash) throw new Error(`Release provenance mismatch for ${target}.`);
+    if (metadata.target !== target || metadata.experimental !== (target === 'darwin-arm64') || metadata.version !== context.version || metadata.commit !== commit || metadata.sha256 !== hash) throw new Error(`Release provenance mismatch for ${target}.`);
     if (fs.readFileSync(`${filename}.sha256`, 'utf8') !== `${hash}  ${path.basename(filename)}\n`) throw new Error(`Checksum mismatch for ${target}.`);
     assets.push(filename, `${filename}.sha256`, `${filename}.json`);
   }
-  if (fs.readdirSync(directory).length !== assets.length) throw new Error('Unexpected or experimental release assets.');
+  if (fs.readdirSync(directory).length !== assets.length) throw new Error('Unexpected release assets.');
   return assets;
 }
 
-module.exports = { releaseContext, targetFor, validatePackageEntries, verifiedReleaseAssets, validateMarketplaceIcon };
+module.exports = { releaseContext, targetFor, releaseTargets, releaseAssetNames, validatePackageEntries, verifiedReleaseAssets, validateMarketplaceIcon };

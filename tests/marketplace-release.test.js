@@ -16,37 +16,63 @@ test('manual Marketplace publication cannot cancel an unrelated main build', () 
   assert.notEqual(group('v0.0.39'), group('v0.0.40'));
 });
 
-function fixture(t) {
+function fixture(t, { version = '0.0.39', targets = ['win32-x64', 'linux-x64'] } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'marketplace-release-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   const source = path.join(root, 'source');
   const directory = path.join(root, 'release');
   fs.mkdirSync(source);
   fs.mkdirSync(directory);
-  const version = '0.0.39';
   const commit = 'a'.repeat(40);
   fs.writeFileSync(path.join(source, 'package.json'), JSON.stringify({ version, preview: true, publisher: 'bitfroest' }));
   fs.writeFileSync(path.join(source, 'package-lock.json'), JSON.stringify({ version, packages: { '': { version } } }));
   const names = [];
-  for (const target of ['win32-x64', 'linux-x64']) {
+  for (const target of targets) {
     const name = `bitfroest-fs-${version}-${target}.vsix`;
     const bytes = Buffer.from(`verified ${target}`);
     const sha256 = crypto.createHash('sha256').update(bytes).digest('hex');
     fs.writeFileSync(path.join(directory, name), bytes);
-    fs.writeFileSync(path.join(directory, `${name}.json`), JSON.stringify({ version, target, experimental: false, commit, sha256 }));
+    fs.writeFileSync(path.join(directory, `${name}.json`), JSON.stringify({ version, target, experimental: target === 'darwin-arm64', commit, sha256 }));
     fs.writeFileSync(path.join(directory, `${name}.sha256`), `${sha256}  ${name}\n`);
     names.push(name, `${name}.sha256`, `${name}.json`);
   }
   const calls = [];
-  const release = { tagName: 'v0.0.39', isDraft: false, assets: names.map(name => ({ name })) };
+  const release = { tagName: `v${version}`, isDraft: false, assets: names.map(name => ({ name })) };
   const run = (command, args) => {
     calls.push({ command, args });
     if (command === 'git') return `${commit}\n`;
     if (command === 'gh' && args[1] === 'view') return JSON.stringify(release);
     return '';
   };
-  return { source, directory, commit, calls, release, run, tag: 'v0.0.39', event: 'workflow_dispatch', ref: 'refs/heads/main' };
+  return { source, directory, commit, calls, release, run, tag: release.tagName, event: 'workflow_dispatch', ref: 'refs/heads/main' };
 }
+
+test('Marketplace pre-releases include the verified experimental Apple Silicon package', t => {
+  const { publishMarketplace } = require('../scripts/publish-marketplace.cjs');
+  const version = '0.0.52';
+  const targets = ['win32-x64', 'linux-x64', 'darwin-arm64'];
+  const context = fixture(t, { version, targets });
+  publishMarketplace(context);
+  const args = context.calls.find(call => call.command === 'npm').args;
+  assert.ok(args.includes('--pre-release'));
+  assert.deepEqual(args.slice(args.indexOf('--packagePath') + 1),
+    targets.map(target => path.join(context.directory, `bitfroest-fs-${version}-${target}.vsix`)));
+});
+
+test('Marketplace refuses missing Apple Silicon assets or provenance without the experimental flag', t => {
+  const { publishMarketplace } = require('../scripts/publish-marketplace.cjs');
+  const version = '0.0.52';
+  const missing = fixture(t, { version });
+  assert.throws(() => publishMarketplace(missing), /platform assets/);
+  assert.equal(missing.calls.some(call => call.command === 'npm'), false);
+
+  const unmarked = fixture(t, { version, targets: ['win32-x64', 'linux-x64', 'darwin-arm64'] });
+  const filename = path.join(unmarked.directory, `bitfroest-fs-${version}-darwin-arm64.vsix.json`);
+  const metadata = JSON.parse(fs.readFileSync(filename, 'utf8'));
+  fs.writeFileSync(filename, JSON.stringify({ ...metadata, experimental: false }));
+  assert.throws(() => publishMarketplace(unmarked), /provenance mismatch for darwin-arm64/);
+  assert.equal(unmarked.calls.some(call => call.command === 'npm'), false);
+});
 
 test('Marketplace publication uses both verified packages with OIDC without rebuilding', t => {
   const context = fixture(t);

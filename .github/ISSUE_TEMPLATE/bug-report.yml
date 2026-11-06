@@ -34,7 +34,7 @@ body:
     id: operating-system
     attributes:
       label: Operating system and architecture
-      description: Include the OS version or Linux distribution and the processor architecture. Windows is the primary platform; Linux has limited support and macOS is unsupported.
+      description: Include the OS version or Linux distribution and the processor architecture. Windows is the primary platform. Linux has limited support, and the Apple Silicon build is experimental.
       placeholder: "Windows 11 24H2, x64; or Ubuntu 24.04, arm64"
     validations:
       required: true
