@@ -35,11 +35,12 @@
         }
         if (this.input) {
           this.input.classList.add('path-field-input');
+          this.input.dataset.vscodeContext = JSON.stringify({ webviewSection: 'textInput', preventDefaultContextMenuItems: false });
           this.input.hidden = true;
           this.display.hidden = false;
           this.display.type = 'button';
           this.display.addEventListener('click', () => this.edit());
-          this.input.addEventListener('blur', () => this.finish());
+          this.input.addEventListener('blur', event => root.BitfroestWebviewInteractions.leavePathEditor(event, () => this.finish()));
           this.input.addEventListener('invalid', () => this.edit());
           this.input.addEventListener('keydown', event => {
             if (!['Enter', 'Escape'].includes(event.key) || event.isComposing) return;
@@ -60,6 +61,7 @@
           this.display.setAttribute('aria-hidden', 'true');
         }
         this.addEventListener('copy', event => {
+          if (this.display.hidden) return;
           const selection = root.getSelection();
           if (!event.clipboardData || selection?.anchorNode?.parentElement !== this.display || selection.toString() !== this.display.textContent) return;
           event.clipboardData.setData('text/plain', this.fullValue);

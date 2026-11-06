@@ -3981,8 +3981,10 @@
   });
   $('#modal-form').addEventListener('submit', event => { event.preventDefault(); if (transferJob?.modalPreparation && filesystemPending) return; if (!confirmAction || confirmAction() !== false) $('#modal').close(); });
   $('#modal-close').replaceChildren(window.BitfroestIcons.element('close'));
-  $('#modal-close').onclick = () => { if (jobDialogOpen()) { cancelTransfer(); return; } $('#modal').close(); if (!$('#modal').open) focusSelection(); };
+  const dismissModal = () => { if (transferJob && jobDialogOpen()) { cancelTransfer(); return; } $('#modal').close(); if (!$('#modal').open) focusSelection(); };
+  $('#modal-close').onclick = dismissModal;
   $('#modal-cancel').onclick = () => { if (jobDialogOpen()) return; $('#modal').close(); if (!$('#modal').open) focusSelection(); };
+  window.BitfroestWebviewInteractions.dismissOnBackdrop($('#modal'), dismissModal);
   $('#modal').addEventListener('close', () => {
     if ($('#modal').open) return;
     if (operationFailureInline && document.querySelector('.inline-rename')) return;
@@ -4495,8 +4497,10 @@
   document.addEventListener('focusout', event => {
     if (event.target.classList?.contains('path-input')) {
       const input = event.target, section = input.closest('[data-pane]');
-      input.value = displayArchivePath(currentPath(state.panes[Number(section.dataset.pane)]));
-      input.closest('.path-address').classList.remove('is-editing');
+      window.BitfroestWebviewInteractions.leavePathEditor(event, () => {
+        input.value = displayArchivePath(currentPath(state.panes[Number(section.dataset.pane)]));
+        input.closest('.path-address').classList.remove('is-editing');
+      });
     }
     queueMicrotask(reportFocus);
   });

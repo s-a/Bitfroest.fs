@@ -15,6 +15,45 @@ function fixture(real = false) {
 function copy(app) { app.click(app.row('same.txt').querySelector('[data-filename]')); app.action('copy'); }
 function submit(app) { app.document.querySelector('#modal-form').dispatchEvent(new app.window.Event('submit', { bubbles: true, cancelable: true })); }
 
+test('the path editor keeps the text and selection while the native text menu takes focus', t => {
+  const app = createApp(t, fixture()); copy(app);
+  const input = app.document.querySelector('#value'), field = input.parentElement;
+  field.querySelector('button').click();
+  input.value = '/edited'; input.setSelectionRange(1, 5);
+  const menu = new app.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 });
+  assert.equal(input.dispatchEvent(menu), true);
+  input.blur();
+  assert.equal(input.hidden, false);
+  app.window.dispatchEvent(new app.window.Event('focus'));
+  assert.equal(app.document.activeElement, input);
+  assert.deepEqual([input.value, input.selectionStart, input.selectionEnd], ['/edited', 1, 5]);
+  const display = field.querySelector('button');
+  app.window.getSelection = () => ({ anchorNode: display.firstChild, toString: () => display.textContent });
+  const copyEvent = new app.window.Event('copy', { bubbles: true, cancelable: true });
+  Object.defineProperty(copyEvent, 'clipboardData', { value: { setData() {} } });
+  assert.equal(input.dispatchEvent(copyEvent), true);
+  app.document.querySelector('#transfer-filter').focus();
+  assert.equal(input.hidden, true);
+  assert.equal(field.fullValue, '/edited');
+});
+
+test('a click on the backdrop dismisses a dialog without submitting or activating the background', t => {
+  const app = createApp(t, fixture()); copy(app);
+  const dialog = app.document.querySelector('#modal'), confirm = app.document.querySelector('#modal-confirm');
+  dialog.getBoundingClientRect = () => ({ left: 100, right: 300, top: 100, bottom: 300 });
+  const pointer = (target, type, x, button = 0) => target.dispatchEvent(new app.window.MouseEvent(type, { bubbles: true, cancelable: true, button, clientX: x, clientY: 150 }));
+  pointer(dialog, 'pointerdown', 200); pointer(dialog, 'click', 200);
+  pointer(dialog, 'pointerdown', 50, 2); pointer(dialog, 'click', 50, 2);
+  pointer(confirm, 'pointerdown', 200); pointer(dialog, 'click', 50);
+  assert.equal(dialog.open, true);
+  let bubbled = false;
+  app.document.addEventListener('click', () => { bubbled = true; });
+  pointer(dialog, 'pointerdown', 50); pointer(dialog, 'click', 50);
+  assert.equal(dialog.open, false);
+  assert.equal(bubbled, false);
+  assert.equal(app.state().folders['/right'].length, 1);
+});
+
 test('folder paths use the full value until the middle needs to be shortened', t => {
   const app = createApp(t, fixture());
   const shorten = app.window.BitfroestPathField.middleEllipsis;

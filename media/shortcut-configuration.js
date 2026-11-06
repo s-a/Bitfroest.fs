@@ -66,6 +66,7 @@
     $('[data-shortcut-add]').onclick = () => accept(true);
     $('[data-shortcut-cancel]').onclick = close;
     $('#shortcut-dialog').addEventListener('cancel', event => { event.preventDefault(); close(); });
+    root.BitfroestWebviewInteractions.dismissOnBackdrop($('#shortcut-dialog'), close);
     window.addEventListener('blur', close);
     return {
       setState(message, values) { close(); catalog = message.shortcutCatalog || catalog; platform = message.platform || platform; base = message.shortcutBase || base; data = values.shortcuts ||= {}; render(); },

@@ -109,6 +109,7 @@
       };
       dialog.querySelector('form').addEventListener('submit', event => { event.preventDefault(); s.start(); });
       dialog.addEventListener('cancel', event => { event.preventDefault(); s.close(); });
+      if (!separate) window.BitfroestWebviewInteractions.dismissOnBackdrop(dialog, () => { s.closeAfterCancel = s.running; s.close(); });
       dialog.addEventListener('keydown', event => { event.stopPropagation(); s.key(event); });
       function updateContentEnabled() { const enabled = $('[name=textEnabled]').checked; for (const name of ['text', 'wholeWords', 'caseSensitive', 'textRegex', 'hex', 'notContaining', 'office', 'encoding-ansi', 'encoding-dos', 'encoding-utf-16le', 'encoding-utf-8']) $(`[name="${name}"]`).disabled = !enabled; }
       $('[name=depthCustom]').min = '1'; $('[name=depthCustom]').step = '1'; $('[name=depthCustom]').required = true;
@@ -177,6 +178,7 @@
           s.$('[data-search-status]').textContent = m.error || `${t(m.cancelled ? 'Suche abgebrochen' : 'Suche abgeschlossen')} · ${s.results.length}`;
           s.$('[data-search-errors]').hidden = !m.errors?.length; s.$('[data-search-errors] pre').textContent = (m.errors || []).map(item => `${paths.displayPath(item.path)}: ${item.error}`).join('\n');
           report(m.error || m.errors?.[0]?.error || `${t(m.cancelled ? 'Suche abgebrochen' : 'Suche abgeschlossen')} · ${s.results.length}`, m.error || m.errors?.length ? 'error' : m.cancelled ? 'cancelled' : 'success', s.statusVersion);
+          if (s.closeAfterCancel) s.close();
         }
         if (m.type === 'search-applied' || m.type === 'search-navigated') {
           s.applying = false; if (!m.ok) { s.$('[data-search-status]').textContent = m.error; s.renderResults(); report(m.error, 'error'); continue; }

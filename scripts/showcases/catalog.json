@@ -173,7 +173,8 @@
     ],
     "sources": [
       "media/app.js",
-      "media/shortcut-runtime.js"
+      "media/shortcut-runtime.js",
+      "media/webview-interactions.js"
     ],
     "captures": [
       {

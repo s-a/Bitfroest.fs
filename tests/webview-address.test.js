@@ -81,6 +81,23 @@ test('path command exposes the flat input and breadcrumbs retain keyboard activa
   assert.match(css, /\.path input\s*\{[^}]*border:\s*0/);
   assert.match(css, /\.path input:focus-visible\s*\{[^}]*outline:\s*none[^}]*box-shadow:\s*none/);
 });
+
+test('the native text menu leaves an edited address and its selection available', t => {
+  const app = createApp(t, fixture()); app.action('path');
+  const input = app.document.activeElement;
+  input.value = '/unsubmitted'; input.setSelectionRange(1, 5);
+  const menu = new app.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true });
+  assert.equal(input.dispatchEvent(menu), true);
+  input.blur();
+  assert.equal(input.value, '/unsubmitted');
+  assert.ok(input.closest('.path-address').classList.contains('is-editing'));
+  app.window.dispatchEvent(new app.window.Event('focus'));
+  assert.equal(app.document.activeElement, input);
+  assert.deepEqual([input.selectionStart, input.selectionEnd], [1, 5]);
+  input.closest('[data-pane]').querySelector('[data-refresh]').focus();
+  assert.equal(input.value, '/work/one/two');
+  assert.equal(input.closest('.path-address').classList.contains('is-editing'), false);
+});
 test('roots and archive segments preserve navigable identities and escaped labels', t => {
   for (const [directory, expected] of [
     ['C:/work/<one>', ['C:/', 'C:/work', 'C:/work/<one>']],

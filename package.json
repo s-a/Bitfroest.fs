@@ -1476,7 +1476,7 @@
       "webview/context": [
         {
           "command": "bitfroest.select-all-text",
-          "when": "webviewId == bitfroestPrototype && webviewSection == textInput",
+          "when": "webviewSection == textInput && (webviewId == bitfroestPrototype || webviewId == bitfroestConfiguration)",
           "group": "5_cutcopypaste@4"
         },
         {

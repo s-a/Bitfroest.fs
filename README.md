@@ -70,6 +70,7 @@ This recording shows the previous confirmation dialog style.
 | Address bar breadcrumb | Ctrl-click | Open that folder in a new tab in the same panel. |
 | Address bar breadcrumb | Right-click | Copy the full current address to the clipboard. |
 | Space after the breadcrumbs | Click | Edit the current address. |
+| Address text field | Right-click | Open the VS Code text menu while editing the address. |
 | Address bar icon | Click | Open favorites and any Git or ZIP actions available for the current location. On Windows, drive roots such as `C:\` appear at the bottom, starting with the system drive. A divider separates the drives from up to ten recently visited UNC share roots. |
 | Back or forward arrow | Right-click | Show the current tab's full history, including forward entries. |
 | Folder tab | Double-click or middle-click | Close the tab. Each panel keeps at least one tab. |
@@ -103,6 +104,7 @@ This recording shows the previous confirmation dialog style.
 
 | Where | Gesture | Result |
 | --- | --- | --- |
+| Outside a modal dialog | Click | Dismiss the dialog. |
 | Jobs counter | Click | Show running and queued operations. Select a job to reveal its destination, or use its cancel button to cancel it. |
 | Status message icon | Click | Copy the status message and its work log. |
 

@@ -25,7 +25,7 @@ async function setup(t, overrides = {}) {
   dom.window.acquireVsCodeApi = () => ({ postMessage: message => messages.push(message) });
   dom.window.HTMLDialogElement.prototype.showModal = function () { this.setAttribute('open', ''); };
   dom.window.HTMLDialogElement.prototype.close = function () { this.removeAttribute('open'); };
-  for (const name of ['bitfroest-paths', 'path-field', 'bitfroest-i18n', 'bitfroest-column-settings', 'bitfroest-shortcuts', 'shortcut-configuration', 'configuration-model', 'icon-font-metrics', 'bitfroest-icons', 'configuration-view']) new vm.Script(fs.readFileSync(path.join(context.extensionUri.fsPath, 'media', `${name}.js`), 'utf8')).runInContext(dom.getInternalVMContext());
+  for (const name of ['webview-interactions', 'bitfroest-paths', 'path-field', 'bitfroest-i18n', 'bitfroest-column-settings', 'bitfroest-shortcuts', 'shortcut-configuration', 'configuration-model', 'icon-font-metrics', 'bitfroest-icons', 'configuration-view']) new vm.Script(fs.readFileSync(path.join(context.extensionUri.fsPath, 'media', `${name}.js`), 'utf8')).runInContext(dom.getInternalVMContext());
   const flush = async () => { while (messages.length) await panel.receive(messages.shift()); while (panel.messages.length) { const message = panel.messages.shift(); if (overrides.platform) message.platform = overrides.platform; dom.window.dispatchEvent(new dom.window.MessageEvent('message', { data: message })); } };
   await flush();
   return { editor, panels, panel, window: dom.window, document: dom.window.document, saved, flush, external: value => { values = value; }, change: (selector, value) => { const element = dom.window.document.querySelector(selector); element.value = value; element.dispatchEvent(new dom.window.Event('change', { bubbles: true })); }, click: selector => { const element = dom.window.document.querySelector(selector); assert.ok(element, selector); element.click(); }, input: (selector, value) => { const element = dom.window.document.querySelector(selector); element.value = value; element.dispatchEvent(new dom.window.Event('input', { bubbles: true })); } };
@@ -36,6 +36,21 @@ test('configuration tree icons use the central output and local font policy', as
   app.click('[data-add-group]'); app.click('[data-add-favorite]');
   for (const row of app.document.querySelectorAll('.tree-row')) assert.ok(row.querySelector('[data-icon-reviewed]'));
   assert.match(app.panel.webview.html, /font-src webview-resource:/);
+});
+
+test('the shortcut recorder discards its draft when dismissed from the backdrop', async t => {
+  const app = await setup(t); app.editor.open('shortcuts'); await app.flush();
+  const edit = app.document.querySelector('[data-command="bitfroest.copy"][data-default-key="f5"] [data-shortcut-edit]');
+  edit.click();
+  const dialog = app.document.querySelector('#shortcut-dialog');
+  dialog.getBoundingClientRect = () => ({ left: 100, right: 300, top: 100, bottom: 300 });
+  app.document.querySelector('#shortcut-capture').dispatchEvent(new app.window.KeyboardEvent('keydown', { key: 'F9', bubbles: true, cancelable: true }));
+  for (const type of ['pointerdown', 'click']) {
+    dialog.dispatchEvent(new app.window.MouseEvent(type, { bubbles: true, cancelable: true, clientX: 50, clientY: 50 }));
+  }
+  assert.equal(dialog.open, false);
+  assert.equal(app.document.activeElement, edit);
+  assert.equal(app.saved.length, 0);
 });
 
 test('unsupported content columns are disabled on Linux while portable metadata remains selectable', async t => {

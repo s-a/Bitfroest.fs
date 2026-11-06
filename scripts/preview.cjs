@@ -33,6 +33,7 @@ const files = {
   '/dialog-heading.css': ['dialog-heading.css', 'text/css; charset=utf-8'],
   '/path-field.css': ['path-field.css', 'text/css; charset=utf-8'],
   '/path-field.js': ['path-field.js', 'text/javascript; charset=utf-8'],
+  '/webview-interactions.js': ['webview-interactions.js', 'text/javascript; charset=utf-8'],
   '/bitfroest-file-names.js': ['bitfroest-file-names.js', 'text/javascript; charset=utf-8'],
   '/app.js': ['app.js', 'text/javascript; charset=utf-8'],
   '/bitfroest-i18n.js': ['bitfroest-i18n.js', 'text/javascript; charset=utf-8'],

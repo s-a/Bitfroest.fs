@@ -7,6 +7,21 @@ const respond = (app, data) => app.window.dispatchEvent(new app.window.MessageEv
 const change = (app, selector, value) => { const el = app.document.querySelector(selector); assert.ok(el, selector); el.value = value; el.dispatchEvent(new app.window.Event('input', { bubbles: true })); };
 function open(t) { const app = createApp(t, fixture()); app.document.querySelector('.pane.active .list').focus(); app.key('F7', { altKey: true }); return app; }
 
+test('search backdrop requests cancellation once and closes after the running search settles', t => {
+  const app = open(t), dialog = app.document.querySelector('[data-file-search]');
+  app.key('s', { altKey: true });
+  const { searchId } = app.messages.find(message => message.type === 'search-start');
+  dialog.getBoundingClientRect = () => ({ left: 100, right: 300, top: 100, bottom: 300 });
+  for (const type of ['pointerdown', 'click', 'pointerdown', 'click']) {
+    dialog.dispatchEvent(new app.window.MouseEvent(type, { bubbles: true, cancelable: true, clientX: 50, clientY: 50 }));
+  }
+  assert.equal(app.messages.filter(message => message.type === 'search-cancel' && message.searchId === searchId).length, 1);
+  assert.equal(dialog.open, true);
+  respond(app, { type: 'search-complete', searchId, cancelled: true });
+  assert.equal(dialog.isConnected, false);
+  assert.ok(app.messages.some(message => message.type === 'search-release' && message.ids.includes(searchId)));
+});
+
 test('search mnemonics focus and select the complete name and search text', t => {
   const app = open(t), dialog = app.document.querySelector('[data-file-search]');
   assert.ok(dialog.querySelector('.dialog-heading h2.dialog-heading-title'));
