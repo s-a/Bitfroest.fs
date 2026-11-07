@@ -7,6 +7,7 @@
   const units = new Set(['bytes', 'items', 'requests', 'steps']);
   const statusSnapshots = new WeakMap();
   const transferOperations = new WeakSet();
+  const transferBytePlans = new WeakSet();
   const reasons = new Set(['enumerating', 'stream-size-unknown', 'native-operation', 'awaiting-confirmation', 'remaining-work-unknown']);
   function validate(value) {
     if (!value || !units.has(value.unit) || !Number.isSafeInteger(value.completed) || value.completed < 0) throw new TypeError('Invalid progress measurement');
@@ -38,13 +39,29 @@
     if (input?.version !== 1 || input.scope !== 'transfer-batch') throw new TypeError('Unsupported transfer batch progress');
     return transferBatch(input);
   }
-  function projectTransferOperation(input, confirmedBytes, checkpoint) {
+  function createTransferBytePlan(files) {
+    const sizes = new Map();
+    let total = 0;
+    for (const { id, size } of files) {
+      if (typeof id !== 'string' || sizes.has(id) || !Number.isSafeInteger(size) || size < 0) return undefined;
+      sizes.set(id, size);
+      total += size;
+    }
+    if (!Number.isSafeInteger(total)) return undefined;
+    const plan = Object.freeze({ get total() { return total; }, skip(id) { total -= sizes.get(id) || 0; sizes.delete(id); } });
+    transferBytePlans.add(plan);
+    return plan;
+  }
+  function projectTransferOperation(input, confirmedBytes, checkpoint, bytePlan) {
     const { batch, file, ...details } = readTransferBatch(input);
     if (!Number.isSafeInteger(confirmedBytes) || confirmedBytes < 0 || typeof checkpoint !== 'boolean') throw new TypeError('Invalid transfer operation context');
+    if (bytePlan !== undefined && !transferBytePlans.has(bytePlan)) throw new TypeError('Invalid transfer byte plan');
     const completed = confirmedBytes + batch.completed;
-    const overall = checkpoint ? unknown('bytes', completed, 'remaining-work-unknown')
-      : batch.kind === 'determinate' ? known('bytes', completed, confirmedBytes + batch.total)
-        : unknown('bytes', completed, batch.reason);
+    const plannedBytes = bytePlan?.total;
+    const batchTotal = batch.kind === 'determinate' ? confirmedBytes + batch.total : undefined;
+    const plannedTotal = Number.isSafeInteger(plannedBytes) && batchTotal !== undefined && plannedBytes >= batchTotal ? plannedBytes : undefined;
+    const total = checkpoint ? plannedTotal : batchTotal;
+    const overall = total === undefined ? unknown('bytes', completed, checkpoint ? 'remaining-work-unknown' : batch.reason) : known('bytes', completed, total);
     const operation = event({ ...details, scope: 'transfer-operation', overall: { ...overall, scope: 'operation' }, current: file });
     transferOperations.add(operation);
     return operation;
@@ -165,5 +182,5 @@
     return snapshot;
   }
   function statusReport(input) { return statusSnapshots.get(readStatus(input))(); }
-  return { known, unknown, event, read, batchBytes, fileBytes, transferBatch, readTransferBatch, projectTransferOperation, acceptTransferOperation, statusPlan, readStatus, readFinishedStatus, statusReport };
+  return { known, unknown, event, read, batchBytes, fileBytes, transferBatch, readTransferBatch, createTransferBytePlan, projectTransferOperation, acceptTransferOperation, statusPlan, readStatus, readFinishedStatus, statusReport };
 });

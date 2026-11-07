@@ -38,7 +38,10 @@ export function batchBytes(completed: number, total: number): BatchMeasurement;
 export function fileBytes(completed: number, total: number): FileMeasurement;
 export function transferBatch(input: TransferBatchInput): TransferBatchProgress;
 export function readTransferBatch(input: unknown): TransferBatchProgress;
-export function projectTransferOperation(input: TransferBatchProgress, confirmedBytes: number, checkpoint: boolean): TransferOperationProgress;
+declare const transferBytePlan: unique symbol;
+export interface TransferBytePlan { readonly [transferBytePlan]: true; readonly total: number; skip(id: string): void }
+export function createTransferBytePlan(files: readonly { readonly id: string; readonly size: number }[]): TransferBytePlan | undefined;
+export function projectTransferOperation(input: TransferBatchProgress, confirmedBytes: number, checkpoint: boolean, bytePlan?: TransferBytePlan): TransferOperationProgress;
 export function acceptTransferOperation(input: TransferOperationProgress): ProgressEvent;
 declare const statusSnapshot: unique symbol;
 export interface StatusSummary {

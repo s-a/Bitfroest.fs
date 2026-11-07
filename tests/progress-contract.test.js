@@ -184,6 +184,13 @@ test('transfer progress validates scope at the wire boundary and only projects a
   const pending = Progress.projectTransferOperation(received, 12, true);
   assert.equal(pending.overall.kind, 'indeterminate');
   assert.equal(pending.overall.completed, 14);
+  const plan = Progress.createTransferBytePlan([{ id: 'first', size: 12 }, { id: 'current', size: 4 }, { id: 'later', size: 8 }]);
+  assert.equal(Progress.projectTransferOperation(received, 12, true, plan).overall.total, 24);
+  plan.skip('later'); plan.skip('later');
+  assert.equal(Progress.projectTransferOperation(received, 12, true, plan).overall.total, 16);
+  plan.skip('current');
+  assert.equal(Progress.projectTransferOperation(received, 12, true, plan).overall.kind, 'indeterminate');
+  assert.throws(() => Progress.projectTransferOperation(received, 12, true, file), /transfer byte plan/);
   const final = Progress.projectTransferOperation(received, 12, false);
   assert.throws(() => Progress.acceptTransferOperation({ ...final, overall: batch }), /projected measurements/);
   assert.deepEqual(Progress.acceptTransferOperation(final).overall, { ...Progress.known('bytes', 14, 16), scope: 'operation' });
@@ -246,6 +253,9 @@ test('the actual transfer caller cannot pass section or file progress as operati
     const failures = check([file], new Map([[file, modified]]));
     assert.ok(failures.some(failure => /progress contract/.test(failure)), `${replacement}\n${failures.join('\n')}`);
   }
+  const unplanned = original.replace('transferJob.transfer.checkpoint === true, transferJob.bytePlan);', 'transferJob.transfer.checkpoint === true, batch.file);');
+  assert.notEqual(unplanned, original);
+  assert.ok(check([file], new Map([[file, unplanned]])).some(failure => /TransferBytePlan/.test(failure)));
 });
 
 test('the compiler rejects reversing the byte scopes at the actual filesystem producer', () => {

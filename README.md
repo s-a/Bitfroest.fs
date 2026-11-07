@@ -89,6 +89,8 @@ This recording shows the previous confirmation dialog style.
 
 When moving a folder with **Send to**, an existing folder with the same name is merged with the source. Files outside the transfer remain in the destination, including files added or replaced while it runs.
 
+When the selected files have known sizes, the status bar can show overall byte progress across conflict prompts. The lower indicator shows the current file.
+
 ### Preview controls
 
 When the window regains focus, Bitfroest.fs checks the open folders and leaves unchanged views in place. X-Ray and Quick Diff keep their scroll position when the displayed file is updated.

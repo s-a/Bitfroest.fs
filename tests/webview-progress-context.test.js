@@ -28,8 +28,9 @@ test('a single-file transfer may display identical progress for the operation an
 test('copy progress keeps the whole transfer separate from each conflict checkpoint and current file', async t => {
   const saved = fixture();
   saved.folders['/left'].push({ id: 'b', name: 'same.txt', type: 'text', size: 4 });
-  saved.folders['/right'].push({ id: 'existing', name: 'same.txt', type: 'text', size: 2 });
-  saved.panes[0].selected = ['a', 'b'];
+  saved.folders['/left'].push({ id: 'c', name: 'last.txt', type: 'text', size: 8 });
+  saved.folders['/right'].push({ id: 'existing', name: 'same.txt', type: 'text', size: 2 }, { id: 'last', name: 'last.txt', type: 'text', size: 3 });
+  saved.panes[0].selected = ['a', 'b', 'c'];
   const app = createApp(t, saved, { language: 'en' });
   const first = await start(app, 'copy');
   assert.equal(first.transfer.checkpoint, true);
@@ -37,7 +38,8 @@ test('copy progress keeps the whole transfer separate from each conflict checkpo
     progress: Progress.transferBatch({ phase, batch: Progress.batchBytes(completed, total), file: Progress.fileBytes(completed, total) }) });
   const overall = app.document.querySelector('#status-progress-overall'), current = app.document.querySelector('#status-progress-file');
   report(first, 6, 12);
-  assert.equal(overall.hasAttribute('aria-valuemax'), false);
+  assert.equal(overall.getAttribute('aria-valuenow'), '6');
+  assert.equal(overall.getAttribute('aria-valuemax'), '24');
   assert.equal(current.getAttribute('aria-valuenow'), '6');
   assert.equal(current.getAttribute('aria-valuemax'), '12');
   report(first, 12, 12, 'published');
@@ -45,21 +47,34 @@ test('copy progress keeps the whole transfer separate from each conflict checkpo
   await tick();
   app.click(app.document.querySelector('[data-conflict-action="overwrite"]'));
   await tick();
-  const last = app.messages.filter(message => message.type === 'filesystem-apply').at(-1);
-  assert.notEqual(last.operationId, first.operationId);
-  report(last, 2, 4);
+  const second = app.messages.filter(message => message.type === 'filesystem-apply').at(-1);
+  assert.notEqual(second.operationId, first.operationId);
+  assert.equal(second.transfer.checkpoint, true);
+  report(second, 2, 4);
   assert.equal(overall.getAttribute('aria-valuenow'), '14');
-  assert.equal(overall.getAttribute('aria-valuemax'), '16');
+  assert.equal(overall.getAttribute('aria-valuemax'), '24');
   assert.equal(current.getAttribute('aria-valuenow'), '2');
   assert.equal(current.getAttribute('aria-valuemax'), '4');
+  report(second, 4, 4, 'published');
+  send(app, { type: 'filesystem-result', operationId: second.operationId, ok: true, state: second.state });
+  await tick();
+  app.click(app.document.querySelector('[data-conflict-action="overwrite"]'));
+  await tick();
+  const last = app.messages.filter(message => message.type === 'filesystem-apply').at(-1);
+  assert.notEqual(last.operationId, second.operationId);
+  report(last, 4, 8);
+  assert.equal(overall.getAttribute('aria-valuenow'), '20');
+  assert.equal(overall.getAttribute('aria-valuemax'), '24');
+  assert.equal(current.getAttribute('aria-valuenow'), '4');
+  assert.equal(current.getAttribute('aria-valuemax'), '8');
   send(app, { type: 'filesystem-result', operationId: last.operationId, ok: true, state: last.state });
   app.click(app.document.querySelector('#status-message [data-status-icon]'));
   const reportRequest = app.messages.findLast(message => message.type === 'status-log-copy');
   const trace = JSON.parse(reportRequest.text).context.transferEvents;
-  assert.deepEqual(trace.map(event => event.stage), ['dialog-opened', 'confirmed', 'queued', 'write-requested', 'write-acknowledged', 'conflict-decision', 'write-requested', 'write-acknowledged', 'finished']);
+  assert.deepEqual(trace.map(event => event.stage), ['dialog-opened', 'confirmed', 'queued', 'write-requested', 'write-acknowledged', 'conflict-decision', 'write-requested', 'write-acknowledged', 'conflict-decision', 'write-requested', 'write-acknowledged', 'finished']);
   assert.equal(new Set(trace.map(event => event.traceId)).size, 1);
   assert.equal(trace.find(event => event.stage === 'conflict-decision').decision, 'overwrite');
-  assert.equal(trace.at(-1).completed, 2);
+  assert.equal(trace.at(-1).completed, 3);
 });
 
 test('active progress keeps localized operation and literal source/final target independently of transient hints', async t => {

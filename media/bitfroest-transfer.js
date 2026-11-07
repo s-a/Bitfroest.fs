@@ -242,13 +242,14 @@
         const decision = await options.onRename?.(clone(item), destinationDirectory, result);
         if (cancelled()) break;
         if (!decision || decision.action === 'cancel') { result.cancelled = true; break; }
-        if (decision.action === 'skip') { result.skipped++; continue; }
+        if (decision.action === 'skip') { result.skipped++; options.onSourceSkipped?.(item.id); continue; }
         name = decision.name;
         if (!validName(name) || [...name].some(character => character.charCodeAt(0) < 32) || /^[a-z]:\//i.test(destinationDirectory) && /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(name)) {
-          result.errors.push('Der neue Dateiname ist ungültig oder bereits vorhanden.'); result.skipped++; continue;
+          result.errors.push('Der neue Dateiname ist ungültig oder bereits vorhanden.'); result.skipped++; options.onSourceSkipped?.(item.id); continue;
         }
       }
       if (await put(sourcePath, item, destinationDirectory, name)) result.completedIds.push(item.id);
+      else if (!result.cancelled) options.onSourceSkipped?.(item.id);
       if (result.cancelled) break;
     }
     return result;

@@ -4,7 +4,7 @@
   const paths = window.BitfroestPaths;
   /** @type {typeof import('./bitfroest-progress')} */
   const Progress = window.BitfroestProgress;
-  /** @type {Pick<typeof import('./bitfroest-progress'), 'readTransferBatch' | 'projectTransferOperation' | 'acceptTransferOperation'>} */
+  /** @type {Pick<typeof import('./bitfroest-progress'), 'readTransferBatch' | 'createTransferBytePlan' | 'projectTransferOperation' | 'acceptTransferOperation'>} */
   const TransferProgress = Progress;
   const displayPath = value => paths.displayPath(value);
   const inputPath = (value, base) => paths.normalizePath(value, { base, input: true, platform: document.body.dataset.platform });
@@ -2756,7 +2756,8 @@
     }
     const resume = () => executeTransferNow(options).catch(failed);
     if (prepareFolders([plan.directories.length ? parent(plan.directories[0]) : targetDirectory], options.mode, resume, false, false, transfer)) { transferPreparationFailure = cancelled => options.onComplete?.({ confirmed: false, completed: 0, completedIds: [], errors: cancelled ? [] : [t('Dateioperation fehlgeschlagen; Verzeichnisse erneut eingelesen')], cancelled: Boolean(cancelled) }); return; }
-    const selectedFolders = (state.folders[options.sourcePath] || []).filter(file => options.ids.includes(file.id) && file.type === 'folder');
+    const selectedRows = (state.folders[options.sourcePath] || []).filter(file => options.ids.includes(file.id));
+    const selectedFolders = selectedRows.filter(file => file.type === 'folder');
     if (selectedFolders.length) {
       const targetFolders = new Map((state.folders[targetDirectory] || []).filter(row => row.type === 'folder').map(row => {
         const path = join(targetDirectory, row.name);
@@ -2775,6 +2776,12 @@
     transferPending = true;
     const planningJob = transferJob;
     planningJob.controller = new AbortController();
+    const candidateFiles = selectedRows.filter(file => window.BitfroestTransfer.matches(file.name, options.filter));
+    const changesTargetBytes = action => ['append', 'rename-target', 'autorename-target', 'rename-older-target'].includes(action);
+    if (!selectedFolders.length && !plan.name && !plan.mask && !options.individualNames && paths.identity(options.sourcePath) !== paths.identity(targetDirectory)
+        && !changesTargetBytes(options.policyState?.value || options.policy) && candidateFiles.every(file => file.type !== 'link')) {
+      planningJob.bytePlan = TransferProgress.createTransferBytePlan(candidateFiles);
+    }
     let originalFolders = clone(state.folders);
     let planningFolders = clone(state.folders);
     let committedResult = { completed: 0, directories: 0, completedIds: [] };
@@ -2793,7 +2800,7 @@
       planningJob.batchPublishedBytes = 0;
       planningJob.reportedProgress = null;
       planningJob.completedBytes = planningJob.confirmedBytes || 0;
-      planningJob.totalBytes = undefined;
+      planningJob.totalBytes = planningJob.bytePlan?.total;
       planningJob.currentPath = null;
       planningJob.currentTransferred = 0;
       planningJob.currentTotal = undefined;
@@ -2850,7 +2857,13 @@
     };
     transferPlanning = true;
     const result = await window.BitfroestTransfer.execute({ ...options, policy: options.policyState?.value || options.policy, signal: planningJob.controller.signal, folders: planningFolders, createId: () => String(nextId++),
-      onBeforeDecision: flushCompleted, onConflict: async conflict => { const decision = await transferConflict(conflict); traceTransfer(options, 'conflict-decision', { decision: decision.action }); if (options.policyState && window.BitfroestTransfer.policies.includes(decision?.action) && decision.action !== 'ask') options.policyState.value = decision.action; return decision; }, onRename: (source, directory) => transferIndividualName(source, directory, options.mode, planningFolders) });
+      onBeforeDecision: flushCompleted, onSourceSkipped: id => planningJob.bytePlan?.skip(id), onConflict: async conflict => {
+        const decision = await transferConflict(conflict);
+        traceTransfer(options, 'conflict-decision', { decision: decision.action });
+        if (changesTargetBytes(decision.action)) planningJob.bytePlan = undefined;
+        if (options.policyState && window.BitfroestTransfer.policies.includes(decision?.action) && decision.action !== 'ask') options.policyState.value = decision.action;
+        return decision;
+      }, onRename: (source, directory) => transferIndividualName(source, directory, options.mode, planningFolders) });
     if (transferJob !== planningJob) return;
     if (planningJob.cancelRequested) {
       state.folders = originalFolders;
@@ -4199,7 +4212,7 @@
     if (host && event.data?.type === 'filesystem-transfer-progress') {
       if (transferJob?.id === event.data.operationId && transferJob.transfer) {
         const batch = TransferProgress.readTransferBatch(event.data.progress);
-        const projected = TransferProgress.projectTransferOperation(batch, transferJob.confirmedBytes || 0, transferJob.transfer.checkpoint === true);
+        const projected = TransferProgress.projectTransferOperation(batch, transferJob.confirmedBytes || 0, transferJob.transfer.checkpoint === true, transferJob.bytePlan);
         if (batch.phase === 'published') transferJob.batchPublishedBytes = batch.batch.completed;
         transferProgress(TransferProgress.acceptTransferOperation(projected));
       }
