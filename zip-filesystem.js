@@ -106,7 +106,11 @@ function createZipFilesystem(base, options = {}) {
       for (const [key, view] of views) if (path.resolve(view.locations[key].archive) === path.resolve(archive)) views.delete(key);
       return result;
     },
-    async apply(before, after, operation) { readonly(before, after); return overlay(await base.apply(real(before), real(after), operation)); },
+    async apply(before, after, operation) {
+      if (operation?.transfer) return overlay(await base.apply(real(before), undefined, operation));
+      readonly(before, after);
+      return overlay(await base.apply(real(before), real(after), operation));
+    },
     async prepare(before, settings) {
       for (const value of settings.directories || []) {
         const archive = archivePath(value);
@@ -117,7 +121,8 @@ function createZipFilesystem(base, options = {}) {
     },
     async remove(before, request, settings) {
       if (request.paths?.some(archivePath)) throw new Error('Änderungen innerhalb von ZIP-Archiven sind im Pilot nicht verfügbar.');
-      return overlay(await base.remove(real(before), request, settings));
+      try { return overlay(await base.remove(real(before), request, settings)); }
+      catch (error) { if (error.confirmedState) error.confirmedState = overlay(error.confirmedState); throw error; }
     },
     measureFolder: (before, directory, settings) => base.measureFolder(real(before), directory, settings),
     clear() { views.clear(); archives.clear(); operations.clear(); },

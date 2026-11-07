@@ -39,6 +39,10 @@ test('Send to uses the generated host view and retains an off-screen destination
     const outgoing = view.messages.slice(sent);
     sent = view.messages.length;
     for (const message of outgoing) {
+      if (message.type === 'filesystem-apply' && message.transfer) {
+        assert.equal(Object.hasOwn(message, 'state'), false);
+        assert.ok(message.transfer.changes.length > 0);
+      }
       if (['filesystem-prepare', 'filesystem-apply', 'transfer-trace'].includes(message.type)) await panel.receive(message);
     }
     const incoming = panel.messages.slice(received);
@@ -374,7 +378,7 @@ test('generated host HTML separates left dragging, right selection and held righ
   initial.panes.forEach(pane => { pane.filter = ''; pane.sort = 'name'; pane.selected = []; });
   initial.folders['C:/tmp'].push({ id: 'b', name: 'b.txt', type: 'text', fsSource: 'C:/tmp/b.txt' });
   let writes = 0;
-  const app = harness(t, { filesystemLoad: async () => initial, filesystemApply: async (_before, after) => { writes++; return after; } });
+  const app = harness(t, { filesystemLoad: async () => initial, filesystemApply: async (before, _after, operation) => { writes++; return require('./support/webview.cjs').confirmFixtureTransfer(before, { transfer: operation.transfer }); } });
   await app.command('bitfroest.openPrototype');
   const panel = app.panels[0], html = panel.webview.html;
   assert.match(html, /Content-Security-Policy/); assert.match(html, /script-src 'nonce-[^']+'/);
@@ -1149,8 +1153,9 @@ for (const stage of ['host preparation', 'webview transfer planning', 'host appl
       filesystemLoad: async () => initial, filesystemPrepare: async before => {
         if (stage === 'host preparation') throw error;
         return stage === 'host apply' ? { ...before, folders: { ...before.folders, [target]: [] } } : before;
-      }, filesystemApply: async (_before, proposed) => {
-        assert.equal(proposed.folders['C:/tmp'].length, 0);
+      }, filesystemApply: async (_before, proposed, operation) => {
+        assert.equal(proposed, undefined);
+        assert.equal(operation.transfer.changes[0].target, `${target}/a.txt`);
         throw Object.assign(new Error('Write denied'), { code: 'EACCES', path: target, syscall: 'rename' });
       } });
     await app.command('bitfroest.openPrototype');
@@ -1933,7 +1938,7 @@ function harness(t, options = {}) {
         load: async optionsForLoad => options.filesystemLoad ? options.filesystemLoad(optionsForLoad) : null,
         prepare: async (before, preparation) => options.filesystemPrepare ? options.filesystemPrepare(before, preparation) : before,
         measureFolder: async (before, directory, settings) => options.measureFolder(before, directory, settings),
-        apply: async (before, after, operation) => options.filesystemApply ? options.filesystemApply(before, after, operation) : after,
+        apply: async (before, after, operation) => options.filesystemApply ? options.filesystemApply(before, after, operation) : after ?? before,
         remove: async (before, request) => options.filesystemRemove ? options.filesystemRemove(before, request, providerOptions) : before,
         contains: target => options.containsPath ? options.containsPath(target) : /^C:\/(tmp|temp)(\/|$)/i.test(target)
       }); } };
@@ -3164,7 +3169,7 @@ test('generated host HTML starts a copy during a pending refresh and rejects the
   let signal, writes = 0;
   const app = harness(t, { filesystemLoad: async () => structuredClone(initial), filesystemPrepare: async (_before, settings) => {
     signal = settings.signal; entered.resolve(); await reading.promise; return { ...initial, snapshotId: 'obsolete' };
-  }, filesystemApply: async (_before, after) => { writes++; return { ...after, snapshotId: 'copied' }; } });
+  }, filesystemApply: async (before, _after, operation) => { writes++; return { ...require('./support/webview.cjs').confirmFixtureTransfer(before, { transfer: operation.transfer }), snapshotId: 'copied' }; } });
   await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
   const view = require('./support/webview.cjs').createApp(t, initial, { html: panel.webview.html });
   assert.match(panel.webview.html, /Content-Security-Policy/);
@@ -5318,7 +5323,7 @@ test('transfer cancellation interrupts the running job and forwards only its act
   const real = { version: 1, realFilesystem: true, snapshotId: 'one', folders: { 'C:/tmp': [], 'C:/temp': [] }, panes: [{ tabs: ['C:/tmp'], tab: 0 }, { tabs: ['C:/temp'], tab: 0 }] };
   let operation, release;
   const outcome = { cancelled: true, completedIds: ['one'], completedSourcePaths: ['C:/tmp/a'] };
-  const app = harness(t, { filesystemLoad: async () => real, filesystemApply: async (_before, after, options) => { operation = options; options.onTransferProgress(Progress.transferBatch({ phase: 'copying', batch: Progress.batchBytes(3, 10), file: Progress.fileBytes(3, 10) })); await new Promise(resolve => { release = resolve; }); return { ...after, operationOutcome: outcome }; } });
+  const app = harness(t, { filesystemLoad: async () => real, filesystemApply: async (before, _after, options) => { operation = options; options.onTransferProgress(Progress.transferBatch({ phase: 'copying', batch: Progress.batchBytes(3, 10), file: Progress.fileBytes(3, 10) })); await new Promise(resolve => { release = resolve; }); return { ...before, operationOutcome: outcome }; } });
   await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
   const pending = panel.receive({ type: 'filesystem-apply', operationId: 'job-1', transfer: { mode: 'copy', sourcePath: 'C:/tmp', ids: ['one'], sourceSide: 0 }, state: real });
   await new Promise(resolve => setImmediate(resolve));
@@ -5950,7 +5955,7 @@ test('right copy and left paste retain native command availability through focus
   const initial = clipboardFixture();
   initial.panes.forEach(pane => { pane.filter = ''; pane.sort = 'name'; });
   initial.folders['C:/temp'] = [{ id: 'b', name: 'right.txt', type: 'text', size: 5, content: 'right', fsSource: 'C:/temp/right.txt' }];
-  const options = { filesystemLoad: async () => structuredClone(initial) };
+  const options = { filesystemLoad: async () => structuredClone(initial), filesystemApply: async (before, _after, operation) => require('./support/webview.cjs').confirmFixtureTransfer(before, { transfer: operation.transfer }) };
   const app = harness(t, options);
   await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
   const view = require('./support/webview.cjs').createApp(t, structuredClone(initial), { html: panel.webview.html });
@@ -5988,7 +5993,7 @@ test('right copy and left paste retain native command availability through focus
   assert.equal(view.document.querySelector('#modal').open, false);
   await tick();
   const apply = view.messages.find(message => message.type === 'filesystem-apply'); assert.ok(apply, JSON.stringify({ messages: view.messages.slice(-5), status: view.document.querySelector('#status-message').textContent, dialog: view.document.querySelector('#modal-body').textContent }));
-  assert.ok(apply.state.folders['C:/tmp'].some(file => file.name === 'right.txt'));
+  assert.equal(apply.transfer.changes[0].target, 'C:/tmp/right.txt');
   await panel.receive(apply);
   deliver(panel.messages.filter(message => message.type === 'filesystem-result').at(-1)); await tick();
   assert.ok(view.state().folders['C:/tmp'].some(file => file.name === 'right.txt'));

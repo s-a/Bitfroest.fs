@@ -1191,14 +1191,14 @@
     if (host && state.realFilesystem && filesystemPending) host.postMessage({ type: 'view-state', panes: state.panes, active: state.active });
     if (host) {
       host.setState(state);
-      const proposedState = transferCompletion?.proposedState || state;
-      if (state.realFilesystem && JSON.stringify(proposedState.folders) !== confirmedFolders) {
+      const transferWrite = transferCompletion && transferJob?.transfer;
+      if (state.realFilesystem && (transferWrite || JSON.stringify(state.folders) !== confirmedFolders)) {
         prioritizeFilesystemOperation();
         if (!filesystemPending) {
           pendingFilesystemKind = 'filesystem-apply'; filesystemPending = true; $('#panes').inert = !operationQueue?.active; $('#functionbar').inert = true;
           if (!transferJob) { toast(t('Dateioperation läuft…'), 'info'); statusTask('filesystem', t('Dateioperation läuft…') + ` · ${t('Hostbestätigung')}`); }
           traceTransfer(transferJob?.transfer, 'write-requested', { operationId: transferJob?.id, checkpoint: false });
-          host.postMessage({ type: 'filesystem-apply', state: proposedState, ...(transferJob ? { operationId: transferJob.id, transfer: transferJob.transfer } : {}) });
+          host.postMessage({ type: 'filesystem-apply', ...(transferWrite ? { operationId: transferJob.id, transfer: transferWrite } : { state }) });
         }
       } else if (!filesystemPending) host.postMessage({ type: 'state', state });
     }
@@ -2785,14 +2785,15 @@
     }
     let originalFolders = clone(state.folders);
     let planningFolders = clone(state.folders);
+    let changes = [];
     let committedResult = { completed: 0, directories: 0, completedIds: [] };
-    const pendingTransfer = () => ({ ...transfer, verifyAfterCopy: options.verifyAfterCopy === true,
+    const pendingTransfer = () => ({ ...transfer, changes, verifyAfterCopy: options.verifyAfterCopy === true,
       ...(options.requiredDirectory ? { requiredDirectory: targetDirectory } : {}),
       ids: options.ids.filter(id => !committedResult.completedIds.includes(id) && (originalFolders[options.sourcePath] || []).some(row => row.id === id)) });
     try {
     const confirmedView = host && state.realFilesystem ? { folders: originalFolders, panes: clone(state.panes) } : null;
     const flushCompleted = async partial => {
-      if (!confirmedView || JSON.stringify(planningFolders) === confirmedFolders) return true;
+      if (!confirmedView || !changes.length) return true;
       const plannedFolders = planningFolders, proposed = { ...clone(state), folders: clone(plannedFolders) };
       state.folders = originalFolders;
       planningJob.hostActive = true;
@@ -2812,6 +2813,7 @@
           traceTransfer(options, 'write-acknowledged', { operationId: planningJob.id, checkpoint: true, ok: message.ok, cancelled: Boolean(message.cancelled || message.operationOutcome?.cancelled), errorCode: message.diagnostic?.failure?.code });
           const nativeState = message.state?.realFilesystem ? message.state : message.ok ? proposed : { ...state, folders: originalFolders };
           const view = { panes: state.panes, active: state.active };
+          const previousViews = state.panes.map(paneDisplayState);
           for (const key of Object.keys(plannedFolders)) if (!Object.hasOwn(nativeState.folders, key)) delete plannedFolders[key];
           for (const [key, incoming] of Object.entries(nativeState.folders)) {
             const rows = plannedFolders[key] || [];
@@ -2834,6 +2836,7 @@
           originalFolders = clone(plannedFolders); confirmedView.folders = originalFolders; confirmedView.panes = clone(state.panes);
           const outcome = message.operationOutcome;
           if (message.ok && !message.cancelled && !outcome?.cancelled) {
+            changes = [];
             committedResult = { completed: partial.completed, directories: partial.directories, completedIds: [...partial.completedIds] };
             planningJob.confirmedBytes = (planningJob.confirmedBytes || 0) + planningJob.batchPublishedBytes;
           }
@@ -2848,17 +2851,19 @@
           if (message.cancelled || message.operationOutcome?.cancelled) {
             planningJob.cancelRequested = true; planningJob.controller.abort();
           }
-          render(true); transferProgress();
+          for (const path of message.refreshGitDirectories || []) { directoryListings.delete(path); directoryCache.delete(path); }
+          cacheDirectories();
+          render(true, previousViews); transferProgress();
           if (!message.ok) reject(Object.assign(new Error(message.error || t('Dateioperation fehlgeschlagen; Verzeichnisse erneut eingelesen')), { diagnostic: message.diagnostic }));
           else resolve(!planningJob.cancelRequested);
         } };
         traceTransfer(options, 'write-requested', { operationId: planningJob.id, checkpoint: true });
-        host.postMessage({ type: 'filesystem-apply', operationId: planningJob.id, transfer: planningJob.transfer, state: proposed });
+        host.postMessage({ type: 'filesystem-apply', operationId: planningJob.id, transfer: planningJob.transfer });
       });
     };
     transferPlanning = true;
     const result = await window.BitfroestTransfer.execute({ ...options, policy: options.policyState?.value || options.policy, signal: planningJob.controller.signal, folders: planningFolders, createId: () => String(nextId++),
-      onBeforeDecision: flushCompleted, onSourceSkipped: id => planningJob.bytePlan?.skip(id), onConflict: async conflict => {
+      onChange: change => changes.push(change), onBeforeDecision: flushCompleted, onSourceSkipped: id => planningJob.bytePlan?.skip(id), onConflict: async conflict => {
         const decision = await transferConflict(conflict);
         traceTransfer(options, 'conflict-decision', { decision: decision.action });
         if (changesTargetBytes(decision.action)) planningJob.bytePlan = undefined;
@@ -2882,10 +2887,10 @@
       if (!remaining.has(sourcePane.cursor)) sourcePane.cursor = null;
     }
     const completion = { result, options, committedResult };
-    const needsCommit = host && state.realFilesystem && JSON.stringify(planningFolders) !== confirmedFolders;
+    const needsCommit = host && state.realFilesystem && changes.length > 0;
     if (needsCommit) { transferCompletion = completion; document.querySelector('.transfer-progress')?.remove(); transferJob = { id: `transfer-${Date.now()}-${++transferSequence}`, queueJobId: queuedJob?.id, hostActive: true, context: Object.freeze({ mode: options.mode, sources: Object.freeze(result.completedIds.map(id => progressSources.get(id))), target: plan.name || plan.mask ? join(targetDirectory, plan.name || plan.mask) : targetDirectory }), transfer: pendingTransfer(), confirmedBytes: planningJob.confirmedBytes, completedBytes: planningJob.confirmedBytes }; transferProgress(); }
     if (needsCommit) {
-      completion.proposedState = { ...clone(state), folders: clone(planningFolders) }; const currentPanes = state.panes;
+      const currentPanes = state.panes;
       state.folders = confirmedView.folders;
       currentPanes.forEach((currentPane, index) => {
         const confirmedPane = confirmedView.panes[index];
@@ -4273,7 +4278,8 @@
       if (pathNavigation) pathNavigation.valid = pathNavigation.generation === pathRequestGeneration && document.activeElement === pathNavigation.input && state.active === pathNavigation.side;
       rememberScroll();
       const navigatingFilesystem = completedFilesystemKind === 'filesystem-navigate';
-      const previousViews = refreshingFilesystem || navigatingFilesystem ? state.panes.map(paneDisplayState) : undefined;
+      const scopedWrite = Boolean(transferCompletion || completedFilesystemKind === 'filesystem-delete');
+      const previousViews = refreshingFilesystem || navigatingFilesystem || scopedWrite ? state.panes.map(paneDisplayState) : undefined;
       const previousIcons = refreshingFilesystem ? displayedIconEntries() : undefined;
       const scopedRefreshDirectories = [0, 1].includes(refreshPlan?.side) ? refreshPlan.directories : null;
       const focusRefresh = refreshingFilesystem && !scopedRefreshDirectories;
@@ -4313,7 +4319,9 @@
       else if (!event.data.ok && failedRename) { state = failedRename.before; confirmedFolders = JSON.stringify(state.folders); }
       if (gitMenuSelection && completedFilesystemKind === 'filesystem-refresh' && event.data.ok) gitMenuSelection.refreshSnapshot = state.snapshotId;
       if (completedFilesystemKind === 'filesystem-refresh' && scopedRefreshDirectories) { for (const path of scopedRefreshDirectories) directoryListings.delete(path); }
-      else directoryListings.clear();
+      else if (scopedWrite && event.data.refreshGitDirectories) {
+        for (const path of event.data.refreshGitDirectories) { directoryListings.delete(path); directoryCache.delete(path); }
+      } else directoryListings.clear();
       cacheDirectories();
       if (previousFolders) invalidateChangedDirectories(previousFolders, focusRefresh ? [] : navigatingFilesystem && event.data.ok && event.data.resumeNavigation ? [event.data.resumeNavigation.path] : event.data.refreshGitDirectories || []);
       if (readingView) {
@@ -4334,10 +4342,6 @@
       }
       const previewRefresh = completedFilesystemKind === 'filesystem-refresh' && (xray.has(0) || xray.has(1) || quickDiff.snapshot());
       const unchangedFocus = focusRefresh && state.panes.every((pane, side) => paneDisplayState(pane, side) === previousViews[side]);
-      if (unchangedFocus) { requestIcons(); requestGitStatus(); }
-      else render(!focusRefresh && !previewRefresh && !$('#modal').open && (!pathNavigation || pathNavigation.valid), previousViews);
-      if (previousViews) refreshSelection();
-      if (focusRefresh && event.data.ok && !event.data.cancelled) quickDiff.refresh();
       const error = event.data.error || t('Dateioperation fehlgeschlagen; Verzeichnisse erneut eingelesen');
       if (completion && event.data.operationOutcome) {
         const outcome = event.data.operationOutcome;
@@ -4349,8 +4353,11 @@
         const completedIds = event.data.ok && !event.data.cancelled || event.data.operationOutcome ? completion.result.completedIds : completion.committedResult?.completedIds || [];
         const sourcePane = state.panes[completion.options.sourceSide];
         if (currentPath(sourcePane) === completion.options.sourcePath) sourcePane.selected = sourcePane.selected.filter(id => !completedIds.includes(id));
-        render(!$('#modal').open);
       }
+      if (unchangedFocus) { requestIcons(); requestGitStatus(); }
+      else render(!focusRefresh && !previewRefresh && !$('#modal').open && (!pathNavigation || pathNavigation.valid), previousViews);
+      if (previousViews) refreshSelection();
+      if (focusRefresh && event.data.ok && !event.data.cancelled) quickDiff.refresh();
       const cancelled = event.data.cancelled || event.data.operationOutcome?.cancelled || completion?.result.cancelled;
       const outcome = !event.data.ok || completion?.result.errors.length ? 'error' : cancelled ? 'cancelled' : 'success';
       const resultMessage = event.data.ok ? event.data.notice || (cancelled ? t('Dateiübertragung abgebrochen.') : completion ? transferSummary(completion) : completedTransferJob ? t('Dateioperation beendet') : '') : error;

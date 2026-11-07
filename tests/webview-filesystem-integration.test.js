@@ -20,7 +20,7 @@ async function fixture(t) {
   async function commit() {
     const message = app.messages.filter(message => ['filesystem-apply', 'filesystem-delete'].includes(message.type)).at(-1);
     assert.ok(message, 'surface sends a real operation');
-    confirmed = message.type === 'filesystem-delete' ? await provider.remove(confirmed, message) : await provider.apply(confirmed, clone(message.state));
+    confirmed = message.type === 'filesystem-delete' ? await provider.remove(confirmed, message) : await provider.apply(confirmed, message.state, { transfer: message.transfer });
     app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-result', ok: true, state: clone(confirmed) } }));
     return confirmed;
   }

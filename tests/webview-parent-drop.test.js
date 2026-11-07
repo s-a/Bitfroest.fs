@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { createApp, resolveThemeCss } = require('./support/webview.cjs');
+const { createApp, resolveThemeCss, confirmFixtureTransfer } = require('./support/webview.cjs');
 const tick = () => new Promise(resolve => setImmediate(resolve));
 function fixture() {
   const pane = path => ({ tabs: [path], tab: 0, selected: ['a'], cursor: 'a', filter: '', sort: 'name' });
@@ -89,8 +89,8 @@ test('a cached parent opens its conflict dialog and copying never removes the so
   app.click(app.document.querySelector('[data-conflict-action="overwrite"]')); await tick();
   const apply = app.messages.find(message => message.type === 'filesystem-apply'); assert.ok(apply);
   assert.ok(app.row('film.mp4'));
-  assert.equal(apply.state.folders['C:/base/temp'].length, 1);
-  send(app, { type: 'filesystem-result', operationId: apply.operationId, ok: true, state: apply.state }); await tick();
+  assert.equal(apply.transfer.mode, 'copy');
+  send(app, { type: 'filesystem-result', operationId: apply.operationId, ok: true, state: confirmFixtureTransfer(initial, apply) }); await tick();
   assert.ok(app.row('film.mp4'));
   assert.equal(app.state().folders['C:/base'].find(file => file.name === 'film.mp4').size, 1234);
 });
@@ -134,7 +134,8 @@ test('left-drop planning cannot expose an unconfirmed move when an unrelated red
   assert.equal(app.messages.some(message => message.type === 'filesystem-apply'), false);
   release(); await tick();
   const apply = app.messages.find(message => message.type === 'filesystem-apply'); assert.ok(apply);
-  assert.equal(apply.state.folders['C:/base/temp'].length, 0);
+  assert.equal(apply.transfer.mode, 'move');
+  assert.equal(apply.transfer.changes[0].source, 'C:/base/temp/film.mp4');
   assert.ok(app.row('film.mp4'));
   send(app, { type: 'filesystem-result', operationId: apply.operationId, ok: false, error: 'Host failure' }); await tick();
   assert.ok(app.row('film.mp4'));

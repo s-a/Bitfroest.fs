@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { createApp } = require('./support/webview.cjs');
+const { createApp, confirmFixtureTransfer } = require('./support/webview.cjs');
 const tick = () => new Promise(resolve => setImmediate(resolve));
 function fixture() {
   const pane = path => ({ tabs: [path], tab: 0, selected: [], cursor: null, filter: '', sort: 'name', descending: false });
@@ -120,7 +120,8 @@ test('real transfers preserve source metadata before host mutation', async t => 
   app.click(app.document.querySelector('[data-conflict-action="overwrite"]')); await tick();
   const mutation = app.messages.find(message => message.type === 'filesystem-apply');
   assert.ok(mutation);
-  assert.equal(mutation.state.folders['/right'].find(file => file.name === 'same.txt').fsSource, '/left/same.txt');
+  assert.equal(Object.hasOwn(mutation, 'state'), false);
+  assert.equal(mutation.transfer.changes[0].source, '/left/same.txt');
 });
 
 test('favorites navigate while a background copy is waiting in its JavaScript planning phase', async t => {
@@ -161,16 +162,17 @@ test('a successful favorites navigation during the real copy planner preserves i
   release(); await tick(); await tick();
   const applies = app.messages.filter(message => message.type === 'filesystem-apply');
   assert.equal(applies.length, 1, 'the planned copy is dispatched once after local planning finishes');
-  assert.ok(applies[0].state.folders['/right'].some(row => row.name === 'same.txt'));
-  assert.equal(applies[0].state.panes[0].tabs[0], '/elsewhere');
-  assert.equal(applies[0].state.panes[0].tabStates[applies[0].state.panes[0].tab].id, originalTargetTabId);
+  assert.equal(applies[0].transfer.changes[0].target, '/right/same.txt');
+  const confirmed = confirmFixtureTransfer(app.state(), applies[0]);
+  assert.equal(confirmed.panes[0].tabs[0], '/elsewhere');
+  assert.equal(confirmed.panes[0].tabStates[confirmed.panes[0].tab].id, originalTargetTabId);
   assert.equal(executionCount, 1);
   assert.equal(app.state().folders['/right'].length, 0, 'unconfirmed copy results remain outside the displayed file lists');
   assert.equal(app.messages.filter(message => message.type === 'filesystem-navigate' && message.path === '/elsewhere').length, 0, 'navigation waits for the matching host commit acknowledgement');
-  app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-result', operationId: applies[0].operationId + '-stale', ok: true, state: applies[0].state } }));
+  app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-result', operationId: applies[0].operationId + '-stale', ok: true, state: confirmed } }));
   assert.equal(app.messages.filter(message => message.type === 'filesystem-navigate' && message.path === '/elsewhere').length, 0, 'an unrelated acknowledgement cannot release navigation');
   assert.equal(app.state().folders['/right'].length, 0);
-  app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-result', operationId: applies[0].operationId, ok: true, state: applies[0].state } }));
+  app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-result', operationId: applies[0].operationId, ok: true, state: confirmed } }));
   const navigations = app.messages.filter(message => message.type === 'filesystem-navigate' && message.path === '/elsewhere');
   assert.equal(navigations.length, 1);
   const navigation = app.messages.filter(message => message.type === 'filesystem-navigate' && message.path === '/elsewhere').at(-1);
@@ -266,7 +268,7 @@ test('conflict F3 shortcuts use frozen real source and target URIs while preserv
 test('real copy reports progress in the statusbar until the host confirms success and exposes host failure without false success',async t=>{
  for(const ok of [true,false]){const state=fixture();state.realFilesystem=true;state.folders['/right']=[];state.folders['/left'][0].fsSource='/left/same.txt';const app=createApp(t,state);choose(app,'same.txt');app.action('copy');submit(app);await tick();
  assert.match(app.document.querySelector('#status-message').textContent,/läuft/);assert.equal(app.document.querySelector('#toast').classList.contains('visible'),false);assert.equal(app.document.querySelector('#panes').inert,false);assert.equal(app.document.querySelector('#functionbar').inert,true);
- const pending=app.messages.find(message=>message.type==='filesystem-apply');assert.ok(pending);const confirmed=ok?JSON.parse(JSON.stringify(pending.state)):state;
+ const pending=app.messages.find(message=>message.type==='filesystem-apply');assert.ok(pending);const confirmed=ok?confirmFixtureTransfer(state, pending):state;
  app.window.dispatchEvent(new app.window.MessageEvent('message',{data:{type:'filesystem-result',ok,state:confirmed,error:ok?undefined:'Zugriff verweigert'}}));
  if(ok) assert.match(app.document.querySelector('#status-message').textContent,/1 Datei kopiert/); else assert.match(app.document.querySelector('.operation-error-text').value,/Zugriff verweigert/);assert.equal(app.document.querySelector('#panes').inert,false);
  }
@@ -364,9 +366,9 @@ test('real append is explicitly offered and sends trusted source references rath
   const append = app.document.querySelector('[data-conflict-action="append"]'); assert.equal(append.disabled, false);
   app.click(append); await tick();
   const mutation = app.messages.find(message => message.type === 'filesystem-apply'); assert.ok(mutation);
-  const target = mutation.state.folders['/right'][0];
-  assert.deepEqual(JSON.parse(JSON.stringify(target.fsAppend)), { source: '/left/same.txt', target: '/right/same.txt' });
-  assert.equal(target.content, undefined);
+  const [change] = mutation.transfer.changes;
+  assert.deepEqual(JSON.parse(JSON.stringify(change)), { kind: 'append', source: '/left/same.txt', target: '/right/same.txt' });
+  assert.equal(Object.hasOwn(mutation, 'state'), false);
 });
 
 test('real transfer progress cancels by job identity and keeps unfinished sources selected', async t => {
@@ -407,7 +409,7 @@ test('pending native transfers retain confirmed rows, sizes and source selection
     assert.equal(app.document.querySelector('#panes').inert, false); assert.equal(app.document.querySelector('#functionbar').inert, true);
     app.document.body.classList.toggle('vscode-high-contrast'); await tick();
     assert.deepEqual(names(section(1 - side)), []); assert.equal(app.messages.filter(message => message.type === 'filesystem-apply').length, 1);
-    const actual = outcome === 'success' ? structuredClone(request.state) : structuredClone(original);
+    const actual = outcome === 'success' ? confirmFixtureTransfer(original, request) : structuredClone(original);
     if (outcome === 'cancel') {
       actual.folders[targetPath].push({ ...original.folders[sourcePath][0], fsSource: `${targetPath}/same.txt` });
       if (mode === 'move') actual.folders[sourcePath] = actual.folders[sourcePath].filter(row => row.id !== original.folders[sourcePath][0].id);
@@ -430,5 +432,5 @@ test('pending native overwrite retains the confirmed target size and filename', 
   const target = app.document.querySelector('[data-pane="1"] [data-file-row][data-id="c"]'); assert.ok(target);
   assert.equal(target.querySelector('[data-cell="size"]').textContent, '900 B');
   assert.equal(app.state().folders['/right'][0].content, 'old');
-  assert.equal(request.state.folders['/right'].find(row => row.name === 'same.txt').size, 3);
+  assert.equal(request.transfer.changes[0].replaced, '/right/same.txt');
 });

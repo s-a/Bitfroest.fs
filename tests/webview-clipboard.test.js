@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { createApp } = require('./support/webview.cjs');
+const { createApp, confirmFixtureTransfer } = require('./support/webview.cjs');
 const tick = () => new Promise(resolve => setImmediate(resolve));
 function fixture(real = false) {
   const pane = path => ({ tabs: [path], tab: 0, selected: [], cursor: null, filter: '', sort: 'name' });
@@ -104,7 +104,7 @@ test('real cut never acknowledges the system clipboard before host transfer conf
   respond(app, read, { selection }); await tick();
   const apply = app.messages.find(message => message.type === 'filesystem-apply'); assert.ok(apply);
   assert.equal(app.messages.some(message => message.type === 'clipboard-ack'), false);
-  const confirmed = structuredClone(apply.state); confirmed.snapshotId = 'clip-two'; confirmed.folders['C:/temp'][0].fsSource = 'C:/temp/a.txt';
+  const confirmed = confirmFixtureTransfer(app.state(), apply); confirmed.snapshotId = 'clip-two'; confirmed.folders['C:/temp'][0].fsSource = 'C:/temp/a.txt';
   app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-result', ok: true, state: confirmed } })); await tick();
   const ack = app.messages.find(message => message.type === 'clipboard-ack'); assert.ok(ack);
   assert.deepEqual(Array.from(ack.remainingPaths), []);
@@ -134,7 +134,7 @@ test('native multi-directory cut preserves uncompleted groups when a later confl
   assert.equal(app.document.querySelector('#modal').open, false);
   await tick();
   const applied = app.messages.find(message => message.type === 'filesystem-apply');
-  const confirmed = structuredClone(applied.state); confirmed.snapshotId = 'multi-two'; confirmed.folders['C:/temp'].find(file => file.name === 'b.txt').fsSource = 'C:/temp/b.txt';
+  const confirmed = confirmFixtureTransfer(app.state(), applied); confirmed.snapshotId = 'multi-two'; confirmed.folders['C:/temp'].find(file => file.name === 'b.txt').fsSource = 'C:/temp/b.txt';
   app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-result', ok: true, state: confirmed } })); await tick();
   assert.ok(app.document.querySelector('[data-conflict-action="overwrite"]'));
   assert.equal(app.document.querySelector('#transfer-filter'), null);
@@ -152,7 +152,7 @@ test('failed preparation of a later cut group still acknowledges only earlier co
   const app = createApp(t, saved); app.key('Tab'); app.key('v', { ctrlKey: true });
   const selection = { paths: ['C:/tmp/nested/b.txt', 'C:/tmp/docs'], mode: 'move', token: 'preparation', source: 'system' };
   respond(app, app.messages.find(message => message.type === 'clipboard-read'), { selection }); await tick();
-  const applied = app.messages.find(message => message.type === 'filesystem-apply'), confirmed = structuredClone(applied.state); confirmed.snapshotId = 'confirmed-first';
+  const applied = app.messages.find(message => message.type === 'filesystem-apply'), confirmed = confirmFixtureTransfer(app.state(), applied); confirmed.snapshotId = 'confirmed-first';
   app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-result', ok: true, state: confirmed } })); await tick();
   assert.equal(app.document.querySelector('#modal').open, false);
   assert.ok(app.messages.some(message => message.type === 'filesystem-prepare'));
@@ -363,7 +363,7 @@ test('Linux move completion remains successful when a foreign clipboard owner ca
   const read = app.messages.find(message => message.type === 'clipboard-read'); assert.ok(read);
   respond(app, read, { selection }); await tick();
   const apply = app.messages.find(message => message.type === 'filesystem-apply'); assert.ok(apply);
-  const confirmed = structuredClone(apply.state); confirmed.snapshotId = 'linux-move-confirmed';
+  const confirmed = confirmFixtureTransfer(app.state(), apply); confirmed.snapshotId = 'linux-move-confirmed';
   confirmed.folders['/temp'][0].fsSource = '/temp/a.txt';
   app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-result', ok: true, state: confirmed } })); await tick();
   const ack = app.messages.find(message => message.type === 'clipboard-ack'); assert.ok(ack);
@@ -409,7 +409,7 @@ test('confirmed clipboard files remain pasteable across focus and pane changes w
     assert.equal(app.document.querySelector('#modal').open, false);
     await tick();
     const apply = app.messages.find(message => message.type === 'filesystem-apply'); assert.ok(apply);
-    assert.ok(apply.state.folders[saved.panes[targetSide].tabs[0]].some(file => file.name === source.name));
+    assert.ok(apply.transfer.changes.some(change => change.target === `${saved.panes[targetSide].tabs[0]}/${source.name}`));
   }
 });
 

@@ -14,7 +14,6 @@ const bindingPath = process.env.NATIVE_BINDING_TEST_PATH || path.join(__dirname,
 const childMode = process.env.BITFROEST_NATIVE_TRANSFER_CHILD === '1';
 const available = process.platform === 'win32' && nativeFs.existsSync(bindingPath);
 const slash = value => value.replace(/\\/g, '/');
-const clone = value => JSON.parse(JSON.stringify(value));
 const row = (state, directory, name) => state.folders[directory].find(file => file.name === name);
 const expected = stat => Object.fromEntries(['dev', 'ino', 'size', 'mtimeNs', 'ctimeNs'].map(key => [key, String(stat[key])]));
 
@@ -233,10 +232,10 @@ test('worker termination during native copy does not unload active threadpool ca
 
 test('provider stages and publishes real files through one native API session', { skip: !available && 'The Windows file transfer binding is unavailable.' }, async t => {
   const { provider, left, right } = await fixture(t);
-  const before = await provider.load(), after = clone(before);
-  const files = ['first.txt', 'second.bin', 'empty.bin'].map(name => row(after, left, name));
-  after.folders[right].push(...files.map(file => ({ ...file, id: `copy-${file.id}` })));
-  await provider.apply(before, after, { transfer: { mode: 'copy', sourcePath: left, ids: files.map(file => file.id), sourceSide: 0 }, signal: new AbortController().signal });
+  const before = await provider.load();
+  const files = ['first.txt', 'second.bin', 'empty.bin'].map(name => row(before, left, name));
+  const changes = files.map(file => ({ kind: 'put', source: file.fsSource, target: `${right}/${file.name}` }));
+  await provider.apply(before, undefined, { transfer: { mode: 'copy', sourcePath: left, targetPath: right, ids: files.map(file => file.id), sourceSide: 0, changes }, signal: new AbortController().signal });
   for (const file of files) assert.deepEqual(await fs.readFile(`${right}/${file.name}`), await fs.readFile(file.fsSource));
   assert.deepEqual((await fs.readdir(right)).sort(), ['empty.bin', 'first.txt', 'second.bin']);
 });
@@ -253,10 +252,10 @@ test('provider rolls back a completed native copy when the next staged copy fail
       dispose: () => session.dispose()
     };
   });
-  const before = await provider.load(), after = clone(before);
-  const files = ['first.txt', 'second.bin'].map(name => row(after, left, name));
-  after.folders[right].push(...files.map(file => ({ ...file, id: `copy-${file.id}` })));
-  await assert.rejects(provider.apply(before, after, { transfer: { mode: 'copy', sourcePath: left, ids: files.map(file => file.id), sourceSide: 0 }, signal: new AbortController().signal }), /second-copy failure/);
+  const before = await provider.load();
+  const files = ['first.txt', 'second.bin'].map(name => row(before, left, name));
+  const changes = files.map(file => ({ kind: 'put', source: file.fsSource, target: `${right}/${file.name}` }));
+  await assert.rejects(provider.apply(before, undefined, { transfer: { mode: 'copy', sourcePath: left, targetPath: right, ids: files.map(file => file.id), sourceSide: 0, changes }, signal: new AbortController().signal }), /second-copy failure/);
   assert.equal(copies, 2);
   assert.deepEqual(await fs.readdir(right), []);
   for (const file of files) assert.ok((await fs.readFile(file.fsSource)).length > 0);

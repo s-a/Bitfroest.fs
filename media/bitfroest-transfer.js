@@ -132,6 +132,8 @@
     try { targetPlan = planTarget(options); } catch (error) { result.errors.push(error.message); return result; }
     const { directory: destinationDirectory, name: destinationName, mask } = targetPlan;
     fileNames.ensureDirectories(folders, targetPlan.directories, name => ({ id: createId(), name, type: 'folder', size: 0 }));
+    const change = operation => options.onChange?.(operation);
+    for (const target of targetPlan.directories) change({ kind: 'mkdir', target });
     result.directories += targetPlan.directories.length;
 
     function removeTree(value, archive) {
@@ -168,7 +170,10 @@
       if (!Array.isArray(items)) throw missingDestination(targetDirectory);
       let existing = items.find(item => sameName(item.name, name, targetDirectory));
       const samePath = targetDirectory === sourceDirectory && sameName(source.name, name, targetDirectory);
+      const sourceFile = join(sourceDirectory, source.name);
+      let replaced;
       if (samePath && existing === source && mode === 'move' && source.name !== name && !items.some(item => item !== source && sameName(item.name, name, targetDirectory))) {
+        change({ kind: 'case', source: sourceFile, target: join(targetDirectory, name) });
         relocateTree(join(sourceDirectory, source.name), join(targetDirectory, name), source.type === 'archive');
         source.name = name;
         if (source.type === 'folder') result.directories++; else result.completed++;
@@ -200,6 +205,7 @@
         } else if (action === 'rename-target' || action === 'autorename-target' || action === 'rename-older-target') {
           const renamed = action !== 'rename-target' ? uniqueName(items, name, targetDirectory) : decision.name;
           if (samePath || !validName(renamed) || items.some(item => sameName(item.name, renamed, targetDirectory))) { result.errors.push('Die Zieldatei kann unter diesem Namen nicht umbenannt werden.'); result.skipped++; return; }
+          change({ kind: 'rename-target', source: join(targetDirectory, existing.name), target: join(targetDirectory, renamed), incoming: sourceFile });
           relocateTree(join(targetDirectory, existing.name), join(targetDirectory, renamed), existing.type === 'archive');
           existing.name = renamed; existing = undefined;
         } else if (samePath) { result.errors.push('Quelle und Ziel sind identisch.'); result.skipped++; return; }
@@ -207,6 +213,7 @@
           const real = source.fsSource && existing.fsSource;
           if (['folder', 'archive'].includes(source.type) || ['folder', 'archive'].includes(existing.type) || !real && (typeof source.content !== 'string' || typeof existing.content !== 'string')) { result.errors.push('Anhängen ist nur für Textdateien verfügbar.'); result.skipped++; return; }
           if (real) {
+            change({ kind: 'append', source: sourceFile, target: join(targetDirectory, existing.name) });
             const previous = existing.fsAppend;
             existing.fsAppend = previous ? { source: previous.source, target: previous.target, sources: [...(previous.sources || [previous.source]), source.fsSource] } : { source: source.fsSource, target: existing.fsSource };
             existing.size = Number(existing.size) + Number(source.size);
@@ -218,15 +225,19 @@
           if (mode === 'move') removeEntry(sourceDirectory, source);
           result.completed++; return true;
         } else if (!['overwrite', 'overwrite-all', 'overwrite-older', 'overwrite-older-equal', 'larger', 'smaller'].includes(action)) { result.errors.push('Unbekannte Konfliktentscheidung.'); result.skipped++; return; }
-        if (existing) { removeTree(join(targetDirectory, existing.name), existing.type === 'archive'); items.splice(items.indexOf(existing), 1); existing = undefined; }
+        if (existing) { replaced = join(targetDirectory, existing.name); removeTree(replaced, existing.type === 'archive'); items.splice(items.indexOf(existing), 1); existing = undefined; }
       }
       if (source.type === 'folder') {
         const sourceFolder = join(sourceDirectory, source.name), targetFolder = join(targetDirectory, existing?.name ?? name);
-        if (!existing) { items.push({ ...clone(source), id: createId(), name }); folders[targetFolder] = []; result.directories++; }
+        if (!existing) { change({ kind: 'put', source: sourceFolder, target: targetFolder, replaced }); items.push({ ...clone(source), id: createId(), name }); folders[targetFolder] = []; result.directories++; }
         for (const child of [...(folders[sourceFolder] || [])]) { await put(sourceFolder, child, targetFolder, child.name); if (result.cancelled) break; }
-        if (mode === 'move' && !(folders[sourceFolder] || []).length && !result.cancelled) removeEntry(sourceDirectory, source);
+        if (mode === 'move' && !(folders[sourceFolder] || []).length && !result.cancelled) {
+          change({ kind: 'remove-source', source: sourceFolder, target: targetFolder });
+          removeEntry(sourceDirectory, source);
+        }
         return !result.cancelled && (mode === 'copy' || !folders[sourceFolder]);
       } else {
+        change({ kind: 'put', source: sourceFile, target: join(targetDirectory, name), replaced });
         items.push({ ...clone(source), id: createId(), name });
         if (source.type === 'archive') duplicateTree(`${join(sourceDirectory, source.name)}!`, `${join(targetDirectory, name)}!`, false);
         if (mode === 'move') removeEntry(sourceDirectory, source);

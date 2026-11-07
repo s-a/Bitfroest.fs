@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const {createApp} = require('./support/webview.cjs');
+const {createApp, confirmFixtureTransfer} = require('./support/webview.cjs');
 function fixture() {
  const pane=path=>({tabs:[path],tab:0,selected:[],cursor:null,sort:'name',descending:false,filter:''});
  return {version:1,realFilesystem:true,snapshotId:'old',active:0,panes:[pane('C:/tmp'),pane('C:/temp')],unloadedFolders:['C:/tmp/docs','C:/temp/incoming'],folders:{'C:/tmp':[{id:'docs',name:'docs',type:'folder',fsSource:'C:/tmp/docs'},{id:'a',name:'a.txt',type:'text',content:'a',size:1,fsSource:'C:/tmp/a.txt'}],'C:/temp':[{id:'incoming',name:'incoming',type:'folder'}],'C:/tmp/docs':[],'C:/temp/incoming':[]}};
@@ -125,8 +125,8 @@ test('existing target folder children are prepared and collisions wait for expli
 test('a target edited in the transfer dialog is prepared without losing the chosen filter',async t=>{
  const app=createApp(t,fixture());select(app,'a.txt');app.action('copy');app.document.querySelector('#value').value='C:/temp/incoming';app.document.querySelector('#transfer-filter').value='*.txt';submit(app);await tick();
  const request=app.messages.find(m=>m.type==='filesystem-prepare');assert.ok(request);assert.deepEqual([...request.paths],['C:/temp/incoming']);assert.equal(request.recursive,false);assert.equal(app.messages.some(m=>m.type==='filesystem-apply'),false);
- result(app);await tick();const apply=app.messages.find(m=>m.type==='filesystem-apply');assert.ok(apply);assert.ok(apply.state.folders['C:/temp/incoming'].some(file=>file.name==='a.txt'));assert.equal(app.state().folders['C:/temp/incoming'].some(file=>file.name==='a.txt'),false);
- app.window.dispatchEvent(new app.window.MessageEvent('message',{data:{type:'filesystem-result',operationId:apply.operationId,ok:true,state:apply.state}}));assert.ok(app.state().folders['C:/temp/incoming'].some(file=>file.name==='a.txt'));
+ result(app);await tick();const apply=app.messages.find(m=>m.type==='filesystem-apply');assert.ok(apply);assert.ok(apply.transfer.changes.some(change=>change.target==='C:/temp/incoming/a.txt'));assert.equal(app.state().folders['C:/temp/incoming'].some(file=>file.name==='a.txt'),false);
+ app.window.dispatchEvent(new app.window.MessageEvent('message',{data:{type:'filesystem-result',operationId:apply.operationId,ok:true,state:confirmFixtureTransfer(app.state(), apply)}}));assert.ok(app.state().folders['C:/temp/incoming'].some(file=>file.name==='a.txt'));
 });
 test('opening a folder in the opposite new tab displays its destination immediately and leaves the source path intact',t=>{
  const app=createApp(t,fixture());select(app,'docs');app.action('open-dir-other-tab');assert.equal(app.state().panes[1].tabs.length,2);result(app);

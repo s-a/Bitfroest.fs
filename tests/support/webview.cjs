@@ -92,4 +92,19 @@ function createApp(t, saved, options = {}) {
 }
 
 
-module.exports = { createApp, resolveThemeCss };
+function confirmFixtureTransfer(before, request) {
+  const state = structuredClone(before);
+  for (const change of request.transfer.changes) {
+    assert.equal(change.kind, 'put', 'this fixture helper only acknowledges file writes');
+    const sourceDirectory = change.source.slice(0, change.source.lastIndexOf('/'));
+    const targetDirectory = change.target.slice(0, change.target.lastIndexOf('/'));
+    const sourceName = change.source.slice(sourceDirectory.length + 1), name = change.target.slice(targetDirectory.length + 1);
+    const row = state.folders[sourceDirectory].find(file => file.name === sourceName);
+    assert.ok(row, `fixture source exists: ${change.source}`);
+    state.folders[targetDirectory] = [...state.folders[targetDirectory].filter(file => file.name !== name), { ...row, id: `confirmed:${change.target}`, name, fsSource: change.target }];
+    if (request.transfer.mode === 'move') state.folders[sourceDirectory] = state.folders[sourceDirectory].filter(file => file !== row);
+  }
+  return state;
+}
+
+module.exports = { createApp, resolveThemeCss, confirmFixtureTransfer };

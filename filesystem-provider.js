@@ -165,6 +165,25 @@ function createProvider(options = {}) {
     return stat;
   }
 
+  async function describeEntry(absolute, name, child, attributeFlags, versionInfo) {
+    if (!child.isFile() && !child.isDirectory() && !child.isSymbolicLink()) throw new Error('Nicht reguläre Dateisystemeinträge sind nicht erlaubt.');
+    const hidden = attributeFlags?.hidden ?? (process.platform !== 'win32' && name.startsWith('.'));
+    const row = { id: `fs:${identity(absolute)}`, name, type: child.isSymbolicLink() ? 'link' : child.isDirectory() ? 'folder' : fileType(name), size: child.isDirectory() ? 0 : Number(child.size), date: displayDate(child.mtimeMs), mtimeMs: Number(child.mtimeMs), attributes: `${child.isSymbolicLink() ? 'l' : child.isDirectory() ? 'd' : '-'}${child.isFile() ? 'a' : '-'}${(child.mode & 0o200n) === 0n ? 'r' : '-'}${hidden ? 'h' : '-'}`, fsSource: absolute };
+    for (const [field, timestamp] of [['writedate', child.mtimeMs], ['creationdate', child.birthtimeMs], ['accessdate', child.atimeMs]]) {
+      if (timestamp !== undefined && Number.isFinite(Number(timestamp))) row[field] = new Date(Number(timestamp)).toISOString();
+    }
+    row.attributeFlags = attributeFlags ? Object.fromEntries(Object.entries(attributeFlags).filter(([, value]) => typeof value === 'boolean')) : { directory: child.isDirectory(), readonly: (child.mode & 0o222n) === 0n, hidden };
+    if (process.platform !== 'win32') row.posixMode = Number(child.mode);
+    if (typeof attributeFlags?.dosName === 'string' && attributeFlags.dosName) row.dosName = attributeFlags.dosName;
+    if (versionInfo?.version) row.fileVersion = versionInfo.version;
+    if (versionInfo?.versionString !== undefined) row.fileVersionString = versionInfo.versionString;
+    const linkText = child.isSymbolicLink() && process.platform === 'linux' ? (await fs.readlink(absolute, { encoding: 'buffer' })).toString('base64') : undefined;
+    if (linkText !== undefined && statSignature(await fs.lstat(absolute, { bigint: true })) !== statSignature(child)) throw new Error('Verknüpfung während der Bestandsaufnahme geändert.');
+    const signature = statSignature(child);
+    if (child.isFile()) row.fileRevision = signature;
+    return { path: absolute, type: child.isDirectory() ? 'folder' : 'file', signature, contentSignature: contentSignature(child), ...(linkText !== undefined ? { linkText } : {}), row };
+  }
+
   async function readSnapshot(settings = {}) {
     const sourceSnapshot = snapshot;
     const folders = settings.baseline ? clone(settings.baseline.folders) : {}, entries = new Map(settings.baseline?.entries);
@@ -270,22 +289,9 @@ function createProvider(options = {}) {
           if (listed.isDirectory()) folders[absolute] ||= [];
           continue;
         }
-        if (!child.isFile() && !child.isDirectory() && !child.isSymbolicLink()) throw new Error('Nicht reguläre Dateisystemeinträge sind nicht erlaubt.');
-        const hidden = attributeFlags?.hidden ?? (process.platform !== 'win32' && name.startsWith('.'));
-        const row = { id: `fs:${identity(absolute)}`, name, type: child.isSymbolicLink() ? 'link' : child.isDirectory() ? 'folder' : fileType(name), size: child.isDirectory() ? 0 : Number(child.size), date: displayDate(child.mtimeMs), mtimeMs: Number(child.mtimeMs), attributes: `${child.isSymbolicLink() ? 'l' : child.isDirectory() ? 'd' : '-'}${child.isFile() ? 'a' : '-'}${(child.mode & 0o200n) === 0n ? 'r' : '-'}${hidden ? 'h' : '-'}`, fsSource: absolute };
-        for (const [field, timestamp] of [['writedate', child.mtimeMs], ['creationdate', child.birthtimeMs], ['accessdate', child.atimeMs]]) {
-          if (timestamp !== undefined && Number.isFinite(Number(timestamp))) row[field] = new Date(Number(timestamp)).toISOString();
-        }
-        row.attributeFlags = attributeFlags ? Object.fromEntries(Object.entries(attributeFlags).filter(([, value]) => typeof value === 'boolean')) : { directory: child.isDirectory(), readonly: (child.mode & 0o222n) === 0n, hidden };
-        if (process.platform !== 'win32') row.posixMode = Number(child.mode);
-        if (typeof attributeFlags?.dosName === 'string' && attributeFlags.dosName) row.dosName = attributeFlags.dosName;
-        if (versionInfo?.version) row.fileVersion = versionInfo.version;
-        if (versionInfo?.versionString !== undefined) row.fileVersionString = versionInfo.versionString;
-        const linkText = child.isSymbolicLink() && process.platform === 'linux' ? (await fs.readlink(absolute, { encoding: 'buffer' })).toString('base64') : undefined;
-        if (linkText !== undefined && statSignature(await fs.lstat(absolute, { bigint: true })) !== statSignature(child)) throw new Error('Verknüpfung während der Bestandsaufnahme geändert.');
-        const signature = statSignature(child);
-        if (child.isFile()) row.fileRevision = signature;
-        entries.set(identity(absolute), { path: absolute, type: child.isDirectory() ? 'folder' : 'file', signature, contentSignature: contentSignature(child), ...(linkText !== undefined ? { linkText } : {}), row });
+        const entry = await describeEntry(absolute, name, child, attributeFlags, versionInfo);
+        entries.set(identity(absolute), entry);
+        const { row } = entry;
         folders[directory].push(row);
         settings.onProgress?.(Progress.event({ phase: settings.phase || 'preparing', filesScanned: count, path: absolute, overall: Progress.unknown('items', count, 'enumerating'), current: Progress.known('items', folders[directory].length, names.length) }));
         throwIfAborted(settings.signal);
@@ -452,7 +458,7 @@ function createProvider(options = {}) {
     if (!Object.hasOwn(result.folders, left) || !Object.hasOwn(result.folders, right)) throw new Error('Der gewählte Ordner wurde nicht vollständig eingelesen.');
     for (const entry of result.entries.values()) if (entry.root) visitedRoots.add(entry.path);
     const state = { version: 1, active: 0, realFilesystem: true, snapshotId: crypto.randomUUID(), panes: [pane(left), pane(right)], folders: result.folders, unloadedFolders: result.unloadedFolders, networkDirectories };
-    snapshot = { ...result, deferredDirectories, visibleOnly, state: clone(state), digest: filesystemDigest(state) };
+    snapshot = { ...result, deferredDirectories, visibleOnly, state: clone(state), digest: settings.omitDigest ? undefined : filesystemDigest(state) };
     publishedEntries.clear();
     return state;
   }
@@ -537,6 +543,130 @@ function createProvider(options = {}) {
     return state;
   }
 
+  const knownDigest = value => value.digest ??= filesystemDigest(value.state);
+
+  async function publishChangedPaths(baseline, view, { removed = [], added = [], renamed = [], includeStreamed = false }) {
+    const folders = { ...baseline.folders }, entries = new Map(baseline.entries);
+    const loaded = new Set(baseline.loadedDirectories);
+    const directoryKeys = new Map();
+    for (const directory of Object.keys(folders)) {
+      const key = identity(directory);
+      if (!directoryKeys.has(key)) directoryKeys.set(key, []);
+      directoryKeys.get(key).push(directory);
+    }
+    const changedDirectories = new Set(), rowsToUpdate = new Map();
+    const parentKeys = target => directoryKeys.get(identity(slash(path.dirname(target)))) || [];
+    const updateRows = (target, row) => {
+      for (const directory of parentKeys(target)) {
+        changedDirectories.add(directory);
+        if (!rowsToUpdate.has(directory)) rowsToUpdate.set(directory, new Map());
+        rowsToUpdate.get(directory).set(identity(target), row);
+      }
+    };
+    function discard(target) {
+      const entry = entries.get(identity(target));
+      updateRows(target);
+      entries.delete(identity(target));
+      if (entry?.type !== 'folder') return;
+      for (const [key, aliases] of directoryKeys) if (below(key, target)) {
+        for (const directory of aliases) {
+          changedDirectories.add(directory);
+          delete folders[directory]; loaded.delete(directory);
+        }
+        directoryKeys.delete(key);
+      }
+      for (const [key, child] of entries) if (below(child.path, target)) entries.delete(key);
+    }
+    if (includeStreamed) {
+      const parents = new Set(removed.map(item => identity(slash(path.dirname(item.path)))));
+      for (const { snapshot: source, entry } of publishedEntries.values()) {
+        if (source !== baseline || !parents.has(identity(slash(path.dirname(entry.path)))) || parentKeys(entry.path).some(directory => loaded.has(directory))) continue;
+        entries.set(identity(entry.path), entry);
+        updateRows(entry.path, entry.row);
+        if (entry.type === 'folder' && !directoryKeys.has(identity(entry.path))) {
+          directoryKeys.set(identity(entry.path), [entry.path]);
+          folders[entry.path] = [];
+        }
+      }
+    }
+    for (const item of removed) discard(item.path);
+    for (const { original, target } of renamed) {
+      if (original.type === 'folder') {
+        const relocate = value => target + value.slice(original.path.length);
+        for (const [key, aliases] of directoryKeys) if (below(key, original.path)) {
+          const rows = folders[aliases.find(directory => loaded.has(directory)) || aliases[0]];
+          const next = relocate(aliases[0]), wasLoaded = aliases.some(directory => loaded.has(directory));
+          for (const directory of aliases) { delete folders[directory]; loaded.delete(directory); }
+          folders[next] = rows.map(row => ({ ...row, fsSource: relocate(row.fsSource) }));
+          directoryKeys.set(key, [next]);
+          if (wasLoaded) loaded.add(next);
+        }
+        for (const [key, entry] of entries) if (entry.path !== original.path && below(entry.path, original.path)) {
+          const next = relocate(entry.path);
+          entries.set(key, { ...entry, path: next, ...(entry.row ? { row: { ...entry.row, fsSource: next } } : {}) });
+        }
+      }
+      added.push({ path: target, type: original.type });
+    }
+    for (const item of [...added].sort((a, b) => a.path.length - b.path.length)) {
+      const absolute = item.path, name = path.basename(absolute);
+      let stat;
+      try { stat = await fs.lstat(absolute, { bigint: true }); }
+      catch (error) {
+        if (!['ENOENT', 'ENOTDIR'].includes(error.code)) throw error;
+        discard(absolute);
+        continue;
+      }
+      const attributes = options.readAttributes ? await options.readAttributes(absolute) : undefined;
+      const version = stat.isFile() && /\.(exe|dll)$/i.test(name) ? await getFileVersionInfo(absolute, { fs }) : undefined;
+      const entry = await describeEntry(absolute, name, stat, attributes, version);
+      entries.set(identity(absolute), entry);
+      updateRows(absolute, entry.row);
+      if (entry.type === 'folder' && !directoryKeys.has(identity(absolute))) {
+        directoryKeys.set(identity(absolute), [absolute]);
+        folders[absolute] = [];
+        loaded.add(absolute);
+      }
+    }
+    for (const directory of changedDirectories) {
+      const entry = entries.get(identity(directory));
+      if (!entry || !Object.hasOwn(folders, directory)) continue;
+      const updates = rowsToUpdate.get(directory);
+      if (updates) {
+        const before = folders[directory];
+        const rows = [...before.filter(row => !updates.has(identity(row.fsSource))), ...[...updates.values()].filter(Boolean)];
+        const isDescription = name => /^(descript\.ion|files\.bbs)$/i.test(name);
+        const descriptions = rows.map(row => row.name).filter(isDescription);
+        const descriptionsChanged = [...updates.keys()].some(target => isDescription(path.basename(target)));
+        const affectedRows = descriptionsChanged ? rows : rows.filter(row => updates.has(identity(row.fsSource)));
+        const comments = descriptions.length && affectedRows.length ? await readDirectoryComments(directory, [...new Set([...descriptions, ...affectedRows.map(row => row.name)])], { fs, encoding: typeof options.commentEncoding === 'function' ? options.commentEncoding(directory) : options.commentEncoding }) : new Map();
+        const affected = new Set(affectedRows);
+        folders[directory] = rows.map(row => {
+          const comment = comments.get(identity(row.name));
+          if (!affected.has(row) || row.comment === comment) return row;
+          const changed = { ...row };
+          if (comment === undefined) delete changed.comment; else changed.comment = comment;
+          const key = identity(row.fsSource), current = entries.get(key);
+          if (current) entries.set(key, { ...current, row: changed });
+          return changed;
+        });
+      }
+      let stat;
+      try { stat = await fs.lstat(directory, { bigint: true }); }
+      catch (error) {
+        if (!['ENOENT', 'ENOTDIR'].includes(error.code)) throw error;
+        continue;
+      }
+      if (stat.isDirectory() && statSignature(stat).split(':').slice(0, 3).join(':') === entry.signature.split(':').slice(0, 3).join(':')) entries.set(identity(directory), { ...entry, signature: statSignature(stat), contentSignature: contentSignature(stat) });
+    }
+    const unloadedFolders = Object.keys(folders).filter(directory => !loaded.has(directory));
+    const state = inheritedPanes({ ...baseline.state, snapshotId: crypto.randomUUID(), folders, unloadedFolders, updatedDirectories: [...changedDirectories] }, view);
+    const { updatedDirectories, operationOutcome, ...persisted } = state;
+    snapshot = { ...baseline, folders, entries, loadedDirectories: [...loaded], unloadedFolders, deferredDirectories: baseline.deferredDirectories.filter(directory => Object.hasOwn(folders, directory)), state: clone(persisted), digest: undefined };
+    publishedEntries.clear();
+    return state;
+  }
+
   async function apply(before, after, operation = {}) {
     if (busy) throw new Error('Eine Dateisystemoperation läuft bereits.');
     busy = true;
@@ -546,32 +676,120 @@ function createProvider(options = {}) {
     finally { try { await session?.dispose(); } finally { busy = false; } }
   }
 
+  function planTransferWrites(baseline, transfer) {
+    const invalid = () => new Error('Ungültiger Übertragungsauftrag.');
+    const operationPath = value => {
+      const absolute = allowed(value);
+      if (process.platform === 'win32' && absolute.split('/').slice(/^[a-z]:\//i.test(absolute) ? 1 : 4).some(name => /[<>:"|?*\x00-\x1f]|[. ]$|^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(name))) throw invalid();
+      return absolute;
+    };
+    const destination = operationPath(transfer.targetPath);
+    if (transfer.requiredDirectory && identity(operationPath(transfer.requiredDirectory)) !== identity(destination)) throw invalid();
+    const selected = transfer.selected;
+    const authorized = value => selected.some(entry => below(value, entry.path));
+    const desired = new Map(), removed = new Map(), caseChanges = [], directoriesToValidate = new Set();
+    const original = value => baseline.entries.get(identity(value));
+    const current = value => desired.get(identity(value)) || (!removed.has(identity(value)) && original(value));
+    const save = (target, row, type) => desired.set(identity(target), { path: target, row, type });
+    const children = directory => (baseline.folders[directory] || []).map(row => original(row.fsSource)).filter(Boolean);
+    function subtree(entry) {
+      if (entry.type !== 'folder') return [entry];
+      if (!baseline.loadedDirectories.some(directory => identity(directory) === identity(entry.path))) throw Object.assign(new Error('Der Ordner muss vor der Dateioperation vollständig eingelesen und vorbereitet werden.'), { code: 'DirectoryNotPrepared', path: entry.path, preparationReason: 'transfer-subtree' });
+      return [entry, ...children(entry.path).flatMap(subtree)];
+    }
+    function remove(value) {
+      const key = identity(value), entry = original(value);
+      if (entry?.root && !entry.row) throw invalid();
+      if (entry) removed.set(key, entry);
+      desired.delete(key);
+    }
+    const changes = transfer.changes;
+    if (!Array.isArray(changes) || !changes.length || changes.length > 3 * limits.entries) throw invalid();
+    const renamedTargets = new Map();
+    for (const change of changes) {
+      const target = operationPath(change.target);
+      const isDestination = below(target, destination) && identity(target) !== identity(destination);
+      const folderName = slash(path.dirname(target));
+      const parent = current(folderName);
+      if (parent?.type !== 'folder') throw invalid();
+      if (parent === original(folderName)) directoriesToValidate.add(parent);
+      if (change.kind === 'mkdir') {
+        if (!below(destination, target) || current(target)) throw invalid();
+        save(target, { name: path.basename(target), type: 'folder' }, 'folder');
+        continue;
+      }
+      if (!isDestination) throw invalid();
+      const source = operationPath(change.source), sourceEntry = current(source);
+      if (!sourceEntry?.row || selected.some(entry => entry.type === 'folder' && below(target, entry.path)) && change.kind !== 'case') throw invalid();
+      if (change.kind === 'rename-target') {
+        const incoming = operationPath(change.incoming);
+        if (!authorized(incoming) || identity(slash(path.dirname(source))) !== identity(folderName) || !below(source, destination) || current(target) || sourceEntry !== original(source)) throw invalid();
+        const tree = subtree(sourceEntry);
+        for (const entry of tree) {
+          const next = target + entry.path.slice(sourceEntry.path.length);
+          remove(entry.path);
+          save(next, { ...entry.row, name: path.basename(next) }, entry.type);
+        }
+        renamedTargets.set(identity(source), identity(incoming));
+        continue;
+      }
+      if (!authorized(source) || sourceEntry !== original(source)) throw invalid();
+      if (change.kind === 'case') {
+        if (transfer.mode !== 'move' || identity(source) !== identity(target) || source === target) throw invalid();
+        caseChanges.push({ original: sourceEntry, target });
+      } else if (change.kind === 'remove-source') {
+        if (transfer.mode !== 'move' || sourceEntry.type !== 'folder' || current(target)?.type !== 'folder' || !baseline.loadedDirectories.includes(sourceEntry.path) || children(sourceEntry.path).some(entry => current(entry.path))) throw invalid();
+        remove(source);
+      } else if (change.kind === 'put' || change.kind === 'append') {
+        if (identity(source) === identity(target)) throw invalid();
+        const existing = current(target);
+        if (change.kind === 'append') {
+          if (existing?.type !== 'file' || sourceEntry.type !== 'file' || !original(target)?.row || existing.row.fsSource !== original(target).row.fsSource) throw invalid();
+          const sources = [...(existing.row.fsAppend?.sources || []), sourceEntry.path];
+          save(target, { ...existing.row, size: Number(existing.row.size) + Number(sourceEntry.row.size), fsAppend: { source: sources[0], sources, target: original(target).path } }, 'file');
+        } else {
+          if (existing) {
+            if (!change.replaced || identity(allowed(change.replaced)) !== identity(target)) throw invalid();
+            if (existing === original(target)) for (const entry of subtree(existing)) remove(entry.path);
+          } else if (change.replaced) throw invalid();
+          if (renamedTargets.has(identity(target))) {
+            if (renamedTargets.get(identity(target)) !== identity(source)) throw invalid();
+            renamedTargets.delete(identity(target));
+          }
+          save(target, { ...sourceEntry.row, name: path.basename(target) }, sourceEntry.type);
+          if (sourceEntry.type === 'folder') directoriesToValidate.add(sourceEntry);
+        }
+        if (transfer.mode === 'move' && sourceEntry.type === 'file') remove(source);
+      } else throw invalid();
+    }
+    if (renamedTargets.size) throw invalid();
+    return { desired, removed: [...removed.values()], caseChanges, directoriesToValidate: [...directoriesToValidate] };
+  }
+
   async function applyChanges(before, after, operation) {
     const baseline = snapshot;
-    if (!baseline || before?.snapshotId !== baseline.state.snapshotId || filesystemDigest(before) !== baseline.digest || after?.snapshotId !== before.snapshotId) throw new Error('Der Dateisystem-Snapshot ist veraltet oder wurde verändert.');
-    const desired = flatten(after);
+    const scoped = operation.transfer !== undefined;
+    if (!baseline || before?.snapshotId !== baseline.state.snapshotId || !scoped && (filesystemDigest(before) !== knownDigest(baseline) || after?.snapshotId !== before.snapshotId)) throw new Error('Der Dateisystem-Snapshot ist veraltet oder wurde verändert.');
+    if (scoped) after = before;
     let transfer;
     if (operation.transfer) {
       const request = operation.transfer;
       if (!['copy', 'move'].includes(request.mode) || !Array.isArray(request.ids) || !request.ids.length || ![0, 1].includes(request.sourceSide)) throw new Error('Ungültiger Übertragungsauftrag.');
       const sourcePath = allowed(request.sourcePath);
-      const selected = (baseline.folders[sourcePath] || []).filter(file => request.ids.includes(file.id));
+      const ids = new Set(request.ids);
+      const selected = (baseline.folders[sourcePath] || []).filter(file => ids.has(file.id));
       if (selected.length !== request.ids.length) throw new Error('Die Übertragungsauswahl ist nicht mehr gültig.');
-      transfer = { ...request, sourcePath, selected: selected.map(row => baseline.entries.get(identity(`${sourcePath}/${row.name}`))) };
+      transfer = { ...request, sourcePath, selected: selected.map(row => baseline.entries.get(identity(row.fsSource))) };
+      if (transfer.selected.some(entry => !entry?.row)) throw new Error('Die Übertragungsauswahl ist nicht mehr gültig.');
     }
-    const abortedState = async (completed = [], refresh = true) => {
-      const directories = baseline.visibleOnly ? activeDirectories(before) : [...new Set([transfer.sourcePath, ...before.panes.flatMap(pane => pane.tabs)])];
-      const fresh = inheritedPanes(refresh ? await load({ directories: directories.filter(directory => contains(directory) && nativeFs.existsSync(directory)), ...(baseline.visibleOnly ? { visibleOnly: true, deferredDirectories: deferredDirectories(before) } : {}) }) : clone(baseline.state), before);
-      const completedSources = completed.filter(entry => transfer.mode === 'copy' || !nativeFs.existsSync(entry.path));
-      fresh.operationOutcome = { cancelled: true, completedIds: completedSources.map(entry => entry.row.id), completedSourcePaths: completedSources.map(entry => entry.path) };
-      fresh.updatedDirectories = activeDirectories(before).filter(directory => completedSources.some(source => transfer.mode === 'move' && below(source.path, directory) || [...desired.values()].some(item => item.row.fsSource && below(item.row.fsSource, source.path) && identity(item.path) !== identity(item.row.fsSource) && below(item.path, directory))));
-      snapshot.state = clone(fresh); return fresh;
-    };
+    const plan = scoped ? planTransferWrites(baseline, transfer) : null;
+    const desired = plan?.desired || flatten(after);
+    const abortedState = () => ({ ...baseline.state, updatedDirectories: [], operationOutcome: { cancelled: true, completedIds: [], completedSourcePaths: [] } });
     if (operation.signal?.aborted) {
-      if (transfer) return abortedState([], false);
+      if (transfer) return abortedState();
       throw abortError();
     }
-    for (const directory of baseline.unloadedFolders) {
+    for (const directory of scoped ? [] : baseline.unloadedFolders) {
       const key = identity(directory);
       const untouched = desired.get(key);
       const viewRoot = roots.includes(directory) || baseline.deferredDirectories?.includes(directory) || baseline.entries.get(key)?.root;
@@ -583,14 +801,14 @@ function createProvider(options = {}) {
       else if ([...desired.values()].some(item => item.type === 'folder' && isSource(item.row) && identity(item.path) !== key)) preparationReason = 'reused-as-source';
       if (preparationReason) throw Object.assign(new Error('Der Ordner muss vor der Dateioperation vollständig eingelesen und vorbereitet werden.'), { code: 'DirectoryNotPrepared', path: directory, preparationReason });
     }
-    if (filesystemDigest(after) === baseline.digest) {
+    if (!scoped && filesystemDigest(after) === knownDigest(baseline)) {
       const state = { ...clone(after), snapshotId: baseline.state.snapshotId };
       baseline.state = clone(state); return state;
     }
-    const caseChanges = process.platform === 'win32' ? [...desired].filter(([key, item]) => {
+    const caseChanges = plan?.caseChanges || (process.platform === 'win32' ? [...desired].filter(([key, item]) => {
       const original = baseline.entries.get(key);
       return original && original.path !== item.path && path.basename(original.path) !== path.basename(item.path);
-    }).map(([key, item]) => ({ original: baseline.entries.get(key), target: item.path })) : [];
+    }).map(([key, item]) => ({ original: baseline.entries.get(key), target: item.path })) : []);
     const staged = new Map();
     for (const [key, item] of desired) {
       const provenance = item.row.fsSource && allowed(item.row.fsSource);
@@ -627,16 +845,17 @@ function createProvider(options = {}) {
       const old = baseline.entries.get(key);
       if (data || !old || old.type !== 'file' || source !== old) staged.set(key, { ...item, data, source, hash: data ? hash(data) : source.hash });
     }
-    const removed = [...baseline.entries.values()].filter(item => !item.root && (!desired.has(identity(item.path)) || desired.get(identity(item.path)).type !== item.type || staged.has(identity(item.path))));
+    const removed = plan ? [...new Set([...plan.removed, ...[...staged.keys()].map(key => baseline.entries.get(key)).filter(Boolean)])] : [...baseline.entries.values()].filter(item => !item.root && (!desired.has(identity(item.path)) || desired.get(identity(item.path)).type !== item.type || staged.has(identity(item.path))));
     const quarantine = removed.filter(item => !removed.some(other => other !== item && other.type === 'folder' && below(item.path, other.path)));
     try {
       const sources = [...staged.values()].flatMap(item => [item.source, ...(item.appendSources || [])]).filter(Boolean);
+      if (plan) await validateEntries(baseline, plan.directoriesToValidate, operation.signal, false);
       if (transfer?.requiredDirectory !== undefined) {
         const target = baseline.entries.get(identity(allowed(transfer.requiredDirectory)));
         if (target?.type !== 'folder') throw new Error('Ein vorhandener Zielordner ist erforderlich.');
         await validateEntries(baseline, [target], operation.signal, false);
       }
-      await validateEntries(baseline, [...quarantine, ...sources, ...caseChanges.map(change => change.original), ...(transfer?.selected || [])], operation.signal);
+      await validateEntries(baseline, [...quarantine, ...sources, ...caseChanges.map(change => change.original)], operation.signal);
       for (const item of desired.values()) {
         if (!staged.has(identity(item.path)) && !(item.type === 'folder' && !baseline.entries.has(identity(item.path)))) continue;
         await assertComponents(item.path, true);
@@ -645,7 +864,7 @@ function createProvider(options = {}) {
         catch (error) { if (error.code === 'ENOENT') continue; throw error; }
         throw new Error('Der Zielpfad ist bereits vorhanden.');
       }
-    } catch (error) { if (transfer && error.name === 'AbortError') return abortedState([], false); throw error; }
+    } catch (error) { if (transfer && error.name === 'AbortError') return abortedState(); throw error; }
     const sourcePaths = [...desired.values()].flatMap(item => [item.row.fsSource, ...(item.row.fsAppend ? item.row.fsAppend.sources || [item.row.fsAppend.source] : [])]).filter(Boolean);
     const deferredSources = new Set(quarantine.filter(item => !desired.has(identity(item.path)) && sourcePaths.some(source => below(source, item.path))));
     const newDirectories = [...desired.values()].filter(item => item.type === 'folder' && baseline.entries.get(identity(item.path))?.type !== 'folder').sort((a, b) => a.path.split('/').length - b.path.split('/').length);
@@ -934,7 +1153,7 @@ function createProvider(options = {}) {
             ? newDirectories.filter(directory => directory.row.fsSource && below(directory.row.fsSource, entry.path)) : [];
           return directories.every(directory => completedDirectoryMetadata.has(directory.path));
         });
-        const retainedPaths = [];
+        const retainedPaths = [], removedDirectories = [];
         try {
           await verifyPublications();
           for (const file of createdFiles.filter(file => !file.completed).reverse()) {
@@ -969,7 +1188,7 @@ function createProvider(options = {}) {
           for (const item of moved.filter(item => !item.restored)) await removeBackup(item.backup, item.path);
           for (const directory of backups.values()) await fs.rmdir(directory);
           if (transfer.mode === 'move') {
-            const directories = [...baseline.entries.values()].filter(entry => !entry.root && entry.type === 'folder' && !desired.has(identity(entry.path))).sort((a, b) => b.path.length - a.path.length);
+            const directories = removed.filter(entry => !entry.root && entry.type === 'folder' && !desired.has(identity(entry.path))).sort((a, b) => b.path.length - a.path.length);
             for (const entry of directories) {
               const destination = [...desired.values()].find(item => item.type === 'folder' && item.row.fsSource && identity(item.row.fsSource) === identity(entry.path) && identity(item.path) !== identity(entry.path));
               if (!destination || !nativeFs.existsSync(destination.path) || !nativeFs.existsSync(entry.path) || (await fs.readdir(entry.path)).length) continue;
@@ -978,9 +1197,14 @@ function createProvider(options = {}) {
               const stat = await fs.lstat(entry.path, { bigint: true });
               if (`${stat.dev}:${stat.ino}` !== entry.signature.split(':').slice(0, 2).join(':')) throw new Error('Ordner extern verändert.', { cause: error });
               await fs.rmdir(entry.path);
+              removedDirectories.push(entry);
             }
           }
-          return await abortedState(completedRoots);
+          const remaining = [...moved.filter(item => !item.restored), ...removedDirectories];
+          const fresh = await publishChangedPaths(baseline, after, { removed: remaining, added: [...createdDirectories.filter(directory => nativeFs.existsSync(directory)).map(directory => ({ path: directory, type: 'folder' })), ...completedFiles] });
+          const completedSources = completedRoots.filter(entry => transfer.mode === 'copy' || !nativeFs.existsSync(entry.path));
+          fresh.operationOutcome = { cancelled: true, completedIds: completedSources.map(entry => entry.row.id), completedSourcePaths: completedSources.map(entry => entry.path) };
+          return fresh;
         } catch (cause) {
           retainedPaths.push(...backups.values(), ...stages.filter(stage => !stage.cleaned).map(stage => stage.path));
           snapshot = null; throw createOperationError('recovery-incomplete', { cause, paths: retainedPaths });
@@ -1013,7 +1237,7 @@ function createProvider(options = {}) {
         }
         catch { rollbackFailed = true; retained.push(change.target); }
       }
-      snapshot = null;
+      if (rollbackFailed || !plan) snapshot = null;
       if (rollbackFailed) throw createOperationError('recovery-incomplete', { cause: error, paths: [...backups.values(), ...stages.filter(stage => !stage.cleaned).map(stage => stage.path), ...retained] });
       for (const directory of backups.values()) await fs.rmdir(directory);
       throw error;
@@ -1045,9 +1269,9 @@ function createProvider(options = {}) {
       snapshot = null;
       throw createOperationError('cleanup-failed', { cause: error, paths: [...backups.values()] });
     }
-    // The transfer planner still needs the loaded subtrees after a partial commit.
-    const reloadDirectories = baseline.visibleOnly && transfer?.checkpoint !== true
-      ? [...new Set([...activeDirectories(after), ...(transfer?.requiredDirectory ? [transfer.requiredDirectory] : [])])]
+    if (plan) return publishChangedPaths(baseline, after, { removed, added: [...newDirectories, ...staged.values()], renamed: caseChanges });
+    const reloadDirectories = baseline.visibleOnly
+      ? activeDirectories(after)
       : [...baseline.loadedDirectories, ...newDirectories.map(item => item.path)];
     const next = inheritedPanes(await load({ directories: await availableViewDirectories(reloadDirectories.filter(directory => roots.includes(directory) || baseline.entries.get(identity(directory))?.root || desired.get(identity(directory))?.type === 'folder')), ...(baseline.visibleOnly ? { visibleOnly: true, deferredDirectories: deferredDirectories(after) } : {}) }), after);
     const updatedPaths = [...staged.values(), ...removed, ...newDirectories].map(item => item.path).concat(caseChanges.flatMap(change => [change.original.path, change.target]));
@@ -1058,7 +1282,7 @@ function createProvider(options = {}) {
 
   async function measureFolder(before, directory, settings = {}) {
     if (busy) throw new Error('Eine Dateisystemoperation läuft bereits.');
-    if (!snapshot || before?.snapshotId !== snapshot.state.snapshotId || filesystemDigest(before) !== snapshot.digest) throw new Error('Der Dateisystem-Snapshot ist veraltet oder wurde verändert.');
+    if (!snapshot || before?.snapshotId !== snapshot.state.snapshotId || filesystemDigest(before) !== knownDigest(snapshot)) throw new Error('Der Dateisystem-Snapshot ist veraltet oder wurde verändert.');
     const target = allowed(directory), entry = snapshot.entries.get(identity(target));
     if (!entry || entry.root || entry.type !== 'folder') throw new Error('Ein bekannter Unterordner ist erforderlich.');
     busy = true;
@@ -1095,7 +1319,7 @@ function createProvider(options = {}) {
 
   async function prepare(before, settings = {}) {
     if (busy) throw new Error('Eine Dateisystemoperation läuft bereits.');
-    if (!settings.navigation && (!snapshot || before?.snapshotId !== snapshot.state.snapshotId || filesystemDigest(before) !== snapshot.digest)) throw new Error('Der Dateisystem-Snapshot ist veraltet oder wurde verändert.');
+    if (!settings.navigation && (!snapshot || before?.snapshotId !== snapshot.state.snapshotId || !settings.transfer && filesystemDigest(before) !== knownDigest(snapshot))) throw new Error('Der Dateisystem-Snapshot ist veraltet oder wurde verändert.');
     if (settings.source !== undefined) {
       const { path: sourcePath, ids } = settings.source || {};
       if (!Array.isArray(ids) || !ids.length || ids.length > limits.entries || ids.some(id => typeof id !== 'string')) throw new Error('Die Übertragungsauswahl ist nicht mehr gültig.');
@@ -1114,9 +1338,10 @@ function createProvider(options = {}) {
         return resolved.path;
       }))
       : (settings.directories || []).map(allowed);
-    const retainedDirectories = snapshot.visibleOnly ? activeDirectories(before) : snapshot.loadedDirectories;
+    const transferPreparation = settings.transfer && snapshot.visibleOnly;
+    const retainedDirectories = transferPreparation ? [] : snapshot.visibleOnly ? activeDirectories(before) : snapshot.loadedDirectories;
     const requestedDirectories = settings.navigation ? directories : [...retainedDirectories, ...(requiredDirectory === undefined ? [] : [allowed(requiredDirectory)]), ...directories];
-    const fresh = await load({ directories: requestedDirectories, ...(settings.navigation ? { baseline: snapshot, refreshDirectories: directories, visibleDirectories: settings.visibleDirectories, getVisibleDirectories: settings.getVisibleDirectories, onDirectory: settings.onDirectory } : {}), recursiveDirectories: settings.recursive ? directories : [], mergeDirectories: settings.mergeDirectories, signal: settings.signal, onProgress: settings.onProgress });
+    const fresh = await load({ directories: requestedDirectories, ...(settings.navigation ? { baseline: snapshot, refreshDirectories: directories, visibleDirectories: settings.visibleDirectories, getVisibleDirectories: settings.getVisibleDirectories, onDirectory: settings.onDirectory } : transferPreparation ? { baseline: snapshot, refreshDirectories: requestedDirectories, omitDigest: true } : {}), recursiveDirectories: settings.recursive ? directories : [], mergeDirectories: settings.mergeDirectories, signal: settings.signal, onProgress: settings.onProgress });
     const state = inheritedPanes(fresh, before);
     if (snapshot.state.snapshotId === fresh.snapshotId) snapshot.state = clone(state);
     return state;
@@ -1124,7 +1349,7 @@ function createProvider(options = {}) {
   async function remove(before, request = {}, settings = {}) {
     if (busy) throw new Error('Eine Dateisystemoperation läuft bereits.');
     const baseline = snapshot;
-    if (!baseline || before?.snapshotId !== baseline.state.snapshotId || filesystemDigest(before) !== baseline.digest) throw new Error('Der Dateisystem-Snapshot ist veraltet oder wurde verändert.');
+    if (!baseline || before?.snapshotId !== baseline.state.snapshotId) throw new Error('Der Dateisystem-Snapshot ist veraltet oder wurde verändert.');
     if (!Array.isArray(request.paths) || !request.paths.length || request.paths.length > limits.entries || typeof request.useTrash !== 'boolean') throw new Error('Ungültige Löschanfrage.');
     const selected = [...new Set(request.paths.map(value => identity(allowed(value))))].map(key => {
       const published = publishedEntries.get(key);
@@ -1155,20 +1380,17 @@ function createProvider(options = {}) {
         completed++;
         settings.onProgress?.(Progress.event({ phase: 'deleting', path: item.path, overall: Progress.known('items', completed, targets.length), current: Progress.known('items', 1, 1) }));
       }
-      const view = settings.getView?.() || before;
-      const visibleDirectories = activeDirectories(view).filter(directory => canNavigate(directory));
-      const remainingDirectories = [...new Set([...(baseline.visibleOnly ? [] : baseline.loadedDirectories), ...visibleDirectories])]
-        .filter(directory => !targets.some(item => below(directory, item.path)));
-      const state = inheritedPanes(await load({ directories: await availableViewDirectories(remainingDirectories), ...(baseline.visibleOnly ? { visibleOnly: true, deferredDirectories: deferredDirectories(view) } : {}) }), view);
-      state.updatedDirectories = visibleDirectories.filter(directory => targets.some(target => below(target.path, directory)));
-      snapshot.state = clone(state);
-      return state;
+      return await publishChangedPaths(baseline, settings.getView?.() || before, { removed: targets, includeStreamed: true });
     } catch (error) {
-      snapshot = null;
-      publishedEntries.clear();
-      if (error.name === 'AbortError') throw error;
+      let confirmedState;
+      if (completed) confirmedState = await publishChangedPaths(baseline, settings.getView?.() || before, { removed: targets.slice(0, completed), includeStreamed: true });
+      if (error.name === 'AbortError') {
+        error.confirmedState = confirmedState;
+        throw error;
+      }
       const failure = new Error(`Löschen fehlgeschlagen nach ${completed} Einträgen: ${error.message}`, { cause: error });
       failure.deletedCount = completed;
+      failure.confirmedState = confirmedState;
       if (deleting) failure.deleteTarget = { path: deleting.path, folder: deleting.type === 'folder' };
       throw failure;
     } finally { busy = false; }

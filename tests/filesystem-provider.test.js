@@ -5,6 +5,80 @@ const os = require('node:os');
 const path = require('node:path');
 const { createProvider } = require('../filesystem-provider');
 
+function fileTransfer(mode, sourcePath, targetPath, rows, extras = {}) {
+  return { mode, sourcePath, targetPath, sourceSide: 0, ids: rows.map(file => file.id), changes: rows.map(file => ({ kind: 'put', source: file.fsSource, target: `${targetPath}/${file.name}` })), ...extras };
+}
+
+for (const mode of ['copy', 'move']) {
+  test(`${mode} writes only the selected paths and publishes only affected rows`, async t => {
+    const { left, right } = await setup(t);
+    const source = `${left}/selected.txt`, target = `${right}/selected.txt`, sibling = `${right}/keep.txt`;
+    await fs.writeFile(source, 'selected');
+    await fs.writeFile(sibling, 'original');
+    const disk = { ...fs,
+      readdir: async (...args) => {
+        if (writing) assert.match(String(args[0]), /\.bitfroest-(rollback|copy)-/, `unexpected listing of ${args[0]}`);
+        return fs.readdir(...args);
+      },
+      lstat: async (target, ...args) => {
+        if (writing) assert.ok(![sibling, `${left}/docs`].includes(slash(String(target))), `unexpected metadata read of ${target}`);
+        return fs.lstat(target, ...args);
+      }
+    };
+    let writing = false;
+    const provider = createProvider({ roots: [left, right], fs: disk, deletePath: file => fs.unlink(file) });
+    const before = await provider.load({ directories: [left, right, `${left}/docs`], visibleOnly: true });
+    before.panes[1].tabs = [`${left}/docs`, right];
+    await fs.writeFile(sibling, 'externally changed');
+    await fs.writeFile(`${left}/docs/new.txt`, 'external');
+    const id = row(before, left, 'selected.txt').id;
+    writing = true;
+    const unrelated = `${left}/plain.txt`;
+    await assert.rejects(provider.apply(before, undefined, { transfer: { mode, sourcePath: left, sourceSide: 0, targetPath: right, ids: [id], changes: [{ kind: 'put', source: unrelated, target: sibling, replaced: sibling }] } }), /Ungültiger Übertragungsauftrag/);
+    assert.equal(await fs.readFile(unrelated, 'utf8'), 'original text');
+    assert.equal(await fs.readFile(sibling, 'utf8'), 'externally changed');
+    const next = await provider.apply(before, undefined, { transfer: { mode, sourcePath: left, sourceSide: 0, targetPath: right, ids: [id], changes: [{ kind: 'put', source, target }] } });
+    assert.equal(await fs.readFile(target, 'utf8'), 'selected');
+    if (mode === 'move') await assert.rejects(fs.access(source), { code: 'ENOENT' });
+    else assert.equal(await fs.readFile(source, 'utf8'), 'selected');
+    assert.equal(await fs.readFile(sibling, 'utf8'), 'externally changed');
+    assert.equal(await fs.readFile(`${left}/docs/new.txt`, 'utf8'), 'external');
+    assert.deepEqual(row(next, right, 'keep.txt'), row(before, right, 'keep.txt'));
+    assert.deepEqual(next.folders[`${left}/docs`], before.folders[`${left}/docs`]);
+    assert.deepEqual(next.panes[1].tabs, [`${left}/docs`, right]);
+    assert.ok(row(next, right, 'selected.txt'));
+    assert.deepEqual(next.updatedDirectories, mode === 'move' ? [left, right] : [right]);
+    const removed = await provider.remove(next, { paths: [target], useTrash: false });
+    assert.deepEqual(removed.updatedDirectories, [right]);
+    assert.equal(row(removed, right, 'selected.txt'), undefined);
+    assert.deepEqual(row(removed, right, 'keep.txt'), row(before, right, 'keep.txt'));
+    assert.equal(await fs.readFile(sibling, 'utf8'), 'externally changed');
+  });
+}
+
+test('cancelling a real move after its first publication patches only that completed file', async t => {
+  const { provider, left, right } = await setup(t);
+  await fs.writeFile(`${right}/keep.txt`, 'keep');
+  const before = await provider.load({ directories: [left, right], visibleOnly: true });
+  const first = row(before, left, 'plain.txt'), second = row(before, left, 'binary.bin');
+  const controller = new AbortController();
+  const after = await provider.apply(before, undefined, {
+    signal: controller.signal,
+    transfer: fileTransfer('move', left, right, [first, second]),
+    onTransferProgress: event => { if (event.phase === 'published') controller.abort(); }
+  });
+  assert.deepEqual(after.operationOutcome.completedIds, [first.id]);
+  assert.equal(after.operationOutcome.cancelled, true);
+  assert.equal(await fs.readFile(`${right}/plain.txt`, 'utf8'), 'original text');
+  await assert.rejects(fs.access(`${left}/plain.txt`), { code: 'ENOENT' });
+  await assert.rejects(fs.access(`${right}/binary.bin`), { code: 'ENOENT' });
+  assert.deepEqual(await fs.readFile(`${left}/binary.bin`), Buffer.from([0, 255, 8, 7]));
+  assert.equal(await fs.readFile(`${right}/keep.txt`, 'utf8'), 'keep');
+  assert.ok(row(after, left, 'binary.bin'));
+  assert.equal(row(after, right, 'binary.bin'), undefined);
+  assert.deepEqual(row(after, right, 'keep.txt'), row(before, right, 'keep.txt'));
+});
+
 test('concurrent navigation retains both directory results and the next write remains valid', async t => {
   const { left, right } = await setup(t);
   let release, entered;
@@ -147,12 +221,9 @@ test('a real native move delivers scoped progress for every file without cancell
   const { provider, left, right } = await setup(t);
   const before = await provider.load();
   const selected = before.folders[left].filter(file => ['plain.txt', 'binary.bin'].includes(file.name));
-  const after = clone(before);
-  after.folders[left] = after.folders[left].filter(file => !selected.some(source => source.id === file.id));
-  after.folders[right].push(...selected.map(file => ({ ...file, id: `moved-${file.id}` })));
   const progress = [];
-  const result = await provider.apply(before, after, { signal: new AbortController().signal,
-    transfer: { mode: 'move', sourcePath: left, sourceSide: 0, ids: selected.map(file => file.id) },
+  const result = await provider.apply(before, undefined, { signal: new AbortController().signal,
+    transfer: fileTransfer('move', left, right, selected),
     onTransferProgress: event => progress.push(event) });
   assert.notEqual(result.operationOutcome?.cancelled, true);
   assert.equal(await fs.readFile(`${right}/plain.txt`, 'utf8'), 'original text');
@@ -281,9 +352,7 @@ test('moving files from an active child keeps the cached parent row backed by th
   before.panes[0].tabs = [source, left];
   const ids = before.folders[source].map(file => file.id);
   const prepared = await provider.prepare(before, { directories: [right], requiredDirectory: right, source: { path: source, ids } });
-  const desired = clone(prepared);
-  desired.folders[right].push(...desired.folders[source].splice(0));
-  const after = await provider.apply(prepared, desired, { transfer: { mode: 'move', ids, sourcePath: source, sourceSide: 0, requiredDirectory: right, checkpoint: true } });
+  const after = await provider.apply(prepared, undefined, { transfer: fileTransfer('move', source, right, prepared.folders[source], { requiredDirectory: right, checkpoint: true }) });
   assert.deepEqual(await fs.readdir(source), []);
   assert.deepEqual((await fs.readdir(right)).sort(), ['another.txt', 'nested.txt']);
   assert.ok(row(after, left, 'docs'));
@@ -303,10 +372,7 @@ test('moving one selected file accepts a deferred child with different Windows d
   const prepared = await provider.prepare(fresh, { directories: [target], requiredDirectory: target, source: { path: right, ids: [selected.id] } });
   assert.ok(prepared.unloadedFolders.includes(cachedChild));
   assert.equal(row(prepared, target, 'docs').fsSource, `${target}/docs`);
-  const desired = clone(prepared);
-  desired.folders[right] = desired.folders[right].filter(file => file.id !== selected.id);
-  desired.folders[target].push({ ...selected, id: 'moved-selection' });
-  await provider.apply(prepared, desired, { transfer: { mode: 'move', ids: [selected.id], sourcePath: right, sourceSide: 0, requiredDirectory: target } });
+  await provider.apply(prepared, undefined, { transfer: fileTransfer('move', right, target, [selected], { requiredDirectory: target }) });
   assert.equal(await fs.readFile(`${target}/selected.txt`, 'utf8'), 'selected');
   assert.deepEqual(await fs.readdir(right), ['unselected.txt']);
   await assert.rejects(fs.stat(`${target}/unselected.txt`), { code: 'ENOENT' });
@@ -359,9 +425,8 @@ test('moving one file after cache eviction retains authorization for the previou
   forged.folders[`${left}/docs`].push({ id: 'unprepared-write', name: 'unexpected.txt', type: 'text', content: 'untrusted' });
   await assert.rejects(provider.apply(before, forged), { code: 'DirectoryNotPrepared', path: `${left}/docs`, preparationReason: 'listing-changed' });
   await assert.rejects(fs.stat(`${left}/docs/unexpected.txt`), { code: 'ENOENT' });
-  const after = clone(before), source = row(after, nested, 'episode.bin');
-  after.folders[nested] = []; after.folders[right].push({ ...source, id: 'moved-episode' });
-  await provider.apply(before, after, { transfer: { mode: 'move', sourcePath: nested, sourceSide: 0, ids: [source.id] } });
+  const source = row(before, nested, 'episode.bin');
+  await provider.apply(before, undefined, { transfer: fileTransfer('move', nested, right, [source]) });
   assert.deepEqual(await fs.readFile(`${right}/episode.bin`), Buffer.from([0, 255, 4, 9]));
   await assert.rejects(fs.stat(`${nested}/episode.bin`), { code: 'ENOENT' });
   assert.deepEqual(await fs.readdir(right), ['episode.bin']);
@@ -852,14 +917,12 @@ test('stale snapshots and new external destinations are rejected before any writ
 
 test('a rejected move identifies the affected entry and exact metadata difference before writing', async t => {
   const { provider, left, right } = await setup(t);
-  const before = await provider.load({ recursive: true }), after = clone(before);
+  const before = await provider.load({ recursive: true });
   const source = row(before, left, 'plain.txt'), target = `${left}/plain.txt`;
   const expected = await fs.lstat(target, { bigint: true });
-  after.folders[left] = after.folders[left].filter(file => file.id !== source.id);
-  after.folders[right].push({ ...source });
   await fs.writeFile(target, 'externally replaced contents');
   const observed = await fs.lstat(target, { bigint: true });
-  await assert.rejects(provider.apply(before, after, { transfer: { mode: 'move', sourcePath: left, sourceSide: 0, ids: [source.id] } }), error => {
+  await assert.rejects(provider.apply(before, undefined, { transfer: fileTransfer('move', left, right, [source]) }), error => {
     assert.equal(error.code, 'EntryChangedBeforeWrite');
     assert.equal(error.path, target);
     for (const key of ['dev', 'ino', 'mode', 'size', 'mtimeNs', 'ctimeNs']) {
@@ -893,8 +956,7 @@ test('copy does not rescan unrelated loaded roots before its first file copy', a
   const sourceStat = await fs.stat(source.fsSource, { bigint: true });
   baselineReads = directories.length;
   await fs.writeFile(`${right}/unrelated.txt`, 'changed outside the selected copy');
-  after.folders[right].push({ ...source, id: 'copy-selected' });
-  await provider.apply(before, after, { transfer: { mode: 'copy', sourcePath: left, ids: [source.id], sourceSide: 0 } });
+  await provider.apply(before, undefined, { transfer: fileTransfer('copy', left, right, [source]) });
   assert.deepEqual(expectedSource, Object.fromEntries(['dev', 'ino', 'size', 'mtimeNs', 'ctimeNs'].map(key => [key, String(sourceStat[key])] )));
   assert.equal(await fs.readFile(`${right}/plain.txt`, 'utf8'), 'original text');
   assert.equal(await fs.readFile(`${right}/unrelated.txt`, 'utf8'), 'changed outside the selected copy');
@@ -920,8 +982,7 @@ test('copy rejects a same-size source change with restored modification time bef
   const fixedMtime = new Date('2020-01-02T03:04:05.000Z'); await fs.utimes(sourcePath, fixedMtime, fixedMtime);
   const before = await provider.load(), after = clone(before), source = row(after, left, 'plain.txt');
   originalStat = await fs.stat(sourcePath, { bigint: true });
-  after.folders[right].push({ ...source, id: 'copy-stale-source' });
-  await assert.rejects(provider.apply(before, after, { transfer: { mode: 'copy', sourcePath: left, ids: [source.id], sourceSide: 0 } }), /extern geändert|veraltet/);
+  await assert.rejects(provider.apply(before, undefined, { transfer: fileTransfer('copy', left, right, [source]) }), /extern geändert|veraltet/);
   const changedStat = await fs.stat(sourcePath, { bigint: true });
   assert.equal(changedStat.size, originalStat.size);
   assert.equal(changedStat.mtimeNs, originalStat.mtimeNs);
@@ -933,9 +994,8 @@ test('copy rejects a same-size source change with restored modification time bef
 test('copy preserves an externally created selected destination without overwriting it', async t => {
   const { provider, left, right } = await setup(t);
   const before = await provider.load(), after = clone(before), source = row(after, left, 'plain.txt');
-  after.folders[right].push({ ...source, id: 'copy-target-race' });
   await fs.writeFile(`${right}/plain.txt`, 'external destination');
-  await assert.rejects(provider.apply(before, after, { transfer: { mode: 'copy', sourcePath: left, ids: [source.id], sourceSide: 0 } }));
+  await assert.rejects(provider.apply(before, undefined, { transfer: fileTransfer('copy', left, right, [source]) }));
   assert.equal(await fs.readFile(`${right}/plain.txt`, 'utf8'), 'external destination');
   assert.equal(await fs.readFile(`${left}/plain.txt`, 'utf8'), 'original text');
   assert.equal((await fs.readdir(right)).some(name => name.startsWith('.bitfroest-')), false);

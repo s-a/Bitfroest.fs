@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { createApp } = require('./support/webview.cjs');
+const { createApp, confirmFixtureTransfer } = require('./support/webview.cjs');
 const fixture = () => ({ version: 1, realFilesystem: true, snapshotId: 'ctx', active: 0,
   panes: [{ tabs: ['C:/one', 'C:/two'], tab: 0, filter: '', selected: ['a'], cursor: 'a' }, { tabs: ['C:/two'], tab: 0, filter: '', selected: [] }],
   folders: { 'C:/one': [{ id: 'a', name: 'one.txt', type: 'text', size: 1 }, { id: 'b', name: 'two.txt', type: 'text', size: 1 }], 'C:/two': [] } });
@@ -87,8 +87,8 @@ test('typing a file search before Send to does not expand a single selection wit
   await new Promise(resolve => setImmediate(resolve));
   const write = app.messages.find(message => message.type === 'filesystem-apply');
   assert.deepEqual(Array.from(write.transfer.ids), ['a']);
-  assert.deepEqual(Array.from(write.state.folders['C:/two'], file => file.name), ['one.txt']);
-  assert.deepEqual(Array.from(write.state.folders['C:/one'], file => file.name), ['two.txt']);
+  assert.equal(Object.hasOwn(write, 'state'), false);
+  assert.deepEqual(JSON.parse(JSON.stringify(write.transfer.changes)), [{ kind: 'put', source: 'C:/one/one.txt', target: 'C:/two/one.txt' }]);
 });
 
 for (const [mode, label, ids] of [['copy', 'Copy', ['a']], ['move', 'Move', ['a', 'b']]]) {
@@ -113,10 +113,10 @@ for (const [mode, label, ids] of [['copy', 'Copy', ['a']], ['move', 'Move', ['a'
     const [write] = writes;
     assert.equal(write.transfer.mode, mode);
     assert.deepEqual(Array.from(write.transfer.ids), ids);
-    assert.equal(write.state.folders['C:/two'].length, ids.length);
+    assert.equal(write.transfer.changes.length, ids.length);
     const status = app.document.querySelector('#status-message');
     assert.doesNotMatch(status.textContent, /copied|moved/i);
-    post(app, { type: 'filesystem-result', operationId: write.operationId, ok: true, state: structuredClone(write.state) });
+    post(app, { type: 'filesystem-result', operationId: write.operationId, ok: true, state: confirmFixtureTransfer(saved, write) });
     assert.match(status.textContent, mode === 'copy' ? /copied/i : /moved/i);
   });
 }
