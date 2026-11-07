@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const Progress = require('../media/bitfroest-progress');
-const { createApp } = require('./support/webview.cjs');
+const { createApp, confirmFixtureTransfer } = require('./support/webview.cjs');
 
 function fixture() {
   const p = path => ({ tabs: [path], tab: 0, selected: ['a'], cursor: 'a', filter: '', sort: 'name' });
@@ -9,6 +9,63 @@ function fixture() {
 }
 const tick = () => new Promise(resolve => setImmediate(resolve));
 const send = (app, data) => app.window.dispatchEvent(new app.window.MessageEvent('message', { data }));
+
+test('move preparation keeps scanned target entries out of the current-file status', async t => {
+  const saved = fixture();
+  saved.unloadedFolders = ['/right'];
+  const app = createApp(t, saved, { language: 'en' });
+  await start(app, 'move');
+  const prepare = app.messages.find(message => message.type === 'filesystem-prepare');
+  assert.ok(prepare);
+  send(app, { type: 'filesystem-progress', operationId: prepare.operationId, progress: Progress.event({
+    phase: 'preparing', path: '/right/unrelated.txt', filesScanned: 1,
+    overall: Progress.unknown('items', 1, 'enumerating'), current: Progress.known('items', 1, 2)
+  }) });
+  assert.doesNotMatch(app.document.querySelector('#status-message').textContent, /unrelated\.txt/);
+  assert.equal(app.document.querySelector('[data-current-file-path]').hasAttribute('value'), false);
+  const ready = structuredClone(saved); ready.unloadedFolders = [];
+  send(app, { type: 'filesystem-result', operationId: prepare.operationId, ok: true, state: ready });
+  await tick();
+  const move = app.messages.find(message => message.type === 'filesystem-apply');
+  send(app, { type: 'filesystem-transfer-progress', operationId: move.operationId, progress: Progress.transferBatch({
+    phase: 'copying', path: '/right/Renamed.txt', sourcePath: '/left/Quelle & Source.txt', batch: Progress.batchBytes(6, 12), file: Progress.fileBytes(6, 12)
+  }) });
+  assert.match(app.document.querySelector('#status-message').textContent, /Quelle & Source\.txt/);
+  assert.doesNotMatch(app.document.querySelector('#status-message').textContent, /Renamed\.txt/);
+});
+
+test('move acknowledgements leave unchanged tables mounted and keep the changed table widths', { timeout: 5000 }, async t => {
+  const saved = fixture();
+  saved.folders['/favorite'] = [];
+  saved.unloadedFolders = ['/favorite'];
+  saved.panes[1].selected = [];
+  saved.panes[1].cursor = null;
+  const app = createApp(t, saved);
+  await Promise.all([0, 1].map(side => new Promise(resolve => app.grid(side).addEventListener('firstDataRendered', resolve))));
+  const calls = [];
+  for (const side of [0, 1]) {
+    const grid = app.grid(side), set = grid.setGridOption.bind(grid);
+    grid.setGridOption = (key, value) => { calls.push([side, key]); return set(key, value); };
+    const autoSize = grid.autoSizeColumns.bind(grid);
+    grid.autoSizeColumns = (...args) => { calls.push([side, 'autoSizeColumns']); return autoSize(...args); };
+  }
+  await start(app, 'move', '/favorite/');
+  const prepare = app.messages.find(message => message.type === 'filesystem-prepare');
+  assert.ok(prepare);
+  assert.equal(app.document.querySelector('[data-progress-source]').textContent, '/left/Quelle & Source.txt');
+  assert.equal(app.document.querySelector('[data-progress-target]').textContent, '/favorite');
+  calls.length = 0;
+  const ready = structuredClone(saved); ready.unloadedFolders = [];
+  send(app, { type: 'filesystem-result', operationId: prepare.operationId, ok: true, state: ready });
+  await tick();
+  const move = app.messages.find(message => message.type === 'filesystem-apply');
+  assert.ok(move);
+  assert.deepEqual(calls.filter(([, key]) => ['rowData', 'autoSizeColumns'].includes(key)), []);
+  Object.defineProperty(app.document.querySelector('[data-pane="0"] [data-file-grid]'), 'offsetWidth', { value: 800 });
+  send(app, { type: 'filesystem-result', operationId: move.operationId, ok: true, state: confirmFixtureTransfer(ready, move), refreshGitDirectories: ['/left', '/favorite'] });
+  assert.deepEqual(calls.filter(([, key]) => ['rowData', 'autoSizeColumns'].includes(key)), [[0, 'rowData']]);
+  assert.equal(app.row('Quelle & Source.txt'), undefined);
+});
 async function start(app, mode, target) {
   app.action(mode);
   if (target) app.document.querySelector('#value').value = target;

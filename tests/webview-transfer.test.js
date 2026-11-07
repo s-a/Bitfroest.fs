@@ -416,6 +416,7 @@ test('pending native transfers retain confirmed rows, sizes and source selection
     }
     send({ type: 'filesystem-result', operationId: request.operationId, ok: outcome !== 'error', state: actual, ...(outcome === 'cancel' ? { operationOutcome: { cancelled: true, completedIds: [original.folders[sourcePath][0].id] } } : {}), ...(outcome === 'error' ? { error: 'denied' } : {}) });
     assert.equal(app.document.querySelector('#panes').inert, false);
+    await tick();
     assert.deepEqual(names(section(1 - side)), outcome === 'success' ? ['other.txt', 'same.txt'] : outcome === 'cancel' ? ['same.txt'] : []);
     assert.deepEqual(names(section(side)), outcome === 'success' && mode === 'move' ? [] : outcome === 'cancel' && mode === 'move' ? ['other.txt'] : ['other.txt', 'same.txt']);
     assert.equal(app.messages.filter(message => message.type === 'filesystem-apply').length, 1);

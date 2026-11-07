@@ -168,7 +168,7 @@
 
     function signature(p) { return JSON.stringify(p.columns.map(({ key, label, field, visible, align }) => ({ key, label, field, visible, align }))); }
 
-    function mount(section, p, rows) {
+    function mount(section, p, rows, preserveColumnWidths = false) {
       const container = section.querySelector('[data-file-grid]');
       if (!container) return;
       let record = instances.get(container);
@@ -183,7 +183,8 @@
         const selection = focused?.matches('input') ? [focused.selectionStart, focused.selectionEnd] : null;
         const navigated = record.path !== options.path(p);
         const holdWidths = record.ready && !ready;
-        if (changed || navigated || record.count !== rows.length || record.source !== source) record.measurePending = true;
+        const keepWidths = preserveColumnWidths && !changed && !navigated && record.ready === ready;
+        if (!keepWidths && (changed || navigated || record.count !== rows.length || record.source !== source)) record.measurePending = true;
         record.ready = ready; record.count = rows.length; record.source = source;
         record.path = options.path(p);
         record.p = p; record.signature = currentSignature; marks(record);
@@ -205,7 +206,7 @@
         } finally { record.updating = false; }
         sync(section, p);
         options.decorate(section, p);
-        measureWhenReady(record);
+        if (!keepWidths) measureWhenReady(record);
         return;
       }
       record = { section, container, p, path: options.path(p), view: options.view(p), manual: new Set(), updating: true, ready, measurePending: true };
@@ -285,10 +286,10 @@
     }
 
     function api(section) { return instances.get(section?.querySelector('[data-file-grid]'))?.api; }
-    function sync(section, _p) {
+    function sync(section, p) {
       const grid = api(section);
       if (!grid) return;
-      const record = instances.get(section.querySelector('[data-file-grid]')); marks(record);
+      const record = instances.get(section.querySelector('[data-file-grid]')); record.p = p; marks(record);
       const selected = record.selected;
       grid.forEachNode(node => {
         const value = selected.has(node.id);

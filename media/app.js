@@ -922,7 +922,9 @@
       element.querySelector('[data-progress-count]').textContent = '';
     }
     if (progress.phase) transferJob.phase = progress.phase;
-    const progressPath = progress.sourcePath || progress.path || progress.currentPath;
+    const scanningTransfer = transferJob.phase === 'preparing' && transferJob.filesystemPreparation;
+    const progressPath = scanningTransfer ? undefined : progress.sourcePath || progress.path || progress.currentPath;
+    if (scanningTransfer) transferJob.currentPath = null;
     if (progressPath && progressPath !== transferJob.currentPath) { transferJob.currentPath = progressPath; transferJob.currentTransferred = 0; transferJob.currentTotal = progress.total; }
     if (progress.filesScanned !== undefined) { transferJob.filesScanned = progress.filesScanned; element.querySelector('[data-progress-count]').textContent = t(transferJob.zipWrite && transferJob.phase === 'preparing' ? '{count} Einträge erfasst' : '{count} Einträge geprüft', { count: progress.filesScanned }); }
     else if (reported?.overall.unit === 'bytes') element.querySelector('[data-progress-count]').textContent = size(reported.overall.completed) + (reported.overall.kind === 'determinate' ? ' / ' + size(reported.overall.total) : '');
@@ -940,7 +942,9 @@
       transferJob.currentTransferred = reported.current.unit === 'bytes' ? reported.current.completed : 0;
     }
     if (progress.phase === 'published' && Number.isFinite(transferJob.currentTotal)) transferJob.currentTransferred = transferJob.currentTotal;
-    if (transferJob.currentPath) element.querySelector('[data-current-file-path]').setAttribute('value', displayPath(transferJob.currentPath));
+    const currentFilePath = element.querySelector('[data-current-file-path]');
+    if (transferJob.currentPath) currentFilePath.setAttribute('value', displayPath(transferJob.currentPath));
+    else currentFilePath.removeAttribute('value');
     element.querySelector('[data-current-file-count]').textContent = Number.isFinite(transferJob.currentTotal) && transferJob.currentTotal > 0 ? size(transferJob.currentTransferred || 0) + ' / ' + size(transferJob.currentTotal) : t('Dateioperation läuft…');
     const zipPhaseLabels = { retaining: 'Archiveinträge übernehmen', finalizing: 'ZIP abschließen', publishing: 'ZIP speichern', 'removing-sources': 'Quellen entfernen' };
     const operationLabel = transferJob.phase === 'deleting' ? 'Löschen' : zipPhaseLabels[transferJob.phase] || (transferJob.phase === 'preparing' ? transferJob.zipWrite ? 'ZIP-Dateien erfassen' : 'Vorbereiten' : transferJob.phase === 'packing' ? 'ZIP erstellen' : transferJob.phase === 'verifying' ? 'Archiv prüfen' : transferJob.phase === 'validating' ? 'Prüfen' : transferJob.context.mode === 'move' ? 'Verschieben' : 'Kopieren');
@@ -1071,7 +1075,9 @@
     rememberScroll();
     filesystemResume = resume;
     if (message.type === 'filesystem-prepare' && ['copy', 'move'].includes(message.action)) {
-      transferJob = { id: `prepare-${Date.now()}-${++transferSequence}`, queueJobId: operationQueue?.active?.id, phase: 'preparing', hostActive: true, context: Object.freeze({ mode: message.action, sources: Object.freeze([...message.paths]), target: message.requiredDirectory || currentPath(state.panes[1 - state.active]) }) };
+      const sources = message.transfer ? transferSourcePaths(message.transfer) : [...message.paths];
+      const target = message.requiredDirectory || message.transfer?.targetPath || currentPath(state.panes[1 - state.active]);
+      transferJob = { id: `prepare-${Date.now()}-${++transferSequence}`, queueJobId: operationQueue?.active?.id, phase: 'preparing', filesystemPreparation: true, hostActive: true, context: Object.freeze({ mode: message.action, sources: Object.freeze(sources), target }) };
       transferJob.preparation = message.transfer;
       transferJob.modalPreparation = $('#modal').open;
       if (transferJob.modalPreparation) { if ($('#value')) $('#value').disabled = true; $('#modal-confirm').disabled = true; }
@@ -2040,7 +2046,7 @@
     }
     while (cursor) { const removed = cursor; cursor = nextViewChild(cursor.nextSibling); removed.remove(); }
   }
-  function render(focusList = false, previousViews, git = true) {
+  function render(focusList = false, previousViews, git = true, preserveColumnWidths = false) {
     filePointerGesture?.cancel();
     cancelPointerDrag();
     if (backgroundNavigation) focusList = false;
@@ -2053,10 +2059,10 @@
       const cached = state.realFilesystem && validatedNavigation !== path && (directoryListings.has(path) || directoryCache.get(path) !== undefined || Object.hasOwn(state.folders, path) && !state.unloadedFolders?.includes(path));
       return changed && cached ? [index] : [];
     });
-    if (!cachedSides.length) return renderView(focusList, previousViews, git);
+    if (!cachedSides.length) return renderView(focusList, previousViews, git, preserveColumnWidths);
     const previous = container.getAttribute('data-cache-paint');
     container.setAttribute('data-cache-paint', cachedSides.join(' '));
-    try { return renderView(focusList, previousViews, git); }
+    try { return renderView(focusList, previousViews, git, preserveColumnWidths); }
     finally {
       try {
         for (const side of cachedSides) {
@@ -2070,7 +2076,7 @@
       }
     }
   }
-  function renderView(focusList = false, previousViews, git = true) {
+  function renderView(focusList = false, previousViews, git = true, preserveColumnWidths = false) {
     closeFavorites(false);
     rememberScroll();
     refreshHighlight();
@@ -2087,7 +2093,7 @@
       const list = section.querySelector('.list');
       if (!list) return;
       const p = state.panes[index];
-      fileGrid.mount(section, p, visible(p));
+      fileGrid.mount(section, p, visible(p), preserveColumnWidths);
     });
     lister.mount();
     xray.mount(); quickDiff.sync();
@@ -2807,7 +2813,7 @@
       planningJob.currentTransferred = 0;
       planningJob.currentTotal = undefined;
       filesystemPending = true; transferPending = false;
-      render(true); transferProgress();
+      render(true, state.panes.map(paneDisplayState), true, true); transferProgress();
       return new Promise((resolve, reject) => {
         transferCheckpoint = { id: planningJob.id, cancel: () => resolve(false), complete: message => {
           traceTransfer(options, 'write-acknowledged', { operationId: planningJob.id, checkpoint: true, ok: message.ok, cancelled: Boolean(message.cancelled || message.operationOutcome?.cancelled), errorCode: message.diagnostic?.failure?.code });
@@ -2853,7 +2859,7 @@
           }
           for (const path of message.refreshGitDirectories || []) { directoryListings.delete(path); directoryCache.delete(path); }
           cacheDirectories();
-          render(true, previousViews); transferProgress();
+          render(true, previousViews, true, true); transferProgress();
           if (!message.ok) reject(Object.assign(new Error(message.error || t('Dateioperation fehlgeschlagen; Verzeichnisse erneut eingelesen')), { diagnostic: message.diagnostic }));
           else resolve(!planningJob.cancelRequested);
         } };
@@ -2901,7 +2907,7 @@
       state.panes = currentPanes;
     } else state.folders = planningFolders;
     transferPending = false;
-    render(true);
+    render(true, needsCommit ? state.panes.map(paneDisplayState) : undefined, true, needsCommit);
     if (!needsCommit) { finishTransfer(completion, true); operationQueue?.complete(operationQueue.active?.id, { ok: !result.errors.length, cancelled: result.cancelled, message: transferSummary(completion) }); }
     return result;
     } catch (error) {
@@ -4279,7 +4285,8 @@
       rememberScroll();
       const navigatingFilesystem = completedFilesystemKind === 'filesystem-navigate';
       const scopedWrite = Boolean(transferCompletion || completedFilesystemKind === 'filesystem-delete');
-      const previousViews = refreshingFilesystem || navigatingFilesystem || scopedWrite ? state.panes.map(paneDisplayState) : undefined;
+      const preparingTransfer = completedFilesystemKind === 'filesystem-prepare' && Boolean(transferJob);
+      const previousViews = refreshingFilesystem || navigatingFilesystem || scopedWrite || preparingTransfer ? state.panes.map(paneDisplayState) : undefined;
       const previousIcons = refreshingFilesystem ? displayedIconEntries() : undefined;
       const scopedRefreshDirectories = [0, 1].includes(refreshPlan?.side) ? refreshPlan.directories : null;
       const focusRefresh = refreshingFilesystem && !scopedRefreshDirectories;
@@ -4355,7 +4362,7 @@
         if (currentPath(sourcePane) === completion.options.sourcePath) sourcePane.selected = sourcePane.selected.filter(id => !completedIds.includes(id));
       }
       if (unchangedFocus) { requestIcons(); requestGitStatus(); }
-      else render(!focusRefresh && !previewRefresh && !$('#modal').open && (!pathNavigation || pathNavigation.valid), previousViews);
+      else render(!focusRefresh && !previewRefresh && !$('#modal').open && (!pathNavigation || pathNavigation.valid), previousViews, true, scopedWrite || preparingTransfer);
       if (previousViews) refreshSelection();
       if (focusRefresh && event.data.ok && !event.data.cancelled) quickDiff.refresh();
       const cancelled = event.data.cancelled || event.data.operationOutcome?.cancelled || completion?.result.cancelled;

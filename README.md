@@ -93,7 +93,7 @@ The transfer filter applies to the selected files and the contents of selected f
 
 Copy, move and delete update the affected entries in open folder tabs after the operation is confirmed.
 
-When the selected files have known sizes, the status bar can show overall byte progress across conflict prompts. The lower indicator shows the current file.
+When the selected files have known sizes, the status bar can show overall byte progress across conflict prompts. During copying or moving, the file indicator shows the source file currently being transferred.
 
 ### Preview controls
 
