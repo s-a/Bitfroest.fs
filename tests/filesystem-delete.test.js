@@ -183,13 +183,15 @@ test('cancellation during the final target identity read prevents the native del
   assert.deepEqual(calls, []);
 });
 
-test('a removed optional view cannot turn a completed native deletion into a reported failure', async t => {
+test('an unrelated external deletion is picked up on refresh after a successful scoped deletion', async t => {
   const { provider, left } = await fixture(t, target => fs.unlink(target));
   const before = await provider.load({ directories: [`${left}/child`] });
   await fs.unlink(`${left}/child/inside.txt`); await fs.rmdir(`${left}/child`);
   const result = await provider.remove(before, { paths: [`${left}/a.txt`], useTrash: true });
   assert.equal(result.folders[left].some(row => row.name === 'a.txt'), false);
-  assert.equal(Object.hasOwn(result.folders, `${left}/child`), false);
+  assert.equal(Object.hasOwn(result.folders, `${left}/child`), true);
+  const refreshed = await provider.load();
+  assert.equal(Object.hasOwn(refreshed.folders, `${left}/child`), false);
 });
 
 test('prepared directory deletion removes a whole selected tree with one native call', async t => {
