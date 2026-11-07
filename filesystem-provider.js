@@ -430,7 +430,21 @@ function createProvider(options = {}) {
       if (!settings.baseline) {
         const refreshed = target => result.loadedDirectories.some(loaded => below(target, loaded));
         for (const [key, entry] of previous?.entries || []) if (below(entry.path, directory) && !refreshed(entry.path) && !result.entries.has(key)) result.entries.set(key, entry);
-        for (const [key, rows] of Object.entries(previous?.folders || {})) if (below(key, directory) && !refreshed(key)) result.folders[key] = clone(rows);
+        for (const [key, rows] of Object.entries(previous?.folders || {})) {
+          if (!below(key, directory) || refreshed(key)) continue;
+          const retained = rows.filter(row => {
+            const sourceKey = identity(row.fsSource);
+            const current = result.entries.get(sourceKey);
+            if (current?.row) return current.type === (row.type === 'folder' ? 'folder' : 'file');
+            const cached = previous.entries.get(sourceKey);
+            if (current?.type !== 'folder' || cached?.type !== 'folder' ||
+                current.signature.split(':').slice(0, 3).join(':') !== cached.signature.split(':').slice(0, 3).join(':')) return false;
+            // An active child is freshly scanned as a root before its deferred parent's row is restored.
+            current.row = row;
+            return true;
+          });
+          result.folders[key] = clone(retained);
+        }
       }
       result.folders[directory] ||= [];
     }
@@ -574,7 +588,10 @@ function createProvider(options = {}) {
     for (const [key, item] of desired) {
       const provenance = item.row.fsSource && allowed(item.row.fsSource);
       const source = provenance && baseline.entries.get(identity(provenance));
-      if (provenance && (!source?.row || source.type !== item.type)) throw new Error('Die Datei-Quelle gehört nicht zum ursprünglichen Snapshot.');
+      if (provenance && (!source?.row || source.type !== item.type)) throw Object.assign(new Error('Die Datei-Quelle gehört nicht zum ursprünglichen Snapshot.'), {
+        code: 'SourceNotInSnapshot', path: provenance, dest: item.path,
+        sourceState: !source ? 'missing-entry' : !source.row ? 'missing-row' : 'type-mismatch'
+      });
       if (item.row.fsAppend) {
         const request = item.row.fsAppend;
         const sourceList = request.sources || [request.source];

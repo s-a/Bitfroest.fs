@@ -253,6 +253,40 @@ test('navigation removes disappeared child caches and keeps later operations val
   await provider.apply(after, desired); assert.equal(await fs.readFile(`${left}/new.txt`, 'utf8'), 'new');
 });
 
+test('moving files from an active child keeps the cached parent row backed by the snapshot', async t => {
+  const { provider, left, right } = await setup(t);
+  const source = `${left}/docs`;
+  await fs.writeFile(`${source}/another.txt`, 'another');
+  await provider.load({ directories: [left, source, right], visibleOnly: true });
+  const before = await provider.load({ directories: [source, right], deferredDirectories: [left], visibleOnly: true });
+  assert.ok(row(before, left, 'docs'));
+  before.panes[0].tabs = [source, left];
+  const ids = before.folders[source].map(file => file.id);
+  const prepared = await provider.prepare(before, { directories: [right], requiredDirectory: right, source: { path: source, ids } });
+  const desired = clone(prepared);
+  desired.folders[right].push(...desired.folders[source].splice(0));
+  const after = await provider.apply(prepared, desired, { transfer: { mode: 'move', ids, sourcePath: source, sourceSide: 0, requiredDirectory: right, checkpoint: true } });
+  assert.deepEqual(await fs.readdir(source), []);
+  assert.deepEqual((await fs.readdir(right)).sort(), ['another.txt', 'nested.txt']);
+  assert.ok(row(after, left, 'docs'));
+});
+
+test('a deferred parent does not restore a cached row for a replaced active child', async t => {
+  const { provider, left, right } = await setup(t);
+  const child = `${left}/docs`;
+  await provider.load({ directories: [left, child, right], visibleOnly: true });
+  await fs.rename(child, `${left}/former-docs`);
+  await fs.mkdir(child);
+  await fs.writeFile(`${child}/current.txt`, 'current');
+  const before = await provider.load({ directories: [child, right], deferredDirectories: [left], visibleOnly: true });
+  assert.equal(row(before, left, 'docs'), undefined);
+  assert.ok(row(before, child, 'current.txt'));
+  const desired = clone(before);
+  desired.folders[right].push({ id: 'new-after-replacement', name: 'new.txt', type: 'text', content: 'new' });
+  await provider.apply(before, desired);
+  assert.equal(await fs.readFile(`${right}/new.txt`, 'utf8'), 'new');
+});
+
 test('mutations after scoped navigation refresh visible paths without scanning inactive cached tabs', async t => {
   const { left, right } = await setup(t), reads = [];
   const provider = createProvider({ roots: [left, right], fs: { ...fs, readdir: async (directory, ...args) => { reads.push(slash(String(directory))); return fs.readdir(directory, ...args); } } });

@@ -68,7 +68,7 @@ function operationDiagnostic(error, request, state, sourceState = state) {
   const serialize = (failure, depth = 0) => {
     if (!failure || depth > 6) return undefined;
     const result = {};
-    for (const key of ['name', 'message', 'code', 'path', 'dest', 'errno', 'syscall', 'scanPhase', 'expectedDirectory', 'observedDirectory', 'changedFields', 'nativeCode', 'nativeStage', 'hresult', 'nativeCommand', 'nativeCommandId', 'operation', 'requestId', 'generation']) {
+    for (const key of ['name', 'message', 'code', 'path', 'dest', 'errno', 'syscall', 'sourceState', 'scanPhase', 'expectedDirectory', 'observedDirectory', 'changedFields', 'nativeCode', 'nativeStage', 'hresult', 'nativeCommand', 'nativeCommandId', 'operation', 'requestId', 'generation']) {
       const value = failure[key];
       if (typeof value === 'string' || typeof value === 'number' || typeof value === 'bigint') result[key] = String(value).slice(0, 4000);
     }

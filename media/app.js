@@ -2446,6 +2446,7 @@
     const appendFailure = (failure, label = null, depth = 0) => {
       if (!failure || depth > 6) return;
       if (label) lines.push(`${'  '.repeat(depth)}${t('Ursache')}:`);
+      if (failure.sourceState) lines.push(`${t('Quellzustand im Snapshot')}: ${failure.sourceState}`);
       for (const [key, label] of Object.entries({ name: 'Fehlername', code: 'Fehlercode', errno: 'errno', syscall: 'Systemaufruf', nativeCode: 'Nativer Fehlercode', nativeStage: 'Native Phase', hresult: 'HRESULT', nativeCommand: 'Nativer Befehl', nativeCommandId: 'Native Befehlskennung', operation: 'Native Operation', requestId: 'Native Anfragekennung', generation: 'Sitzungsgeneration', message: 'Fehlermeldung', path: 'Pfad', dest: 'Zielpfad', scanPhase: 'Scan-Phase', expectedDirectory: 'Erwartete Ordnermetadaten', observedDirectory: 'Gelesene Ordnermetadaten', changedFields: 'Abweichende Ordnermerkmale' })) if (failure[key] !== undefined && failure[key] !== null && failure[key] !== '') lines.push(`${t(label)}: ${failure[key]}`);
       if (failure.stack) lines.push(`${'  '.repeat(depth)}${t('Stack')}:\n${failure.stack}`);
       if (failure.sourceIdentity) {
