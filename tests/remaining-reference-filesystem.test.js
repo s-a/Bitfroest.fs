@@ -29,9 +29,10 @@ test('append timestamps describe changed combined contents while empty appends p
     const targetTime = (await fs.stat(`${right}/a.bin`)).mtimeMs;
     const before = await provider.load(), after = structuredClone(before), source = after.folders[left][0];
     const started = Date.now();
-    const planned = await transfer.execute({ folders: after.folders, sourcePath: left, targetPath: right, ids: [source.id], mode, onConflict: () => ({ action: 'append' }) });
+    const changes = [];
+    const planned = await transfer.execute({ folders: after.folders, sourcePath: left, targetPath: right, ids: [source.id], mode, onChange: change => changes.push(change), onConflict: () => ({ action: 'append' }) });
     assert.equal(planned.completed, 1);
-    await provider.apply(before, after, { signal: new AbortController().signal, transfer: { mode, sourcePath: left, sourceSide: 0, ids: [source.id] } });
+    await provider.apply(before, undefined, { signal: new AbortController().signal, transfer: { mode, sourcePath: left, targetPath: right, sourceSide: 0, ids: [source.id], changes } });
     assert.deepEqual(await fs.readFile(`${right}/a.bin`), Buffer.concat([original, incoming]));
     const modified = (await fs.stat(`${right}/a.bin`)).mtimeMs;
     if (empty) assert.equal(modified, targetTime);
@@ -48,9 +49,10 @@ test('empty-target copies and repeated wildcard folder masks commit real bytes t
   let before = await provider.load({ recursive: true });
   for (const [name, targetPath, mode, policy] of [['a.txt', '', 'copy', 'autorename-source'], ['docs.old', `${right}/****`, 'move', 'ask']]) {
     const after = structuredClone(before), source = after.folders[left].find(row => row.name === name);
-    const planned = await transfer.execute({ folders: after.folders, sourcePath: left, targetPath, ids: [source.id], mode, policy });
+    const changes = [];
+    const planned = await transfer.execute({ folders: after.folders, sourcePath: left, targetPath, ids: [source.id], mode, onChange: change => changes.push(change), policy });
     assert.equal(planned.errors.length, 0);
-    before = await provider.apply(before, after, { signal: new AbortController().signal, transfer: { mode, sourcePath: left, sourceSide: 0, ids: [source.id] } });
+    before = await provider.apply(before, undefined, { signal: new AbortController().signal, transfer: { mode, sourcePath: left, targetPath: targetPath ? right : left, sourceSide: 0, ids: [source.id], changes } });
   }
   assert.equal(await fs.readFile(`${left}/a.txt`, 'utf8'), 'original');
   assert.equal(await fs.readFile(`${left}/a (2).txt`, 'utf8'), 'original');

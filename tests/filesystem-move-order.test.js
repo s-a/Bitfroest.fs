@@ -38,9 +38,10 @@ test('parent-directory transfers resolve an existing target and commit actual by
     await fs.writeFile(`${left}/source.bin`, 'old target');
     const before = await provider.load({ directories: [sourcePath] }), after = structuredClone(before), source = after.folders[sourcePath][0];
     let conflicts = 0;
-    const result = await require('../media/bitfroest-transfer').execute({ folders: after.folders, sourcePath, targetPath: left, ids: [source.id], mode, onConflict: () => { conflicts++; return { action: 'overwrite' }; } });
+    const changes = [];
+    const result = await require('../media/bitfroest-transfer').execute({ folders: after.folders, sourcePath, targetPath: left, ids: [source.id], mode, onChange: change => changes.push(change), onConflict: () => { conflicts++; return { action: 'overwrite' }; } });
     assert.equal(conflicts, 1); assert.equal(result.completed, 1);
-    await provider.apply(before, after, { transfer: { mode, sourcePath, sourceSide: 0, ids: [source.id] } });
+    await provider.apply(before, undefined, { transfer: { mode, sourcePath, targetPath: left, sourceSide: 0, ids: [source.id], changes } });
     assert.deepEqual(await fs.readFile(`${left}/source.bin`), Buffer.from([0, 2, 4, 6]));
     if (mode === 'copy') assert.deepEqual(await fs.readFile(`${sourcePath}/source.bin`), Buffer.from([0, 2, 4, 6]));
     else await assert.rejects(fs.stat(`${sourcePath}/source.bin`), { code: 'ENOENT' });

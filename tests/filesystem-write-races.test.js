@@ -39,9 +39,11 @@ test('cancelled move does not delete a source whose published target was replace
     }
     return fs.copyFile(source, target, flags);
   };
-  const before = await provider.load(), after = structuredClone(before);
-  after.folders[left] = []; after.folders[right] = before.folders[left].map((row, index) => ({ ...row, id: `move-${index}` }));
-  await assert.rejects(provider.apply(before, after, { signal: controller.signal, transfer: { mode: 'move', sourcePath: left, sourceSide: 0, ids: before.folders[left].map(row => row.id) } }), /Wiederherstellung/);
+  const before = await provider.load(), files = before.folders[left];
+  const changes = files.map(file => ({ kind: 'put', source: file.fsSource, target: right + '/' + file.name }));
+  await assert.rejects(provider.apply(before, undefined, { signal: controller.signal, transfer: {
+    mode: 'move', sourcePath: left, targetPath: right, sourceSide: 0, ids: files.map(row => row.id), changes
+  } }), /Wiederherstellung/);
   assert.equal(await fs.readFile(`${left}/lower.txt`, 'utf8'), 'ORIGINAL');
   assert.equal(await fs.readFile(`${left}/z.txt`, 'utf8'), 'SECOND');
   assert.equal(await fs.readFile(`${right}/lower.txt`, 'utf8'), 'EXTERNAL');

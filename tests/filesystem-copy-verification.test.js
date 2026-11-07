@@ -18,9 +18,9 @@ for (const enabled of [false, true]) test(`additional copy comparison ${enabled}
     return handle;
   } } });
   const before = await provider.load({ directories: [left, right], visibleOnly: true });
-  const after = structuredClone(before), source = before.folders[left][0]; after.folders[right].push({ ...source, id: 'copied' });
+  const source = before.folders[left][0];
   readBytes = 0;
-  await provider.apply(before, after, { verifyAfterCopy: enabled, transfer: { mode: 'copy', sourcePath: left, sourceSide: 0, ids: [source.id] } });
+  await provider.apply(before, undefined, { verifyAfterCopy: enabled, transfer: { mode: 'copy', sourcePath: left, targetPath: right, sourceSide: 0, ids: [source.id], changes: [{ kind: 'put', source: source.fsSource, target: right + '/source.bin' }] } });
   assert.equal(readBytes, enabled ? bytes.length * 2 : 0);
   assert.deepEqual(await fs.readFile(`${right}/source.bin`), bytes);
   assert.deepEqual(await fs.readFile(`${left}/source.bin`), bytes);

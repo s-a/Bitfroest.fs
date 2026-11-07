@@ -21,7 +21,7 @@ test('directory preparation reports scanned entries and aborts without invalidat
 test('a pre-aborted transfer remains cancellable before the first copy', async t => {
   let copies = 0;
   const f = await fixture(t, { copyFile: async (...args) => { copies++; return fs.copyFile(...args); } }), controller = new AbortController(); controller.abort();
-  const result = await f.provider.apply(f.before, f.after, { transfer: f.transfer, signal: controller.signal });
+  const result = await f.provider.apply(f.before, undefined, { transfer: f.transfer, signal: controller.signal });
   assert.equal(result.operationOutcome.cancelled, true);
   assert.equal(copies, 0);
   assert.deepEqual(await fs.readdir(f.right), []);
@@ -33,7 +33,7 @@ test('pre-aborted copy acknowledges without rescanning the filesystem', async t 
   const f = await fixture(t, { fs: { ...fs, readdir: async (...args) => { reads.push(args[0]); return fs.readdir(...args); } } });
   reads.length = 0;
   const controller = new AbortController(); controller.abort();
-  const result = await f.provider.apply(f.before, f.after, { transfer: f.transfer, signal: controller.signal });
+  const result = await f.provider.apply(f.before, undefined, { transfer: f.transfer, signal: controller.signal });
   assert.equal(result.operationOutcome.cancelled, true);
   assert.deepEqual(reads, [], 'no writes require no reconciliation scan');
 });
@@ -50,16 +50,13 @@ test('cancelled copy refreshes open tabs without rescanning recursively prepared
   const unrelated = `${f.left}/unrelated`;
   await fs.mkdir(unrelated); await fs.writeFile(`${unrelated}/untouched.txt`, 'KEEP');
   f.before = await f.provider.load({ directories: [unrelated] });
-  f.after = structuredClone(f.before);
-  f.after.folders[f.right] = f.after.folders[f.left].filter(row => row.type !== 'folder').map((row, index) => ({ ...row, id: `copy-${index}` }));
   reads.length = 0;
-  const result = await f.provider.apply(f.before, f.after, { transfer: f.transfer, signal: controller.signal });
+  const result = await f.provider.apply(f.before, undefined, { transfer: f.transfer, signal: controller.signal });
   assert.equal(result.operationOutcome.cancelled, true);
   assert.equal(reads.includes(unrelated), false);
   assert.equal(result.folders[f.right].some(row => row.name === 'a.txt'), true);
-  assert.ok(result.unloadedFolders.includes(unrelated));
-  const prepared = await f.provider.prepare(result, { directories: [unrelated] });
-  assert.equal(prepared.folders[unrelated][0].name, 'untouched.txt');
+  assert.equal(result.unloadedFolders.includes(unrelated), false);
+  assert.deepEqual(result.folders[unrelated], f.before.folders[unrelated]);
 });
 
 test('one transfer reuses one native copy session and disposes it after publishing all files', async t => {
@@ -68,7 +65,7 @@ test('one transfer reuses one native copy session and disposes it after publishi
     async copy(input) { copies++; await fs.copyFile(input.source, input.target, 1); },
     async dispose() { disposed++; }
   }; } });
-  await f.provider.apply(f.before, f.after, { signal: new AbortController().signal, transfer: f.transfer });
+  await f.provider.apply(f.before, undefined, { signal: new AbortController().signal, transfer: f.transfer });
   assert.equal(sessions, 1); assert.equal(copies, 2); assert.equal(disposed, 1);
   assert.equal(await fs.readFile(`${f.right}/a.txt`, 'utf8'), 'AAA');
   assert.equal(await fs.readFile(`${f.right}/b.txt`, 'utf8'), 'BBBB');
@@ -82,12 +79,14 @@ async function fixture(t, options = {}, mode = 'copy') {
   const provider = createProvider({ roots: [left, right], ...options }), before = await provider.load(), after = structuredClone(before);
   after.folders[right] = after.folders[left].map((file, index) => ({ ...file, id: `copy-${index}` }));
   if (mode === 'move') after.folders[left] = [];
-  const transfer = { mode, sourcePath: left, ids: before.folders[left].map(file => file.id), sourceSide: 0 };
+  const files = before.folders[left];
+  const changes = files.map(file => ({ kind: 'put', source: file.fsSource, target: right + '/' + file.name }));
+  const transfer = { mode, sourcePath: left, targetPath: right, ids: files.map(file => file.id), sourceSide: 0, changes };
   return { provider, before, after, transfer, left, right };
 }
 test('abort before a transfer starts cannot publish files or remove sources', async t => {
   const f = await fixture(t), controller = new AbortController(); controller.abort();
-  const result = await f.provider.apply(f.before, f.after, { signal: controller.signal, transfer: f.transfer });
+  const result = await f.provider.apply(f.before, undefined, { signal: controller.signal, transfer: f.transfer });
   assert.equal(result.operationOutcome.cancelled, true);
   assert.deepEqual(result.operationOutcome.completedIds, []);
   assert.deepEqual(await fs.readdir(f.right), []);
@@ -100,9 +99,10 @@ test('copy abort retains only fully verified earlier publications and restores u
     await fs.copyFile(source, destination, 1); options.onProgress?.({ transferred: 3, total: 3, granular: true });
   } });
   await fs.writeFile(`${f.right}/b.txt`, 'OLD');
-  f.before = await f.provider.load(); f.after = structuredClone(f.before);
-  f.after.folders[f.right] = f.after.folders[f.left].map((file, index) => ({ ...file, id: `copy-${index}` }));
-  const result = await f.provider.apply(f.before, f.after, { signal: controller.signal, transfer: f.transfer });
+  f.before = await f.provider.load();
+  const replacement = f.transfer.changes[1];
+  f.transfer.changes[1] = { ...replacement, replaced: replacement.target };
+  const result = await f.provider.apply(f.before, undefined, { signal: controller.signal, transfer: f.transfer });
   assert.equal(result.operationOutcome.cancelled, true);
   assert.deepEqual(result.operationOutcome.completedIds, [f.transfer.ids[0]]);
   assert.equal(await fs.readFile(`${f.right}/a.txt`, 'utf8'), 'AAA');
@@ -115,7 +115,7 @@ test('partial move counts success only after the completed source has actually b
     if (source.endsWith('/b.txt')) { controller.abort(); throw abortError(); }
     await fs.copyFile(source, destination, 1);
   } }, 'move');
-  const result = await f.provider.apply(f.before, f.after, { signal: controller.signal, transfer: f.transfer });
+  const result = await f.provider.apply(f.before, undefined, { signal: controller.signal, transfer: f.transfer });
   assert.equal(result.operationOutcome.cancelled, true);
   assert.deepEqual(result.operationOutcome.completedSourcePaths, [`${f.left}/a.txt`]);
   assert.deepEqual(await fs.readdir(f.left), ['b.txt']);
@@ -136,11 +136,11 @@ test('append abort between chunks restores original target and retains every sou
     return handle;
   } } });
   await fs.writeFile(`${f.left}/a.txt`, Buffer.alloc(200000, 9)); await fs.writeFile(`${f.right}/a.txt`, 'OLD');
-  f.before = await f.provider.load(); f.after = structuredClone(f.before);
-  const target = f.after.folders[f.right][0], source = f.after.folders[f.left][0];
-  target.fsAppend = { source: source.fsSource, target: target.fsSource }; target.size += source.size; delete target.content;
+  f.before = await f.provider.load();
+  const target = f.before.folders[f.right][0], source = f.before.folders[f.left][0];
+  const changes = [{ kind: 'append', source: source.fsSource, target: target.fsSource }];
   let writes = 0;
-  const result = await f.provider.apply(f.before, f.after, { signal: controller.signal, transfer: { ...f.transfer, ids: [source.id] }, onProgress: event => { if (event.phase === 'appending') writes++; } });
+  const result = await f.provider.apply(f.before, undefined, { signal: controller.signal, transfer: { ...f.transfer, ids: [source.id], changes }, onTransferProgress: event => { if (event.phase === 'appending') writes++; } });
   assert.equal(result.operationOutcome.cancelled, true); assert.deepEqual(result.operationOutcome.completedIds, []);
   assert.equal(writes, 1); assert.equal(await fs.readFile(`${f.right}/a.txt`, 'utf8'), 'OLD');
   assert.equal((await fs.stat(`${f.left}/a.txt`)).size, 200000);
@@ -149,18 +149,18 @@ test('append abort between chunks restores original target and retains every sou
 test('published transfer byte progress never moves backwards at the commit boundary', async t => {
   const events = [], controller = new AbortController();
   const f = await fixture(t, { copyFile: async (source, destination, options) => { await fs.copyFile(source, destination, 1); options.onProgress({ transferred: 300, total: 300, granular: true }); } });
-  await f.provider.apply(f.before, f.after, { transfer: f.transfer, signal: controller.signal, onProgress: event => events.push(event) });
+  await f.provider.apply(f.before, undefined, { transfer: f.transfer, signal: controller.signal, onTransferProgress: event => events.push(event) });
   const bytes = events.filter(event => event.phase !== 'validating');
   assert.ok(bytes.length > 0);
-  assert.ok(bytes.every((event, index) => event.completedBytes <= event.totalBytes && (!index || event.completedBytes >= bytes[index - 1].completedBytes)));
-  assert.equal(events.at(-1).completedBytes, 7);
+  assert.ok(bytes.every((event, index) => event.batch.completed <= event.batch.total && (!index || event.batch.completed >= bytes[index - 1].batch.completed)));
+  assert.equal(events.at(-1).batch.completed, 7);
 });
 
 test('real cancellable provider copy preserves readonly source and target bytes', { skip: process.platform !== 'win32' }, async t => {
   const f = await fixture(t), controller = new AbortController();
   await fs.chmod(`${f.left}/a.txt`, 0o444);
-  f.before = await f.provider.load(); f.after = structuredClone(f.before); f.after.folders[f.right] = f.after.folders[f.left].map((file, i) => ({ ...file, id: `copied-${i}` }));
-  const result = await f.provider.apply(f.before, f.after, { signal: controller.signal, transfer: f.transfer });
+  f.before = await f.provider.load();
+  const result = await f.provider.apply(f.before, undefined, { signal: controller.signal, transfer: f.transfer });
   assert.equal(result.folders[f.right].length, 2); assert.equal(await fs.readFile(`${f.right}/a.txt`, 'utf8'), 'AAA');
   assert.equal((await fs.stat(`${f.right}/a.txt`)).mode & 0o222, 0);
 });
@@ -168,12 +168,17 @@ test('real cancellable provider copy preserves readonly source and target bytes'
 test('partial move keeps empty destination subdirectories before removing completed source trees', async t => {
   const controller = new AbortController(), f = await fixture(t);
   await fs.mkdir(`${f.left}/docs`); await fs.mkdir(`${f.left}/docs/empty`); await fs.writeFile(`${f.left}/docs/item.txt`, 'child');
-  f.before = await f.provider.load({ recursive: true }); f.after = structuredClone(f.before);
-  const folder = f.after.folders[f.left].find(row => row.name === 'docs');
-  f.after.folders[f.left] = f.after.folders[f.left].filter(row => row !== folder);
-  f.after.folders[f.right].push({ ...folder, id: 'docs-copy' });
-  for (const directory of Object.keys(f.after.folders).filter(dir => dir.startsWith(`${f.left}/docs`))) { f.after.folders[f.right + directory.slice(f.left.length)] = f.after.folders[directory].map(row => ({ ...row, id: `copy-${row.id}` })); delete f.after.folders[directory]; }
-  const result = await f.provider.apply(f.before, f.after, { signal: controller.signal, transfer: { ...f.transfer, mode: 'move', ids: [folder.id] }, onProgress: event => { if (event.phase === 'published') controller.abort(); } });
+  f.before = await f.provider.load({ recursive: true });
+  const folder = f.before.folders[f.left].find(row => row.name === 'docs');
+  const source = folder.fsSource, target = f.right + '/docs';
+  const changes = [
+    { kind: 'put', source, target },
+    { kind: 'put', source: source + '/empty', target: target + '/empty' },
+    { kind: 'remove-source', source: source + '/empty', target: target + '/empty' },
+    { kind: 'put', source: source + '/item.txt', target: target + '/item.txt' },
+    { kind: 'remove-source', source, target }
+  ];
+  const result = await f.provider.apply(f.before, undefined, { signal: controller.signal, transfer: { ...f.transfer, mode: 'move', ids: [folder.id], changes }, onTransferProgress: event => { if (event.phase === 'published') controller.abort(); } });
   assert.equal(result.operationOutcome.cancelled, true);
   assert.equal((await fs.stat(`${f.right}/docs/empty`)).isDirectory(), true);
   assert.equal(await fs.readFile(`${f.right}/docs/item.txt`, 'utf8'), 'child');
@@ -185,14 +190,14 @@ test('partial move keeps empty destination subdirectories before removing comple
 
 test('source-removal failure after cancellation exposes recovery without a moved acknowledgement', async t => {
   const controller = new AbortController(), f = await fixture(t, { fs: { ...fs, rename: async (source, target) => { if (String(source).endsWith('/left/a.txt')) throw new Error('source removal denied'); return fs.rename(source, target); } } }, 'move');
-  await assert.rejects(f.provider.apply(f.before, f.after, { signal: controller.signal, transfer: f.transfer, onProgress: event => { if (event.phase === 'published') controller.abort(); } }), error => /recovery|Wiederherstellung/.test(error.message));
+  await assert.rejects(f.provider.apply(f.before, undefined, { signal: controller.signal, transfer: f.transfer, onTransferProgress: event => { if (event.phase === 'published') controller.abort(); } }), error => /recovery|Wiederherstellung/.test(error.message));
   assert.equal(await fs.readFile(`${f.left}/a.txt`, 'utf8'), 'AAA');
   assert.equal(await fs.readFile(`${f.right}/a.txt`, 'utf8'), 'AAA');
 });
 
 test('cancellation after a source quarantine retains acknowledged completed moves', async t => {
   const controller = new AbortController(), f = await fixture(t, { fs: { ...fs, rename: async (source, target) => { await fs.rename(source, target); if (String(source).endsWith('/left/a.txt')) controller.abort(); } } }, 'move');
-  const result = await f.provider.apply(f.before, f.after, { signal: controller.signal, transfer: f.transfer });
+  const result = await f.provider.apply(f.before, undefined, { signal: controller.signal, transfer: f.transfer });
   assert.equal(result.operationOutcome.cancelled, true);
   assert.deepEqual(result.operationOutcome.completedIds, f.transfer.ids);
   assert.deepEqual(await fs.readdir(f.left), []);

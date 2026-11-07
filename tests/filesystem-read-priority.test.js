@@ -24,9 +24,9 @@ test('an interrupted metadata read cannot replace the snapshot of a completed co
   let copied;
   try {
     controller.abort();
-    const after = structuredClone(before), source = before.folders[left].find(row => row.name === 'source.txt');
-    after.folders[right].push({ ...source, id: 'copied' });
-    copied = await provider.apply(before, after, { transfer: { mode: 'copy', sourcePath: left, sourceSide: 0, ids: [source.id] } });
+    const source = before.folders[left].find(row => row.name === 'source.txt');
+    const changes = [{ kind: 'put', source: source.fsSource, target: right + '/source.txt' }];
+    copied = await provider.apply(before, undefined, { transfer: { mode: 'copy', sourcePath: left, targetPath: right, sourceSide: 0, ids: [source.id], changes } });
     assert.equal(await fs.readFile(`${right}/source.txt`, 'utf8'), 'original bytes');
   } finally { release(); await assert.rejects(reading, { name: 'AbortError' }); }
   const next = await provider.apply(copied, structuredClone(copied));

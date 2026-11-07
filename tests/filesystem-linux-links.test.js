@@ -57,10 +57,8 @@ test('Linux copies relative, dangling and outside-root symlinks as link objects'
   await fs.symlink(`${outside}/private.txt`, `${left}/outside-link`);
   const before = await provider.load();
   const links = ['relative-link', 'dangling-link', 'outside-link'].map(name => row(before, left, name));
-  const after = structuredClone(before);
-  after.folders[right].push(...links.map((link, index) => ({ ...link, id: `copied-${index}` })));
-
-  await provider.apply(before, after, { transfer: { mode: 'copy', sourcePath: left, sourceSide: 0, ids: links.map(link => link.id) } });
+  await provider.apply(before, undefined, { transfer: { mode: 'copy', sourcePath: left, targetPath: right, sourceSide: 0, ids: links.map(link => link.id),
+    changes: links.map(link => ({ kind: 'put', source: link.fsSource, target: right + '/' + link.name })) } });
 
   assert.equal(await fs.lstat(`${right}/relative-link`).then(stat => stat.isSymbolicLink()), true);
   assert.equal(await fs.readlink(`${right}/relative-link`), 'target.txt');
@@ -77,18 +75,15 @@ test('Linux moves and renames symlinks without changing their target text', linu
   await fs.symlink('missing-relative-target', `${left}/rename-link`);
   let before = await provider.load();
   const moving = row(before, left, 'move-link');
-  let after = structuredClone(before);
-  after.folders[left] = after.folders[left].filter(item => item.id !== moving.id);
-  after.folders[right].push({ ...moving, id: 'moved-link' });
-
-  await provider.apply(before, after, { transfer: { mode: 'move', sourcePath: left, sourceSide: 0, ids: [moving.id] } });
+  await provider.apply(before, undefined, { transfer: { mode: 'move', sourcePath: left, targetPath: right, sourceSide: 0, ids: [moving.id],
+    changes: [{ kind: 'put', source: moving.fsSource, target: right + '/move-link' }] } });
 
   await assert.rejects(fs.lstat(`${left}/move-link`), { code: 'ENOENT' });
   assert.equal(await fs.readlink(`${right}/move-link`), '../outside/private.txt');
   assert.equal(await fs.readFile(`${outside}/private.txt`, 'utf8'), 'outside data');
 
   before = await provider.load();
-  after = structuredClone(before);
+  const after = structuredClone(before);
   const renaming = row(before, left, 'rename-link');
   after.folders[left] = after.folders[left].map(item => item.id === renaming.id ? { ...item, name: 'renamed-link' } : item);
   await provider.apply(before, after);

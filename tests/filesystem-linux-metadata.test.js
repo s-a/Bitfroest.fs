@@ -12,13 +12,12 @@ test('Linux cancellation before directory metadata does not confirm the whole fo
   await Promise.all([fs.mkdir(source, { recursive: true }), fs.mkdir(right)]);
   await fs.writeFile(path.join(source, 'data.txt'), 'copied data');
   const provider = createProvider({ roots: [left, right] });
-  const before = await provider.load({ recursive: true }), after = structuredClone(before);
+  const before = await provider.load({ recursive: true });
   const folder = before.folders[left][0], target = path.join(right, 'folder');
-  after.folders[right].push({ ...folder, id: 'copied-folder' });
-  after.folders[target] = before.folders[source].map(row => ({ ...row, id: `copied-${row.id}` }));
+  const changes = [{ kind: 'put', source, target }, { kind: 'put', source: path.join(source, 'data.txt'), target: path.join(target, 'data.txt') }];
   const controller = new AbortController();
-  const result = await provider.apply(before, after, { signal: controller.signal,
-    transfer: { mode: 'copy', sourcePath: left, sourceSide: 0, ids: [folder.id] },
+  const result = await provider.apply(before, undefined, { signal: controller.signal,
+    transfer: { mode: 'copy', sourcePath: left, targetPath: right, sourceSide: 0, ids: [folder.id], changes },
     onProgress: event => { if (event.phase === 'metadata') controller.abort(); }
   });
   assert.equal(result.operationOutcome.cancelled, true);
