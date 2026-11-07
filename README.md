@@ -130,7 +130,7 @@ The **Configuration** menu opens settings for file operations, favorites, column
 | --- | --- |
 | Windows | Primary supported platform, including native Windows integrations |
 | Linux | Native file copy, symbolic links, Git index actions, supported desktop capabilities and portable file operations. File clipboard access uses X11, supported Wayland data-control protocols or an existing XWayland connection. The Windows shell context menu is unavailable |
-| macOS | Experimental Marketplace pre-release for Apple Silicon (ARM64). Build and package checks run in CI. Desktop workflows are open for community testing |
+| macOS | No official support. An experimental Marketplace pre-release is available for Apple Silicon (ARM64) |
 
 Published Windows and Linux packages target x64 processors. Linux packages target Ubuntu 24.04 or a compatible newer runtime.
 
