@@ -66,12 +66,13 @@ test('Send to moves a folder into its existing namesake and preserves unrelated 
   const directory = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'bitfroest-send-to-merge-'))).replaceAll('\\', '/');
   t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
   const left = directory + '/left', right = directory + '/right', favorite = directory + '/favorite';
-  const source = left + '/Project', target = favorite + '/Project';
-  for (const folder of [left, right, favorite, source, target]) fs.mkdirSync(folder);
-  fs.writeFileSync(source + '/shared.txt', 'updated');
-  fs.writeFileSync(source + '/new.txt', 'new');
-  fs.writeFileSync(target + '/shared.txt', 'old');
-  fs.writeFileSync(target + '/keep.txt', 'keep');
+  const source = left + '/Project', target = favorite + (process.platform === 'win32' ? '/PROJECT' : '/Project');
+  const sourceSeason = source + '/Season', targetSeason = target + (process.platform === 'win32' ? '/SEASON' : '/Season');
+  for (const folder of [left, right, favorite, source, target, sourceSeason, targetSeason]) fs.mkdirSync(folder);
+  fs.writeFileSync(sourceSeason + '/shared.txt', 'updated');
+  fs.writeFileSync(sourceSeason + '/new.txt', 'new');
+  fs.writeFileSync(targetSeason + '/shared.txt', 'old');
+  fs.writeFileSync(targetSeason + '/keep.txt', 'keep');
   const saved = await createProvider({ roots: [left, right] }).load({ directories: [left, right], visibleOnly: true });
   const app = harness(t, { language: 'en', startupRoots: [left, right], workspaceState: { fileManagerState: saved },
     configuration: { 'favorites.entries': { Work: favorite } },
@@ -94,14 +95,16 @@ test('Send to moves a folder into its existing namesake and preserves unrelated 
   const conflict = () => view.document.querySelector('[data-conflict-action="overwrite"]');
   for (let i = 0; i < 8 && !conflict(); i++) await exchange();
   assert.ok(conflict(), view.document.querySelector('.operation-error-text')?.value);
-  assert.equal(fs.readFileSync(target + '/new.txt', 'utf8'), 'new');
-  assert.equal(fs.readFileSync(target + '/shared.txt', 'utf8'), 'old');
+  assert.equal(fs.readFileSync(targetSeason + '/new.txt', 'utf8'), 'new');
+  assert.equal(fs.readFileSync(targetSeason + '/shared.txt', 'utf8'), 'old');
   view.click(conflict());
   for (let i = 0; i < 8 && fs.existsSync(source); i++) await exchange();
   assert.equal(fs.existsSync(source), false, view.document.querySelector('.operation-error-text')?.value);
-  assert.equal(fs.readFileSync(target + '/shared.txt', 'utf8'), 'updated');
-  assert.equal(fs.readFileSync(target + '/new.txt', 'utf8'), 'new');
-  assert.equal(fs.readFileSync(target + '/keep.txt', 'utf8'), 'keep');
+  assert.equal(fs.readFileSync(targetSeason + '/shared.txt', 'utf8'), 'updated');
+  assert.equal(fs.readFileSync(targetSeason + '/new.txt', 'utf8'), 'new');
+  assert.equal(fs.readFileSync(targetSeason + '/keep.txt', 'utf8'), 'keep');
+  assert.deepEqual(fs.readdirSync(favorite), [path.basename(target)]);
+  assert.deepEqual(fs.readdirSync(target), [path.basename(targetSeason)]);
   assert.deepEqual(Array.from(view.state().panes, pane => pane.tabs[pane.tab]), [left, right]);
   panel.dispose();
 });

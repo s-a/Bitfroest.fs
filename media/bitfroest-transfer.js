@@ -23,6 +23,10 @@
     return paths.normalizePath(value, { base: source, input: true });
   }
 
+  function missingDestination(path) {
+    return Object.assign(new Error('Ein vorhandener Zielordner ist erforderlich.'), { code: 'DESTINATION_NOT_IN_SNAPSHOT', path });
+  }
+
   function uniqueName(items, name, directory) {
     const dot = name.lastIndexOf('.');
     let stem = dot > 0 ? name.slice(0, dot) : name;
@@ -90,9 +94,7 @@
     const mask = !options.requiredDirectory && /[*?]/.test(leaf) ? leaf : null;
     const existing = path => Object.keys(folders).find(key => paths.identity(key) === paths.identity(path));
     const existingDirectory = existing(destination);
-    if (options.requiredDirectory && !existingDirectory) {
-      throw Object.assign(new Error('Ein vorhandener Zielordner ist erforderlich.'), { code: 'DESTINATION_NOT_IN_SNAPSHOT', path: destination });
-    }
+    if (options.requiredDirectory && !existingDirectory) throw missingDestination(destination);
     const directoryTarget = existingDirectory || /[\\/]"?$/.test(raw) || selected.length > 1 && !mask;
     let directory = directoryTarget ? destination : parent(destination);
     let name = directoryTarget || mask ? undefined : leaf;
@@ -163,6 +165,7 @@
       if (source.type !== 'folder' && !matches(source.name, options.filter)) { result.skipped++; return; }
       let name = requestedName || source.name;
       const items = folders[targetDirectory];
+      if (!Array.isArray(items)) throw missingDestination(targetDirectory);
       let existing = items.find(item => sameName(item.name, name, targetDirectory));
       const samePath = targetDirectory === sourceDirectory && sameName(source.name, name, targetDirectory);
       if (samePath && existing === source && mode === 'move' && source.name !== name && !items.some(item => item !== source && sameName(item.name, name, targetDirectory))) {
@@ -218,7 +221,7 @@
         if (existing) { removeTree(join(targetDirectory, existing.name), existing.type === 'archive'); items.splice(items.indexOf(existing), 1); existing = undefined; }
       }
       if (source.type === 'folder') {
-        const sourceFolder = join(sourceDirectory, source.name), targetFolder = join(targetDirectory, name);
+        const sourceFolder = join(sourceDirectory, source.name), targetFolder = join(targetDirectory, existing?.name ?? name);
         if (!existing) { items.push({ ...clone(source), id: createId(), name }); folders[targetFolder] = []; result.directories++; }
         for (const child of [...(folders[sourceFolder] || [])]) { await put(sourceFolder, child, targetFolder, child.name); if (result.cancelled) break; }
         if (mode === 'move' && !(folders[sourceFolder] || []).length && !result.cancelled) removeEntry(sourceDirectory, source);

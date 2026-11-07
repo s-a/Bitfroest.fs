@@ -2739,7 +2739,17 @@
     const resume = () => executeTransferNow(options).catch(failed);
     if (prepareFolders([plan.directories.length ? parent(plan.directories[0]) : targetDirectory], options.mode, resume, false, false, transfer)) { transferPreparationFailure = cancelled => options.onComplete?.({ confirmed: false, completed: 0, completedIds: [], errors: cancelled ? [] : [t('Dateioperation fehlgeschlagen; Verzeichnisse erneut eingelesen')], cancelled: Boolean(cancelled) }); return; }
     const selectedFolders = (state.folders[options.sourcePath] || []).filter(file => options.ids.includes(file.id) && file.type === 'folder');
-    if (prepareFolders(selectedFolders.flatMap(file => [join(options.sourcePath, file.name), join(targetDirectory, plan.name || (plan.mask ? window.BitfroestTransfer.applyNameMask(file.name, plan.mask) : file.name))]), options.mode, resume, true, false, transfer)) { transferPreparationFailure = cancelled => options.onComplete?.({ confirmed: false, completed: 0, completedIds: [], errors: cancelled ? [] : [t('Dateioperation fehlgeschlagen; Verzeichnisse erneut eingelesen')], cancelled: Boolean(cancelled) }); return; }
+    if (selectedFolders.length) {
+      const targetFolders = new Map((state.folders[targetDirectory] || []).filter(row => row.type === 'folder').map(row => {
+        const path = join(targetDirectory, row.name);
+        return [paths.identity(path), path];
+      }));
+      const directoriesToPrepare = selectedFolders.flatMap(file => {
+        const target = join(targetDirectory, plan.name || (plan.mask ? window.BitfroestTransfer.applyNameMask(file.name, plan.mask) : file.name));
+        return [join(options.sourcePath, file.name), targetFolders.get(paths.identity(target)) ?? target];
+      });
+      if (prepareFolders(directoriesToPrepare, options.mode, resume, true, false, transfer)) { transferPreparationFailure = cancelled => options.onComplete?.({ confirmed: false, completed: 0, completedIds: [], errors: cancelled ? [] : [t('Dateioperation fehlgeschlagen; Verzeichnisse erneut eingelesen')], cancelled: Boolean(cancelled) }); return; }
+    }
     transferPending = true;
     const planningJob = transferJob;
     planningJob.controller = new AbortController();

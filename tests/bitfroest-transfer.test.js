@@ -127,6 +127,13 @@ test('partial directory moves keep skipped children and remove only completed so
   assert.ok(options.folders['/target/docs'].some(item => item.name === 'other.txt'));
 });
 
+test('moving into an existing folder without a listing reports the missing destination', async () => {
+  const options = setup({ '/source': [file('folder', 'docs', '', { type: 'folder' })], '/source/docs': [file('child', 'new.txt')], '/target': [file('target-folder', 'docs', '', { type: 'folder' })] });
+  const before = structuredClone(options.folders);
+  await assert.rejects(transfer.execute({ ...options, ids: ['folder'], mode: 'move' }), { code: 'DESTINATION_NOT_IN_SNAPSHOT', path: '/target/docs' });
+  assert.deepEqual(options.folders, before);
+});
+
 test('copying folders into their own descendant and invalid renames leave data unchanged', async () => {
   const options = setup({ '/source': [file('folder', 'docs', '', { type: 'folder' })], '/source/docs': [] }); options.ids = ['folder'];
   const before = JSON.stringify(options.folders);
