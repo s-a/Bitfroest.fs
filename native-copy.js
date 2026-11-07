@@ -26,16 +26,17 @@ function validate(input, platform = 'win32') {
 }
 function nativeCopyError(error, outcome, request) {
   const status = outcome?.status;
-  if (status === 'committed' && outcome?.copied === true) return null;
+  const progressFailed = error?.code === 'ProgressCallbackFailed';
+  if (status === 'committed' && outcome?.copied === true && !progressFailed) return null;
   const unchanged = status === 'unchanged' && outcome?.copied === false;
-  const code = status === 'unknown' || !unchanged && status !== 'partial' ? 'NativeOutcomeUnknown' : status === 'partial' ? 'NativeCopyPartial' : error?.code || 'NativeOutcomeUnchanged';
+  const code = progressFailed ? 'ProgressCallbackFailed' : status === 'unknown' || !unchanged && status !== 'partial' ? 'NativeOutcomeUnknown' : status === 'partial' ? 'NativeCopyPartial' : error?.code || 'NativeOutcomeUnchanged';
   const message = error?.message || (status === 'partial' ? 'The native copy left a partial destination.' : status === 'unknown' ? 'The native copy outcome is unknown.' : 'The native copy did not commit.');
   const result = new Error(message, error ? { cause: error } : undefined);
   result.code = code;
   if (outcome) result.outcome = outcome;
   if (error?.nativeCode !== undefined) result.nativeCode = error.nativeCode;
   if (status === 'partial' && outcome.ownedDestination) result.ownedDestination = { path: request.target, ...outcome.ownedDestination };
-  if (outcome?.cancelled || error?.name === 'AbortError') result.name = 'AbortError';
+  if (!progressFailed && (outcome?.cancelled || error?.name === 'AbortError')) result.name = 'AbortError';
   return result;
 }
 function createCopySession(options = {}) {
@@ -71,7 +72,7 @@ function createCopySession(options = {}) {
       try { outcome = await operation; } catch (error) { operationError = error; outcome = error?.outcome; }
       const failure = nativeCopyError(operationError, outcome, request);
       if (failure) {
-        if (failure.name === 'AbortError') broken = true;
+        if (failure.name === 'AbortError' || failure.outcome?.cancelled) broken = true;
         throw failure;
       }
       return { copied: true, granular: true, ...(outcome?.ownedDestination ? { ownedDestination: outcome.ownedDestination } : {}) };

@@ -22,6 +22,8 @@ export function event(input: ProgressInput): ProgressEvent;
 export function read(input: unknown): ProgressEvent;
 export interface TransferBatchInput {
   readonly phase: string;
+  readonly overall?: never;
+  readonly current?: never;
   readonly batch: BatchMeasurement;
   readonly file: FileMeasurement;
   readonly [field: string]: unknown;

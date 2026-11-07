@@ -25,8 +25,7 @@ test('Send to uses the generated host view and retains an off-screen destination
   const app = harness(t, { language: 'en', startupRoots: [left, right], workspaceState: { fileManagerState: saved },
     onInfoLog: message => logs.push(JSON.parse(message)),
     configuration: { 'favorites.entries': { Work: target } },
-    providerFactory: options => createProvider({ ...options, roots: [left, right], readDirectory: undefined, readAttributes: undefined,
-      fs: require('node:fs/promises') }) });
+    providerFactory: options => createProvider({ ...options, roots: [left, right], readDirectory: undefined, readAttributes: undefined }) });
   await app.command('bitfroest.openPrototype');
   const panel = app.panels[0];
   const view = require('./support/webview.cjs').createApp(t, undefined, { html: panel.webview.html });

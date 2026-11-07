@@ -143,6 +143,24 @@ async function setup(t, options = {}) {
 
 function row(state, directory, name) { return state.folders[directory].find(file => file.name === name); }
 
+test('a real native move delivers scoped progress for every file without cancelling', async t => {
+  const { provider, left, right } = await setup(t);
+  const before = await provider.load();
+  const selected = before.folders[left].filter(file => ['plain.txt', 'binary.bin'].includes(file.name));
+  const after = clone(before);
+  after.folders[left] = after.folders[left].filter(file => !selected.some(source => source.id === file.id));
+  after.folders[right].push(...selected.map(file => ({ ...file, id: `moved-${file.id}` })));
+  const progress = [];
+  const result = await provider.apply(before, after, { signal: new AbortController().signal,
+    transfer: { mode: 'move', sourcePath: left, sourceSide: 0, ids: selected.map(file => file.id) },
+    onTransferProgress: event => progress.push(event) });
+  assert.notEqual(result.operationOutcome?.cancelled, true);
+  assert.equal(await fs.readFile(`${right}/plain.txt`, 'utf8'), 'original text');
+  assert.deepEqual(await fs.readFile(`${right}/binary.bin`), Buffer.from([0, 255, 8, 7]));
+  assert.equal(progress.filter(event => event.phase === 'published').length, 2);
+  assert.equal(progress.every(event => event.batch.scope === 'batch' && event.file.scope === 'file' && !Object.hasOwn(event, 'overall')), true);
+});
+
 test('Send to preparation rejects a changed source or a missing required directory', async t => {
   const { provider, left, right } = await setup(t);
   const destination = right + '/dest';

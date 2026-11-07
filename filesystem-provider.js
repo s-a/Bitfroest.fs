@@ -647,11 +647,12 @@ function createProvider(options = {}) {
     const completedDirectoryMetadata = new Set();
     const totalBytes = [...staged.values()].reduce((sum, file) => sum + (file.expectedSize ?? file.data?.length ?? file.source?.row.size ?? 0), 0);
     let publishedBytes = 0;
-    /** @param {object} file @param {{phase: string, transferred?: number, [field: string]: unknown}} event */
+    /** @param {object} file @param {Partial<import('./media/bitfroest-progress').ProgressEvent> & {phase: string, transferred?: number}} event */
     const report = (file, event) => {
       const bytes = file.expectedSize ?? file.data?.length ?? file.source?.row.size ?? 0;
       const transferred = event.phase === 'published' ? bytes : Math.min(bytes, event.transferred || 0);
-      operation.onTransferProgress?.(Progress.transferBatch({ ...event, path: file.path, sourcePath: file.appendSources?.[0]?.path || file.source?.path || file.path,
+      operation.onTransferProgress?.(Progress.transferBatch({ phase: event.phase, measurementBasis: event.measurementBasis, logicalProcessed: event.logicalProcessed, dataBytesWritten: event.dataBytesWritten, granular: event.granular,
+        path: file.path, sourcePath: file.appendSources?.[0]?.path || file.source?.path || file.path,
         filesCompleted: createdFiles.filter(item => item.completed).length, filesTotal: staged.size,
         batch: Progress.batchBytes(publishedBytes + transferred, totalBytes), file: Progress.fileBytes(transferred, bytes) }));
     };

@@ -91,3 +91,19 @@ test('missing and inconsistent terminal outcomes fail closed without an automati
     await session.dispose();
   }
 });
+
+test('a progress callback failure remains an error when the native operation cancels for it', async () => {
+  const cause = new TypeError('Invalid transfer batch progress');
+  const { session } = fixture(async () => {
+    throw Object.assign(new Error('Copy progress could not be delivered.', { cause }), {
+      code: 'ProgressCallbackFailed', outcome: { status: 'unchanged', copied: false, cancelled: true }
+    });
+  });
+  await assert.rejects(session.copy(input), error => {
+    assert.equal(error.code, 'ProgressCallbackFailed');
+    assert.equal(error.name, 'Error');
+    assert.equal(error.cause.cause, cause);
+    return true;
+  });
+  await session.dispose();
+});

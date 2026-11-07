@@ -257,6 +257,15 @@ test('the compiler rejects reversing the byte scopes at the actual filesystem pr
   assert.ok(failures.some(failure => /progress contract/.test(failure)), failures.join('\n'));
 });
 
+test('the compiler rejects spreading the native progress envelope into the actual transfer batch', () => {
+  const file = path.resolve(__dirname, '../filesystem-provider.js'), original = fs.readFileSync(file, 'utf8');
+  const modified = original.replace('Progress.transferBatch({ phase: event.phase,', 'Progress.transferBatch({ ...event, phase: event.phase,');
+  assert.notEqual(modified, original);
+  const failures = check([file], new Map([[file, modified]]));
+  assert.ok(failures.some(failure => /progress contract/.test(failure)), failures.join('\n'));
+  assert.ok(failures.some(failure => /overall|current/.test(failure)), failures.join('\n'));
+});
+
 test('removing a required measurement from an actual ZIP producer fails the build gate', () => {
   const file = path.resolve(__dirname, '../zip-operations.js');
   const original = fs.readFileSync(file, 'utf8');
