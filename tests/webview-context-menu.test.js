@@ -172,6 +172,22 @@ test('Send to rejects a captured source changed while preparing the destination'
   assert.equal(app.messages.some(message => message.type === 'filesystem-apply'), false);
 });
 
+test('Send to reports that nothing was moved when all selected files are skipped', async t => {
+  const saved = fixture();
+  saved.folders['C:/two'] = [{ id: 'existing', name: 'one.txt', type: 'text', size: 2 }];
+  const app = createApp(t, saved, { language: 'en', platform: 'win32' });
+  openSendToTarget(app);
+  app.click(menuButton(app, 'Move'));
+  app.click(app.document.querySelector('#modal-confirm'));
+  const prepare = app.messages.find(message => message.type === 'filesystem-prepare');
+  post(app, { type: 'filesystem-result', operationId: prepare.operationId, ok: true, state: saved });
+  await new Promise(resolve => setImmediate(resolve));
+  app.click(app.document.querySelector('[data-conflict-action="skip"]'));
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(app.messages.some(message => message.type === 'filesystem-apply'), false);
+  assert.match(app.document.querySelector('#status-message').textContent, /No files or folders were moved.*1 skipped/i);
+});
+
 test('file delete popup confirms its captured selection and allows cancellation', t => {
   for (const language of ['de', 'en']) {
     const app = createApp(t, fixture(), { language });

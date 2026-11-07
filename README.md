@@ -264,6 +264,8 @@ Licensed under the [Apache License 2.0](LICENSE). Project attribution is recorde
 
 **Copy Details** in a file operation error dialog copies the available diagnostic information. For transfer failures, this can include the triggering command, selected files, destination and error code. Recognized paths are shortened. Stack frames retain function names, file names and line numbers.
 
+The status bar's **Copy message and activity log** action includes transfer confirmations, conflict decisions, host acknowledgements and outcomes. Review the activity log before sharing it because it can include local paths.
+
 **Report on GitHub** opens a prefilled issue for review. The report includes a shortened error message, error codes and version information. Recognized paths retain up to three trailing components, which may contain names. Recognized URLs are masked. Stack traces and panel paths are excluded.
 
 Community testing, contributions and feedback are welcome and appreciated. Linux bug reports are most useful with the distribution and version, desktop environment, X11 or Wayland session type, and steps to reproduce. The remaining platform limits are described above.

@@ -268,6 +268,7 @@ function activate(context) {
   let latestBrowserState = null, firstBrowserError = null, latestNativeWindowState = null, diagnosticBuild = null, diagnosticRun = null;
   let omittedStartupEvents = 0, currentStartup, startupClock = performance.now(), logSequence = 0;
   const diagnosticJSON = (value, space) => JSON.stringify(value, (_key, entry) => typeof entry === 'bigint' ? entry.toString() : entry, space);
+  const isTransferTraceId = value => typeof value === 'string' && /^transfer-trace-\d{1,15}-\d{1,10}$/.test(value);
   function logStartup(kind, details = {}) {
     const event = { version: 1, timestamp: new Date().toISOString(), startupId: currentStartup?.id || null,
       sequence: ++logSequence, elapsed: Math.max(0, performance.now() - startupClock), kind, ...details };
@@ -1094,6 +1095,17 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
         });
         return;
       }
+      if (message?.type === 'transfer-trace') {
+        const event = message.event;
+        const token = value => typeof value === 'string' && /^[a-z0-9_-]{1,80}$/i.test(value);
+        if (!event || !isTransferTraceId(event.traceId) || !token(event.stage) || !['copy', 'move'].includes(event.mode)) return;
+        const fields = { traceId: event.traceId, stage: event.stage, mode: event.mode };
+        for (const key of ['trigger', 'operationId', 'decision', 'errorCode']) if (token(event[key])) fields[key] = event[key];
+        for (const key of ['selected', 'completed', 'skipped']) if (Number.isSafeInteger(event[key]) && event[key] >= 0) fields[key] = event[key];
+        for (const key of ['checkpoint', 'ok', 'cancelled']) if (typeof event[key] === 'boolean') fields[key] = event[key];
+        logStartup('transfer-trace', fields);
+        return;
+      }
       if (message?.type === 'status-log-copy') {
         if (typeof message.requestId !== 'string' || !/^status-log-\d{1,15}$/.test(message.requestId)) return;
         let result;
@@ -1788,8 +1800,11 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
         if (shellMenuBusy) { await messagePanel.webview.postMessage({ type: 'filesystem-result', ok: false, state: filesystemState, ...(typeof message.refreshRequestId === 'string' ? { refreshRequestId: message.refreshRequestId } : {}), ...(message.operationId ? { operationId: message.operationId } : {}), ...(message.navigationRequestId ? { navigationRequestId: message.navigationRequestId } : {}), ...(message.taskRequestId ? { taskRequestId: message.taskRequestId } : {}), error: t('Eine Dateisystemoperation läuft bereits.') }); return; }
         const current = panel;
         const operationId = (message.type === 'filesystem-apply' && message.transfer || ['filesystem-prepare', 'filesystem-delete'].includes(message.type)) && typeof message.operationId === 'string' && /^[a-zA-Z0-9-]{1,80}$/.test(message.operationId) ? message.operationId : undefined;
+        const trace = operationId && isTransferTraceId(message.transfer?.traceId) && ['filesystem-apply', 'filesystem-prepare'].includes(message.type)
+          ? { traceId: message.transfer.traceId, operationId, request: message.type, checkpoint: message.transfer.checkpoint === true } : null;
         const requestedViewRevision = viewRevision;
         if (operationId && transferJobs.has(operationId)) return;
+        if (trace) logStartup('transfer-host-request', trace);
         const job = operationId ? { controller: new AbortController(), panel: current } : null;
         const navigationTabId = typeof message.navigationTabId === 'string' && /^[a-zA-Z0-9-]{1,128}$/.test(message.navigationTabId) ? message.navigationTabId : undefined;
         const directoryJob = message.type === 'filesystem-navigate' && typeof message.navigationRequestId === 'string' && /^directory-\d{1,12}$/.test(message.navigationRequestId) && [0, 1].includes(message.side) ? { controller: new AbortController(), side: message.side, tabId: navigationTabId } : null;
@@ -1817,6 +1832,10 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
         const onTransferProgress = input => {
           if (!job || transferJobs.get(operationId) !== job || panel !== current) return;
           const progress = Progress.readTransferBatch(input);
+          if (trace && progress.phase === 'published') {
+            trace.publishedBytes = progress.batch.completed;
+            if (Number.isSafeInteger(progress.filesCompleted) && progress.filesCompleted >= 0) trace.publishedFiles = progress.filesCompleted;
+          }
           forwardProgress('filesystem-transfer-progress', progress, progress.phase === 'published' && progress.batch.kind === 'determinate' && progress.batch.completed === progress.batch.total);
         };
         filesystemRequests++;
@@ -1942,6 +1961,7 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
           if (directoryJob && directoryJobs.get(directoryKey) === directoryJob) directoryJobs.delete(directoryKey);
           if (refreshController && refreshRead === refreshController) refreshRead = null;
           if (ok && !cancelled && navigationReplyPath) rememberUncRoot(navigationReplyPath);
+          if (trace) logStartup('transfer-host-result', { ...trace, ok, cancelled: Boolean(cancelled || filesystemState?.operationOutcome?.cancelled), ...(diagnostic?.failure?.code ? { errorCode: diagnostic.failure.code } : {}) });
           if (current && panel === current) await current.webview.postMessage({ type: 'filesystem-result', ok, state: filesystemState, ...(typeof message.refreshRequestId === 'string' ? { refreshRequestId: message.refreshRequestId } : {}), ...(message.taskRequestId ? { taskRequestId: message.taskRequestId } : {}), ...(message.navigationRequestId ? { navigationRequestId: message.navigationRequestId } : {}), ...(updatedDirectories?.length ? { refreshGitDirectories: updatedDirectories } : {}), ...(cancelled ? { cancelled: true } : {}), ...(operationId ? { operationId, operationOutcome: filesystemState?.operationOutcome } : {}), ...(!ok ? { error: operationError, diagnostic, ...(blockedDeletion ? { blockedDeletion } : {}) } : {}), ...(ok && !cancelled && message.type === 'filesystem-navigate' && navigationReplyPath ? { resumeNavigation: { path: navigationReplyPath, side: message.side } } : {}), ...(ok && !cancelled && message.type === 'filesystem-navigate' && openReplyPath ? { resumeOpen: { path: openReplyPath } } : {}), ...(ok && !cancelled && message.type === 'filesystem-prepare' ? { resumeAction: message.action } : {}) });
         }).finally(() => { filesystemRequests--; });
         if (!isolatedNavigation) {

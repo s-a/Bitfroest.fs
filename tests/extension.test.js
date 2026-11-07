@@ -21,7 +21,9 @@ test('Send to uses the generated host view and retains an off-screen destination
   fs.writeFileSync(target + '/second.txt', 'old');
   const { createProvider } = require('../filesystem-provider');
   const saved = await createProvider({ roots: [left, right] }).load();
+  const logs = [];
   const app = harness(t, { language: 'en', startupRoots: [left, right], workspaceState: { fileManagerState: saved },
+    onInfoLog: message => logs.push(JSON.parse(message)),
     configuration: { 'favorites.entries': { Work: target } },
     providerFactory: options => createProvider({ ...options, roots: [left, right], readDirectory: undefined, readAttributes: undefined,
       fs: require('node:fs/promises') }) });
@@ -38,7 +40,7 @@ test('Send to uses the generated host view and retains an off-screen destination
     const outgoing = view.messages.slice(sent);
     sent = view.messages.length;
     for (const message of outgoing) {
-      if (['filesystem-prepare', 'filesystem-apply'].includes(message.type)) await panel.receive(message);
+      if (['filesystem-prepare', 'filesystem-apply', 'transfer-trace'].includes(message.type)) await panel.receive(message);
     }
     const incoming = panel.messages.slice(received);
     received = panel.messages.length;
@@ -57,6 +59,9 @@ test('Send to uses the generated host view and retains an off-screen destination
   view.click(view.document.querySelector('[data-conflict-action="overwrite"]'));
   for (let i = 0; i < 5 && fs.readFileSync(target + '/second.txt', 'utf8') === 'old'; i++) await exchange();
   assert.equal(fs.readFileSync(target + '/second.txt', 'utf8'), 'second');
+  const results = logs.filter(event => event.kind === 'transfer-host-result' && event.publishedFiles);
+  assert.deepEqual(results.map(event => [event.checkpoint, event.ok, event.publishedFiles, event.publishedBytes]), [[true, true, 1, 5], [false, true, 1, 6]]);
+  assert.equal(new Set(results.map(event => event.traceId)).size, 1);
   assert.deepEqual(Array.from(view.state().panes, pane => pane.tabs[pane.tab]), [left, right]);
   panel.dispose();
 });

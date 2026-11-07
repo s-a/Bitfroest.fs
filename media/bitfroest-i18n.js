@@ -500,6 +500,8 @@
     'Neuer Name für Kopie oder Ziel': 'New name for copy or target', 'Inhalt vergleichen': 'Compare contents', 'Keine vollständigen Textdaten für einen Vergleich vorhanden': 'Complete text data is not available for comparison',
     'QUELLE': 'SOURCE', 'ZIEL': 'TARGET', '(Keine Textdaten)': '(No text data)',
     'verschoben': 'moved', 'kopiert': 'copied', 'übersprungen': 'skipped', 'Abgebrochen': 'Cancelled',
+    'Keine Dateien oder Ordner verschoben. {count} übersprungen.': 'No files or folders were moved. {count} skipped.',
+    'Keine Dateien oder Ordner kopiert. {count} übersprungen.': 'No files or folders were copied. {count} skipped.',
     'Zuerst eine Datei oder einen Ordner auswählen.': 'Select a file or folder first.', 'Bei Konflikten nachfragen': 'Ask about conflicts',
     'Alle vorhandenen überspringen': 'Skip all existing files', 'Vorhandene Ziele automatisch umbenennen': 'Auto-rename existing targets',
     'Nur größere Dateien kopieren': 'Copy only larger files', 'Nur kleinere Dateien kopieren': 'Copy only smaller files', 'ausgewählte Einträge aus': 'selected entries from',

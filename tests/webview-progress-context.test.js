@@ -52,6 +52,14 @@ test('copy progress keeps the whole transfer separate from each conflict checkpo
   assert.equal(overall.getAttribute('aria-valuemax'), '16');
   assert.equal(current.getAttribute('aria-valuenow'), '2');
   assert.equal(current.getAttribute('aria-valuemax'), '4');
+  send(app, { type: 'filesystem-result', operationId: last.operationId, ok: true, state: last.state });
+  app.click(app.document.querySelector('#status-message [data-status-icon]'));
+  const reportRequest = app.messages.findLast(message => message.type === 'status-log-copy');
+  const trace = JSON.parse(reportRequest.text).context.transferEvents;
+  assert.deepEqual(trace.map(event => event.stage), ['dialog-opened', 'confirmed', 'queued', 'write-requested', 'write-acknowledged', 'conflict-decision', 'write-requested', 'write-acknowledged', 'finished']);
+  assert.equal(new Set(trace.map(event => event.traceId)).size, 1);
+  assert.equal(trace.find(event => event.stage === 'conflict-decision').decision, 'overwrite');
+  assert.equal(trace.at(-1).completed, 2);
 });
 
 test('active progress keeps localized operation and literal source/final target independently of transient hints', async t => {
