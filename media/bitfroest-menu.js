@@ -76,7 +76,8 @@
         for (const [key, value] of Object.entries(entry.attrs || {})) item.setAttribute(key, value);
         if (entry.keys?.length) decorateKeys?.(item, entry.keys);
         decorate(item, entry.id || '', entry.icon, focusOnHover);
-        if (entry.children) {
+        const hasChildren = entry.children || entry.loadChildren;
+        if (hasChildren) {
           item.setAttribute('aria-haspopup', 'menu'); item.setAttribute('aria-expanded', 'false');
           item.append(root.BitfroestIcons.element('chevron-right', { 'data-submenu-arrow': '' }));
         }
@@ -84,18 +85,27 @@
           if (item.disabled) return;
           if (!record.child || record.child.owner !== item) {
             closeChild();
-            const child = build(entry.children, record, item); record.child = child;
+            const child = build(entry.children || [], record, item); record.child = child;
             child.menu.id = `bitfroest-submenu-${++sequence}`; item.setAttribute('aria-controls', child.menu.id);
             child.menu.dataset.menuSubmenu = ''; menu.append(child.menu);
             place(child.menu, { anchor: item, submenu: true }); item.setAttribute('aria-expanded', 'true');
             item.dataset.openDirection = child.menu.dataset.direction;
+            entry.loadChildren?.(entries => {
+              if (!child.menu.isConnected || record.child !== child) return;
+              const focusMenu = document.activeElement === child.menu;
+              child.menu.replaceChildren();
+              appenders.get(child.menu)(entries);
+              place(child.menu, { anchor: item, submenu: true });
+              item.dataset.openDirection = child.menu.dataset.direction;
+              if (focusMenu) (child.menu.querySelector('button:not(:disabled)') || child.menu).focus();
+            });
           }
           if (focus) (record.child.menu.querySelector('button:not(:disabled)') || record.child.menu).focus();
         }
-        item.addEventListener('mouseenter', () => { if (entry.children) open(false); else closeChild(); });
-        item.onclick = () => { if (item.disabled) return; if (entry.children) open(true); else onAction(entry); };
+        item.addEventListener('mouseenter', () => { if (hasChildren) open(false); else closeChild(); });
+        item.onclick = () => { if (item.disabled) return; if (hasChildren) open(true); else onAction(entry); };
         item.addEventListener('keydown', event => {
-          if (event.key === 'ArrowRight' && entry.children) { event.preventDefault(); event.stopPropagation(); open(true); }
+          if (event.key === 'ArrowRight' && hasChildren) { event.preventDefault(); event.stopPropagation(); open(true); }
         });
         menu.append(item);
       }

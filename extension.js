@@ -1064,6 +1064,16 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
     panel.webview.onDidReceiveMessage(async message => {
       if (panel !== messagePanel) return;
       let resolvedFileLink = false;
+      if (message?.type === 'send-to-directories') {
+        if (!Number.isSafeInteger(message.requestId) || typeof message.path !== 'string' || message.path.length > 4096) return;
+        let result;
+        try { result = { ok: true, directories: await provider.favoriteDirectories(message.path) }; }
+        catch { result = { ok: false }; }
+        if (panel === messagePanel && !listerDisposed) await messagePanel.webview.postMessage({
+          type: 'send-to-directories-result', requestId: message.requestId, ...result
+        });
+        return;
+      }
       if (message?.type === 'location-destinations') {
         if (process.platform !== 'win32' || !Number.isSafeInteger(message.requestId)) return;
         let drives = [], drivesUnavailable = false;
@@ -1822,6 +1832,8 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
             else if (message.type === 'filesystem-navigate' || message.type === 'filesystem-prepare') {
               let directories = message.type === 'filesystem-navigate' ? [message.path] : message.paths;
               if (!Array.isArray(directories) || directories.length > 128 || directories.some(target => typeof target !== 'string' || target.length > 4096 || !provider.canNavigate(target, message.type === 'filesystem-navigate'))) throw new Error(t('Ungültiger Datei- oder Ordnername.'));
+              const requiredDirectory = message.type === 'filesystem-prepare' ? message.requiredDirectory : undefined;
+              if (requiredDirectory !== undefined && (directories.length !== 1 || requiredDirectory !== directories[0])) throw new Error(t('Ein vorhandener Zielordner ist erforderlich.'));
               if (message.type === 'filesystem-navigate' && ![0, 1].includes(message.side)) throw new Error(t('Ungültiger Datei- oder Ordnername.'));
               if (message.type === 'filesystem-navigate') {
                 const resolution = await provider.resolveNavigation(message.path);
@@ -1844,7 +1856,7 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
                   if (!message.navigationRequestId || panel !== current) return;
                   return current.webview.postMessage({ type: 'filesystem-directory', navigationRequestId: message.navigationRequestId, ...update, path: update.path === navigationReplyPath ? message.path : update.path });
                 };
-                fresh = isolatedNavigation ? await navigationProvider.load({ directories: visibleDirectories, visibleOnly: true, signal: directoryJob?.controller.signal, onDirectory: onNavigationDirectory }) : await provider.prepare(filesystemState, { directories, recursive: message.type === 'filesystem-prepare' && message.recursive !== false, ...(message.type === 'filesystem-navigate' ? { navigation: true, visibleDirectories, onDirectory: onNavigationDirectory, getVisibleDirectories: visiblePaths, ...(directoryJob ? { signal: directoryJob.controller.signal } : {}) } : {}), ...(job ? { signal: job.controller.signal, onProgress } : {}) });
+                fresh = isolatedNavigation ? await navigationProvider.load({ directories: visibleDirectories, visibleOnly: true, signal: directoryJob?.controller.signal, onDirectory: onNavigationDirectory }) : await provider.prepare(filesystemState, { directories, requiredDirectory, source: requiredDirectory === undefined ? undefined : message.source, recursive: message.type === 'filesystem-prepare' && message.recursive !== false, ...(message.type === 'filesystem-navigate' ? { navigation: true, visibleDirectories, onDirectory: onNavigationDirectory, getVisibleDirectories: visiblePaths, ...(directoryJob ? { signal: directoryJob.controller.signal } : {}) } : {}), ...(job ? { signal: job.controller.signal, onProgress } : {}) });
               }
             } else {
               const refreshView = message.state || savedState;

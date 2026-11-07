@@ -143,6 +143,35 @@ async function setup(t, options = {}) {
 
 function row(state, directory, name) { return state.folders[directory].find(file => file.name === name); }
 
+test('Send to lists only direct folders within favorites without changing the snapshot', async t => {
+  const favorites = [];
+  const { provider, left, right } = await setup(t, { additionalRoots: () => favorites, allowNavigationOutsideRoots: true });
+  favorites.push(left);
+  await fs.mkdir(path.join(left, 'docs', 'deep'));
+  await fs.symlink(right, path.join(left, 'linked'), 'junction');
+  const before = await provider.load();
+  assert.deepEqual(await provider.favoriteDirectories(left), [{ name: 'docs', path: left + '/docs' }]);
+  assert.deepEqual(await provider.favoriteDirectories(left + '/docs/deep'), []);
+  for (const target of [right, left + '/linked', left + '/missing', left + '/plain.txt']) {
+    await assert.rejects(provider.favoriteDirectories(target));
+  }
+  const prepared = await provider.prepare(before, { directories: [left + '/docs'], recursive: false });
+  assert.ok(prepared.folders[left + '/docs'].some(entry => entry.name === 'deep'));
+});
+
+test('Send to preparation rejects a changed source or a missing required directory', async t => {
+  const { provider, left, right } = await setup(t);
+  const destination = right + '/dest';
+  await fs.mkdir(destination);
+  const before = await provider.load();
+  const source = { path: left, ids: [row(before, left, 'plain.txt').id] };
+  await fs.writeFile(left + '/plain.txt', 'updated source content');
+  await assert.rejects(provider.prepare(before, { directories: [destination], requiredDirectory: destination, source }),
+    { code: 'EntryChangedBeforeWrite' });
+  await fs.rmdir(destination);
+  await assert.rejects(provider.prepare(before, { directories: [destination], requiredDirectory: destination }), { code: 'ENOENT' });
+});
+
 test('shallow navigation publishes complete names before metadata and bounded row batches before completion', async t => {
   const { provider, left, right } = await setup(t);
   const before = await provider.load(); const chunks = [];

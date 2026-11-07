@@ -83,6 +83,7 @@ This recording shows the previous confirmation dialog style.
 | File list | Start dragging immediately with the right mouse button | Select entries with a rectangle. Hold Ctrl or Shift to extend the selection. |
 | File row | Hold the right mouse button until the drag indicator appears, then drag | Move the selection after confirmation. |
 | File row | Left-drag, with Shift to move | Copy by default. A folder row, the parent row (`..`) or an inactive tab can serve as the destination. |
+| File or folder row | Right-click → **Send to** | Browse favorites and their subfolders, then select **Copy** or **Move** to start the transfer. Available in the Bitfroest context menu. |
 | Folder under the cursor | Press Space | Mark the folder and calculate its recursive size when folder sizing on Space is enabled. |
 | Column separator | Double-click | Fit the column to its contents. |
 

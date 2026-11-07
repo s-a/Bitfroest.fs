@@ -11,6 +11,56 @@ const manifest = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'ut
 const tick = () => new Promise(resolve => setImmediate(resolve));
 const Progress = require('../media/bitfroest-progress');
 
+test('Send to uses the generated host view and retains an off-screen destination across a conflict', async t => {
+  const directory = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'bitfroest-send-to-'))).replaceAll('\\', '/');
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const left = directory + '/left', right = directory + '/right', favorite = directory + '/favorite', target = favorite + '/Nested';
+  for (const folder of [left, right, favorite, target]) fs.mkdirSync(folder);
+  fs.writeFileSync(left + '/first.txt', 'first');
+  fs.writeFileSync(left + '/second.txt', 'second');
+  fs.writeFileSync(target + '/second.txt', 'old');
+  const { createProvider } = require('../filesystem-provider');
+  const saved = await createProvider({ roots: [left, right] }).load();
+  const app = harness(t, { language: 'en', startupRoots: [left, right], workspaceState: { fileManagerState: saved },
+    configuration: { 'favorites.entries': { Work: favorite } },
+    providerFactory: options => createProvider({ ...options, roots: [left, right], readDirectory: undefined, readAttributes: undefined,
+      fs: require('node:fs/promises') }) });
+  await app.command('bitfroest.openPrototype');
+  const panel = app.panels[0];
+  const view = require('./support/webview.cjs').createApp(t, undefined, { html: panel.webview.html });
+  assert.match(panel.webview.html, /Content-Security-Policy/i);
+  view.action('select-all');
+  view.row('first.txt').dispatchEvent(new view.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }));
+  const button = label => [...view.document.querySelectorAll('[data-context-menu] button')].findLast(item =>
+    item.dataset.contextAction !== 'clipboard-copy' && item.querySelector('.menu-label')?.textContent === label);
+  let received = panel.messages.length, sent = 0;
+  const exchange = async () => {
+    const outgoing = view.messages.slice(sent);
+    sent = view.messages.length;
+    for (const message of outgoing) {
+      if (['send-to-directories', 'filesystem-prepare', 'filesystem-apply'].includes(message.type)) await panel.receive(message);
+    }
+    const incoming = panel.messages.slice(received);
+    received = panel.messages.length;
+    for (const data of incoming) view.window.dispatchEvent(new view.window.MessageEvent('message', { data }));
+    await tick();
+  };
+  view.click(button('Send to'));
+  view.click(button('Work'));
+  await exchange();
+  view.click(button('Nested'));
+  await exchange();
+  view.click(button('Copy'));
+  for (let i = 0; i < 5 && !view.document.querySelector('[data-conflict-action="overwrite"]'); i++) await exchange();
+  assert.equal(fs.readFileSync(target + '/first.txt', 'utf8'), 'first');
+  assert.equal(fs.readFileSync(target + '/second.txt', 'utf8'), 'old');
+  view.click(view.document.querySelector('[data-conflict-action="overwrite"]'));
+  for (let i = 0; i < 5 && fs.readFileSync(target + '/second.txt', 'utf8') === 'old'; i++) await exchange();
+  assert.equal(fs.readFileSync(target + '/second.txt', 'utf8'), 'second');
+  assert.deepEqual(Array.from(view.state().panes, pane => pane.tabs[pane.tab]), [left, right]);
+  panel.dispose();
+});
+
 test('successful UNC navigation remembers only the share root and exposes it below the drives', async t => {
   const initial = clipboardFixture();
   const previousSystemDrive = process.env.SystemDrive;

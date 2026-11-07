@@ -154,6 +154,27 @@ function createProvider(options = {}) {
     return absolute;
   }
 
+  async function requireDirectory(value) {
+    const directory = await assertComponents(value);
+    const stat = await fs.lstat(directory, { bigint: true });
+    if (!stat.isDirectory()) throw new Error('Ein vorhandener Zielordner ist erforderlich.');
+    return stat;
+  }
+
+  async function favoriteDirectories(value) {
+    const directory = allowed(value);
+    const favorites = options.additionalRoots?.() || [];
+    if (!favorites.some(root => {
+      try { return below(directory, canonical(root.trim())); } catch { return false; }
+    })) throw new Error('Der Pfad liegt außerhalb der Favoriten.');
+    const before = await requireDirectory(directory);
+    const entries = await fs.readdir(directory, { withFileTypes: true });
+    const after = await requireDirectory(directory);
+    if (before.dev !== after.dev || before.ino !== after.ino) throw new Error('Ordner während der Bestandsaufnahme geändert.');
+    return entries.filter(entry => entry.isDirectory()).sort((a, b) => a.name.localeCompare(b.name))
+      .map(entry => ({ name: entry.name, path: slash(path.join(directory, entry.name)) }));
+  }
+
   async function readSnapshot(settings = {}) {
     const sourceSnapshot = snapshot;
     const folders = settings.baseline ? clone(settings.baseline.folders) : {}, entries = new Map(settings.baseline?.entries);
@@ -589,6 +610,11 @@ function createProvider(options = {}) {
     const quarantine = removed.filter(item => !removed.some(other => other !== item && other.type === 'folder' && below(item.path, other.path)));
     try {
       const sources = [...staged.values()].flatMap(item => [item.source, ...(item.appendSources || [])]).filter(Boolean);
+      if (transfer?.requiredDirectory !== undefined) {
+        const target = baseline.entries.get(identity(allowed(transfer.requiredDirectory)));
+        if (target?.type !== 'folder') throw new Error('Ein vorhandener Zielordner ist erforderlich.');
+        await validateEntries(baseline, [target], operation.signal, false);
+      }
       await validateEntries(baseline, [...quarantine, ...sources, ...caseChanges.map(change => change.original), ...(transfer?.selected || [])], operation.signal);
       for (const item of desired.values()) {
         if (!staged.has(identity(item.path)) && !(item.type === 'folder' && !baseline.entries.has(identity(item.path)))) continue;
@@ -991,7 +1017,9 @@ function createProvider(options = {}) {
       snapshot = null;
       throw createOperationError('cleanup-failed', { cause: error, paths: [...backups.values()] });
     }
-    const reloadDirectories = baseline.visibleOnly ? activeDirectories(after) : [...baseline.loadedDirectories, ...newDirectories.map(item => item.path)];
+    const reloadDirectories = baseline.visibleOnly
+      ? [...new Set([...activeDirectories(after), ...(transfer?.requiredDirectory ? [transfer.requiredDirectory] : [])])]
+      : [...baseline.loadedDirectories, ...newDirectories.map(item => item.path)];
     const next = inheritedPanes(await load({ directories: await availableViewDirectories(reloadDirectories.filter(directory => roots.includes(directory) || baseline.entries.get(identity(directory))?.root || desired.get(identity(directory))?.type === 'folder')), ...(baseline.visibleOnly ? { visibleOnly: true, deferredDirectories: deferredDirectories(after) } : {}) }), after);
     const updatedPaths = [...staged.values(), ...removed, ...newDirectories].map(item => item.path).concat(caseChanges.flatMap(change => [change.original.path, change.target]));
     next.updatedDirectories = activeDirectories(after).filter(directory => updatedPaths.some(target => below(target, directory)));
@@ -1039,6 +1067,16 @@ function createProvider(options = {}) {
   async function prepare(before, settings = {}) {
     if (busy) throw new Error('Eine Dateisystemoperation läuft bereits.');
     if (!settings.navigation && (!snapshot || before?.snapshotId !== snapshot.state.snapshotId || filesystemDigest(before) !== snapshot.digest)) throw new Error('Der Dateisystem-Snapshot ist veraltet oder wurde verändert.');
+    if (settings.source !== undefined) {
+      const { path: sourcePath, ids } = settings.source || {};
+      if (!Array.isArray(ids) || !ids.length || ids.length > limits.entries || ids.some(id => typeof id !== 'string')) throw new Error('Die Übertragungsauswahl ist nicht mehr gültig.');
+      const directory = allowed(sourcePath);
+      const entries = (snapshot.folders[directory] || []).filter(row => ids.includes(row.id))
+        .map(row => snapshot.entries.get(identity(row.fsSource)));
+      if (entries.length !== ids.length || entries.some(entry => !entry)) throw new Error('Die Übertragungsauswahl ist nicht mehr gültig.');
+      await validateEntries(snapshot, entries, settings.signal, false);
+    }
+    if (settings.requiredDirectory !== undefined) await requireDirectory(settings.requiredDirectory);
     const directories = settings.navigation
       ? await Promise.all((settings.directories || []).map(async directory => {
         const resolved = await resolveNavigation(directory);
@@ -1103,7 +1141,7 @@ function createProvider(options = {}) {
       throw failure;
     } finally { busy = false; }
   }
-  return { contains, canNavigate, resolveNavigation, load, apply, prepare, remove, measureFolder };
+  return { contains, canNavigate, resolveNavigation, favoriteDirectories, load, apply, prepare, remove, measureFolder };
 }
 
 module.exports = { createProvider };

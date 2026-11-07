@@ -55,7 +55,7 @@
     if (!Array.isArray(input.sources) || input.sources.length < support.selection.minItems || input.sources.some(value => typeof value !== 'string' || !value || value.includes('\0'))) throw new TypeError('Operation sources are required.');
     if (input.label !== undefined && (typeof input.label !== 'string' || input.label.includes('\0'))) throw new TypeError('Operation label must be text.');
     if (input.targetLocation !== undefined && (![0, 1].includes(input.targetLocation?.pane) || typeof input.targetLocation?.tabId !== 'string' || !input.targetLocation.tabId || input.targetLocation.tabId.includes('\0'))) throw new TypeError('Operation target location is invalid.');
-    return snapshot({ version: 1, command: input.command, title: input.title, target: input.target, sources: input.sources, ...(input.label === undefined ? {} : { label: input.label }), ...(input.targetLocation === undefined ? {} : { targetLocation: input.targetLocation }) });
+    return snapshot({ version: 1, command: input.command, title: input.title, target: input.target, sources: input.sources, ...(input.label === undefined ? {} : { label: input.label }), ...(input.targetLocation === undefined ? {} : { targetLocation: input.targetLocation }), ...(input.showInStatus === true ? { showInStatus: true } : {}) });
   }
   function createQueue({ start, finish, cancel = () => {}, change = () => {} }) {
     const items = []; let sequence = 0, active = null, disposed = false;
@@ -176,8 +176,10 @@
       const state = getState(), location = state.panes[state.active].tabs[state.panes[state.active].tab];
       if (!items.some(job => job.id === selectedId)) selectedId = null;
       const local = items.filter(job => samePath(location, job.request.target));
-      const visibleJobs = items.filter(job => state.panes.some(pane => samePath(pane.tabs[pane.tab], job.request.target)));
-      const selected = visibleJobs.length === 1 ? visibleJobs[0] : local.find(job => job.id === selectedId) || local.find(job => job.state === 'running') || local[0];
+      const visibleJobs = items.filter(job => job.request.showInStatus || state.panes.some(pane => samePath(pane.tabs[pane.tab], job.request.target)));
+      const selected = visibleJobs.length === 1 ? visibleJobs[0] : local.find(job => job.id === selectedId) ||
+        visibleJobs.find(job => job.state === 'running' && (job.request.showInStatus || local.includes(job))) || local[0] ||
+        visibleJobs.find(job => job.request.showInStatus);
       footerJobId = selected?.id;
       if (items.length && timer === null) timer = window.setInterval(() => update(currentItems), 1000);
       if (!items.length && timer !== null) { window.clearInterval(timer); timer = null; }

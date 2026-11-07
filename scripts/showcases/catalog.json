@@ -645,6 +645,23 @@
     "category": "Navigation & Selection"
   },
   {
+    "id": "send-to-favorites",
+    "parentId": "file-context-menu",
+    "title": "Send files to a favorite folder",
+    "description": "Open Send to from a file row, browse a demo favorite and its subfolders, and choose Copy or Move.",
+    "paths": [
+      "${demo}/left",
+      "${demo}/right"
+    ],
+    "sources": [
+      "media/app.js"
+    ],
+    "status": "pending",
+    "reason": "The menu and transfer still need to be recorded with isolated demo data. Recording a transfer requires separate approval.",
+    "captures": [],
+    "category": "Basic File Operations"
+  },
+  {
     "id": "select-group",
     "parentId": "main",
     "title": "Select files by name pattern",

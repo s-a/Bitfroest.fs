@@ -207,15 +207,7 @@
   function favoritesBlocked() {
     return (filesystemPending && !operationQueue?.active && !refreshingFilesystem) || (transferPending && !operationQueue?.active) || (transferJob && !operationQueue?.active);
   }
-  function showFavorites(trigger) {
-    if (favoritesBlocked() || $('#modal').open) return;
-    const wasOpen = trigger === favoriteTrigger;
-    closeFavorites(false); if (wasOpen) return;
-    window.dispatchEvent(new CustomEvent('bitfroest-menu-open', { detail: 'favorites' }));
-    favoriteTrigger = trigger; trigger.setAttribute('aria-expanded', 'true');
-    const side = Number(trigger.closest('[data-pane]').dataset.pane);
-    const origin = state.panes[side], originPath = currentPath(origin), originTab = origin.tabStates[origin.tab].id;
-    const kind = locationKind(origin);
+  function favoriteMenuItems() {
     const entries = favoriteSettings.entries || {}, groups = favoriteSettings.groups || {};
     const names = [...new Set([...(Array.isArray(favoriteSettings.order) ? favoriteSettings.order : []), ...Object.keys(entries)])].filter(name => Object.hasOwn(entries, name) && typeof entries[name] === 'string');
     const leaf = (name, label) => ({ id: name, label, favorite: name, icon: 'folder-opened', attrs: { 'data-favorite-entry': '' } });
@@ -239,7 +231,19 @@
         children.push(leaf(name, typeof favoriteSettings.labels?.[name] === 'string' ? favoriteSettings.labels[name] : name));
       }
     }
-    const exists = names.some(name => favoriteIdentity(entries[name]) === favoriteIdentity(currentPath(state.panes[side])));
+    return definitions;
+  }
+  function showFavorites(trigger) {
+    if (favoritesBlocked() || $('#modal').open) return;
+    const wasOpen = trigger === favoriteTrigger;
+    closeFavorites(false); if (wasOpen) return;
+    window.dispatchEvent(new CustomEvent('bitfroest-menu-open', { detail: 'favorites' }));
+    favoriteTrigger = trigger; trigger.setAttribute('aria-expanded', 'true');
+    const side = Number(trigger.closest('[data-pane]').dataset.pane);
+    const origin = state.panes[side], originPath = currentPath(origin), originTab = origin.tabStates[origin.tab].id;
+    const kind = locationKind(origin);
+    let definitions = favoriteMenuItems();
+    const exists = Object.values(favoriteSettings.entries || {}).some(path => typeof path === 'string' && favoriteIdentity(path) === favoriteIdentity(originPath));
     definitions.push({ id: 'favorite-toggle', label: t(exists ? 'Aktuelles Verzeichnis entfernen' : 'Aktuelles Verzeichnis hinzufügen…'), icon: exists ? 'remove' : 'star-add', attrs: { 'data-favorite-toggle': '' } });
     definitions.push({ id: 'favorite-configure', label: t('Favoriten konfigurieren…'), icon: 'settings-gear', attrs: { 'data-favorite-configure': '' } });
     if (kind) {
@@ -1058,7 +1062,7 @@
     rememberScroll();
     filesystemResume = resume;
     if (message.type === 'filesystem-prepare' && ['copy', 'move'].includes(message.action)) {
-      transferJob = { id: `prepare-${Date.now()}-${++transferSequence}`, phase: 'preparing', hostActive: true, context: Object.freeze({ mode: message.action, sources: Object.freeze([...message.paths]), target: currentPath(state.panes[1 - state.active]) }) };
+      transferJob = { id: `prepare-${Date.now()}-${++transferSequence}`, queueJobId: operationQueue?.active?.id, phase: 'preparing', hostActive: true, context: Object.freeze({ mode: message.action, sources: Object.freeze([...message.paths]), target: message.requiredDirectory || currentPath(state.panes[1 - state.active]) }) };
       transferJob.modalPreparation = $('#modal').open;
       if (transferJob.modalPreparation) { if ($('#value')) $('#value').disabled = true; $('#modal-confirm').disabled = true; }
       message.operationId = transferJob.id; transferProgress();
@@ -2689,7 +2693,7 @@
     if (!host || !state.realFilesystem) return executeTransferNow(options);
     const captured = { ...options, verifyAfterCopy: options.verifyAfterCopy ?? fileSettings.verifyAfterCopy === true, validateSelection: undefined, ids: [...options.ids] };
     const target = captured.requiredDirectory || window.BitfroestTransfer.planTarget({ ...captured, folders: state.folders }).directory;
-    enqueueOperation({ command: options.mode === 'move' ? 'move' : 'copy', title: t(options.mode === 'move' ? 'Verschieben' : 'Kopieren'), target, sources: options.ids.map(id => (state.folders[options.sourcePath] || []).find(file => file.id === id)).filter(Boolean).map(file => file.fsSource || join(options.sourcePath, file.name)) }, job => executeTransferNow(captured).catch(error => {
+    enqueueOperation({ command: options.mode === 'move' ? 'move' : 'copy', title: t(options.mode === 'move' ? 'Verschieben' : 'Kopieren'), target, showInStatus: options.showInStatus, sources: options.ids.map(id => (state.folders[options.sourcePath] || []).find(file => file.id === id)).filter(Boolean).map(file => file.fsSource || join(options.sourcePath, file.name)) }, job => executeTransferNow(captured).catch(error => {
       failTransferExecution(error, captured.onComplete);
       operationQueue.complete(job.id, { ok: false, error: error.message });
     }), options.targetSide ?? 1 - options.sourceSide);
@@ -2700,12 +2704,14 @@
     prioritizeFilesystemOperation();
     if (filesystemPending) { runQueuedOperation(queuedJob, () => executeTransferNow(options).catch(failed)); return; }
     if (options.validateSelection && !options.validateSelection()) throw new Error(t('Die gezogene Auswahl wurde geändert. Bitte erneut ziehen.'));
+    if (options.validateSources && !options.validateSources()) throw new Error(t('Die Übertragungsauswahl ist nicht mehr gültig.'));
     if (host && state.realFilesystem && !Object.hasOwn(state.folders, options.sourcePath)) {
       requestFilesystem({ type: 'filesystem-prepare', paths: [options.sourcePath], action: options.mode, recursive: false }, () => executeTransferNow(options).catch(failed));
       return;
     }
     if (options.requiredDirectory && !options.requiredDirectoryVerified) {
-      requestFilesystem({ type: 'filesystem-prepare', paths: [options.requiredDirectory], action: options.mode, recursive: false }, () => executeTransferNow({ ...options, requiredDirectoryVerified: true }).catch(failed));
+      const source = options.validateSources ? { path: options.sourcePath, ids: options.ids } : undefined;
+      requestFilesystem({ type: 'filesystem-prepare', paths: [options.requiredDirectory], requiredDirectory: options.requiredDirectory, source, action: options.mode, recursive: false }, () => executeTransferNow({ ...options, requiredDirectoryVerified: true }).catch(failed));
       return;
     }
     const plan = window.BitfroestTransfer.planTarget({ ...options, folders: state.folders });
@@ -2728,6 +2734,7 @@
     let planningFolders = clone(state.folders);
     let committedResult = { completed: 0, directories: 0, completedIds: [] };
     const pendingTransfer = () => ({ mode: options.mode, sourcePath: options.sourcePath, sourceSide: options.sourceSide, verifyAfterCopy: options.verifyAfterCopy === true,
+      ...(options.requiredDirectory ? { requiredDirectory: targetDirectory } : {}),
       ids: options.ids.filter(id => !committedResult.completedIds.includes(id) && (originalFolders[options.sourcePath] || []).some(row => row.id === id)) });
     try {
     const confirmedView = host && state.realFilesystem ? { folders: originalFolders, panes: clone(state.panes) } : null;
@@ -4305,8 +4312,19 @@
       return;
     }
     if (host && event.data?.type === 'column-settings') { hostColumnSettings = event.data.settings || {}; render(); return; }
-    if (host && event.data?.type === 'favorite-settings') { favoriteSettings = event.data.settings || {}; closeFavorites(false); return; }
+    if (host && event.data?.type === 'favorite-settings') {
+      favoriteSettings = event.data.settings || {};
+      closeFavorites(false);
+      if (contextPopup?.root.querySelector('[data-context-action="send-to"]')) closeContextMenu(true);
+      return;
+    }
     if (host && event.data?.type === 'location-destinations-result') { receiveDestinations(event.data); return; }
+    if (host && event.data?.type === 'send-to-directories-result') {
+      const receive = sendToRequests.get(event.data.requestId);
+      sendToRequests.delete(event.data.requestId);
+      receive?.(event.data);
+      return;
+    }
     if (host && event.data?.type === 'icons' && event.data.icons && typeof event.data.icons === 'object') {
       if (event.data.iconGeneration !== undefined && event.data.iconGeneration !== iconGeneration) return;
       for (const [key, value] of Object.entries(event.data.icons)) {
@@ -4371,10 +4389,39 @@
     }
   });
   let contextPopup = null;
+  let sendToSequence = 0;
+  const sendToRequests = new Map();
+  const menuNotice = label => ({ label: t(label), disabled: true });
+  function sendToDirectory(label, path, attrs) {
+    return { label, icon: 'folder', attrs: { ...attrs, title: displayPath(path) }, loadChildren: update => {
+      update([menuNotice('Ordner wird geladen…')]);
+      const requestId = ++sendToSequence;
+      sendToRequests.set(requestId, result => {
+        if (!result.ok) { update([menuNotice('Ordner nicht verfügbar')]); return; }
+        const children = result.directories.map(directory => sendToDirectory(directory.name, directory.path));
+        if (children.length) children.push({ separator: true });
+        for (const [mode, label] of [['copy', 'Kopieren'], ['move', 'Verschieben']]) {
+          children.push({ id: mode, label: t(label), sendTo: { mode, path } });
+        }
+        update(children);
+      });
+      host.postMessage({ type: 'send-to-directories', requestId, path });
+    } };
+  }
+  function sendToFavorites(entries) {
+    return entries.flatMap(entry => {
+      if (entry.children) {
+        const children = sendToFavorites(entry.children);
+        return children.length ? [{ ...entry, children }] : [];
+      }
+      const path = favoriteSettings.entries?.[entry.favorite];
+      return typeof path === 'string' ? [sendToDirectory(entry.label, favoritePath(path), entry.attrs)] : [];
+    });
+  }
   function closeContextMenu(restoreFocus = false) {
     if (!contextPopup) return;
     const { root, origin } = contextPopup;
-    contextPopup = null; root.remove();
+    contextPopup = null; sendToRequests.clear(); root.remove();
     if (restoreFocus && origin?.isConnected) origin.focus({ preventScroll: true });
   }
   function showContextMenu(event, section, kind, selection) {
@@ -4407,11 +4454,21 @@
         disabled: paste && (!clipboardAvailable || directory.startsWith('zip:') || Boolean(state.archiveLocations?.[directory])),
         ...(children ? { children: children.map(describe) } : {}) };
     }
+    const items = definitions.map(describe);
+    const sendToSources = kind === 'files' && !resultView(p) && !state.archiveLocations?.[directory] && !directory.startsWith('zip:')
+      && selection.ids.length && selection.ids.every(id => id !== parentId && selectionFile(p, id))
+      ? new Map(selection.ids.map(id => [id, JSON.stringify(selectionFile(p, id))])) : null;
+    if (sendToSources) {
+      const children = sendToFavorites(favoriteMenuItems());
+      items.splice(items.findIndex(item => item.id === 'clipboard-paste') + 1, 0, { separator: true },
+        { id: 'send-to', label: t('Senden an'), attrs: { 'data-context-action': 'send-to' }, children: children.length ? children : [menuNotice('Keine Einträge')] });
+    }
     const popup = menus.create({ items: history ? history.map((path, index) => ({ id: `history:${index}`, label: displayArchivePath(path),
       attrs: { 'data-history-index': String(index), ...(index === p.tabStates[p.tab].historyIndex ? { 'aria-current': 'location' } : {}) }
-    })) : definitions.map(describe), label: history ? t('Ordnerverlauf') : t('Kontextmenü'), decorateKeys: decorateShortcut,
+    })) : items, label: history ? t('Ordnerverlauf') : t('Kontextmenü'), decorateKeys: decorateShortcut,
       onClose: restore => closeContextMenu(restore), onAction: entry => {
         const action = entry.id;
+        if (entry.sendTo && contextPopup?.root !== root) return;
         closeContextMenu(true);
         if ($('#modal').open || state.panes[side] !== p || state.snapshotId !== snapshotId || currentPath(p) !== directory || p.tabStates[p.tab].id !== tabId) return;
         if (selection && selection.ids.some(id => !selectionFile(p, id))) return;
@@ -4425,6 +4482,15 @@
         if (action === 'configure-columns') { host?.postMessage({ type: 'configure-columns' }); return; }
         if (action === 'inspect-folder-locks') { requestShellMenu(true, true, selection); return; }
         if (action === 'delete') { actionDelete(); return; }
+        if (entry.sendTo) {
+          const { mode, path } = entry.sendTo;
+          const validateSources = () => [...sendToSources].every(([id, signature]) =>
+            JSON.stringify(state.folders[directory]?.find(row => row.id === id)) === signature);
+          executeTransfer({ sourceSide: side, sourcePath: directory, ids: [...sendToSources.keys()],
+            targetPath: path, requiredDirectory: path, mode, policy: 'ask', filter: '*.*', validateSources, showInStatus: true })
+            .catch(error => failTransferExecution(error));
+          return;
+        }
         run(action, false, action === 'close-tab' ? { tabId: clickedTabId } : selection);
       }
     });

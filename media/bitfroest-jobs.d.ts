@@ -26,6 +26,7 @@ export interface OperationInput {
   readonly sources: readonly string[];
   readonly label?: string;
   readonly targetLocation?: { readonly pane: 0 | 1; readonly tabId: string };
+  readonly showInStatus?: boolean;
 }
 export interface OperationRequest extends OperationInput { readonly version: 1 }
 export interface Job {

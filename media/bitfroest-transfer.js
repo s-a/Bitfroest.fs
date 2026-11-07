@@ -86,10 +86,11 @@
     const { folders, sourcePath, ids } = options;
     const selected = (folders[sourcePath] || []).filter(file => ids.includes(file.id));
     const raw = String(options.targetPath || '').trim() || sourcePath;
-    const destination = normalizePath(raw, sourcePath), leaf = base(destination);
-    const mask = /[*?]/.test(leaf) ? leaf : null;
-    const existing = path => Object.keys(folders).find(key => /^[a-z]:\//i.test(path) ? key.toLowerCase() === path.toLowerCase() : key === path);
+    const destination = options.requiredDirectory || normalizePath(raw, sourcePath), leaf = base(destination);
+    const mask = !options.requiredDirectory && /[*?]/.test(leaf) ? leaf : null;
+    const existing = path => Object.keys(folders).find(key => paths.identity(key) === paths.identity(path));
     const existingDirectory = existing(destination);
+    if (options.requiredDirectory && !existingDirectory) throw new Error('Ein vorhandener Zielordner ist erforderlich.');
     const directoryTarget = existingDirectory || /[\\/]"?$/.test(raw) || selected.length > 1 && !mask;
     let directory = directoryTarget ? destination : parent(destination);
     let name = directoryTarget || mask ? undefined : leaf;

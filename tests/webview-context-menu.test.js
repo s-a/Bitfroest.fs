@@ -10,6 +10,161 @@ const context = (app, target) => {
 };
 const menu = app => app.document.querySelector('[data-context-menu]:not([hidden])');
 
+const post = (app, data) => app.window.dispatchEvent(new app.window.MessageEvent('message', { data }));
+const sendFavorites = app => post(app, { type: 'favorite-settings', settings: {
+  entries: { work: 'C:/two', old: 'C:/old' },
+  order: ['work', 'old'], labels: { work: 'Work', old: 'Old' }, groups: { work: 'Projects' }
+} });
+const menuButton = (app, label) => [...menu(app).querySelectorAll('button')].findLast(button =>
+  button.dataset.contextAction !== 'clipboard-copy' && button.querySelector('.menu-label')?.textContent === label);
+const browseRequests = app => app.messages.filter(message => message.type === 'send-to-directories');
+const browseResult = (app, request, directories, ok = true) => post(app, { type: 'send-to-directories-result', requestId: request.requestId, ok, directories });
+
+test('Send to browses favorite groups without changing tabs or writing files', t => {
+  const app = createApp(t, fixture(), { language: 'en', platform: 'win32' });
+  sendFavorites(app);
+  context(app, app.row('one.txt'));
+  const list = app.document.querySelector('.pane.active .list');
+  const send = menuButton(app, 'Send to');
+  assert.ok(send);
+  assert.equal(send.previousElementSibling.getAttribute('role'), 'separator');
+  assert.equal(send.previousElementSibling.previousElementSibling.dataset.contextAction, 'clipboard-paste');
+  app.key('ArrowRight', {}, send);
+  assert.equal(app.document.activeElement, menuButton(app, 'Projects'));
+  app.key('ArrowRight');
+  app.key('ArrowRight');
+  assert.equal(browseRequests(app).at(-1).path, 'C:/two');
+  browseResult(app, browseRequests(app).at(-1), [{ name: 'Nested', path: 'C:/two/Nested' }]);
+  app.click(menuButton(app, 'Nested'));
+  assert.equal(browseRequests(app).at(-1).path, 'C:/two/Nested');
+  browseResult(app, browseRequests(app).at(-1), []);
+  assert.ok(menuButton(app, 'Copy'));
+  assert.ok(menuButton(app, 'Move'));
+  assert.deepEqual(Array.from(app.state().panes, pane => pane.tabs[pane.tab]), ['C:/one', 'C:/two']);
+  assert.equal(app.messages.some(message => ['filesystem-navigate', 'filesystem-apply', 'clipboard-write'].includes(message.type)), false);
+  for (let i = 0; i < 5 && menu(app); i++) app.key('Escape');
+  assert.equal(menu(app), null);
+  assert.equal(app.document.activeElement, list);
+});
+
+test('Send to ignores a closed branch and shows an unavailable favorite in the menu', t => {
+  const app = createApp(t, fixture(), { language: 'en', platform: 'win32' });
+  sendFavorites(app);
+  context(app, app.row('one.txt'));
+  app.click(menuButton(app, 'Send to'));
+  app.click(menuButton(app, 'Projects'));
+  app.click(menuButton(app, 'Work'));
+  const stale = browseRequests(app).at(-1);
+  app.click(menuButton(app, 'Old'));
+  browseResult(app, stale, [{ name: 'Stale', path: 'C:/two/Stale' }]);
+  browseResult(app, browseRequests(app).at(-1), [], false);
+  assert.equal(menuButton(app, 'Stale'), undefined);
+  assert.match(menu(app).textContent, /Folder unavailable/);
+  assert.equal(menuButton(app, 'Move'), undefined);
+});
+
+function openSendToTarget(app) {
+  sendFavorites(app);
+  context(app, app.row('one.txt'));
+  for (const label of ['Send to', 'Projects', 'Work']) app.click(menuButton(app, label));
+  browseResult(app, browseRequests(app).at(-1), []);
+}
+
+for (const [mode, label, ids] of [['copy', 'Copy', ['a']], ['move', 'Move', ['a', 'b']]]) {
+  test(`Send to starts one ${mode} for the captured selection and waits for host acknowledgement`, async t => {
+    const saved = fixture();
+    saved.panes[0].selected = ids;
+    const app = createApp(t, saved, { language: 'en', platform: 'win32' });
+    openSendToTarget(app);
+    app.click(menuButton(app, label));
+    assert.equal(app.document.querySelector('#modal').open, false);
+    const prepare = app.messages.find(message => message.type === 'filesystem-prepare');
+    assert.equal(prepare.requiredDirectory, 'C:/two');
+    assert.equal(app.messages.some(message => message.type === 'filesystem-apply'), false);
+    post(app, { type: 'filesystem-result', operationId: prepare.operationId, ok: true, state: saved });
+    await new Promise(resolve => setImmediate(resolve));
+    const writes = app.messages.filter(message => message.type === 'filesystem-apply');
+    assert.equal(writes.length, 1);
+    const [write] = writes;
+    assert.equal(write.transfer.mode, mode);
+    assert.deepEqual(Array.from(write.transfer.ids), ids);
+    assert.equal(write.state.folders['C:/two'].length, ids.length);
+    const status = app.document.querySelector('#status-message');
+    assert.doesNotMatch(status.textContent, /copied|moved/i);
+    post(app, { type: 'filesystem-result', operationId: write.operationId, ok: true, state: structuredClone(write.state) });
+    assert.match(status.textContent, mode === 'copy' ? /copied/i : /moved/i);
+  });
+}
+
+test('Send to cannot write after its destination disappears during preparation', async t => {
+  const saved = fixture(), app = createApp(t, saved, { language: 'en', platform: 'win32' });
+  openSendToTarget(app);
+  app.click(menuButton(app, 'Move'));
+  const prepare = app.messages.find(message => message.type === 'filesystem-prepare');
+  assert.equal(prepare.requiredDirectory, 'C:/two');
+  post(app, { type: 'filesystem-result', operationId: prepare.operationId, ok: false, error: 'Folder unavailable', state: saved });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(app.messages.some(message => message.type === 'filesystem-apply'), false);
+  assert.equal(app.state().folders['C:/one'].length, 2);
+  app.click(app.document.querySelector('#modal-cancel'));
+  openSendToTarget(app);
+  app.click(menuButton(app, 'Copy'));
+  assert.equal(app.messages.filter(message => message.type === 'filesystem-prepare').length, 2);
+});
+
+test('Send to shows the progress and cancel control for a destination outside both tabs', t => {
+  const saved = fixture();
+  const destination = 'C:/two/Nested';
+  saved.folders[destination] = [];
+  const app = createApp(t, saved, { language: 'en', platform: 'win32' });
+  sendFavorites(app);
+  context(app, app.row('one.txt'));
+  for (const label of ['Send to', 'Projects', 'Work']) app.click(menuButton(app, label));
+  browseResult(app, browseRequests(app).at(-1), [{ name: 'Nested', path: destination }]);
+  app.click(menuButton(app, 'Nested'));
+  browseResult(app, browseRequests(app).at(-1), []);
+  app.click(menuButton(app, 'Copy'));
+  const prepare = app.messages.find(message => message.type === 'filesystem-prepare');
+  assert.equal(prepare.requiredDirectory, destination);
+  assert.deepEqual(Array.from(app.state().panes, pane => pane.tabs[pane.tab]), ['C:/one', 'C:/two']);
+  assert.ok(app.document.querySelector('#statusbar').dataset.footerJobId);
+  assert.equal(app.document.querySelector('#statusbar').classList.contains('job-context-hidden'), false);
+  const cancel = app.document.querySelector('#status-cancel');
+  assert.equal(cancel.hidden, false);
+  app.click(cancel);
+  assert.equal(app.messages.find(message => message.type === 'filesystem-cancel').operationId, prepare.operationId);
+  post(app, { type: 'filesystem-result', operationId: prepare.operationId, ok: true, cancelled: true, state: saved });
+  assert.equal(app.messages.some(message => message.type === 'filesystem-apply'), false);
+});
+
+test('Send to uses the usual conflict prompt and supports cancellation before a write', async t => {
+  const saved = fixture();
+  saved.folders['C:/two'] = [{ id: 'existing', name: 'one.txt', type: 'text', size: 2 }];
+  const app = createApp(t, saved, { language: 'en', platform: 'win32' });
+  openSendToTarget(app);
+  app.click(menuButton(app, 'Copy'));
+  const prepare = app.messages.find(message => message.type === 'filesystem-prepare');
+  post(app, { type: 'filesystem-result', operationId: prepare.operationId, ok: true, state: saved });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.ok(app.document.querySelector('[data-conflict-action="overwrite"]'));
+  app.click(app.document.querySelector('[data-conflict-action="cancel"]'));
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(app.messages.some(message => message.type === 'filesystem-apply'), false);
+  assert.equal(app.state().folders['C:/two'][0].id, 'existing');
+});
+
+test('Send to rejects a captured source changed while preparing the destination', async t => {
+  const saved = fixture(), app = createApp(t, saved, { language: 'en', platform: 'win32' });
+  openSendToTarget(app);
+  app.click(menuButton(app, 'Move'));
+  const prepare = app.messages.find(message => message.type === 'filesystem-prepare');
+  const refreshed = structuredClone(saved);
+  refreshed.folders['C:/one'][0].size = 20;
+  post(app, { type: 'filesystem-result', operationId: prepare.operationId, ok: true, state: refreshed });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(app.messages.some(message => message.type === 'filesystem-apply'), false);
+});
+
 test('file delete popup confirms its captured selection and allows cancellation', t => {
   for (const language of ['de', 'en']) {
     const app = createApp(t, fixture(), { language });
