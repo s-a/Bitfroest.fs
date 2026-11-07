@@ -665,7 +665,9 @@ function createProvider(options = {}) {
       return deleted && parentKeys(deleted.path)[0];
     } : undefined;
     const state = inheritedPanes({ ...baseline.state, snapshotId: crypto.randomUUID(), folders, unloadedFolders, updatedDirectories: [...changedDirectories] }, view, deletedFolderParent);
-    const { updatedDirectories, operationOutcome, ...persisted } = state;
+    const persisted = { ...state };
+    delete persisted.updatedDirectories;
+    delete persisted.operationOutcome;
     snapshot = { ...baseline, folders, entries, loadedDirectories: [...loaded], unloadedFolders, deferredDirectories: baseline.deferredDirectories.filter(directory => Object.hasOwn(folders, directory)), state: clone(persisted), digest: undefined };
     publishedEntries.clear();
     return state;
@@ -684,7 +686,9 @@ function createProvider(options = {}) {
     const invalid = () => new Error('Ungültiger Übertragungsauftrag.');
     const operationPath = value => {
       const absolute = allowed(value);
-      if (process.platform === 'win32' && absolute.split('/').slice(/^[a-z]:\//i.test(absolute) ? 1 : 4).some(name => /[<>:"|?*\x00-\x1f]|[. ]$|^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(name))) throw invalid();
+      if (process.platform === 'win32' && absolute.split('/').slice(/^[a-z]:\//i.test(absolute) ? 1 : 4).some(name =>
+        /[<>:"|?*]|[. ]$|^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(name)
+        || [...name].some(character => character.charCodeAt(0) < 32))) throw invalid();
       return absolute;
     };
     const destination = operationPath(transfer.targetPath);
