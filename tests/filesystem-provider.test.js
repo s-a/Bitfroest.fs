@@ -367,10 +367,10 @@ test('browsing skips an entry removed after listing while recursive preparation 
   await assert.rejects(provider.prepare(state, { directories: [left], recursive: true }), { code: 'ENOENT' });
 });
 
-test('recursive preparation recovers only an exactly restored transient zero directory timestamp response', async t => {
+test('recursive preparation checks actual entries when directory timestamps are missing', async t => {
   const { left, right } = await setup(t);
-  for (const outcome of ['restored', 'zero', 'changed', 'identity', 'aborted']) {
-    let reads = 0, enumerated = false;
+  for (const outcome of ['restored', 'zero', 'changed', 'entries', 'identity', 'aborted']) {
+    let reads = 0, enumerated = false, listings = 0;
     const controller = new AbortController();
     const provider = createProvider({ roots: [left, right], fs: { ...fs, lstat: async (directory, options) => {
       const stat = await fs.lstat(directory, options);
@@ -380,17 +380,20 @@ test('recursive preparation recovers only an exactly restored transient zero dir
         if (outcome === 'aborted') controller.abort();
         return Object.assign(Object.create(stat), { mtimeNs: 0n, ctimeNs: 0n, ...(outcome === 'identity' ? { ino: stat.ino + 1n } : {}) });
       }
-      if (reads === 2 && outcome === 'zero') return Object.assign(Object.create(stat), { mtimeNs: 0n, ctimeNs: 0n });
+      if (outcome === 'zero' || outcome === 'entries') return Object.assign(Object.create(stat), { mtimeNs: 0n, ctimeNs: 0n });
       if (reads === 2 && outcome === 'changed') return Object.assign(Object.create(stat), { mtimeNs: stat.mtimeNs + 1n });
       return stat;
     }, readdir: async (directory, ...args) => {
       const names = await fs.readdir(directory, ...args);
-      if (slash(String(directory)) === `${left}/docs`) enumerated = true;
+      if (slash(String(directory)) === `${left}/docs`) {
+        enumerated = true;
+        if (++listings === 2 && outcome === 'entries') names.push('added.txt');
+      }
       return names;
     } } });
     const before = await provider.load(); reads = 0;
     const pending = provider.prepare(before, { directories: [`${left}/docs`], recursive: true, signal: controller.signal });
-    if (outcome === 'restored') { await pending; assert.equal(reads, 2); }
+    if (['restored', 'zero'].includes(outcome)) { await pending; assert.equal(reads, 2); }
     else {
       await assert.rejects(pending, outcome === 'aborted' ? { name: 'AbortError' } : { code: 'DirectoryChangedDuringScan' });
       assert.equal(reads, ['identity', 'aborted'].includes(outcome) ? 1 : 2);

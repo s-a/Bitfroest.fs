@@ -87,7 +87,7 @@ This recording shows the previous confirmation dialog style.
 | Folder under the cursor | Press Space | Mark the folder and calculate its recursive size when folder sizing on Space is enabled. |
 | Column separator | Double-click | Fit the column to its contents. |
 
-When moving a folder with **Send to**, an existing folder with the same name is merged with the source. Files that exist only in the destination are retained.
+When moving a folder with **Send to**, an existing folder with the same name is merged with the source. Files outside the transfer remain in the destination, including files added or replaced while it runs.
 
 ### Preview controls
 

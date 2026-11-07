@@ -1077,10 +1077,10 @@
     if (refreshingFilesystem) updateDirectoryActivity();
     return true;
   }
-  function prepareFolders(paths, action, resume, recursive = true, requireSnapshot = false, transfer) {
+  function prepareFolders(paths, action, resume, recursive = true, requireSnapshot = false, transfer, mergeDirectories = []) {
     if (!host || !state.realFilesystem) return false;
     const directories = [...new Set(paths)].filter(path => requireSnapshot && !Object.hasOwn(state.folders, path) || (state.unloadedFolders || []).some(unloaded => unloaded === path || recursive && unloaded.startsWith(`${path}/`)));
-    return directories.length ? requestFilesystem({ type: 'filesystem-prepare', paths: directories, action, recursive, ...(transfer ? { transfer, requiredDirectory: transfer.requiredDirectory, snapshotId: state.snapshotId } : {}) }, resume) : false;
+    return directories.length ? requestFilesystem({ type: 'filesystem-prepare', paths: directories, action, recursive, ...(transfer ? { transfer, requiredDirectory: transfer.requiredDirectory, snapshotId: state.snapshotId } : {}), ...(mergeDirectories.length ? { mergeDirectories: mergeDirectories.filter(path => directories.includes(path)) } : {}) }, resume) : false;
   }
   function receiveDirectoryMessage(data) {
     const request = navigationRequests.get(data.navigationRequestId) || (!data.navigationRequestId && !filesystemPending && data.type === 'filesystem-result' && navigationRequests.size === 1 ? navigationRequests.values().next().value : undefined);
@@ -2744,11 +2744,15 @@
         const path = join(targetDirectory, row.name);
         return [paths.identity(path), path];
       }));
+      const mergeDirectories = [];
       const directoriesToPrepare = selectedFolders.flatMap(file => {
+        const source = join(options.sourcePath, file.name);
         const target = join(targetDirectory, plan.name || (plan.mask ? window.BitfroestTransfer.applyNameMask(file.name, plan.mask) : file.name));
-        return [join(options.sourcePath, file.name), targetFolders.get(paths.identity(target)) ?? target];
+        const existingTarget = targetFolders.get(paths.identity(target));
+        if (existingTarget && paths.identity(source) !== paths.identity(existingTarget)) mergeDirectories.push(existingTarget);
+        return [source, existingTarget ?? target];
       });
-      if (prepareFolders(directoriesToPrepare, options.mode, resume, true, false, transfer)) { transferPreparationFailure = cancelled => options.onComplete?.({ confirmed: false, completed: 0, completedIds: [], errors: cancelled ? [] : [t('Dateioperation fehlgeschlagen; Verzeichnisse erneut eingelesen')], cancelled: Boolean(cancelled) }); return; }
+      if (prepareFolders(directoriesToPrepare, options.mode, resume, true, false, transfer, mergeDirectories)) { transferPreparationFailure = cancelled => options.onComplete?.({ confirmed: false, completed: 0, completedIds: [], errors: cancelled ? [] : [t('Dateioperation fehlgeschlagen; Verzeichnisse erneut eingelesen')], cancelled: Boolean(cancelled) }); return; }
     }
     transferPending = true;
     const planningJob = transferJob;

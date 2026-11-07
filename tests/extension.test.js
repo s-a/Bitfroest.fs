@@ -74,9 +74,26 @@ test('Send to moves a folder into its existing namesake and preserves unrelated 
   fs.writeFileSync(targetSeason + '/shared.txt', 'old');
   fs.writeFileSync(targetSeason + '/keep.txt', 'keep');
   const saved = await createProvider({ roots: [left, right] }).load({ directories: [left, right], visibleOnly: true });
+  let addedDuringScan = false, sourceSeasonListed = false;
+  const changingFilesystem = { ...filesystem, lstat: async (entry, options) => {
+    const stat = await filesystem.lstat(entry, options);
+    return entry === sourceSeason && sourceSeasonListed && options?.bigint
+      ? Object.assign(Object.create(stat), { mtimeNs: 0n, ctimeNs: 0n }) : stat;
+  }, readdir: async (directory, ...args) => {
+    const entries = await filesystem.readdir(directory, ...args);
+    if (directory === sourceSeason) sourceSeasonListed = true;
+    if (directory === targetSeason && !addedDuringScan) {
+      addedDuringScan = true;
+      await filesystem.writeFile(targetSeason + '/added-during-scan.txt', 'added');
+      await filesystem.writeFile(targetSeason + '/keep.txt', 'replaced while scanning');
+      const changedTime = new Date('2030-01-01T00:00:00Z');
+      await filesystem.utimes(targetSeason, changedTime, changedTime);
+    }
+    return entries;
+  } };
   const app = harness(t, { language: 'en', startupRoots: [left, right], workspaceState: { fileManagerState: saved },
     configuration: { 'favorites.entries': { Work: favorite } },
-    providerFactory: options => createProvider({ ...options, roots: [left, right], readDirectory: undefined, readAttributes: undefined, fs: filesystem }) });
+    providerFactory: options => createProvider({ ...options, roots: [left, right], readDirectory: undefined, readAttributes: undefined, fs: changingFilesystem }) });
   await app.command('bitfroest.openPrototype');
   const panel = app.panels[0];
   const view = require('./support/webview.cjs').createApp(t, undefined, { html: panel.webview.html });
@@ -97,12 +114,15 @@ test('Send to moves a folder into its existing namesake and preserves unrelated 
   assert.ok(conflict(), view.document.querySelector('.operation-error-text')?.value);
   assert.equal(fs.readFileSync(targetSeason + '/new.txt', 'utf8'), 'new');
   assert.equal(fs.readFileSync(targetSeason + '/shared.txt', 'utf8'), 'old');
+  assert.equal(fs.readFileSync(targetSeason + '/keep.txt', 'utf8'), 'replaced while scanning');
+  fs.writeFileSync(targetSeason + '/keep.txt', 'replaced during conflict');
   view.click(conflict());
   for (let i = 0; i < 8 && fs.existsSync(source); i++) await exchange();
   assert.equal(fs.existsSync(source), false, view.document.querySelector('.operation-error-text')?.value);
   assert.equal(fs.readFileSync(targetSeason + '/shared.txt', 'utf8'), 'updated');
   assert.equal(fs.readFileSync(targetSeason + '/new.txt', 'utf8'), 'new');
-  assert.equal(fs.readFileSync(targetSeason + '/keep.txt', 'utf8'), 'keep');
+  assert.equal(fs.readFileSync(targetSeason + '/keep.txt', 'utf8'), 'replaced during conflict');
+  assert.equal(fs.readFileSync(targetSeason + '/added-during-scan.txt', 'utf8'), 'added');
   assert.deepEqual(fs.readdirSync(favorite), [path.basename(target)]);
   assert.deepEqual(fs.readdirSync(target), [path.basename(targetSeason)]);
   assert.deepEqual(Array.from(view.state().panes, pane => pane.tabs[pane.tab]), [left, right]);

@@ -1835,6 +1835,8 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
               let directories = message.type === 'filesystem-navigate' ? [message.path] : message.paths;
               if (!Array.isArray(directories) || directories.length > 128 || directories.some(target => typeof target !== 'string' || target.length > 4096 || !provider.canNavigate(target, message.type === 'filesystem-navigate'))) throw new Error(t('Ungültiger Datei- oder Ordnername.'));
               const requiredDirectory = message.type === 'filesystem-prepare' ? message.requiredDirectory : undefined;
+              const mergeDirectories = message.type === 'filesystem-prepare' ? message.mergeDirectories : undefined;
+              if (mergeDirectories !== undefined && (!Array.isArray(mergeDirectories) || mergeDirectories.length > directories.length || mergeDirectories.some(target => !directories.includes(target)))) throw new Error(t('Ungültiger Datei- oder Ordnername.'));
               if (requiredDirectory !== undefined && (typeof requiredDirectory !== 'string' || requiredDirectory.length > 4096 || !provider.canNavigate(requiredDirectory))) throw new Error(t('Ein vorhandener Zielordner ist erforderlich.'));
               if (message.type === 'filesystem-navigate' && ![0, 1].includes(message.side)) throw new Error(t('Ungültiger Datei- oder Ordnername.'));
               if (message.type === 'filesystem-navigate') {
@@ -1858,7 +1860,7 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
                   if (!message.navigationRequestId || panel !== current) return;
                   return current.webview.postMessage({ type: 'filesystem-directory', navigationRequestId: message.navigationRequestId, ...update, path: update.path === navigationReplyPath ? message.path : update.path });
                 };
-                fresh = isolatedNavigation ? await navigationProvider.load({ directories: visibleDirectories, visibleOnly: true, signal: directoryJob?.controller.signal, onDirectory: onNavigationDirectory }) : await provider.prepare(filesystemState, { directories, requiredDirectory, source: requiredDirectory === undefined ? undefined : message.source, recursive: message.type === 'filesystem-prepare' && message.recursive !== false, ...(message.type === 'filesystem-navigate' ? { navigation: true, visibleDirectories, onDirectory: onNavigationDirectory, getVisibleDirectories: visiblePaths, ...(directoryJob ? { signal: directoryJob.controller.signal } : {}) } : {}), ...(job ? { signal: job.controller.signal, onProgress } : {}) });
+                fresh = isolatedNavigation ? await navigationProvider.load({ directories: visibleDirectories, visibleOnly: true, signal: directoryJob?.controller.signal, onDirectory: onNavigationDirectory }) : await provider.prepare(filesystemState, { directories, requiredDirectory, mergeDirectories, source: requiredDirectory === undefined ? undefined : message.source, recursive: message.type === 'filesystem-prepare' && message.recursive !== false, ...(message.type === 'filesystem-navigate' ? { navigation: true, visibleDirectories, onDirectory: onNavigationDirectory, getVisibleDirectories: visiblePaths, ...(directoryJob ? { signal: directoryJob.controller.signal } : {}) } : {}), ...(job ? { signal: job.controller.signal, onProgress } : {}) });
               }
             } else {
               const refreshView = message.state || savedState;

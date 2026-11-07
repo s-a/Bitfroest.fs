@@ -32,6 +32,10 @@ function statSignature(stat) {
 function statIdentity(stat) {
   return Object.fromEntries(['dev', 'ino', 'mode', 'size', 'mtimeNs', 'ctimeNs'].map(key => [key, String(stat[key])]));
 }
+function onlyMissingDirectoryTimes(expected, observed) {
+  return ['dev', 'ino', 'mode', 'size'].every(key => expected[key] === observed[key])
+    && ['mtimeNs', 'ctimeNs'].every(key => expected[key] === observed[key] || expected[key] === '0' || observed[key] === '0');
+}
 function contentSignature(stat) {
   return [stat.dev, stat.ino, stat.mode, stat.size, stat.mtimeNs].map(String).join(':');
 }
@@ -189,6 +193,7 @@ function createProvider(options = {}) {
     async function scanDirectory(directory, depth, root = false, recursive = false) {
       throwIfAborted(settings.signal);
       const strict = recursive || (settings.recursiveDirectories || []).some(target => below(directory, target));
+      const mergingDestination = (settings.mergeDirectories || []).some(target => below(directory, target));
       if (depth > limits.depth) throw new Error('Die Tiefengrenze des Dateisystem-Scans wurde erreicht.');
       if (loadedDirectories.has(directory)) {
         if (recursive) for (const row of folders[directory]) {
@@ -253,7 +258,7 @@ function createProvider(options = {}) {
           }
         }
         catch (error) {
-          if (!strict && error.code === 'ENOENT' && (!error.path || identity(canonical(error.path)) === identity(absolute))) continue;
+          if ((!strict || mergingDestination) && error.code === 'ENOENT' && (!error.path || identity(canonical(error.path)) === identity(absolute))) continue;
           if (strict || !['EPERM', 'EACCES'].includes(error.code)) throw error;
           if (error.path && identity(canonical(error.path)) !== identity(absolute)) throw error;
           directoryEntries ||= await fs.readdir(directory, { withFileTypes: true });
@@ -297,16 +302,20 @@ function createProvider(options = {}) {
       }
       await settings.onDirectory?.({ path: directory, phase: 'validation', rows: [], completed: names.length, total: names.length });
       let finalStat = await fs.lstat(directory, { bigint: true });
-      const timeFields = ['mtimeNs', 'ctimeNs'];
-      const incompleteTimes = timeFields.some(key => stat[key] > 0n && finalStat[key] === 0n)
-        && timeFields.every(key => finalStat[key] === stat[key] || stat[key] > 0n && finalStat[key] === 0n);
-      if (strict && finalStat.isDirectory() && !finalStat.isSymbolicLink() && incompleteTimes
-          && ['dev', 'ino', 'mode', 'size'].every(key => finalStat[key] === stat[key])) {
+      const verifyContents = strict && !mergingDestination;
+      const expected = statIdentity(stat);
+      let checkedListing = false;
+      if (verifyContents && finalStat.isDirectory() && !finalStat.isSymbolicLink() && statSignature(finalStat) !== statSignature(stat)
+          && onlyMissingDirectoryTimes(expected, statIdentity(finalStat))) {
+        throwIfAborted(settings.signal);
+        checkedListing = JSON.stringify((await fs.readdir(directory)).sort()) === JSON.stringify(names);
         throwIfAborted(settings.signal);
         finalStat = await fs.lstat(directory, { bigint: true });
+        if (!checkedListing) throw Object.assign(new Error('Ordner während der Bestandsaufnahme geändert.'), { code: 'DirectoryChangedDuringScan', path: directory, scanPhase: 'directory-entries' });
       }
       throwIfAborted(settings.signal);
-      if (!finalStat.isDirectory() || finalStat.isSymbolicLink() || finalStat.dev !== stat.dev || finalStat.ino !== stat.ino || finalStat.mode !== stat.mode || strict && statSignature(finalStat) !== statSignature(stat)) {
+      if (!finalStat.isDirectory() || finalStat.isSymbolicLink() || finalStat.dev !== stat.dev || finalStat.ino !== stat.ino || finalStat.mode !== stat.mode
+          || verifyContents && statSignature(finalStat) !== statSignature(stat) && !(checkedListing && onlyMissingDirectoryTimes(expected, statIdentity(finalStat)))) {
         const fields = ['dev', 'ino', 'mode', 'size', 'mtimeNs', 'ctimeNs'];
         const describe = value => JSON.stringify(Object.fromEntries(fields.map(key => [key, String(value[key])])));
         throw Object.assign(new Error('Ordner während der Bestandsaufnahme geändert.'), { code: 'DirectoryChangedDuringScan', path: directory, scanPhase: 'directory-validation', expectedDirectory: describe(stat), observedDirectory: describe(finalStat), changedFields: fields.filter(key => stat[key] !== finalStat[key]).join(', ') });
@@ -470,17 +479,19 @@ function createProvider(options = {}) {
       const observed = await fs.lstat(entry.path, { bigint: true });
       if (observed.isSymbolicLink() && entry.linkText === undefined) throw new Error('Eintrag vor dem Schreiben durch eine Verknüpfung ersetzt.');
       const signature = statSignature(observed);
-      const matches = !recursive && entry.type === 'folder'
+      const matchesSignature = !recursive && entry.type === 'folder'
         ? signature.split(':').slice(0, 3).join(':') === entry.signature.split(':').slice(0, 3).join(':')
         : signature === entry.signature;
-      if (!matches) {
+      if (!matchesSignature) {
         const fields = ['dev', 'ino', 'mode', 'size', 'mtimeNs', 'ctimeNs'];
         const values = entry.signature.split(':');
-        throw Object.assign(new Error('Eintrag vor dem Schreiben extern geändert.'), {
+        const expectedStat = Object.fromEntries(fields.map((key, index) => [key, values[index]]));
+        const observedStat = statIdentity(observed);
+        if (entry.type !== 'folder' || !onlyMissingDirectoryTimes(expectedStat, observedStat)) throw Object.assign(new Error('Eintrag vor dem Schreiben extern geändert.'), {
           code: 'EntryChangedBeforeWrite', path: entry.path,
           outcome: { sourceIdentity: {
-            expected: Object.fromEntries(fields.map((key, index) => [key, values[index]])),
-            observed: Object.fromEntries(fields.map(key => [key, String(observed[key])]))
+            expected: expectedStat,
+            observed: observedStat
           } }
         });
       }
@@ -1074,7 +1085,7 @@ function createProvider(options = {}) {
       : (settings.directories || []).map(allowed);
     const retainedDirectories = snapshot.visibleOnly ? activeDirectories(before) : snapshot.loadedDirectories;
     const requestedDirectories = settings.navigation ? directories : [...retainedDirectories, ...(requiredDirectory === undefined ? [] : [allowed(requiredDirectory)]), ...directories];
-    const fresh = await load({ directories: requestedDirectories, ...(settings.navigation ? { baseline: snapshot, refreshDirectories: directories, visibleDirectories: settings.visibleDirectories, getVisibleDirectories: settings.getVisibleDirectories, onDirectory: settings.onDirectory } : {}), recursiveDirectories: settings.recursive ? directories : [], signal: settings.signal, onProgress: settings.onProgress });
+    const fresh = await load({ directories: requestedDirectories, ...(settings.navigation ? { baseline: snapshot, refreshDirectories: directories, visibleDirectories: settings.visibleDirectories, getVisibleDirectories: settings.getVisibleDirectories, onDirectory: settings.onDirectory } : {}), recursiveDirectories: settings.recursive ? directories : [], mergeDirectories: settings.mergeDirectories, signal: settings.signal, onProgress: settings.onProgress });
     const state = inheritedPanes(fresh, before);
     if (snapshot.state.snapshotId === fresh.snapshotId) snapshot.state = clone(state);
     return state;
