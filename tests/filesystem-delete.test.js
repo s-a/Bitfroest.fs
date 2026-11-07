@@ -31,6 +31,27 @@ async function fixture(t, deletePath) {
   return { left, right, provider: createProvider({ roots: [left, right], deletePath }) };
 }
 
+test('deleting a folder from its deferred parent works while the folder is open in the other pane', async t => {
+  const calls = [], { provider, left, right } = await fixture(t, async target => {
+    calls.push(target);
+    await fs.rm(target, { recursive: true });
+  });
+  const child = `${left}/child`;
+  await provider.load({ directories: [left, right], visibleOnly: true });
+  const before = await provider.load({
+    left, right: child, directories: [child], deferredDirectories: [left], visibleOnly: true,
+    visibleDirectories: [child]
+  });
+  const row = before.folders[left].find(row => row.name === 'child');
+  assert.equal(row?.fsSource, child);
+
+  const after = await provider.remove(before, { paths: [row.fsSource], useTrash: true });
+
+  assert.deepEqual(calls, [child]);
+  assert.equal(after.folders[left].some(row => row.name === 'child'), false);
+  assert.equal(await fs.readFile(`${left}/a.txt`, 'utf8'), 'a');
+});
+
 test('trash deletion passes the original name and trash option to the native adapter', async t => {
   const calls = [];
   const { provider, left } = await fixture(t, async (target, options) => { calls.push({ target, options }); await fs.unlink(target); });

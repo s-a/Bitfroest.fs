@@ -1356,7 +1356,12 @@ function createProvider(options = {}) {
       const item = baseline.entries.get(key) || (published?.snapshot === baseline ? published.entry : undefined);
       const currentDirectory = typeof request.currentDirectory === 'string' && identity(allowed(request.currentDirectory)) === key && request.paths.length === 1 && activeDirectories(before).some(directory => identity(directory) === key);
       const protectedRoot = roots.some(root => identity(root) === key) || identity(slash(path.parse(item?.path || '').root)) === key;
-      if (!item || item.root && (!currentDirectory || protectedRoot) || request.currentDirectory !== undefined && !currentDirectory) throw new Error('Root-Ordner oder unbekannte Einträge dürfen nicht entfernt werden.');
+      const parent = item?.root && item.row && slash(path.dirname(item.row.fsSource));
+      const listedFolder = parent && baseline.folders[parent]?.some(row => row.type === 'folder' && identity(row.fsSource) === key)
+        && activeDirectories(before).some(directory => identity(directory) === identity(parent));
+      if (!item || protectedRoot || (item.root && !listedFolder && !currentDirectory) || (request.currentDirectory !== undefined && !currentDirectory)) {
+        throw new Error('Root-Ordner oder unbekannte Einträge dürfen nicht entfernt werden.');
+      }
       return item;
     });
     const targets = selected.filter(item => !selected.some(other => other !== item && other.type === 'folder' && below(item.path, other.path)));
