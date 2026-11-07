@@ -36,6 +36,7 @@ const files = {
   '/webview-interactions.js': ['webview-interactions.js', 'text/javascript; charset=utf-8'],
   '/bitfroest-file-names.js': ['bitfroest-file-names.js', 'text/javascript; charset=utf-8'],
   '/app.js': ['app.js', 'text/javascript; charset=utf-8'],
+  '/operation-report-masking.js': ['operation-report-masking.js', 'text/javascript; charset=utf-8'],
   '/bitfroest-i18n.js': ['bitfroest-i18n.js', 'text/javascript; charset=utf-8'],
   '/bitfroest-column-settings.js': ['bitfroest-column-settings.js', 'text/javascript; charset=utf-8'],
   '/bitfroest-tabs.js': ['bitfroest-tabs.js', 'text/javascript; charset=utf-8'],

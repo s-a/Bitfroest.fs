@@ -2456,7 +2456,7 @@
   }
   function operationFailureReport() {
     const title = t('Dateioperation fehlgeschlagen');
-    return `${title}${operationFailureDiagnostic ? `\n\n${operationDiagnosticText(operationFailureDiagnostic)}` : ''}\n\n${operationFailure}`;
+    return window.BitfroestOperationReport.maskOperationDetails(`${title}${operationFailureDiagnostic ? `\n\n${operationDiagnosticText(operationFailureDiagnostic)}` : ''}\n\n${operationFailure}`);
   }
   function mountOperationFailure() {
     document.querySelector('.operation-error')?.remove();

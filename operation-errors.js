@@ -1,4 +1,4 @@
-const { maskIssueMessage } = require('./operation-report-masking');
+const { maskIssueMessage } = require('./media/operation-report-masking');
 
 const headings = {
   'recovery-incomplete': 'Wiederherstellung unvollständig.',

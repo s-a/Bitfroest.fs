@@ -1,23 +1,35 @@
+(function (root, factory) {
+  const api = factory();
+  if (typeof module === 'object' && module.exports) module.exports = api;
+  else root.BitfroestOperationReport = api;
+})(typeof window === 'object' ? window : globalThis, function () {
+"use strict";
+
 // Match the path shortening and URL masking used for documents.
 const START = String.raw`(?:file:(?:/{2,}[a-zA-Z]:[\\/]+|//[^/\s"'<>|]+/[^/\s"'<>|]+/?)|\\{2,}\?\\+(?:UNC\\+|[a-zA-Z]:\\+)|[a-zA-Z]:[\\/]+|(?<!:)[\\/]{2,}[^\\/\s"'<>|?*]+[\\/]+)`;
 const PATH_REGEX = new RegExp(`"(?<quoted>${START}[^"\\r\\n]*)"|'(?<singleQuoted>${START}[^'\\r\\n]*)'|(?<![\\p{L}\\p{N}_/\\\\])(?<bare>${START}(?:(?![a-zA-Z]:[\\\\/]|\\s+[\\\\/]{2,})[^\\x00-\\x1f"'<>|?*,;])*)`, "giu");
-function collectPaths(text) {
-  PATH_REGEX.lastIndex = 0;
+const DETAILS_START = String.raw`(?:${START}|file:/{3,}|/(?=[^/\s"'<>|]))`;
+const DETAILS_PATH_REGEX = new RegExp(`["“„«](?<quoted>${DETAILS_START}[^"“”»\\r\\n]*)["“”»]|['‘](?<singleQuoted>${DETAILS_START}(?:[^'’\\r\\n]|'(?![\\s,;)]|$))*)['’]|(?<![\\p{L}\\p{N}_./\\\\])(?<bare>${DETAILS_START}[^\\x00-\\x1f"“”»<>|?*,;]*)`, "giu");
+function collectPaths(text, details = false) {
+  const pattern = details ? DETAILS_PATH_REGEX : PATH_REGEX;
+  pattern.lastIndex = 0;
   const matches = [];
   let match;
-  while ((match = PATH_REGEX.exec(text)) !== null) {
+  while ((match = pattern.exec(text)) !== null) {
     const quoted = match.groups.quoted ?? match.groups.singleQuoted;
-    let value = quoted ?? match.groups.bare.trimEnd();
-    if (match.groups.bare !== undefined) {
+    const bare = match.groups.bare;
+    let value = quoted ?? bare.trimEnd();
+    if (bare !== undefined) {
       value = trimBarePath(value);
       const hasFileExtension = /(?:^|[\\/])[^\\/\s]+\.[a-zA-Z0-9]{1,10}$/.test(value);
-      if (/\s/.test(value) && !hasFileExtension && !/[\\/]$/.test(value))
+      if (!details && /\s/.test(value) && !hasFileExtension && !/[\\/]$/.test(value))
         continue;
     }
+    const index = match.index + match[0].indexOf(quoted ?? bare);
     try {
-      matches.push({ index: match.index + match[0].indexOf(quoted ?? match.groups.bare), value, names: normalizedPathNames(value) });
+      matches.push({ index, value, names: normalizedPathNames(value, details) });
     }
-    catch { /* Ignore malformed path candidates. */ }
+    catch { if (details) matches.push({ index, value, names: [] }); }
   }
   return matches;
 }
@@ -39,13 +51,16 @@ function trimBarePath(value) {
   }
   return value.replace(/[.!]+$/, "");
 }
-function normalizedPathNames(value) {
+function normalizedPathNames(value, details) {
   let normalized = value;
   if (/^file:/i.test(normalized)) {
-    normalized = decodeURIComponent(normalized.slice(5)).replaceAll("/", "\\");
-    if (/^\\+[a-zA-Z]:\\/.test(normalized))
-      normalized = normalized.replace(/^\\+/, "");
+    normalized = decodeURIComponent(normalized.slice(5));
+    if (/^[\\/]+[a-zA-Z]:[\\/]/.test(normalized))
+      normalized = normalized.replace(/^[\\/]+/, "");
+    else if (details && /^\/{3,}/.test(normalized))
+      normalized = normalized.replace(/^\/{3,}/, "/");
   }
+  const posix = details && /^\/(?![\\/])/.test(normalized);
   normalized = normalized.replaceAll("/", "\\");
   const isUnc = normalized.startsWith("\\\\");
   normalized = normalized.replace(/\\+/g, "\\");
@@ -65,6 +80,8 @@ function normalizedPathNames(value) {
   else if (unc) {
     remainder = normalized.slice(unc[0].length);
   }
+  else if (posix)
+    remainder = normalized.slice(1);
   else
     throw new Error("Unsupported path.");
   const names = [];
@@ -79,7 +96,7 @@ function normalizedPathNames(value) {
     if (name)
       names.push(name);
   }
-  return names;
+  return details && /^(?:users|home)$/i.test(names[0]) ? names.slice(2) : names;
 }
 function shortenPaths(occurrences) {
   return occurrences.map((item) => {
@@ -154,4 +171,23 @@ function maskIssueMessage(text) {
   return lines.join('\n');
 }
 
-module.exports = { maskIssueMessage };
+function maskOperationDetails(text) {
+  return text.split(/\r\n?|\n/).map(line => {
+    // Keep function names and locations while removing the source root of a frame.
+    const frame = /^(\s*at\s+(?:.*? \()?)((?:[a-z][\w+.-]*:\/{2,}|[a-z]:[\\/]|[\\/]+).*?)(:\d+:\d+\)?\s*)$/i.exec(line);
+    if (frame) {
+      const url = /^[a-z][\w+.-]*:\/\/[^/?#]*(\/[^?#]*)?/i.exec(frame[2]);
+      const path = url ? url[1] || '' : frame[2];
+      const name = path.split(/[\\/]/).at(-1) || '[source]';
+      return `${frame[1]}.../${name}${frame[3]}`;
+    }
+    const urls = getUrlMasks(line);
+    const allUrls = [...line.matchAll(urlCandidate)].filter(match => !/^file:/i.test(match[0])).map(match =>
+      urls.find(url => url.index === match.index && url.value === match[0]) || { index: match.index, value: match[0], replacement: '[…]' });
+    const maskedUrls = replaceMatches(line, allUrls);
+    return replaceMatches(maskedUrls, shortenPaths(collectPaths(maskedUrls, true)));
+  }).join('\n');
+}
+
+return { maskIssueMessage, maskOperationDetails };
+});

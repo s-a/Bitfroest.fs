@@ -1068,12 +1068,23 @@ test('error details copy passes through actual host HTML to the public clipboard
   const app = harness(t, { filesystemLoad: async () => initial });
   await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
   assert.match(panel.webview.html, /img-src [^;]+ data:;/);
+  assert.match(panel.webview.html, /<script nonce="[^"]+" src="webview-resource:[^"\n]+[\\/]media[\\/]operation-report-masking\.js"><\/script>/);
   const view = require('./support/webview.cjs').createApp(t, initial, { html: panel.webview.html, language: 'de' });
   view.action('mkdir');
   view.document.querySelector('#value').value = 'new';
   view.document.querySelector('#modal-form').dispatchEvent(new view.window.Event('submit', { bubbles: true, cancelable: true }));
-  const error = "EPERM: operation not permitted, lstat 'C:\\DumpStack.log.tmp'\nC:\\Recovery\\Ä.stage";
-  view.window.dispatchEvent(new view.window.MessageEvent('message', { data: { type: 'filesystem-result', ok: false, state: initial, error } }));
+  const error = "EPERM: operation not permitted, lstat 'C:\\USERS\\PrivatePerson\\Secret Folder\\note.txt'\nC:\\Users\\PrivatePerson\\Recovery\\Ä.stage";
+  const diagnostic = { request: { type: 'filesystem-apply', ids: ['fs:c:/users/privateperson/downloads/mobland'], transfer: {
+    mode: 'move', sourcePath: 'c:/Users/PrivatePerson/Downloads', targetPath: 'a:/Media/Series', sourcePaths: ['c:/Users/PrivatePerson/Downloads/MobLand']
+  } }, panelPaths: ['c:/Users/PrivatePerson/Downloads', '/home/linux-person', '\\\\private-server\\private-share\\Folder'], failure: {
+    code: 'EPERM', message: error, stack: [
+      'Error: EPERM',
+      '    at put (https://file+.vscode-resource.vscode-cdn.net/c%3A/Users/PrivatePerson/.vscode/extensions/bitfroest.bitfroest-fs-prototype-0.0.54/media/bitfroest-transfer.js:166:28)',
+      '    at apply (/home/linux-person/work/repo/lib/file.js:10:2)',
+      '    at call (node:internal/process/task_queues:105:5)'
+    ].join('\n')
+  } };
+  view.window.dispatchEvent(new view.window.MessageEvent('message', { data: { type: 'filesystem-result', ok: false, state: initial, error, diagnostic } }));
   const illustration = view.document.querySelector('.operation-error img');
   assert.ok(illustration);
   assert.match(illustration.src, /error-monkey\.png$/);
@@ -1082,11 +1093,21 @@ test('error details copy passes through actual host HTML to the public clipboard
   view.click(view.document.querySelector('[data-copy-error]'));
   const request = view.messages.find(message => message.type === 'selection-io');
   await panel.receive(request);
-  assert.deepEqual(app.clipboardCalls.at(-1), { action: 'writeText', text: 'Dateioperation fehlgeschlagen\n\n' + error });
+  const { text } = app.clipboardCalls.at(-1);
+  assert.equal(app.clipboardCalls.at(-1).action, 'writeText');
+  assert.doesNotMatch(text, /privateperson|linux-person|private-server|private-share|vscode-resource/i);
+  assert.match(text, /fs:\.\.\.\/downloads\/mobland/);
+  assert.match(text, /Quellpfad: \.\.\.\/Downloads/);
+  assert.match(text, /Zielpfad: \.\.\.\/Media\/Series/);
+  assert.ok(text.includes("lstat '...\\Secret Folder\\note.txt'"));
+  assert.ok(text.includes('...\\Recovery\\Ä.stage'));
+  assert.match(text, /at put \([^\r\n]+bitfroest-transfer\.js:166:28\)/);
+  assert.match(text, /at apply \([^\r\n]+file\.js:10:2\)/);
+  assert.match(text, /at call \(node:internal\/process\/task_queues:105:5\)/);
   const response = panel.messages.find(message => message.type === 'selection-io-result' && message.requestId === request.requestId);
   assert.equal(response.ok, true);
   view.window.dispatchEvent(new view.window.MessageEvent('message', { data: response }));
-  assert.ok(view.document.querySelector('.operation-error-text').value.endsWith(error));
+  assert.equal(view.document.querySelector('.operation-error-text').value, text);
   assert.equal(view.document.querySelector('#status-message').textContent, 'Fehlerdetails kopiert.');
   panel.dispose();
 });
@@ -1131,10 +1152,10 @@ for (const stage of ['host preparation', 'webview transfer planning', 'host appl
     assert.ok(details);
     assert.match(details.value, /Trigger: send-to/);
     assert.match(details.value, moving ? /Mode: move/ : /Mode: copy/);
-    assert.match(details.value, /Source path: C:\/tmp/);
-    assert.match(details.value, /C:\/tmp\/a\.txt/);
-    assert.match(details.value, /Target path: C:\/favorite/);
-    assert.match(details.value, /Required destination directory: C:\/favorite/);
+    assert.match(details.value, /Source path: \.\.\.\/tmp/);
+    assert.match(details.value, /\.\.\.\/tmp\/a\.txt/);
+    assert.match(details.value, /Target path: \.\.\.\/favorite/);
+    assert.match(details.value, /Required destination directory: \.\.\.\/favorite/);
     assert.match(details.value, stage === 'host preparation' ? /Operation: filesystem-prepare/ : moving ? /Operation: filesystem-apply/ : /Operation: transfer-planning/);
     assert.match(details.value, stage === 'host preparation' ? /Error code: ENOTDIR/ : moving ? /Error code: EACCES/ : /Error code: DESTINATION_NOT_IN_SNAPSHOT/);
     assert.match(details.value, /Stack:/);

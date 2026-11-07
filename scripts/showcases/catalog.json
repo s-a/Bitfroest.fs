@@ -1425,7 +1425,7 @@
     ],
     "sources": [
       "media/app.js",
-      "operation-report-masking.js"
+      "media/operation-report-masking.js"
     ],
     "status": "pending",
     "reason": "Requires a controlled file operation failure and verification of the draft using demo data.",

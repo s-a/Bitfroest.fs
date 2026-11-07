@@ -2,6 +2,32 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createOperationError, renderOperationError } = require('../operation-errors');
 const { create } = require('../media/bitfroest-i18n');
+const { maskOperationDetails } = require('../media/operation-report-masking');
+
+test('operation details mask home, network and malformed URI paths without discarding lines', () => {
+  const text = [
+    'IDs: fs:/home/Casey/Docs/file.txt, fs:C:/Users/Some Name (Work)/Downloads/file.txt',
+    'Folder: \\\\private-server\\private-share\\Subfolder (Work)\\Another folder',
+    'URI: file:///c%3A/Users/Casey/Folder/item.txt',
+    'URI: file:///home/Casey/Folder/item.txt',
+    'Malformed URI: file:///home/Casey/Folder/%Z.txt',
+    "Access denied at 'C:\\Users\\O'Connor\\Folder\\file.txt'",
+    'The folder “/home/Casey” is unavailable.',
+    'Code: EACCES'
+  ].join('\n');
+  const masked = maskOperationDetails(text);
+  assert.doesNotMatch(masked, /casey|some name|private-server|private-share|file:\/\/\/|connor/i);
+  assert.equal(masked, [
+    'IDs: fs:.../Docs/file.txt, fs:.../Downloads/file.txt',
+    'Folder: ...\\Subfolder (Work)\\Another folder',
+    'URI: .../Folder/item.txt',
+    'URI: .../Folder/item.txt',
+    'Malformed URI: ...',
+    "Access denied at '...\\Folder\\file.txt'",
+    'The folder “...” is unavailable.',
+    'Code: EACCES'
+  ].join('\n'));
+});
 
 test('structured recovery errors localize only application parts and preserve paths', () => {
   const paths = ['C:/tmp/Neuer Ordner/Dateioperation fehlgeschlagen<&.stage'];
