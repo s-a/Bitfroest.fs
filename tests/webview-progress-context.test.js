@@ -1,5 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const Progress = require('../media/bitfroest-progress');
 const { createApp } = require('./support/webview.cjs');
 
 function fixture() {
@@ -15,6 +16,35 @@ async function start(app, mode, target) {
   await tick();
   return app.messages.find(message => message.type === 'filesystem-apply');
 }
+
+test('copy progress keeps the whole transfer separate from each conflict checkpoint and current file', async t => {
+  const saved = fixture();
+  saved.folders['/left'].push({ id: 'b', name: 'same.txt', type: 'text', size: 4 });
+  saved.folders['/right'].push({ id: 'existing', name: 'same.txt', type: 'text', size: 2 });
+  saved.panes[0].selected = ['a', 'b'];
+  const app = createApp(t, saved, { language: 'en' });
+  const first = await start(app, 'copy');
+  assert.equal(first.transfer.checkpoint, true);
+  const report = (request, completed, total, phase = 'copying') => send(app, { type: 'filesystem-progress', operationId: request.operationId,
+    progress: Progress.event({ phase, overall: Progress.known('bytes', completed, total), current: Progress.known('bytes', completed, total) }) });
+  const overall = app.document.querySelector('#status-progress-overall'), current = app.document.querySelector('#status-progress-file');
+  report(first, 6, 12);
+  assert.equal(overall.hasAttribute('aria-valuemax'), false);
+  assert.equal(current.getAttribute('aria-valuenow'), '6');
+  assert.equal(current.getAttribute('aria-valuemax'), '12');
+  report(first, 12, 12, 'published');
+  send(app, { type: 'filesystem-result', operationId: first.operationId, ok: true, state: first.state });
+  await tick();
+  app.click(app.document.querySelector('[data-conflict-action="overwrite"]'));
+  await tick();
+  const last = app.messages.filter(message => message.type === 'filesystem-apply').at(-1);
+  assert.notEqual(last.operationId, first.operationId);
+  report(last, 2, 4);
+  assert.equal(overall.getAttribute('aria-valuenow'), '14');
+  assert.equal(overall.getAttribute('aria-valuemax'), '16');
+  assert.equal(current.getAttribute('aria-valuenow'), '2');
+  assert.equal(current.getAttribute('aria-valuemax'), '4');
+});
 
 test('active progress keeps localized operation and literal source/final target independently of transient hints', async t => {
   for (const language of ['en', 'de']) for (const mode of ['copy', 'move']) {

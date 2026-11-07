@@ -880,9 +880,19 @@
     event.preventDefault();
   });
   function transferProgress(progress = {}) {
-    const reported = progress.version === 1 ? Progress.read(progress) : null;
     let element = document.querySelector('.transfer-progress');
     if (!transferJob) { element?.remove(); return; }
+    let reported = progress.version === 1 ? Progress.read(progress) : null;
+    if (reported?.overall.unit === 'bytes' && transferJob.transfer) {
+      const batch = reported.overall;
+      const previous = transferJob.confirmedBytes || 0;
+      if (reported.phase === 'published') transferJob.batchPublishedBytes = batch.completed;
+      const overall = transferJob.transfer.checkpoint
+        ? Progress.unknown('bytes', previous + batch.completed, 'remaining-work-unknown')
+        : batch.kind === 'determinate' ? Progress.known('bytes', previous + batch.completed, previous + batch.total)
+          : Progress.unknown('bytes', previous + batch.completed, batch.reason);
+      reported = Progress.event({ ...reported, overall });
+    }
     if (!element) {
     element = document.createElement('section'); element.className = 'transfer-progress'; element.setAttribute('role', 'region'); element.setAttribute('aria-labelledby', 'transfer-progress-title');
       const title = document.createElement('strong'); title.id = 'transfer-progress-title'; title.dataset.progressTitle = ''; title.textContent = t(transferJob.context.mode === 'delete' ? 'Löschen läuft…' : transferJob.context.mode === 'move' ? 'Verschieben läuft…' : 'Kopieren läuft…');
@@ -2772,6 +2782,13 @@
       planningJob.hostActive = true;
       planningJob.id = `transfer-checkpoint-${Date.now()}-${++transferSequence}`;
       planningJob.transfer = { ...pendingTransfer(), checkpoint: true };
+      planningJob.batchPublishedBytes = 0;
+      planningJob.reportedProgress = null;
+      planningJob.completedBytes = planningJob.confirmedBytes || 0;
+      planningJob.totalBytes = undefined;
+      planningJob.currentPath = null;
+      planningJob.currentTransferred = 0;
+      planningJob.currentTotal = undefined;
       filesystemPending = true; transferPending = false;
       render(true); transferProgress();
       return new Promise((resolve, reject) => {
@@ -2799,7 +2816,10 @@
           confirmedFolders = JSON.stringify(plannedFolders);
           originalFolders = clone(plannedFolders); confirmedView.folders = originalFolders; confirmedView.panes = clone(state.panes);
           const outcome = message.operationOutcome;
-          if (message.ok && !message.cancelled && !outcome?.cancelled) committedResult = { completed: partial.completed, directories: partial.directories, completedIds: [...partial.completedIds] };
+          if (message.ok && !message.cancelled && !outcome?.cancelled) {
+            committedResult = { completed: partial.completed, directories: partial.directories, completedIds: [...partial.completedIds] };
+            planningJob.confirmedBytes = (planningJob.confirmedBytes || 0) + planningJob.batchPublishedBytes;
+          }
           else if (outcome) {
             const additional = (outcome.completedIds || []).filter(id => !committedResult.completedIds.includes(id));
             committedResult = { ...committedResult, completed: committedResult.completed + additional.length, completedIds: [...committedResult.completedIds, ...additional] };
@@ -2839,7 +2859,7 @@
     }
     const completion = { result, options, committedResult };
     const needsCommit = host && state.realFilesystem && JSON.stringify(planningFolders) !== confirmedFolders;
-    if (needsCommit) { transferCompletion = completion; document.querySelector('.transfer-progress')?.remove(); transferJob = { id: `transfer-${Date.now()}-${++transferSequence}`, queueJobId: queuedJob?.id, hostActive: true, context: Object.freeze({ mode: options.mode, sources: Object.freeze(result.completedIds.map(id => progressSources.get(id))), target: plan.name || plan.mask ? join(targetDirectory, plan.name || plan.mask) : targetDirectory }), transfer: pendingTransfer() }; transferProgress(); }
+    if (needsCommit) { transferCompletion = completion; document.querySelector('.transfer-progress')?.remove(); transferJob = { id: `transfer-${Date.now()}-${++transferSequence}`, queueJobId: queuedJob?.id, hostActive: true, context: Object.freeze({ mode: options.mode, sources: Object.freeze(result.completedIds.map(id => progressSources.get(id))), target: plan.name || plan.mask ? join(targetDirectory, plan.name || plan.mask) : targetDirectory }), transfer: pendingTransfer(), confirmedBytes: planningJob.confirmedBytes, completedBytes: planningJob.confirmedBytes }; transferProgress(); }
     if (needsCommit) {
       completion.proposedState = { ...clone(state), folders: clone(planningFolders) }; const currentPanes = state.panes;
       state.folders = confirmedView.folders;

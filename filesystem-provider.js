@@ -351,7 +351,7 @@ function createProvider(options = {}) {
       }
     }
     const unloadedFolders = [...entries.values()].filter(entry => entry.type === 'folder' && !loadedDirectories.has(entry.path)).map(entry => entry.path);
-    settings.onProgress?.(Progress.event({ phase: settings.phase || 'preparing', filesScanned: count, done: true, overall: Progress.known('items', processedEntries, processedEntries), current: Progress.known('items', processedEntries, processedEntries) }));
+    settings.onProgress?.(Progress.event({ phase: settings.phase || 'preparing', filesScanned: count, done: true, overallScope: 'phase', overall: Progress.known('items', processedEntries, processedEntries), current: Progress.unknown('items', 0, 'awaiting-confirmation') }));
     throwIfAborted(settings.signal);
     return { folders, entries, loadedDirectories: [...loadedDirectories], unloadedFolders, scannedDirectories, discardedDirectories };
   }
