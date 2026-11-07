@@ -2950,7 +2950,7 @@
     $('#zip-paths').checked = fileSettings.zip?.paths !== false;
     $('#zip-recursive').checked = fileSettings.zip?.recursive !== false;
   }
-  function runTransfer({ sourceSide = state.active, targetSide = 1 - sourceSide, sourcePath: providedSourcePath, ids, targetPath, targetIsDirectory = false, mode = 'copy', onComplete, validateSelection, sourceGroups }) {
+  function runTransfer({ sourceSide = state.active, targetSide = 1 - sourceSide, sourcePath: providedSourcePath, ids, targetPath, targetIsDirectory = false, mode = 'copy', onComplete, validateSelection, validateSources, sourceGroups, trigger, showInStatus }) {
     if ((filesystemPending && !operationQueue?.active && !refreshingFilesystem) || transferPending) return;
     if (validateSelection && !validateSelection()) return toast(t('Die gezogene Auswahl wurde geändert. Bitte erneut ziehen.'));
     const sourcePane = state.panes[sourceSide];
@@ -2992,10 +2992,11 @@
       let destination = $('#value').value;
       if (sourceGroups?.length && sourceGroups.reduce((sum, group) => sum + group.ids.length, 0) > 1 && destination.trim() && !/[\\/]$/.test(destination)) destination += '/';
       if (validateSelection && !validateSelection()) { toast(t('Die gezogene Auswahl wurde geändert. Bitte erneut ziehen.')); return false; }
+      if (validateSources && !validateSources()) { toast(t('Die Übertragungsauswahl ist nicht mehr gültig.')); return false; }
       const requiredDirectory = targetIsDirectory && paths.identity(inputPath(destination, sourcePath)) === paths.identity(inputPath(targetPath, sourcePath)) ? inputPath(targetPath, sourcePath) : undefined;
       try { if (!requiredDirectory || Object.hasOwn(state.folders, requiredDirectory)) for (const group of sourceGroups || [{ sourcePath, ids: picked.map(file => file.id) }]) window.BitfroestTransfer.planTarget({ folders: state.folders, sourcePath: group.sourcePath, ids: group.ids, targetPath: destination }); }
       catch (error) { toast(error.message); return false; }
-      const options = { sourceSide, targetSide, sourcePath, ids: picked.map(file => file.id), targetPath: destination, requiredDirectory, mode, verifyAfterCopy: $('#transfer-verify').checked, individualNames: $('#transfer-individual').checked, filter: $('#transfer-filter').value, policy: $('#transfer-policy').value, onComplete, validateSelection };
+      const options = { sourceSide, targetSide, sourcePath, ids: picked.map(file => file.id), targetPath: requiredDirectory || destination, requiredDirectory, mode, verifyAfterCopy: $('#transfer-verify').checked, individualNames: $('#transfer-individual').checked, filter: $('#transfer-filter').value, policy: $('#transfer-policy').value, onComplete, validateSelection, validateSources, trigger, showInStatus };
       if (sourceGroups?.length) {
         options.policyState = { value: options.policy };
         let index = 0;
@@ -4507,9 +4508,8 @@
           const { mode, path } = entry.sendTo;
           const validateSources = () => [...sendToSources].every(([id, signature]) =>
             JSON.stringify(state.folders[directory]?.find(row => row.id === id)) === signature);
-          const options = { sourceSide: side, sourcePath: directory, ids: [...sendToSources.keys()],
-            targetPath: path, requiredDirectory: path, mode, trigger: 'send-to', policy: 'ask', filter: '*.*', validateSources, showInStatus: true };
-          executeTransfer(options).catch(error => failTransferExecution(error, options));
+          runTransfer({ sourceSide: side, sourcePath: directory, ids: [...sendToSources.keys()],
+            targetPath: path, targetIsDirectory: true, mode, trigger: 'send-to', validateSources, showInStatus: true });
           return;
         }
         run(action, false, action === 'close-tab' ? { tabId: clickedTabId } : selection);

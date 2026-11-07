@@ -61,6 +61,16 @@ function openSendToTarget(app) {
   for (const label of ['Send to', 'Projects', 'Work']) app.click(menuButton(app, label));
 }
 
+test('Send to can be cancelled in the standard dialog before preparing or writing', t => {
+  const app = createApp(t, fixture(), { language: 'en', platform: 'win32' });
+  openSendToTarget(app);
+  app.click(menuButton(app, 'Move'));
+  assert.equal(app.document.querySelector('#modal-title').textContent, 'Move');
+  app.click(app.document.querySelector('#modal-cancel'));
+  assert.equal(app.document.querySelector('#modal').open, false);
+  assert.equal(app.messages.some(message => ['filesystem-prepare', 'filesystem-apply'].includes(message.type)), false);
+});
+
 for (const [mode, label, ids] of [['copy', 'Copy', ['a']], ['move', 'Move', ['a', 'b']]]) {
   test(`Send to starts one ${mode} for the captured selection and waits for host acknowledgement`, async t => {
     const saved = fixture();
@@ -68,7 +78,11 @@ for (const [mode, label, ids] of [['copy', 'Copy', ['a']], ['move', 'Move', ['a'
     const app = createApp(t, saved, { language: 'en', platform: 'win32' });
     openSendToTarget(app);
     app.click(menuButton(app, label));
-    assert.equal(app.document.querySelector('#modal').open, false);
+    assert.equal(app.document.querySelector('#modal').open, true);
+    assert.equal(app.document.querySelector('#modal-title').textContent, label);
+    assert.match(app.document.querySelector('#value').value, /two$/);
+    assert.equal(app.messages.some(message => message.type === 'filesystem-prepare'), false);
+    app.click(app.document.querySelector('#modal-confirm'));
     const prepare = app.messages.find(message => message.type === 'filesystem-prepare');
     assert.equal(prepare.requiredDirectory, 'C:/two');
     assert.equal(app.messages.some(message => message.type === 'filesystem-apply'), false);
@@ -91,6 +105,7 @@ test('Send to cannot write after its destination disappears during preparation',
   const saved = fixture(), app = createApp(t, saved, { language: 'en', platform: 'win32' });
   openSendToTarget(app);
   app.click(menuButton(app, 'Move'));
+  app.click(app.document.querySelector('#modal-confirm'));
   const prepare = app.messages.find(message => message.type === 'filesystem-prepare');
   assert.equal(prepare.requiredDirectory, 'C:/two');
   post(app, { type: 'filesystem-result', operationId: prepare.operationId, ok: false, error: 'Folder unavailable', state: saved });
@@ -100,6 +115,7 @@ test('Send to cannot write after its destination disappears during preparation',
   app.click(app.document.querySelector('#modal-cancel'));
   openSendToTarget(app);
   app.click(menuButton(app, 'Copy'));
+  app.click(app.document.querySelector('#modal-confirm'));
   assert.equal(app.messages.filter(message => message.type === 'filesystem-prepare').length, 2);
 });
 
@@ -112,6 +128,7 @@ test('Send to shows the progress and cancel control for a destination outside bo
   context(app, app.row('one.txt'));
   for (const label of ['Send to', 'Old']) app.click(menuButton(app, label));
   app.click(menuButton(app, 'Copy'));
+  app.click(app.document.querySelector('#modal-confirm'));
   const prepare = app.messages.find(message => message.type === 'filesystem-prepare');
   assert.equal(prepare.requiredDirectory, destination);
   assert.deepEqual(Array.from(app.state().panes, pane => pane.tabs[pane.tab]), ['C:/one', 'C:/two']);
@@ -131,6 +148,7 @@ test('Send to uses the usual conflict prompt and supports cancellation before a 
   const app = createApp(t, saved, { language: 'en', platform: 'win32' });
   openSendToTarget(app);
   app.click(menuButton(app, 'Copy'));
+  app.click(app.document.querySelector('#modal-confirm'));
   const prepare = app.messages.find(message => message.type === 'filesystem-prepare');
   post(app, { type: 'filesystem-result', operationId: prepare.operationId, ok: true, state: saved });
   await new Promise(resolve => setImmediate(resolve));
@@ -145,6 +163,7 @@ test('Send to rejects a captured source changed while preparing the destination'
   const saved = fixture(), app = createApp(t, saved, { language: 'en', platform: 'win32' });
   openSendToTarget(app);
   app.click(menuButton(app, 'Move'));
+  app.click(app.document.querySelector('#modal-confirm'));
   const prepare = app.messages.find(message => message.type === 'filesystem-prepare');
   const refreshed = structuredClone(saved);
   refreshed.folders['C:/one'][0].size = 20;

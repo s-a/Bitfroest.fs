@@ -50,6 +50,7 @@ test('Send to uses the generated host view and retains an off-screen destination
   assert.equal(button('Nested'), undefined);
   assert.equal(view.messages.some(message => message.type === 'send-to-directories'), false);
   view.click(button('Copy'));
+  view.click(view.document.querySelector('#modal-confirm'));
   for (let i = 0; i < 5 && !view.document.querySelector('[data-conflict-action="overwrite"]'); i++) await exchange();
   assert.equal(fs.readFileSync(target + '/first.txt', 'utf8'), 'first');
   assert.equal(fs.readFileSync(target + '/second.txt', 'utf8'), 'old');
@@ -99,6 +100,7 @@ test('Send to moves a folder into its existing namesake and preserves unrelated 
   const view = require('./support/webview.cjs').createApp(t, undefined, { html: panel.webview.html });
   view.row('Project').dispatchEvent(new view.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }));
   for (const label of ['Send to', 'Work', 'Move']) view.click([...view.document.querySelectorAll('[data-context-menu] button')].findLast(item => item.querySelector('.menu-label')?.textContent === label));
+  view.click(view.document.querySelector('#modal-confirm'));
   let received = panel.messages.length, sent = 0;
   const exchange = async () => {
     const outgoing = view.messages.slice(sent);
@@ -1155,6 +1157,7 @@ for (const stage of ['host preparation', 'webview transfer planning', 'host appl
     view.row('a.txt').dispatchEvent(new view.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }));
     const moving = stage === 'host apply';
     for (const label of ['Send to', 'Work', moving ? 'Move' : 'Copy']) view.click(button(label));
+    view.click(view.document.querySelector('#modal-confirm'));
     const prepare = view.messages.find(message => message.type === 'filesystem-prepare');
     assert.equal(prepare.requiredDirectory, target);
     await panel.receive(prepare);
