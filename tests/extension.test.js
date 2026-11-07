@@ -14,15 +14,15 @@ const Progress = require('../media/bitfroest-progress');
 test('Send to uses the generated host view and retains an off-screen destination across a conflict', async t => {
   const directory = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'bitfroest-send-to-'))).replaceAll('\\', '/');
   t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
-  const left = directory + '/left', right = directory + '/right', favorite = directory + '/favorite', target = favorite + '/Nested';
-  for (const folder of [left, right, favorite, target]) fs.mkdirSync(folder);
+  const left = directory + '/left', right = directory + '/right', target = directory + '/favorite';
+  for (const folder of [left, right, target, target + '/Nested']) fs.mkdirSync(folder);
   fs.writeFileSync(left + '/first.txt', 'first');
   fs.writeFileSync(left + '/second.txt', 'second');
   fs.writeFileSync(target + '/second.txt', 'old');
   const { createProvider } = require('../filesystem-provider');
   const saved = await createProvider({ roots: [left, right] }).load();
   const app = harness(t, { language: 'en', startupRoots: [left, right], workspaceState: { fileManagerState: saved },
-    configuration: { 'favorites.entries': { Work: favorite } },
+    configuration: { 'favorites.entries': { Work: target } },
     providerFactory: options => createProvider({ ...options, roots: [left, right], readDirectory: undefined, readAttributes: undefined,
       fs: require('node:fs/promises') }) });
   await app.command('bitfroest.openPrototype');
@@ -38,7 +38,7 @@ test('Send to uses the generated host view and retains an off-screen destination
     const outgoing = view.messages.slice(sent);
     sent = view.messages.length;
     for (const message of outgoing) {
-      if (['send-to-directories', 'filesystem-prepare', 'filesystem-apply'].includes(message.type)) await panel.receive(message);
+      if (['filesystem-prepare', 'filesystem-apply'].includes(message.type)) await panel.receive(message);
     }
     const incoming = panel.messages.slice(received);
     received = panel.messages.length;
@@ -47,9 +47,8 @@ test('Send to uses the generated host view and retains an off-screen destination
   };
   view.click(button('Send to'));
   view.click(button('Work'));
-  await exchange();
-  view.click(button('Nested'));
-  await exchange();
+  assert.equal(button('Nested'), undefined);
+  assert.equal(view.messages.some(message => message.type === 'send-to-directories'), false);
   view.click(button('Copy'));
   for (let i = 0; i < 5 && !view.document.querySelector('[data-conflict-action="overwrite"]'); i++) await exchange();
   assert.equal(fs.readFileSync(target + '/first.txt', 'utf8'), 'first');

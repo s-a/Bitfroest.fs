@@ -1064,16 +1064,6 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
     panel.webview.onDidReceiveMessage(async message => {
       if (panel !== messagePanel) return;
       let resolvedFileLink = false;
-      if (message?.type === 'send-to-directories') {
-        if (!Number.isSafeInteger(message.requestId) || typeof message.path !== 'string' || message.path.length > 4096) return;
-        let result;
-        try { result = { ok: true, directories: await provider.favoriteDirectories(message.path) }; }
-        catch { result = { ok: false }; }
-        if (panel === messagePanel && !listerDisposed) await messagePanel.webview.postMessage({
-          type: 'send-to-directories-result', requestId: message.requestId, ...result
-        });
-        return;
-      }
       if (message?.type === 'location-destinations') {
         if (process.platform !== 'win32' || !Number.isSafeInteger(message.requestId)) return;
         let drives = [], drivesUnavailable = false;

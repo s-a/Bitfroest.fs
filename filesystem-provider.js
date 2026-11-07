@@ -161,20 +161,6 @@ function createProvider(options = {}) {
     return stat;
   }
 
-  async function favoriteDirectories(value) {
-    const directory = allowed(value);
-    const favorites = options.additionalRoots?.() || [];
-    if (!favorites.some(root => {
-      try { return below(directory, canonical(root.trim())); } catch { return false; }
-    })) throw new Error('Der Pfad liegt außerhalb der Favoriten.');
-    const before = await requireDirectory(directory);
-    const entries = await fs.readdir(directory, { withFileTypes: true });
-    const after = await requireDirectory(directory);
-    if (before.dev !== after.dev || before.ino !== after.ino) throw new Error('Ordner während der Bestandsaufnahme geändert.');
-    return entries.filter(entry => entry.isDirectory()).sort((a, b) => a.name.localeCompare(b.name))
-      .map(entry => ({ name: entry.name, path: slash(path.join(directory, entry.name)) }));
-  }
-
   async function readSnapshot(settings = {}) {
     const sourceSnapshot = snapshot;
     const folders = settings.baseline ? clone(settings.baseline.folders) : {}, entries = new Map(settings.baseline?.entries);
@@ -1141,7 +1127,7 @@ function createProvider(options = {}) {
       throw failure;
     } finally { busy = false; }
   }
-  return { contains, canNavigate, resolveNavigation, favoriteDirectories, load, apply, prepare, remove, measureFolder };
+  return { contains, canNavigate, resolveNavigation, load, apply, prepare, remove, measureFolder };
 }
 
 module.exports = { createProvider };

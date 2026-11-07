@@ -200,7 +200,6 @@
     'Pfad bearbeiten': 'Edit path', 'Pfad kopieren': 'Copy path', 'Kontextmenü': 'Context menu',
     'Ordner-Tab schließen': 'Close folder tab', 'Nächster Ordner-Tab': 'Next folder tab', 'Vorheriger Ordner-Tab': 'Previous folder tab',
     'Ausschneiden': 'Cut', 'Einfügen': 'Paste', 'Senden an': 'Send to', 'Git-Diff': 'Git Diff',
-    'Ordner wird geladen…': 'Loading folder…', 'Ordner nicht verfügbar': 'Folder unavailable',
     'Die Sperrenuntersuchung benötigt genau einen Ordner.': 'Folder lock inspection requires exactly one folder.',
     'Kompressionsrate': 'Compression level', 'Verschlüsselung': 'Encryption', 'Keine': 'None',
     'Pfade speichern': 'Store paths', 'Unterverzeichnisse rekursiv speichern': 'Store subdirectories recursively',

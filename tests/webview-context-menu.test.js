@@ -18,9 +18,8 @@ const sendFavorites = app => post(app, { type: 'favorite-settings', settings: {
 const menuButton = (app, label) => [...menu(app).querySelectorAll('button')].findLast(button =>
   button.dataset.contextAction !== 'clipboard-copy' && button.querySelector('.menu-label')?.textContent === label);
 const browseRequests = app => app.messages.filter(message => message.type === 'send-to-directories');
-const browseResult = (app, request, directories, ok = true) => post(app, { type: 'send-to-directories-result', requestId: request.requestId, ok, directories });
 
-test('Send to browses favorite groups without changing tabs or writing files', t => {
+test('Send to shows configured favorites without reading their subfolders or changing tabs', t => {
   const app = createApp(t, fixture(), { language: 'en', platform: 'win32' });
   sendFavorites(app);
   context(app, app.row('one.txt'));
@@ -33,11 +32,7 @@ test('Send to browses favorite groups without changing tabs or writing files', t
   assert.equal(app.document.activeElement, menuButton(app, 'Projects'));
   app.key('ArrowRight');
   app.key('ArrowRight');
-  assert.equal(browseRequests(app).at(-1).path, 'C:/two');
-  browseResult(app, browseRequests(app).at(-1), [{ name: 'Nested', path: 'C:/two/Nested' }]);
-  app.click(menuButton(app, 'Nested'));
-  assert.equal(browseRequests(app).at(-1).path, 'C:/two/Nested');
-  browseResult(app, browseRequests(app).at(-1), []);
+  assert.equal(browseRequests(app).length, 0);
   assert.ok(menuButton(app, 'Copy'));
   assert.ok(menuButton(app, 'Move'));
   assert.deepEqual(Array.from(app.state().panes, pane => pane.tabs[pane.tab]), ['C:/one', 'C:/two']);
@@ -47,27 +42,23 @@ test('Send to browses favorite groups without changing tabs or writing files', t
   assert.equal(app.document.activeElement, list);
 });
 
-test('Send to ignores a closed branch and shows an unavailable favorite in the menu', t => {
+test('Send to offers only transfer actions when switching between configured favorites', t => {
   const app = createApp(t, fixture(), { language: 'en', platform: 'win32' });
   sendFavorites(app);
   context(app, app.row('one.txt'));
   app.click(menuButton(app, 'Send to'));
   app.click(menuButton(app, 'Projects'));
   app.click(menuButton(app, 'Work'));
-  const stale = browseRequests(app).at(-1);
   app.click(menuButton(app, 'Old'));
-  browseResult(app, stale, [{ name: 'Stale', path: 'C:/two/Stale' }]);
-  browseResult(app, browseRequests(app).at(-1), [], false);
-  assert.equal(menuButton(app, 'Stale'), undefined);
-  assert.match(menu(app).textContent, /Folder unavailable/);
-  assert.equal(menuButton(app, 'Move'), undefined);
+  const branch = app.document.getElementById(menuButton(app, 'Old').getAttribute('aria-controls'));
+  assert.deepEqual([...branch.querySelectorAll('.menu-label')].map(label => label.textContent), ['Copy', 'Move']);
+  assert.equal(browseRequests(app).length, 0);
 });
 
 function openSendToTarget(app) {
   sendFavorites(app);
   context(app, app.row('one.txt'));
   for (const label of ['Send to', 'Projects', 'Work']) app.click(menuButton(app, label));
-  browseResult(app, browseRequests(app).at(-1), []);
 }
 
 for (const [mode, label, ids] of [['copy', 'Copy', ['a']], ['move', 'Move', ['a', 'b']]]) {
@@ -114,15 +105,12 @@ test('Send to cannot write after its destination disappears during preparation',
 
 test('Send to shows the progress and cancel control for a destination outside both tabs', t => {
   const saved = fixture();
-  const destination = 'C:/two/Nested';
+  const destination = 'C:/old';
   saved.folders[destination] = [];
   const app = createApp(t, saved, { language: 'en', platform: 'win32' });
   sendFavorites(app);
   context(app, app.row('one.txt'));
-  for (const label of ['Send to', 'Projects', 'Work']) app.click(menuButton(app, label));
-  browseResult(app, browseRequests(app).at(-1), [{ name: 'Nested', path: destination }]);
-  app.click(menuButton(app, 'Nested'));
-  browseResult(app, browseRequests(app).at(-1), []);
+  for (const label of ['Send to', 'Old']) app.click(menuButton(app, label));
   app.click(menuButton(app, 'Copy'));
   const prepare = app.messages.find(message => message.type === 'filesystem-prepare');
   assert.equal(prepare.requiredDirectory, destination);

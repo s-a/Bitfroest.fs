@@ -4319,12 +4319,6 @@
       return;
     }
     if (host && event.data?.type === 'location-destinations-result') { receiveDestinations(event.data); return; }
-    if (host && event.data?.type === 'send-to-directories-result') {
-      const receive = sendToRequests.get(event.data.requestId);
-      sendToRequests.delete(event.data.requestId);
-      receive?.(event.data);
-      return;
-    }
     if (host && event.data?.type === 'icons' && event.data.icons && typeof event.data.icons === 'object') {
       if (event.data.iconGeneration !== undefined && event.data.iconGeneration !== iconGeneration) return;
       for (const [key, value] of Object.entries(event.data.icons)) {
@@ -4389,24 +4383,12 @@
     }
   });
   let contextPopup = null;
-  let sendToSequence = 0;
-  const sendToRequests = new Map();
   const menuNotice = label => ({ label: t(label), disabled: true });
   function sendToDirectory(label, path, attrs) {
-    return { label, icon: 'folder', attrs: { ...attrs, title: displayPath(path) }, loadChildren: update => {
-      update([menuNotice('Ordner wird geladen…')]);
-      const requestId = ++sendToSequence;
-      sendToRequests.set(requestId, result => {
-        if (!result.ok) { update([menuNotice('Ordner nicht verfügbar')]); return; }
-        const children = result.directories.map(directory => sendToDirectory(directory.name, directory.path));
-        if (children.length) children.push({ separator: true });
-        for (const [mode, label] of [['copy', 'Kopieren'], ['move', 'Verschieben']]) {
-          children.push({ id: mode, label: t(label), sendTo: { mode, path } });
-        }
-        update(children);
-      });
-      host.postMessage({ type: 'send-to-directories', requestId, path });
-    } };
+    return { label, icon: 'folder', attrs: { ...attrs, title: displayPath(path) }, children: [
+      { id: 'copy', label: t('Kopieren'), sendTo: { mode: 'copy', path } },
+      { id: 'move', label: t('Verschieben'), sendTo: { mode: 'move', path } }
+    ] };
   }
   function sendToFavorites(entries) {
     return entries.flatMap(entry => {
@@ -4421,7 +4403,7 @@
   function closeContextMenu(restoreFocus = false) {
     if (!contextPopup) return;
     const { root, origin } = contextPopup;
-    contextPopup = null; sendToRequests.clear(); root.remove();
+    contextPopup = null; root.remove();
     if (restoreFocus && origin?.isConnected) origin.focus({ preventScroll: true });
   }
   function showContextMenu(event, section, kind, selection) {
