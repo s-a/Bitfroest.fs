@@ -6,6 +6,7 @@
   'use strict';
   const units = new Set(['bytes', 'items', 'requests', 'steps']);
   const statusSnapshots = new WeakMap();
+  const transferOperations = new WeakSet();
   const reasons = new Set(['enumerating', 'stream-size-unknown', 'native-operation', 'awaiting-confirmation', 'remaining-work-unknown']);
   function validate(value) {
     if (!value || !units.has(value.unit) || !Number.isSafeInteger(value.completed) || value.completed < 0) throw new TypeError('Invalid progress measurement');
@@ -19,11 +20,38 @@
   function event(input) {
     if (!input || typeof input.phase !== 'string' || !input.phase) throw new TypeError('A progress phase is required');
     if (input.overallScope !== undefined && !['operation', 'phase'].includes(input.overallScope)) throw new TypeError('Invalid progress scope');
+    if (input.overall?.scope !== undefined && input.overall.scope !== 'operation' || input.current?.scope !== undefined && input.current.scope !== 'file') throw new TypeError('Invalid progress measurement scope');
     return Object.freeze({ ...input, version: 1, overall: validate(input.overall), current: validate(input.current) });
   }
   function read(input) {
     if (input?.version !== 1) throw new TypeError('Unsupported progress contract');
     return event(input);
+  }
+  function batchBytes(completed, total) { return validate({ kind: 'determinate', unit: 'bytes', completed, total, scope: 'batch' }); }
+  function fileBytes(completed, total) { return validate({ kind: 'determinate', unit: 'bytes', completed, total, scope: 'file' }); }
+  function transferBatch(input) {
+    if (!input || typeof input.phase !== 'string' || !input.phase || input.batch?.unit !== 'bytes' || input.batch.scope !== 'batch'
+        || input.file?.unit !== 'bytes' || input.file.scope !== 'file' || 'overall' in input || 'current' in input) throw new TypeError('Invalid transfer batch progress');
+    return Object.freeze({ ...input, version: 1, scope: 'transfer-batch', batch: validate(input.batch), file: validate(input.file) });
+  }
+  function readTransferBatch(input) {
+    if (input?.version !== 1 || input.scope !== 'transfer-batch') throw new TypeError('Unsupported transfer batch progress');
+    return transferBatch(input);
+  }
+  function projectTransferOperation(input, confirmedBytes, checkpoint) {
+    const { batch, file, ...details } = readTransferBatch(input);
+    if (!Number.isSafeInteger(confirmedBytes) || confirmedBytes < 0 || typeof checkpoint !== 'boolean') throw new TypeError('Invalid transfer operation context');
+    const completed = confirmedBytes + batch.completed;
+    const overall = checkpoint ? unknown('bytes', completed, 'remaining-work-unknown')
+      : batch.kind === 'determinate' ? known('bytes', completed, confirmedBytes + batch.total)
+        : unknown('bytes', completed, batch.reason);
+    const operation = event({ ...details, scope: 'transfer-operation', overall: { ...overall, scope: 'operation' }, current: file });
+    transferOperations.add(operation);
+    return operation;
+  }
+  function acceptTransferOperation(input) {
+    if (!transferOperations.has(input)) throw new TypeError('Transfer operation progress requires projected measurements');
+    return input;
   }
   function statusPlan({ id, startedAt, steps, mode = 'steps' }) {
     if (typeof id !== 'string' || !id || !Number.isFinite(startedAt) || !['steps', 'work'].includes(mode)) throw new TypeError('Invalid status plan');
@@ -137,5 +165,5 @@
     return snapshot;
   }
   function statusReport(input) { return statusSnapshots.get(readStatus(input))(); }
-  return { known, unknown, event, read, statusPlan, readStatus, readFinishedStatus, statusReport };
+  return { known, unknown, event, read, batchBytes, fileBytes, transferBatch, readTransferBatch, projectTransferOperation, acceptTransferOperation, statusPlan, readStatus, readFinishedStatus, statusReport };
 });

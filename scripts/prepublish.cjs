@@ -1,7 +1,7 @@
 const { spawnSync } = require('node:child_process');
 
 function getPrepublishCommands(environment = process.env) {
-  if (environment.BITFROEST_LOCAL_FAST_INSTALL === '1') return [['run', 'build:xray']];
+  if (environment.BITFROEST_LOCAL_FAST_INSTALL === '1') return [['run', 'check:progress'], ['run', 'build:xray']];
   return [
     ['run', 'build:xray'],
     ['run', 'check:progress'],

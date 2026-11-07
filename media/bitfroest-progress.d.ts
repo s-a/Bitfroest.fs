@@ -5,11 +5,14 @@ export type Measurement =
   | { readonly kind: 'indeterminate'; readonly unit: ProgressUnit; readonly completed: number; readonly reason: UnknownReason };
 export type DeterminateMeasurement = Extract<Measurement, { kind: 'determinate' }>;
 export type IndeterminateMeasurement = Extract<Measurement, { kind: 'indeterminate' }>;
+type BatchMeasurement = Measurement & { readonly unit: 'bytes'; readonly scope: 'batch' };
+type FileMeasurement = Measurement & { readonly unit: 'bytes'; readonly scope: 'file' };
+type OperationMeasurement = Measurement & { readonly unit: 'bytes'; readonly scope: 'operation' };
 export interface ProgressInput {
   readonly phase: string;
   readonly overallScope?: 'operation' | 'phase';
-  readonly overall: Measurement;
-  readonly current: Measurement;
+  readonly overall: Measurement & { readonly scope?: 'operation' };
+  readonly current: Measurement & { readonly scope?: 'file' };
   readonly [field: string]: unknown;
 }
 export interface ProgressEvent extends ProgressInput { readonly version: 1 }
@@ -17,6 +20,24 @@ export function known(unit: ProgressUnit, completed: number, total: number): Det
 export function unknown(unit: ProgressUnit, completed: number, reason: UnknownReason): IndeterminateMeasurement;
 export function event(input: ProgressInput): ProgressEvent;
 export function read(input: unknown): ProgressEvent;
+export interface TransferBatchInput {
+  readonly phase: string;
+  readonly batch: BatchMeasurement;
+  readonly file: FileMeasurement;
+  readonly [field: string]: unknown;
+}
+export interface TransferBatchProgress extends TransferBatchInput { readonly version: 1; readonly scope: 'transfer-batch' }
+export interface TransferOperationProgress extends ProgressEvent {
+  readonly scope: 'transfer-operation';
+  readonly overall: OperationMeasurement;
+  readonly current: FileMeasurement;
+}
+export function batchBytes(completed: number, total: number): BatchMeasurement;
+export function fileBytes(completed: number, total: number): FileMeasurement;
+export function transferBatch(input: TransferBatchInput): TransferBatchProgress;
+export function readTransferBatch(input: unknown): TransferBatchProgress;
+export function projectTransferOperation(input: TransferBatchProgress, confirmedBytes: number, checkpoint: boolean): TransferOperationProgress;
+export function acceptTransferOperation(input: TransferOperationProgress): ProgressEvent;
 declare const statusSnapshot: unique symbol;
 export interface StatusSummary {
   readonly id: string;

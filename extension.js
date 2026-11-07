@@ -1801,14 +1801,23 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
         const directoryView = () => directoryJob && navigationTabId && Array.isArray(savedState?.panes?.[message.side]?.tabStates) ? savedState : message.state || savedState;
         const operationView = () => viewRevision === requestedViewRevision ? message.state || savedState : savedState;
         if (job) transferJobs.set(operationId, job);
-        const onProgress = progress => {
+        const forwardProgress = (type, progress, final) => {
           if (!job || transferJobs.get(operationId) !== job || panel !== current) return;
           const now = Date.now(), phase = progress.phase === 'published' ? 'copying' : progress.phase;
-          progress = Progress.read(progress);
-          const final = progress.done || Number.isFinite(progress.totalBytes) && progress.completedBytes === progress.totalBytes;
           if (!final && job.progressAt !== undefined && phase === job.progressPhase && now - job.progressAt < 50) return;
           job.progressAt = now; job.progressPhase = phase;
-          current.webview.postMessage({ type: 'filesystem-progress', operationId, progress });
+          current.webview.postMessage({ type, operationId, progress });
+        };
+        const onProgress = input => {
+          if (!job || transferJobs.get(operationId) !== job || panel !== current) return;
+          const progress = Progress.read(input);
+          if (message.type === 'filesystem-apply' && progress.overall.unit === 'bytes') throw new TypeError('File transfer bytes require batch progress');
+          forwardProgress('filesystem-progress', progress, progress.done || Number.isFinite(progress.totalBytes) && progress.completedBytes === progress.totalBytes);
+        };
+        const onTransferProgress = input => {
+          if (!job || transferJobs.get(operationId) !== job || panel !== current) return;
+          const progress = Progress.readTransferBatch(input);
+          forwardProgress('filesystem-transfer-progress', progress, progress.phase === 'published' && progress.batch.kind === 'determinate' && progress.batch.completed === progress.batch.total);
         };
         filesystemRequests++;
         const isolatedNavigation = Boolean(directoryJob && transferJobs.size);
@@ -1829,7 +1838,7 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
             if (directoryJob?.controller.signal.aborted) throw Object.assign(new Error('Navigation cancelled.'), { name: 'AbortError' });
             if (!filesystemState) throw new Error(t('Kein Dateisystem geladen.'));
             let fresh;
-            if (message.type === 'filesystem-apply') fresh = await provider.apply(filesystemState, message.state, { verifyAfterCopy: typeof message.transfer?.verifyAfterCopy === 'boolean' ? message.transfer.verifyAfterCopy : fileSettings().verifyAfterCopy, ...(job ? { signal: job.controller.signal, transfer: message.transfer, onProgress } : {}) });
+            if (message.type === 'filesystem-apply') fresh = await provider.apply(filesystemState, message.state, { verifyAfterCopy: typeof message.transfer?.verifyAfterCopy === 'boolean' ? message.transfer.verifyAfterCopy : fileSettings().verifyAfterCopy, ...(job ? { signal: job.controller.signal, transfer: message.transfer, onProgress, onTransferProgress } : {}) });
             else if (message.type === 'filesystem-delete') fresh = await provider.remove(filesystemState, { paths: message.paths, useTrash: message.useTrash, ...(typeof message.currentDirectory === 'string' ? { currentDirectory: message.currentDirectory } : {}), ...(Array.isArray(message.confirmedNetworkPaths) ? { confirmedNetworkPaths: message.confirmedNetworkPaths } : {}) }, { getView: operationView, ...(job ? { signal: job.controller.signal } : {}), onProgress: progress => { if (panel === current) current.webview.postMessage({ type: 'filesystem-task-progress', operationId, taskRequestId: message.taskRequestId, progress: Progress.read(progress) }); } });
             else if (message.type === 'filesystem-navigate' || message.type === 'filesystem-prepare') {
               let directories = message.type === 'filesystem-navigate' ? [message.path] : message.paths;

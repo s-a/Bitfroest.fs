@@ -5314,7 +5314,7 @@ test('transfer cancellation interrupts the running job and forwards only its act
   const real = { version: 1, realFilesystem: true, snapshotId: 'one', folders: { 'C:/tmp': [], 'C:/temp': [] }, panes: [{ tabs: ['C:/tmp'], tab: 0 }, { tabs: ['C:/temp'], tab: 0 }] };
   let operation, release;
   const outcome = { cancelled: true, completedIds: ['one'], completedSourcePaths: ['C:/tmp/a'] };
-  const app = harness(t, { filesystemLoad: async () => real, filesystemApply: async (_before, after, options) => { operation = options; options?.onProgress?.(progressSample({ completedBytes: 3, totalBytes: 10 })); await new Promise(resolve => { release = resolve; }); return { ...after, operationOutcome: outcome }; } });
+  const app = harness(t, { filesystemLoad: async () => real, filesystemApply: async (_before, after, options) => { operation = options; options.onTransferProgress(Progress.transferBatch({ phase: 'copying', batch: Progress.batchBytes(3, 10), file: Progress.fileBytes(3, 10) })); await new Promise(resolve => { release = resolve; }); return { ...after, operationOutcome: outcome }; } });
   await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
   const pending = panel.receive({ type: 'filesystem-apply', operationId: 'job-1', transfer: { mode: 'copy', sourcePath: 'C:/tmp', ids: ['one'], sourceSide: 0 }, state: real });
   await new Promise(resolve => setImmediate(resolve));
@@ -5324,7 +5324,7 @@ test('transfer cancellation interrupts the running job and forwards only its act
   release(); await pending;
   assert.deepEqual(panel.messages.at(-1).operationOutcome, outcome);
   assert.equal(panel.messages.at(-1).operationId, 'job-1');
-  const count = panel.messages.length; operation.onProgress({ completedBytes: 9 }); assert.equal(panel.messages.length, count);
+  const count = panel.messages.length; operation.onTransferProgress({ completedBytes: 9 }); assert.equal(panel.messages.length, count);
 });
 
 test('preparation has progress and a cancellable job before applying any mutation', async t => {
@@ -5375,16 +5375,19 @@ test('failed preparation acknowledges and releases the filesystem queue without 
 
 test('host progress bounds intermediate messages and always forwards the completed byte count', async t => {
   const app = harness(t, { filesystemLoad: async () => clipboardFixture(), filesystemApply: async (_before, after, operation) => {
-    for (let completedBytes = 0; completedBytes < 1000; completedBytes++) operation.onProgress(progressSample({ phase: 'copying', completedBytes, totalBytes: 1000 }));
-    operation.onProgress(progressSample({ phase: 'published', completedBytes: 1000, totalBytes: 1000 }));
+    const report = (phase, bytes) => operation.onTransferProgress(Progress.transferBatch({ phase, batch: Progress.batchBytes(bytes, 1000), file: Progress.fileBytes(bytes, 1000) }));
+    for (let completedBytes = 0; completedBytes < 1000; completedBytes++) report('copying', completedBytes);
+    report('published', 1000);
     return after;
   } });
   await app.command('bitfroest.openPrototype'); const panel = app.panels[0];
   await panel.receive({ type: 'filesystem-apply', operationId: 'progress-1', transfer: { mode: 'copy' }, state: clipboardFixture() });
-  const progress = panel.messages.filter(message => message.type === 'filesystem-progress');
+  const progress = panel.messages.filter(message => message.type === 'filesystem-transfer-progress');
   assert.ok(progress.length <= 3, `unbounded messages: ${progress.length}`);
-  assert.equal(progress[0].progress.completedBytes, 0);
-  assert.equal(progress.at(-1).progress.completedBytes, 1000);
+  assert.equal(progress[0].progress.batch.completed, 0);
+  assert.equal(progress.at(-1).progress.batch.completed, 1000);
+  assert.equal(progress.at(-1).progress.file.completed, 1000);
+  assert.equal(Object.hasOwn(progress.at(-1).progress, 'overall'), false);
 });
 
 test('Unix folder inspection is enabled and uses validated direct selection without a Windows shell popup', async t => {

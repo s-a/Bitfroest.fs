@@ -12,6 +12,8 @@ function check(files, overrides = new Map()) {
   const checker = program.getTypeChecker(), failures = [];
   const eventSymbol = checker.getExportsOfModule(checker.getSymbolAtLocation(program.getSourceFile(contract))).find(symbol => symbol.name === 'ProgressEvent');
   const eventType = checker.getDeclaredTypeOfSymbol(eventSymbol);
+  const transferBatchSymbol = checker.getExportsOfModule(checker.getSymbolAtLocation(program.getSourceFile(contract))).find(symbol => symbol.name === 'TransferBatchProgress');
+  const transferBatchType = checker.getDeclaredTypeOfSymbol(transferBatchSymbol);
   const statusSymbol = checker.getExportsOfModule(checker.getSymbolAtLocation(program.getSourceFile(contract))).find(symbol => symbol.name === 'StatusSnapshot');
   const statusType = checker.getDeclaredTypeOfSymbol(statusSymbol);
   const activitySymbol = checker.getExportsOfModule(checker.getSymbolAtLocation(program.getSourceFile(contract))).find(symbol => symbol.name === 'StatusActivity');
@@ -57,13 +59,19 @@ function check(files, overrides = new Map()) {
           const argument = node.arguments[1], type = argument && checker.getTypeAtLocation(argument);
           if (!argument || !type || type.flags & ts.TypeFlags.Any || !checker.isTypeAssignableTo(type, activityType)) fail(node, 'Background activity requires a status planner snapshot or an explicit null to clear it');
         }
-        if (name === 'onProgress') {
+        if (name === 'onProgress' || name === 'onTransferProgress') {
           const argument = node.arguments[0];
           if (!argument) fail(node, 'A progress event is required');
           else {
             const type = checker.getTypeAtLocation(argument);
-            if (type.flags & ts.TypeFlags.Any || !checker.isTypeAssignableTo(type, eventType)) fail(node, 'Progress callbacks require the versioned progress contract');
+            const expected = name === 'onTransferProgress' ? transferBatchType : eventType;
+            if (type.flags & ts.TypeFlags.Any || !checker.isTypeAssignableTo(type, expected)) fail(node, 'Progress callbacks require the versioned progress contract');
           }
+        }
+        if (['projectTransferOperation', 'acceptTransferOperation', 'transferProgress'].includes(name) && node.arguments.length) {
+          const argument = node.arguments[0], parameter = signature?.parameters[0];
+          const type = checker.getTypeAtLocation(argument);
+          if (!parameter || type.flags & ts.TypeFlags.Any || !checker.isTypeAssignableTo(type, checker.getTypeOfSymbolAtLocation(parameter, node))) fail(node, 'Argument does not satisfy the transfer progress contract');
         }
       }
       ts.forEachChild(node, visit);

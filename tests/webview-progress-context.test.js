@@ -17,6 +17,14 @@ async function start(app, mode, target) {
   return app.messages.find(message => message.type === 'filesystem-apply');
 }
 
+test('a single-file transfer may display identical progress for the operation and the file', async t => {
+  const app = createApp(t, fixture(), { language: 'en' });
+  const request = await start(app, 'copy');
+  send(app, { type: 'filesystem-transfer-progress', operationId: request.operationId,
+    progress: Progress.transferBatch({ phase: 'copying', batch: Progress.batchBytes(6, 12), file: Progress.fileBytes(6, 12) }) });
+  assert.equal(app.document.querySelector('#status-percent').textContent, '50%/50%');
+});
+
 test('copy progress keeps the whole transfer separate from each conflict checkpoint and current file', async t => {
   const saved = fixture();
   saved.folders['/left'].push({ id: 'b', name: 'same.txt', type: 'text', size: 4 });
@@ -25,8 +33,8 @@ test('copy progress keeps the whole transfer separate from each conflict checkpo
   const app = createApp(t, saved, { language: 'en' });
   const first = await start(app, 'copy');
   assert.equal(first.transfer.checkpoint, true);
-  const report = (request, completed, total, phase = 'copying') => send(app, { type: 'filesystem-progress', operationId: request.operationId,
-    progress: Progress.event({ phase, overall: Progress.known('bytes', completed, total), current: Progress.known('bytes', completed, total) }) });
+  const report = (request, completed, total, phase = 'copying') => send(app, { type: 'filesystem-transfer-progress', operationId: request.operationId,
+    progress: Progress.transferBatch({ phase, batch: Progress.batchBytes(completed, total), file: Progress.fileBytes(completed, total) }) });
   const overall = app.document.querySelector('#status-progress-overall'), current = app.document.querySelector('#status-progress-file');
   report(first, 6, 12);
   assert.equal(overall.hasAttribute('aria-valuemax'), false);

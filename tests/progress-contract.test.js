@@ -173,6 +173,26 @@ test('progress contracts reject absent measurements, invalid totals and unexplai
   assert.equal(Progress.unknown('items', 10, 'enumerating').completed, 10);
 });
 
+test('transfer progress validates scope at the wire boundary and only projects actual batch work', () => {
+  const batch = Progress.batchBytes(2, 4), file = Progress.fileBytes(2, 4);
+  const message = Progress.transferBatch({ phase: 'copying', batch, file });
+  const received = Progress.readTransferBatch(structuredClone(message));
+  assert.throws(() => Progress.readTransferBatch({ ...received, batch: file }), /transfer batch progress/);
+  assert.throws(() => Progress.event({ phase: 'copying', overall: file, current: file }), /measurement scope/);
+  assert.throws(() => Progress.event({ phase: 'copying', overall: batch, current: file }), /measurement scope/);
+  assert.throws(() => Progress.acceptTransferOperation(received), /projected measurements/);
+  const pending = Progress.projectTransferOperation(received, 12, true);
+  assert.equal(pending.overall.kind, 'indeterminate');
+  assert.equal(pending.overall.completed, 14);
+  const final = Progress.projectTransferOperation(received, 12, false);
+  assert.throws(() => Progress.acceptTransferOperation({ ...final, overall: batch }), /projected measurements/);
+  assert.deepEqual(Progress.acceptTransferOperation(final).overall, { ...Progress.known('bytes', 14, 16), scope: 'operation' });
+  assert.deepEqual(final.current, file);
+  const singleFile = Progress.acceptTransferOperation(Progress.projectTransferOperation(received, 0, false));
+  assert.deepEqual([singleFile.overall.completed, singleFile.overall.total], [singleFile.current.completed, singleFile.current.total]);
+  assert.notEqual(singleFile.overall.scope, singleFile.current.scope);
+});
+
 test('the compiler rejects missing totals, missing measurements and direct untyped progress callbacks', t => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'progress-contract-'));
   t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
@@ -211,6 +231,32 @@ test('removing the planner from the actual statusbar caller fails the build gate
   assert.ok(check([file], new Map([[file, modified]])).some(failure => /status planner snapshot/.test(failure)));
 });
 
+test('the actual transfer caller cannot pass section or file progress as operation progress', () => {
+  const file = path.resolve(__dirname, '../media/app.js'), original = fs.readFileSync(file, 'utf8');
+  assert.deepEqual(check([file]), []);
+  const caller = 'transferProgress(TransferProgress.acceptTransferOperation(projected));';
+  for (const replacement of [
+    'transferProgress(batch);',
+    'transferProgress(TransferProgress.acceptTransferOperation(batch));',
+    'transferProgress(TransferProgress.acceptTransferOperation({ ...projected, overall: batch.batch }));',
+    'transferProgress(TransferProgress.acceptTransferOperation({ ...projected, overall: batch.file }));'
+  ]) {
+    const modified = original.replace(caller, replacement);
+    assert.notEqual(modified, original);
+    const failures = check([file], new Map([[file, modified]]));
+    assert.ok(failures.some(failure => /progress contract/.test(failure)), `${replacement}\n${failures.join('\n')}`);
+  }
+});
+
+test('the compiler rejects reversing the byte scopes at the actual filesystem producer', () => {
+  const file = path.resolve(__dirname, '../filesystem-provider.js'), original = fs.readFileSync(file, 'utf8');
+  const modified = original.replace('batch: Progress.batchBytes(publishedBytes + transferred, totalBytes), file: Progress.fileBytes(transferred, bytes)',
+    'batch: Progress.fileBytes(transferred, bytes), file: Progress.batchBytes(publishedBytes + transferred, totalBytes)');
+  assert.notEqual(modified, original);
+  const failures = check([file], new Map([[file, modified]]));
+  assert.ok(failures.some(failure => /progress contract/.test(failure)), failures.join('\n'));
+});
+
 test('removing a required measurement from an actual ZIP producer fails the build gate', () => {
   const file = path.resolve(__dirname, '../zip-operations.js');
   const original = fs.readFileSync(file, 'utf8');
@@ -223,5 +269,9 @@ test('removing a required measurement from an actual ZIP producer fails the buil
 test('build and packaging hooks enforce progress contract checking', () => {
   const manifest = require('../package.json');
   assert.match(manifest.scripts.check, /^npm run check:progress &&/);
-  assert.match(manifest.scripts['vscode:prepublish'], /^npm run check:progress &&/);
+  assert.equal(manifest.scripts['vscode:prepublish'], 'node scripts/prepublish.cjs');
+  const { getPrepublishCommands } = require('../scripts/prepublish.cjs');
+  for (const environment of [{}, { BITFROEST_LOCAL_FAST_INSTALL: '1' }]) {
+    assert.ok(getPrepublishCommands(environment).some(args => args.join(' ') === 'run check:progress'));
+  }
 });

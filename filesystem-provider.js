@@ -631,7 +631,13 @@ function createProvider(options = {}) {
     const totalBytes = [...staged.values()].reduce((sum, file) => sum + (file.expectedSize ?? file.data?.length ?? file.source?.row.size ?? 0), 0);
     let publishedBytes = 0;
     /** @param {object} file @param {{phase: string, transferred?: number, [field: string]: unknown}} event */
-    const report = (file, event) => { const bytes = file.expectedSize ?? file.data?.length ?? file.source?.row.size ?? 0; const transferred = event.phase === 'published' ? bytes : Math.min(bytes, event.transferred || 0); operation.onProgress?.(Progress.event({ ...event, path: file.path, sourcePath: file.appendSources?.[0]?.path || file.source?.path || file.path, totalBytes, completedBytes: publishedBytes + transferred, filesCompleted: createdFiles.filter(item => item.completed).length, filesTotal: staged.size, overall: Progress.known('bytes', publishedBytes + transferred, totalBytes), current: Progress.known('bytes', transferred, bytes) })); };
+    const report = (file, event) => {
+      const bytes = file.expectedSize ?? file.data?.length ?? file.source?.row.size ?? 0;
+      const transferred = event.phase === 'published' ? bytes : Math.min(bytes, event.transferred || 0);
+      operation.onTransferProgress?.(Progress.transferBatch({ ...event, path: file.path, sourcePath: file.appendSources?.[0]?.path || file.source?.path || file.path,
+        filesCompleted: createdFiles.filter(item => item.completed).length, filesTotal: staged.size,
+        batch: Progress.batchBytes(publishedBytes + transferred, totalBytes), file: Progress.fileBytes(transferred, bytes) }));
+    };
     async function verifyCopiedBytes(file, sourcePath, destination) {
       const original = Buffer.alloc(65536), copied = Buffer.alloc(65536);
       let destinationOffset = 0;

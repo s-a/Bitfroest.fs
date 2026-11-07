@@ -4,6 +4,8 @@
   const paths = window.BitfroestPaths;
   /** @type {typeof import('./bitfroest-progress')} */
   const Progress = window.BitfroestProgress;
+  /** @type {Pick<typeof import('./bitfroest-progress'), 'readTransferBatch' | 'projectTransferOperation' | 'acceptTransferOperation'>} */
+  const TransferProgress = Progress;
   const displayPath = value => paths.displayPath(value);
   const inputPath = (value, base) => paths.normalizePath(value, { base, input: true, platform: document.body.dataset.platform });
   document.addEventListener('keydown', event => {
@@ -879,20 +881,11 @@
     if (!jobDialogOpen()) return;
     event.preventDefault();
   });
+  /** @param {import('./bitfroest-progress').ProgressEvent | {version?: undefined, [field: string]: unknown}} [progress] */
   function transferProgress(progress = {}) {
     let element = document.querySelector('.transfer-progress');
     if (!transferJob) { element?.remove(); return; }
-    let reported = progress.version === 1 ? Progress.read(progress) : null;
-    if (reported?.overall.unit === 'bytes' && transferJob.transfer) {
-      const batch = reported.overall;
-      const previous = transferJob.confirmedBytes || 0;
-      if (reported.phase === 'published') transferJob.batchPublishedBytes = batch.completed;
-      const overall = transferJob.transfer.checkpoint
-        ? Progress.unknown('bytes', previous + batch.completed, 'remaining-work-unknown')
-        : batch.kind === 'determinate' ? Progress.known('bytes', previous + batch.completed, previous + batch.total)
-          : Progress.unknown('bytes', previous + batch.completed, batch.reason);
-      reported = Progress.event({ ...reported, overall });
-    }
+    const reported = progress.version === 1 ? Progress.read(progress) : null;
     if (!element) {
     element = document.createElement('section'); element.className = 'transfer-progress'; element.setAttribute('role', 'region'); element.setAttribute('aria-labelledby', 'transfer-progress-title');
       const title = document.createElement('strong'); title.id = 'transfer-progress-title'; title.dataset.progressTitle = ''; title.textContent = t(transferJob.context.mode === 'delete' ? 'Löschen läuft…' : transferJob.context.mode === 'move' ? 'Verschieben läuft…' : 'Kopieren läuft…');
@@ -927,6 +920,7 @@
     const progressPath = progress.sourcePath || progress.path || progress.currentPath;
     if (progressPath && progressPath !== transferJob.currentPath) { transferJob.currentPath = progressPath; transferJob.currentTransferred = 0; transferJob.currentTotal = progress.total; }
     if (progress.filesScanned !== undefined) { transferJob.filesScanned = progress.filesScanned; element.querySelector('[data-progress-count]').textContent = t(transferJob.zipWrite && transferJob.phase === 'preparing' ? '{count} Einträge erfasst' : '{count} Einträge geprüft', { count: progress.filesScanned }); }
+    else if (reported?.overall.unit === 'bytes') element.querySelector('[data-progress-count]').textContent = size(reported.overall.completed) + (reported.overall.kind === 'determinate' ? ' / ' + size(reported.overall.total) : '');
     else if (progress.totalBytes !== undefined) element.querySelector('[data-progress-count]').textContent = size(progress.completedBytes || 0) + ' / ' + size(progress.totalBytes);
     else if (!element.querySelector('[data-progress-count]').textContent) element.querySelector('[data-progress-count]').textContent = t('Dateioperation läuft…');
     if (progress.totalBytes !== undefined) { transferJob.totalBytes = progress.totalBytes; transferJob.completedBytes = progress.completedBytes || 0; }
@@ -4166,9 +4160,25 @@
       return;
     }
     if (host && event.data?.type === 'open-trash-result') { if (!event.data.ok) showOperationFailure(event.data.error || t('Der Papierkorb konnte nicht geöffnet werden.'), { inline: Boolean(document.querySelector('.inline-rename')) }); else toast(t('Papierkorb geöffnet.'), 'success'); return; }
-    if (host && event.data?.type === 'filesystem-progress') { if (transferJob?.id === event.data.operationId) transferProgress(event.data.progress); return; }
+    if (host && event.data?.type === 'filesystem-transfer-progress') {
+      if (transferJob?.id === event.data.operationId && transferJob.transfer) {
+        const batch = TransferProgress.readTransferBatch(event.data.progress);
+        const projected = TransferProgress.projectTransferOperation(batch, transferJob.confirmedBytes || 0, transferJob.transfer.checkpoint === true);
+        if (batch.phase === 'published') transferJob.batchPublishedBytes = batch.batch.completed;
+        transferProgress(TransferProgress.acceptTransferOperation(projected));
+      }
+      return;
+    }
+    if (host && event.data?.type === 'filesystem-progress') {
+      if (transferJob?.id === event.data.operationId) {
+        const progress = /** @type {import('./bitfroest-progress').ProgressEvent} */ (event.data.progress);
+        if (transferJob.transfer && progress?.version === 1 && progress.overall?.unit === 'bytes') throw new TypeError('File transfer bytes require projected batch progress');
+        transferProgress(progress);
+      }
+      return;
+    }
     if (host && event.data?.type === 'filesystem-task-progress') {
-      if (transferJob && event.data.operationId === transferJob.id) { transferProgress(event.data.progress); return; }
+      if (transferJob && event.data.operationId === transferJob.id) { transferProgress(/** @type {import('./bitfroest-progress').ProgressEvent} */ (event.data.progress)); return; }
       if (filesystemPending && pendingFilesystemKind === 'filesystem-delete' && event.data.taskRequestId === filesystemTaskId) statusTask('filesystem', t('Löschen wird ausgeführt') + ` · ${displayPath(event.data.progress.path || '')}`, Progress.read(event.data.progress));
       return;
     }

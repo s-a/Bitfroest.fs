@@ -2,9 +2,9 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { getPrepublishCommands } = require('../scripts/prepublish.cjs');
 
-test('local fast packaging runs the required build without publishing checks', () => {
+test('local fast packaging checks the progress contract before building', () => {
   assert.deepEqual(getPrepublishCommands({ BITFROEST_LOCAL_FAST_INSTALL: '1' }), [
-    ['run', 'build:xray']
+    ['run', 'check:progress'], ['run', 'build:xray']
   ]);
 });
 
