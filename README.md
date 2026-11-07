@@ -92,7 +92,7 @@ When moving a folder with **Send to**, an existing folder with the same name is 
 The transfer filter applies to the selected files and the contents of selected folders. The default `*.*` includes all file types within that selection.
 
 Copy, move and delete update the affected entries in open folder tabs after the operation is confirmed.
-A folder selected in its parent directory can be deleted while it is open in the other pane. Configured roots and filesystem roots are protected from deletion.
+A folder selected in its parent directory can be deleted while it is open in the other pane. If its tab is the only one in that pane, the pane opens the parent directory. Configured roots and filesystem roots are protected from deletion.
 
 When the selected files have known sizes, the status bar can show overall byte progress across conflict prompts. During copying or moving, the file indicator shows the source file currently being transferred.
 

@@ -52,6 +52,25 @@ test('deleting a folder from its deferred parent works while the folder is open 
   assert.equal(await fs.readFile(`${left}/a.txt`, 'utf8'), 'a');
 });
 
+test('deleting the only folder tab in the opposite pane opens its parent there', async t => {
+  const { provider, left, right } = await fixture(t, target => fs.rm(target, { recursive: true }));
+  const parent = `${right}/parent`, child = `${parent}/child`;
+  await fs.mkdir(child, { recursive: true });
+  await fs.writeFile(`${parent}/keep.txt`, 'keep');
+  const before = await provider.load({
+    left: parent, right: child, visibleOnly: true, directories: [parent, child], visibleDirectories: [parent, child]
+  });
+  assert.notEqual(parent, left);
+  assert.deepEqual(before.panes[1].tabs, [child]);
+
+  const after = await provider.remove(before, { paths: [child], useTrash: true });
+
+  assert.deepEqual(after.panes.map(pane => pane.tabs[pane.tab]), [parent, parent]);
+  assert.deepEqual(after.panes[1].tabs, [parent]);
+  assert.deepEqual(after.folders[parent].map(row => row.name), ['keep.txt']);
+  assert.equal(Object.hasOwn(after.folders, child), false);
+});
+
 test('trash deletion passes the original name and trash option to the native adapter', async t => {
   const calls = [];
   const { provider, left } = await fixture(t, async (target, options) => { calls.push({ target, options }); await fs.unlink(target); });

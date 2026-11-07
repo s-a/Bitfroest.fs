@@ -527,14 +527,14 @@ function createProvider(options = {}) {
     for (const entry of selected) await verify(entry);
   }
 
-  function inheritedPanes(state, desired) {
+  function inheritedPanes(state, desired, fallbackDirectory) {
     state.active = desired.active === 1 ? 1 : 0;
     if (!Array.isArray(desired.panes) || desired.panes.length !== 2) return state;
     state.panes = clone(desired.panes);
     for (const p of state.panes) {
       const activePath = p.tabs[p.tab];
       p.tabs = p.tabs.filter(directory => Object.hasOwn(state.folders, directory));
-      if (!p.tabs.length) p.tabs = [roots[0]];
+      if (!p.tabs.length) p.tabs = [(activePath && fallbackDirectory?.(activePath)) || roots[0]];
       const retainedIndex = p.tabs.indexOf(activePath);
       p.tab = retainedIndex >= 0 ? retainedIndex : Math.max(0, Math.min(p.tabs.length - 1, p.tab || 0));
       p.selected = []; p.cursor = null;
@@ -660,7 +660,11 @@ function createProvider(options = {}) {
       if (stat.isDirectory() && statSignature(stat).split(':').slice(0, 3).join(':') === entry.signature.split(':').slice(0, 3).join(':')) entries.set(identity(directory), { ...entry, signature: statSignature(stat), contentSignature: contentSignature(stat) });
     }
     const unloadedFolders = Object.keys(folders).filter(directory => !loaded.has(directory));
-    const state = inheritedPanes({ ...baseline.state, snapshotId: crypto.randomUUID(), folders, unloadedFolders, updatedDirectories: [...changedDirectories] }, view);
+    const deletedFolderParent = includeStreamed ? directory => {
+      const deleted = removed.find(item => item.type === 'folder' && below(directory, item.path));
+      return deleted && parentKeys(deleted.path)[0];
+    } : undefined;
+    const state = inheritedPanes({ ...baseline.state, snapshotId: crypto.randomUUID(), folders, unloadedFolders, updatedDirectories: [...changedDirectories] }, view, deletedFolderParent);
     const { updatedDirectories, operationOutcome, ...persisted } = state;
     snapshot = { ...baseline, folders, entries, loadedDirectories: [...loaded], unloadedFolders, deferredDirectories: baseline.deferredDirectories.filter(directory => Object.hasOwn(folders, directory)), state: clone(persisted), digest: undefined };
     publishedEntries.clear();
