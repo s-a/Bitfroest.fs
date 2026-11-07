@@ -138,6 +138,9 @@ test('Send to shows the progress and cancel control for a destination outside bo
   assert.equal(cancel.hidden, false);
   app.click(cancel);
   assert.equal(app.messages.find(message => message.type === 'filesystem-cancel').operationId, prepare.operationId);
+  const cancellation = app.messages.find(message => message.type === 'transfer-trace' && message.event.stage === 'cancel-requested');
+  assert.equal(cancellation?.event.origin, 'job-control');
+  assert.equal(cancellation.event.operationId, prepare.operationId);
   post(app, { type: 'filesystem-result', operationId: prepare.operationId, ok: true, cancelled: true, state: saved });
   assert.equal(app.messages.some(message => message.type === 'filesystem-apply'), false);
 });

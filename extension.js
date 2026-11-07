@@ -1100,7 +1100,7 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
         const token = value => typeof value === 'string' && /^[a-z0-9_-]{1,80}$/i.test(value);
         if (!event || !isTransferTraceId(event.traceId) || !token(event.stage) || !['copy', 'move'].includes(event.mode)) return;
         const fields = { traceId: event.traceId, stage: event.stage, mode: event.mode };
-        for (const key of ['trigger', 'operationId', 'decision', 'errorCode']) if (token(event[key])) fields[key] = event[key];
+        for (const key of ['trigger', 'operationId', 'decision', 'errorCode', 'origin']) if (token(event[key])) fields[key] = event[key];
         for (const key of ['selected', 'completed', 'skipped']) if (Number.isSafeInteger(event[key]) && event[key] >= 0) fields[key] = event[key];
         for (const key of ['checkpoint', 'ok', 'cancelled']) if (typeof event[key] === 'boolean') fields[key] = event[key];
         logStartup('transfer-trace', fields);

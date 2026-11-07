@@ -865,8 +865,13 @@
     if (filesystemPending && !refreshingFilesystem || transferPlanning || !deferredQueueJob) return;
     const job = deferredQueueJob, run = deferredQueueRun; runQueuedOperation(job, run);
   }
-  function cancelTransfer() {
+  function traceTransferCancellation(origin) {
     if (!transferJob || transferJob.cancelRequested) return;
+    traceTransfer(transferJob.transfer || transferJob.preparation || transferJob.trace, 'cancel-requested', { operationId: transferJob.id, origin });
+  }
+  function cancelTransfer(origin) {
+    if (!transferJob || transferJob.cancelRequested) return;
+    if (origin) traceTransferCancellation(origin);
     transferJob.cancelRequested = true;
     if (transferJob.hostActive === false) {
       transferJob.controller?.abort();
@@ -902,7 +907,7 @@
       const actions = document.createElement('div'); actions.className = 'transfer-progress-actions';
       const label = document.createElement('span'), button = document.createElement('button'); label.dataset.progressCount = ''; label.setAttribute('role', 'status');
       button.type = 'button'; button.dataset.cancelTransfer = ''; button.replaceChildren(window.BitfroestIcons.element('close')); button.setAttribute('aria-label', t('Abbrechen')); button.title = t('Abbrechen');
-      button.onclick = cancelTransfer;
+      button.onclick = () => cancelTransfer('progress-panel');
       actions.append(label, button); element.append(title, paths, meters, actions); (transferJob.modalPreparation ? $('#modal-body') : document.body).append(element);
     }
     element.hidden = Boolean(operationQueue?.active && !transferJob.modalPreparation);
@@ -2744,7 +2749,7 @@
     const transfer = { ...transferRequest({ ...options, targetPath: targetDirectory }), ...(options.requiredDirectoryVerified ? { requiredDirectoryVerified: true } : {}) };
     const progressSources = new Map((state.folders[options.sourcePath] || []).filter(file => options.ids.includes(file.id)).map(file => [file.id, join(options.sourcePath, file.name)]));
     if (!transferJob) {
-      transferJob = { id: `transfer-ui-${Date.now()}-${++transferSequence}`, queueJobId: queuedJob?.id, hostActive: false, phase: 'copying', context: Object.freeze({ mode: options.mode, sources: Object.freeze(options.ids.map(id => progressSources.get(id)).filter(Boolean)), target: targetDirectory }) };
+      transferJob = { id: `transfer-ui-${Date.now()}-${++transferSequence}`, queueJobId: queuedJob?.id, hostActive: false, phase: 'copying', trace: transfer, context: Object.freeze({ mode: options.mode, sources: Object.freeze(options.ids.map(id => progressSources.get(id)).filter(Boolean)), target: targetDirectory }) };
       transferProgress();
     } else if (transferJob.hostActive === false && transferJob.phase === 'preparing') {
       transferJob.phase = 'copying'; transferJob.currentPath = null; transferJob.currentTransferred = 0; transferJob.currentTotal = undefined; transferProgress();
@@ -3315,7 +3320,7 @@
   const statusbar = window.BitfroestStatusbar.create({ t, onCopyLog: copyStatusLog,
     getLogContext: () => ({ snapshotId: state.snapshotId, language: document.body.dataset.language, timeOrigin: performance.timeOrigin, hostEvents: [...statusHostEvents], omittedHostEvents, transferEvents: [...transferEvents], omittedTransferEvents, activePane: state.active, panes: state.panes.map(p => ({ path: currentPath(p), tab: p.tab })), filesystemPending, refreshingFilesystem, refreshRequestId, pendingFilesystemKind,
       gitPending: [...gitPending], gitRequests: [...gitBindings].map(([path, request]) => ({ path, requestId: request.requestId, snapshotId: request.snapshotId, startedAt: request.startedAt })), navigationRequests: [...navigationRequests.keys()], activeJob: operationQueue?.active && { id: operationQueue.active.id, command: operationQueue.active.command } }),
-    onLanguage: () => { if (host) host.postMessage({ type: 'choose-language' }); }, version: decodeURIComponent(document.body.dataset.extensionVersion || ''), actions, onCancel: cancelTransfer, focusList: () => { const list = document.querySelectorAll('.list')[state.active]; if (list instanceof HTMLElement) list.focus({ preventScroll: true }); } });
+    onLanguage: () => { if (host) host.postMessage({ type: 'choose-language' }); }, version: decodeURIComponent(document.body.dataset.extensionVersion || ''), actions, onCancel: () => cancelTransfer('statusbar'), focusList: () => { const list = document.querySelectorAll('.list')[state.active]; if (list instanceof HTMLElement) list.focus({ preventScroll: true }); } });
   operationQueue = window.BitfroestJobs.createQueue({
     start: job => runQueuedOperation(job, () => job.run(job)),
     cancel: job => { if (deferredQueueJob === job) { deferredQueueJob = null; deferredQueueRun = null; operationQueue.complete(job.id, { cancelled: true }); } else cancelTransfer(); },
@@ -3326,7 +3331,10 @@
     },
     change: () => jobView?.update(operationQueue.items)
   });
-  jobView = window.BitfroestJobs.createView({ t, getState: () => state, cancel: id => operationQueue.cancel(id), navigate: job => {
+  jobView = window.BitfroestJobs.createView({ t, getState: () => state, cancel: id => {
+    if (operationQueue.active?.id === id) traceTransferCancellation('job-control');
+    operationQueue.cancel(id);
+  }, navigate: job => {
     const location = job.request.targetLocation;
     const needsLoad = !Object.hasOwn(state.folders, job.request.target) || state.unloadedFolders?.includes(job.request.target);
     if (location && [0, 1].includes(location.pane)) {
