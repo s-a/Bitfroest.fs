@@ -5377,6 +5377,25 @@ test('failed preparation acknowledges and releases the filesystem queue without 
   await pending;
 });
 
+test('a transfer preparation failure names the blocking directory and check in the host log', async t => {
+  const blocked = 'C:/Users/ExampleUser/parent/cached-child', logs = [];
+  const error = Object.assign(new Error('Directory was not prepared'), { code: 'DirectoryNotPrepared', path: blocked, preparationReason: 'listing-changed' });
+  const app = harness(t, { filesystemLoad: async () => clipboardFixture(), filesystemApply: async () => { throw error; },
+    onInfoLog: line => logs.push(JSON.parse(line)) });
+  await app.command('bitfroest.openPrototype');
+  const panel = app.panels[0];
+  const traceId = 'transfer-trace-123-1';
+  await panel.receive({ type: 'filesystem-apply', operationId: 'transfer-123-1', transfer: { mode: 'move', traceId }, state: clipboardFixture() });
+  const failure = panel.messages.findLast(message => message.type === 'filesystem-result').diagnostic.failure;
+  assert.equal(failure.path, blocked);
+  assert.equal(failure.preparationReason, 'listing-changed');
+  const result = logs.find(event => event.kind === 'transfer-host-result' && event.traceId === traceId);
+  assert.equal(result.blockedDirectory, '.../parent/cached-child');
+  assert.equal(result.preparationReason, 'listing-changed');
+  assert.doesNotMatch(JSON.stringify(result), /ExampleUser/);
+  panel.dispose();
+});
+
 test('host progress bounds intermediate messages and always forwards the completed byte count', async t => {
   const app = harness(t, { filesystemLoad: async () => clipboardFixture(), filesystemApply: async (_before, after, operation) => {
     const report = (phase, bytes) => operation.onTransferProgress(Progress.transferBatch({ phase, batch: Progress.batchBytes(bytes, 1000), file: Progress.fileBytes(bytes, 1000) }));

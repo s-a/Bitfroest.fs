@@ -327,6 +327,8 @@
     'Aktion': 'Action', 'Modus': 'Mode', 'Pfade': 'Paths', 'Archiv': 'Archive', 'Seite': 'Side', 'Rekursiv': 'Recursive', 'Quellpfad': 'Source path', 'Quellseite': 'Source side', 'Zielpfad': 'Target path',
     'Auslöser': 'Trigger', 'Quellpfade': 'Source paths', 'Erforderlicher Zielordner': 'Required destination directory', 'Systemaufruf': 'System call',
     'Quellzustand im Snapshot': 'Source state in snapshot',
+    'Fehlgeschlagene Ordnervorbereitung': 'Directory preparation check',
+    'Der Ordner muss vor der Dateioperation vollständig eingelesen und vorbereitet werden.': 'The folder must be fully read and prepared before the file operation.',
     'Letzter bestätigter Schritt': 'Last confirmed step', 'Der Erweiterungshost hat die Zielordnervorbereitung bestätigt.': 'The extension host confirmed destination preparation.',
     'Der Zielordner „{path}“ fehlt im eingelesenen Dateibestand.': 'The folder “{path}” is missing from the current file listing.',
     'Fehlername': 'Error name', 'Fehlercode': 'Error code', 'Fehlermeldung': 'Error message', 'Scan-Phase': 'Scan phase', 'Ursache': 'Cause', 'Stack': 'Stack',

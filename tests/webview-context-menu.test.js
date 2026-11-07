@@ -71,6 +71,26 @@ test('Send to can be cancelled in the standard dialog before preparing or writin
   assert.equal(app.messages.some(message => ['filesystem-prepare', 'filesystem-apply'].includes(message.type)), false);
 });
 
+test('typing a file search before Send to does not expand a single selection with the default mask', async t => {
+  const saved = fixture(), app = createApp(t, saved, { language: 'en', platform: 'win32' });
+  const list = app.document.querySelector('[data-pane="0"] .list');
+  list.focus();
+  for (const letter of 'one') app.key(letter, {}, app.document.activeElement);
+  assert.equal(app.state().panes[0].filter, 'one');
+  openSendToTarget(app);
+  app.click(menuButton(app, 'Move'));
+  assert.equal(app.document.querySelector('#transfer-filter').value, '*.*');
+  app.click(app.document.querySelector('#modal-confirm'));
+  const prepare = app.messages.find(message => message.type === 'filesystem-prepare');
+  assert.deepEqual(Array.from(prepare.source.ids), ['a']);
+  post(app, { type: 'filesystem-result', operationId: prepare.operationId, ok: true, state: saved });
+  await new Promise(resolve => setImmediate(resolve));
+  const write = app.messages.find(message => message.type === 'filesystem-apply');
+  assert.deepEqual(Array.from(write.transfer.ids), ['a']);
+  assert.deepEqual(Array.from(write.state.folders['C:/two'], file => file.name), ['one.txt']);
+  assert.deepEqual(Array.from(write.state.folders['C:/one'], file => file.name), ['two.txt']);
+});
+
 for (const [mode, label, ids] of [['copy', 'Copy', ['a']], ['move', 'Move', ['a', 'b']]]) {
   test(`Send to starts one ${mode} for the captured selection and waits for host acknowledgement`, async t => {
     const saved = fixture();

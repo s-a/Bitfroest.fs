@@ -89,6 +89,8 @@ This recording shows the previous confirmation dialog style.
 
 When moving a folder with **Send to**, an existing folder with the same name is merged with the source. Files outside the transfer remain in the destination, including files added or replaced while it runs.
 
+The transfer filter applies to the selected files and the contents of selected folders. The default `*.*` includes all file types within that selection.
+
 When the selected files have known sizes, the status bar can show overall byte progress across conflict prompts. The lower indicator shows the current file.
 
 ### Preview controls

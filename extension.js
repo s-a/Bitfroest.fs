@@ -1,6 +1,7 @@
 const vscode = require('vscode');
 const moduleStartedAt = performance.now();
 const Progress = require('./media/bitfroest-progress');
+const { maskOperationDetails } = require('./media/operation-report-masking');
 const { productIcon } = require('./product-icons');
 const extensionVersion = require('./package.json').version;
 const helpLinks = Object.freeze({
@@ -68,7 +69,7 @@ function operationDiagnostic(error, request, state, sourceState = state) {
   const serialize = (failure, depth = 0) => {
     if (!failure || depth > 6) return undefined;
     const result = {};
-    for (const key of ['name', 'message', 'code', 'path', 'dest', 'errno', 'syscall', 'sourceState', 'scanPhase', 'expectedDirectory', 'observedDirectory', 'changedFields', 'nativeCode', 'nativeStage', 'hresult', 'nativeCommand', 'nativeCommandId', 'operation', 'requestId', 'generation']) {
+    for (const key of ['name', 'message', 'code', 'path', 'dest', 'errno', 'syscall', 'sourceState', 'preparationReason', 'scanPhase', 'expectedDirectory', 'observedDirectory', 'changedFields', 'nativeCode', 'nativeStage', 'hresult', 'nativeCommand', 'nativeCommandId', 'operation', 'requestId', 'generation']) {
       const value = failure[key];
       if (typeof value === 'string' || typeof value === 'number' || typeof value === 'bigint') result[key] = String(value).slice(0, 4000);
     }
@@ -1961,7 +1962,12 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
           if (directoryJob && directoryJobs.get(directoryKey) === directoryJob) directoryJobs.delete(directoryKey);
           if (refreshController && refreshRead === refreshController) refreshRead = null;
           if (ok && !cancelled && navigationReplyPath) rememberUncRoot(navigationReplyPath);
-          if (trace) logStartup('transfer-host-result', { ...trace, ok, cancelled: Boolean(cancelled || filesystemState?.operationOutcome?.cancelled), ...(diagnostic?.failure?.code ? { errorCode: diagnostic.failure.code } : {}) });
+          if (trace) {
+            const failure = diagnostic?.failure;
+            logStartup('transfer-host-result', { ...trace, ok, cancelled: Boolean(cancelled || filesystemState?.operationOutcome?.cancelled),
+              ...(failure?.code ? { errorCode: failure.code } : {}),
+              ...(failure?.code === 'DirectoryNotPrepared' ? { blockedDirectory: maskOperationDetails(`Path: ${failure.path}`).slice(6), preparationReason: failure.preparationReason } : {}) });
+          }
           if (current && panel === current) await current.webview.postMessage({ type: 'filesystem-result', ok, state: filesystemState, ...(typeof message.refreshRequestId === 'string' ? { refreshRequestId: message.refreshRequestId } : {}), ...(message.taskRequestId ? { taskRequestId: message.taskRequestId } : {}), ...(message.navigationRequestId ? { navigationRequestId: message.navigationRequestId } : {}), ...(updatedDirectories?.length ? { refreshGitDirectories: updatedDirectories } : {}), ...(cancelled ? { cancelled: true } : {}), ...(operationId ? { operationId, operationOutcome: filesystemState?.operationOutcome } : {}), ...(!ok ? { error: operationError, diagnostic, ...(blockedDeletion ? { blockedDeletion } : {}) } : {}), ...(ok && !cancelled && message.type === 'filesystem-navigate' && navigationReplyPath ? { resumeNavigation: { path: navigationReplyPath, side: message.side } } : {}), ...(ok && !cancelled && message.type === 'filesystem-navigate' && openReplyPath ? { resumeOpen: { path: openReplyPath } } : {}), ...(ok && !cancelled && message.type === 'filesystem-prepare' ? { resumeAction: message.action } : {}) });
         }).finally(() => { filesystemRequests--; });
         if (!isolatedNavigation) {

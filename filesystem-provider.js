@@ -572,9 +572,16 @@ function createProvider(options = {}) {
       throw abortError();
     }
     for (const directory of baseline.unloadedFolders) {
-      const untouched = desired.get(identity(directory));
-      const viewRoot = roots.includes(directory) || baseline.deferredDirectories?.includes(directory) || baseline.entries.get(identity(directory))?.root;
-      if ((untouched ? untouched.row.fsSource !== directory : !viewRoot) || JSON.stringify(after.folders[directory]) !== JSON.stringify(baseline.folders[directory]) || [...desired.values()].some(item => item.type === 'folder' && item.row.fsSource === directory && identity(item.path) !== identity(directory))) throw new Error('Der Ordner muss vor der Dateioperation vollständig eingelesen und vorbereitet werden.');
+      const key = identity(directory);
+      const untouched = desired.get(key);
+      const viewRoot = roots.includes(directory) || baseline.deferredDirectories?.includes(directory) || baseline.entries.get(key)?.root;
+      const isSource = row => typeof row.fsSource === 'string' && identity(row.fsSource) === key;
+      let preparationReason;
+      if (untouched && !isSource(untouched.row)) preparationReason = 'origin-changed';
+      else if (!untouched && !viewRoot) preparationReason = 'unregistered-placeholder';
+      else if (JSON.stringify(after.folders[directory]) !== JSON.stringify(baseline.folders[directory])) preparationReason = 'listing-changed';
+      else if ([...desired.values()].some(item => item.type === 'folder' && isSource(item.row) && identity(item.path) !== key)) preparationReason = 'reused-as-source';
+      if (preparationReason) throw Object.assign(new Error('Der Ordner muss vor der Dateioperation vollständig eingelesen und vorbereitet werden.'), { code: 'DirectoryNotPrepared', path: directory, preparationReason });
     }
     if (filesystemDigest(after) === baseline.digest) {
       const state = { ...clone(after), snapshotId: baseline.state.snapshotId };

@@ -289,6 +289,30 @@ test('moving files from an active child keeps the cached parent row backed by th
   assert.ok(row(after, left, 'docs'));
 });
 
+test('moving one selected file accepts a deferred child with different Windows drive casing', { skip: process.platform !== 'win32' }, async t => {
+  const { left, right } = await setup(t);
+  const root = left[0].toUpperCase() + left.slice(1);
+  const target = left[0].toLowerCase() + left.slice(1);
+  const cachedChild = `${root}/docs`;
+  const provider = createProvider({ roots: [root, right], fs });
+  await fs.writeFile(`${right}/selected.txt`, 'selected');
+  await fs.writeFile(`${right}/unselected.txt`, 'leave in place');
+  const fresh = await provider.load({ directories: [right], deferredDirectories: [cachedChild], visibleOnly: true });
+  const selected = row(fresh, right, 'selected.txt');
+  fresh.panes[0].tabs = [right, cachedChild];
+  const prepared = await provider.prepare(fresh, { directories: [target], requiredDirectory: target, source: { path: right, ids: [selected.id] } });
+  assert.ok(prepared.unloadedFolders.includes(cachedChild));
+  assert.equal(row(prepared, target, 'docs').fsSource, `${target}/docs`);
+  const desired = clone(prepared);
+  desired.folders[right] = desired.folders[right].filter(file => file.id !== selected.id);
+  desired.folders[target].push({ ...selected, id: 'moved-selection' });
+  await provider.apply(prepared, desired, { transfer: { mode: 'move', ids: [selected.id], sourcePath: right, sourceSide: 0, requiredDirectory: target } });
+  assert.equal(await fs.readFile(`${target}/selected.txt`, 'utf8'), 'selected');
+  assert.deepEqual(await fs.readdir(right), ['unselected.txt']);
+  await assert.rejects(fs.stat(`${target}/unselected.txt`), { code: 'ENOENT' });
+  assert.equal(await fs.readFile(`${cachedChild}/nested.txt`, 'utf8'), 'nested');
+});
+
 test('a deferred parent does not restore a cached row for a replaced active child', async t => {
   const { provider, left, right } = await setup(t);
   const child = `${left}/docs`;
@@ -333,7 +357,7 @@ test('moving one file after cache eviction retains authorization for the previou
   assert.ok(before.unloadedFolders.includes(`${left}/docs`));
   const forged = clone(before);
   forged.folders[`${left}/docs`].push({ id: 'unprepared-write', name: 'unexpected.txt', type: 'text', content: 'untrusted' });
-  await assert.rejects(provider.apply(before, forged), /vollständig eingelesen und vorbereitet/);
+  await assert.rejects(provider.apply(before, forged), { code: 'DirectoryNotPrepared', path: `${left}/docs`, preparationReason: 'listing-changed' });
   await assert.rejects(fs.stat(`${left}/docs/unexpected.txt`), { code: 'ENOENT' });
   const after = clone(before), source = row(after, nested, 'episode.bin');
   after.folders[nested] = []; after.folders[right].push({ ...source, id: 'moved-episode' });
