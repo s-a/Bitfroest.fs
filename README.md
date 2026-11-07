@@ -260,7 +260,9 @@ File-search dialog access keys depend on the interface language. Platform and de
 
 Licensed under the [Apache License 2.0](LICENSE). Project attribution is recorded in [NOTICE](NOTICE); third-party component licenses are included under `licenses`. Use the [GitHub issue tracker](https://github.com/s-a/Bitfroest.fs/issues) for project support and bug reports.
 
-**Report on GitHub** in a file operation error dialog opens a prefilled issue for review. The report includes a shortened error message, error codes and version information. Recognized paths retain up to three trailing components, which may contain names. Recognized URLs are masked. Stack traces and panel paths are excluded.
+**Copy Details** in a file operation error dialog copies the available diagnostic information. For transfer failures, this can include the triggering command, selected files, destination, and error code. The copied details can contain full paths and stack traces.
+
+**Report on GitHub** opens a prefilled issue for review. The report includes a shortened error message, error codes and version information. Recognized paths retain up to three trailing components, which may contain names. Recognized URLs are masked. Stack traces and panel paths are excluded.
 
 Community testing, contributions and feedback are welcome and appreciated. Linux bug reports are most useful with the distribution and version, desktop environment, X11 or Wayland session type, and steps to reproduce. The remaining platform limits are described above.
 

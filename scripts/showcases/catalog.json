@@ -1418,7 +1418,7 @@
     "id": "operation-error",
     "parentId": "main",
     "title": "Inspect a failed operation",
-    "description": "Inspect a file operation error and open a GitHub draft with masked diagnostic details.",
+    "description": "Inspect a file operation error, copy the transfer details and open a GitHub draft with masked diagnostic details.",
     "paths": [
       "${demo}/left",
       "${demo}/right"

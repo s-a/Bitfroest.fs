@@ -498,7 +498,7 @@
           if (result.confirmed !== true || result.cancelled || result.errors?.length) finish();
           else next(index + 1);
         } };
-        executeTransfer(options).catch(error => failTransferExecution(error, options.onComplete));
+        executeTransfer(options).catch(error => failTransferExecution(error, options));
       };
       next(0);
     };
@@ -1077,10 +1077,10 @@
     if (refreshingFilesystem) updateDirectoryActivity();
     return true;
   }
-  function prepareFolders(paths, action, resume, recursive = true, requireSnapshot = false) {
+  function prepareFolders(paths, action, resume, recursive = true, requireSnapshot = false, transfer) {
     if (!host || !state.realFilesystem) return false;
     const directories = [...new Set(paths)].filter(path => requireSnapshot && !Object.hasOwn(state.folders, path) || (state.unloadedFolders || []).some(unloaded => unloaded === path || recursive && unloaded.startsWith(`${path}/`)));
-    return directories.length ? requestFilesystem({ type: 'filesystem-prepare', paths: directories, action, recursive }, resume) : false;
+    return directories.length ? requestFilesystem({ type: 'filesystem-prepare', paths: directories, action, recursive, ...(transfer ? { transfer, snapshotId: state.snapshotId } : {}) }, resume) : false;
   }
   function receiveDirectoryMessage(data) {
     const request = navigationRequests.get(data.navigationRequestId) || (!data.navigationRequestId && !filesystemPending && data.type === 'filesystem-result' && navigationRequests.size === 1 ? navigationRequests.values().next().value : undefined);
@@ -2425,10 +2425,11 @@
       ...(diagnostic.request?.directory !== undefined ? [`${t('Pfad')}: ${diagnostic.request.directory}`] : []),
       ...(diagnostic.request?.ids ? [`IDs: ${diagnostic.request.ids.join(', ')}`] : []),
       ...(diagnostic.request?.requestId ? [`${t('Auftragskennung')}: ${diagnostic.request.requestId}`] : []),
-      ...(['action', 'mode', 'path', 'paths', 'target', 'archive', 'side', 'recursive'].filter(key => diagnostic.request?.[key] !== undefined).map(key => `${t(({ action: 'Aktion', mode: 'Modus', path: 'Pfad', paths: 'Pfade', target: 'Ziel', archive: 'Archiv', side: 'Seite', recursive: 'Rekursiv' })[key])}: ${Array.isArray(diagnostic.request[key]) ? diagnostic.request[key].join('\n  ') : diagnostic.request[key]}`)),
-      ...(diagnostic.request?.transfer ? Object.entries(diagnostic.request.transfer).map(([key, value]) => `${t(({ mode: 'Modus', sourcePath: 'Quellpfad', sourceSide: 'Quellseite', targetPath: 'Zielpfad' })[key] || key)}: ${value}`) : []),
+      ...(['action', 'mode', 'path', 'paths', 'target', 'archive', 'side', 'recursive', 'requiredDirectory'].filter(key => diagnostic.request?.[key] !== undefined && diagnostic.request?.transfer?.[key] === undefined).map(key => `${t(({ action: 'Aktion', mode: 'Modus', path: 'Pfad', paths: 'Pfade', target: 'Ziel', archive: 'Archiv', side: 'Seite', recursive: 'Rekursiv', requiredDirectory: 'Erforderlicher Zielordner' })[key])}: ${Array.isArray(diagnostic.request[key]) ? diagnostic.request[key].join('\n  ') : diagnostic.request[key]}`)),
+      ...(diagnostic.request?.transfer ? Object.entries(diagnostic.request.transfer).filter(([, value]) => value !== undefined && (!Array.isArray(value) || value.length)).map(([key, value]) => `${t(({ mode: 'Modus', trigger: 'Auslöser', sourcePath: 'Quellpfad', sourcePaths: 'Quellpfade', sourceSide: 'Quellseite', targetPath: 'Zielpfad', requiredDirectory: 'Erforderlicher Zielordner' })[key] || key)}: ${Array.isArray(value) ? '\n  ' + value.join('\n  ') : value}`) : []),
       ...(diagnostic.request?.operationId ? [`${t('Auftragskennung')}: ${diagnostic.request.operationId}`] : []),
       ...(diagnostic.request?.snapshotId ? [`${t('Snapshotkennung')}: ${diagnostic.request.snapshotId}`] : []),
+      ...(diagnostic.lastSuccessfulStep ? [`${t('Letzter bestätigter Schritt')}: ${t(diagnostic.lastSuccessfulStep)}`] : []),
       ...(diagnostic.panelPaths?.length ? [`${t('Aktive Bereichspfade')}:\n  ${diagnostic.panelPaths.join('\n  ')}`] : []),
       ...(diagnostic.timestamp ? [`${t('Zeitstempel')}: ${diagnostic.timestamp}`] : []),
       `${t('Plattform')}: ${diagnostic.platform || t('Unbekannt')}`,
@@ -2441,7 +2442,7 @@
     const appendFailure = (failure, label = null, depth = 0) => {
       if (!failure || depth > 6) return;
       if (label) lines.push(`${'  '.repeat(depth)}${t('Ursache')}:`);
-      for (const [key, label] of Object.entries({ name: 'Fehlername', code: 'Fehlercode', nativeCode: 'Nativer Fehlercode', nativeStage: 'Native Phase', hresult: 'HRESULT', nativeCommand: 'Nativer Befehl', nativeCommandId: 'Native Befehlskennung', operation: 'Native Operation', requestId: 'Native Anfragekennung', generation: 'Sitzungsgeneration', message: 'Fehlermeldung', path: 'Pfad', scanPhase: 'Scan-Phase', expectedDirectory: 'Erwartete Ordnermetadaten', observedDirectory: 'Gelesene Ordnermetadaten', changedFields: 'Abweichende Ordnermerkmale' })) if (failure[key] !== undefined && failure[key] !== null && failure[key] !== '') lines.push(`${t(label)}: ${failure[key]}`);
+      for (const [key, label] of Object.entries({ name: 'Fehlername', code: 'Fehlercode', errno: 'errno', syscall: 'Systemaufruf', nativeCode: 'Nativer Fehlercode', nativeStage: 'Native Phase', hresult: 'HRESULT', nativeCommand: 'Nativer Befehl', nativeCommandId: 'Native Befehlskennung', operation: 'Native Operation', requestId: 'Native Anfragekennung', generation: 'Sitzungsgeneration', message: 'Fehlermeldung', path: 'Pfad', dest: 'Zielpfad', scanPhase: 'Scan-Phase', expectedDirectory: 'Erwartete Ordnermetadaten', observedDirectory: 'Gelesene Ordnermetadaten', changedFields: 'Abweichende Ordnermerkmale' })) if (failure[key] !== undefined && failure[key] !== null && failure[key] !== '') lines.push(`${t(label)}: ${failure[key]}`);
       if (failure.stack) lines.push(`${'  '.repeat(depth)}${t('Stack')}:\n${failure.stack}`);
       if (failure.sourceIdentity) {
         const identity = failure.sourceIdentity;
@@ -2463,6 +2464,7 @@
     const area = document.createElement('section'); area.className = 'operation-error'; area.setAttribute('role', 'alert');
     area.innerHTML = `${$('#operation-error-art').innerHTML}<p class="operation-error-intro">${t('Es ist ein unvorhergesehener Fehler aufgetreten.')}</p><details class="operation-error-details"><summary>${t('Details')}</summary><h3>${t('Details für Computer-Nerds')}</h3><label for="operation-error-text">${t('Fehlerdetails und Wiederherstellungspfade')}</label><textarea id="operation-error-text" class="operation-error-text" readonly rows="6"></textarea><button type="button" data-select-error>${t('Details auswählen')}</button></details><div class="operation-error-actions"><button type="button" data-copy-error>${t('Fehlerdetails kopieren')}</button>${host && !operationFailureInline ? `<button type="button" data-report-error title="${t('Öffnet einen GitHub-Entwurf mit maskierten Pfaden und URLs.')}">${t('Auf GitHub melden')}</button>` : ''}${operationErrorDialog ? '' : `<button type="button" data-dismiss-error>${t('Fehler bestätigen')}</button>`}</div>`;
     area.querySelector('textarea').value = operationFailureReport();
+    if (operationFailureDiagnostic?.request?.transfer?.requiredDirectory) area.querySelector('.operation-error-intro').textContent = operationFailure;
     if (operationFailureInline) { area.classList.add('operation-error-inline'); $('#statusbar').before(area); }
     else $('#modal-body').prepend(area);
   }
@@ -2689,33 +2691,44 @@
       dialog.addEventListener('close', cancelled);
     });
   }
+  function transferRequest({ mode, trigger, sourcePath, sourceSide, targetPath, requiredDirectory, ids }) {
+    return { mode, trigger, sourcePath, sourceSide, targetPath, requiredDirectory, ids };
+  }
+  function transferSourcePaths({ sourcePath, ids }) {
+    const files = new Map((state.folders[sourcePath] || []).map(file => [file.id, file]));
+    return ids.map(id => files.get(id)).filter(Boolean).map(file => file.fsSource || join(sourcePath, file.name));
+  }
   async function executeTransfer(options) {
     if (!host || !state.realFilesystem) return executeTransferNow(options);
     const captured = { ...options, verifyAfterCopy: options.verifyAfterCopy ?? fileSettings.verifyAfterCopy === true, validateSelection: undefined, ids: [...options.ids] };
     const target = captured.requiredDirectory || window.BitfroestTransfer.planTarget({ ...captured, folders: state.folders }).directory;
-    enqueueOperation({ command: options.mode === 'move' ? 'move' : 'copy', title: t(options.mode === 'move' ? 'Verschieben' : 'Kopieren'), target, showInStatus: options.showInStatus, sources: options.ids.map(id => (state.folders[options.sourcePath] || []).find(file => file.id === id)).filter(Boolean).map(file => file.fsSource || join(options.sourcePath, file.name)) }, job => executeTransferNow(captured).catch(error => {
-      failTransferExecution(error, captured.onComplete);
-      operationQueue.complete(job.id, { ok: false, error: error.message });
+    enqueueOperation({ command: options.mode === 'move' ? 'move' : 'copy', title: t(options.mode === 'move' ? 'Verschieben' : 'Kopieren'), target, showInStatus: options.showInStatus, sources: transferSourcePaths(captured) }, job => executeTransferNow(captured).catch(error => {
+      operationQueue.complete(job.id, { ok: false, error: failTransferExecution(error, captured) });
     }), options.targetSide ?? 1 - options.sourceSide);
   }
   async function executeTransferNow(options) {
     const queuedJob = operationQueue?.active;
-    const failed = error => { failTransferExecution(error, options.onComplete); operationQueue?.complete(queuedJob?.id, { ok: false, error: error.message }); };
+    const failed = (error, failedOptions = options) => {
+      const message = failTransferExecution(error, failedOptions);
+      operationQueue?.complete(queuedJob?.id, { ok: false, error: message });
+    };
     prioritizeFilesystemOperation();
     if (filesystemPending) { runQueuedOperation(queuedJob, () => executeTransferNow(options).catch(failed)); return; }
     if (options.validateSelection && !options.validateSelection()) throw new Error(t('Die gezogene Auswahl wurde geändert. Bitte erneut ziehen.'));
     if (options.validateSources && !options.validateSources()) throw new Error(t('Die Übertragungsauswahl ist nicht mehr gültig.'));
     if (host && state.realFilesystem && !Object.hasOwn(state.folders, options.sourcePath)) {
-      requestFilesystem({ type: 'filesystem-prepare', paths: [options.sourcePath], action: options.mode, recursive: false }, () => executeTransferNow(options).catch(failed));
+      requestFilesystem({ type: 'filesystem-prepare', paths: [options.sourcePath], action: options.mode, recursive: false, transfer: transferRequest(options), snapshotId: state.snapshotId }, () => executeTransferNow(options).catch(failed));
       return;
     }
     if (options.requiredDirectory && !options.requiredDirectoryVerified) {
       const source = options.validateSources ? { path: options.sourcePath, ids: options.ids } : undefined;
-      requestFilesystem({ type: 'filesystem-prepare', paths: [options.requiredDirectory], requiredDirectory: options.requiredDirectory, source, action: options.mode, recursive: false }, () => executeTransferNow({ ...options, requiredDirectoryVerified: true }).catch(failed));
+      const resumed = { ...options, requiredDirectoryVerified: true };
+      requestFilesystem({ type: 'filesystem-prepare', paths: [options.requiredDirectory], requiredDirectory: options.requiredDirectory, source, action: options.mode, recursive: false, transfer: transferRequest(options), snapshotId: state.snapshotId }, () => executeTransferNow(resumed).catch(error => failed(error, resumed)));
       return;
     }
     const plan = window.BitfroestTransfer.planTarget({ ...options, folders: state.folders });
     const targetDirectory = plan.directory;
+    const transfer = { ...transferRequest({ ...options, targetPath: targetDirectory }), ...(options.requiredDirectoryVerified ? { requiredDirectoryVerified: true } : {}) };
     const progressSources = new Map((state.folders[options.sourcePath] || []).filter(file => options.ids.includes(file.id)).map(file => [file.id, join(options.sourcePath, file.name)]));
     if (!transferJob) {
       transferJob = { id: `transfer-ui-${Date.now()}-${++transferSequence}`, queueJobId: queuedJob?.id, hostActive: false, phase: 'copying', context: Object.freeze({ mode: options.mode, sources: Object.freeze(options.ids.map(id => progressSources.get(id)).filter(Boolean)), target: targetDirectory }) };
@@ -2724,16 +2737,16 @@
       transferJob.phase = 'copying'; transferJob.currentPath = null; transferJob.currentTransferred = 0; transferJob.currentTotal = undefined; transferProgress();
     }
     const resume = () => executeTransferNow(options).catch(failed);
-    if (prepareFolders([plan.directories.length ? parent(plan.directories[0]) : targetDirectory], options.mode, resume, false)) { transferPreparationFailure = cancelled => options.onComplete?.({ confirmed: false, completed: 0, completedIds: [], errors: cancelled ? [] : [t('Dateioperation fehlgeschlagen; Verzeichnisse erneut eingelesen')], cancelled: Boolean(cancelled) }); return; }
+    if (prepareFolders([plan.directories.length ? parent(plan.directories[0]) : targetDirectory], options.mode, resume, false, false, transfer)) { transferPreparationFailure = cancelled => options.onComplete?.({ confirmed: false, completed: 0, completedIds: [], errors: cancelled ? [] : [t('Dateioperation fehlgeschlagen; Verzeichnisse erneut eingelesen')], cancelled: Boolean(cancelled) }); return; }
     const selectedFolders = (state.folders[options.sourcePath] || []).filter(file => options.ids.includes(file.id) && file.type === 'folder');
-    if (prepareFolders(selectedFolders.flatMap(file => [join(options.sourcePath, file.name), join(targetDirectory, plan.name || (plan.mask ? window.BitfroestTransfer.applyNameMask(file.name, plan.mask) : file.name))]), options.mode, resume)) { transferPreparationFailure = cancelled => options.onComplete?.({ confirmed: false, completed: 0, completedIds: [], errors: cancelled ? [] : [t('Dateioperation fehlgeschlagen; Verzeichnisse erneut eingelesen')], cancelled: Boolean(cancelled) }); return; }
+    if (prepareFolders(selectedFolders.flatMap(file => [join(options.sourcePath, file.name), join(targetDirectory, plan.name || (plan.mask ? window.BitfroestTransfer.applyNameMask(file.name, plan.mask) : file.name))]), options.mode, resume, true, false, transfer)) { transferPreparationFailure = cancelled => options.onComplete?.({ confirmed: false, completed: 0, completedIds: [], errors: cancelled ? [] : [t('Dateioperation fehlgeschlagen; Verzeichnisse erneut eingelesen')], cancelled: Boolean(cancelled) }); return; }
     transferPending = true;
     const planningJob = transferJob;
     planningJob.controller = new AbortController();
     let originalFolders = clone(state.folders);
     let planningFolders = clone(state.folders);
     let committedResult = { completed: 0, directories: 0, completedIds: [] };
-    const pendingTransfer = () => ({ mode: options.mode, sourcePath: options.sourcePath, sourceSide: options.sourceSide, verifyAfterCopy: options.verifyAfterCopy === true,
+    const pendingTransfer = () => ({ ...transfer, verifyAfterCopy: options.verifyAfterCopy === true,
       ...(options.requiredDirectory ? { requiredDirectory: targetDirectory } : {}),
       ids: options.ids.filter(id => !committedResult.completedIds.includes(id) && (originalFolders[options.sourcePath] || []).some(row => row.id === id)) });
     try {
@@ -2785,7 +2798,7 @@
             planningJob.cancelRequested = true; planningJob.controller.abort();
           }
           render(true); transferProgress();
-          if (!message.ok) reject(new Error(message.error || t('Dateioperation fehlgeschlagen; Verzeichnisse erneut eingelesen')));
+          if (!message.ok) reject(Object.assign(new Error(message.error || t('Dateioperation fehlgeschlagen; Verzeichnisse erneut eingelesen')), { diagnostic: message.diagnostic }));
           else resolve(!planningJob.cancelRequested);
         } };
         host.postMessage({ type: 'filesystem-apply', operationId: planningJob.id, transfer: planningJob.transfer, state: proposed });
@@ -2838,12 +2851,23 @@
     const { result, options } = completion;
     return result.errors[0] || ui`${count('file', result.completed)} ${options.mode === 'move' ? t('verschoben') : t('kopiert')}, ${result.skipped} übersprungen${result.cancelled ? ui([' · Abgebrochen']) : ''}`;
   }
-  function failTransferExecution(error, onComplete) {
+  function failTransferExecution(error, options) {
+    const message = error.code === 'DESTINATION_NOT_IN_SNAPSHOT' ? t('Der Zielordner „{path}“ fehlt im eingelesenen Dateibestand.', { path: displayPath(error.path) }) : t(error.message);
+    const { ids, ...transfer } = transferRequest(options);
+    const diagnostic = error.diagnostic || {
+      request: { type: 'transfer-planning', snapshotId: state.snapshotId, operationId: transferJob?.id || operationQueue?.active?.id, ids,
+        transfer: { ...transfer, sourcePaths: operationQueue?.active?.request.sources || transferSourcePaths(options) } },
+      panelPaths: state.panes.map(currentPath), timestamp: new Date().toISOString(), platform: nativePlatform,
+      ...(options.requiredDirectoryVerified ? { lastSuccessfulStep: 'Der Erweiterungshost hat die Zielordnervorbereitung bestätigt.' } : {}),
+      extensionVersion: decodeURIComponent(document.body.dataset.extensionVersion || ''), vscodeVersion: decodeURIComponent(document.body.dataset.vscodeVersion || ''),
+      failure: { name: error.name, message: error.message, code: error.code, path: error.path, stack: error.stack }
+    };
     const progress = finishTransferStatus('error');
-    if (progress) statusbar.finishProgress({ message: error.message, severity: window.BitfroestWorkbench.Severity.Error, progress });
+    if (progress) statusbar.finishProgress({ message, severity: window.BitfroestWorkbench.Severity.Error, progress });
     if (transferJob?.hostActive === false) { transferJob = null; transferProgress(); }
-    if (state.realFilesystem) { render(true); showOperationFailure(error.message, { notify: !operationQueue?.active }); } else toast(error.message);
-    onComplete?.({ completed: 0, completedIds: [], ...error.confirmedTransfer, confirmed: Boolean(error.confirmedTransfer), errors: [error.message], cancelled: false });
+    if (state.realFilesystem) { render(true); showOperationFailure(message, { diagnostic, notify: !operationQueue?.active }); } else toast(message);
+    options.onComplete?.({ completed: 0, completedIds: [], ...error.confirmedTransfer, confirmed: Boolean(error.confirmedTransfer), errors: [message], cancelled: false });
+    return message;
   }
   function finishTransfer(completion, confirmed, error) {
     const { result, options } = completion;
@@ -2965,13 +2989,14 @@
           index++;
           if (result.confirmed && !result.cancelled && !result.errors?.length && index < sourceGroups.length) {
             const group = sourceGroups[index];
-            executeTransfer({ ...options, sourcePath: group.sourcePath, ids: group.ids }).catch(error => failTransferExecution(error, onComplete));
+            const next = { ...options, sourcePath: group.sourcePath, ids: group.ids };
+            executeTransfer(next).catch(error => failTransferExecution(error, { ...next, onComplete }));
           } else onComplete?.(result);
         };
       }
       $('#modal').removeEventListener('close', cancelled);
       $('#modal').close();
-      executeTransfer(options).catch(error => failTransferExecution(error, onComplete));
+      executeTransfer(options).catch(error => failTransferExecution(error, { ...options, onComplete }));
       return false;
     });
     $('#value').dataset.transferName = mode;
@@ -4013,7 +4038,7 @@
     if ($('#modal').open) return;
     if (operationFailureInline && document.querySelector('.inline-rename')) return;
     if (operationErrorDialog) { operationFailure = null; operationErrorDialog = false; $('#modal-body').querySelector('.operation-error')?.remove(); }
-    else if (operationFailure) showOperationFailure(operationFailure);
+    else if (operationFailure) showOperationFailure(operationFailure, { diagnostic: operationFailureDiagnostic });
   });
   document.body.classList.toggle('browser-preview', !host);
   function browserMenu() { modal(t('Dateimanager-Befehle'), '<div class="browser-command-list">' + [[t('Seiten tauschen'), 'swap'], [t('Packen'), 'pack'], [t('Entpacken'), 'unpack'], [t('Mehrfach-Umbenennen'), 'rename'], [t('Alle markieren'), 'select-all'], [t('Auswahl umkehren'), 'invert'], [t('Auswahl aufheben'), 'clear'], [t('Beispieldaten zurücksetzen'), 'reset'], [t('Hilfe'), 'help']].map(([label, command]) => `<button type="button" data-browser-action="${command}">${label}</button>`).join('') + '</div>', null, null); }
@@ -4468,9 +4493,9 @@
           const { mode, path } = entry.sendTo;
           const validateSources = () => [...sendToSources].every(([id, signature]) =>
             JSON.stringify(state.folders[directory]?.find(row => row.id === id)) === signature);
-          executeTransfer({ sourceSide: side, sourcePath: directory, ids: [...sendToSources.keys()],
-            targetPath: path, requiredDirectory: path, mode, policy: 'ask', filter: '*.*', validateSources, showInStatus: true })
-            .catch(error => failTransferExecution(error));
+          const options = { sourceSide: side, sourcePath: directory, ids: [...sendToSources.keys()],
+            targetPath: path, requiredDirectory: path, mode, trigger: 'send-to', policy: 'ask', filter: '*.*', validateSources, showInStatus: true };
+          executeTransfer(options).catch(error => failTransferExecution(error, options));
           return;
         }
         run(action, false, action === 'close-tab' ? { tabId: clickedTabId } : selection);

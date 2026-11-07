@@ -45,20 +45,30 @@ const { validateSettings: validateSearchSettings } = require('./file-search');
 const { createConfigurationEditor } = require('./configuration-editor');
 const { createConfigurationSettings } = require('./configuration-settings');
 
-function operationDiagnostic(error, request, state) {
-  const fields = ['path', 'paths', 'target', 'archive', 'side', 'action', 'recursive', 'operationId', 'snapshotId', 'directory', 'ids', 'requestId', 'keyboard', 'inspectLocks'];
+function operationDiagnostic(error, request, state, sourceState = state) {
+  const fields = ['path', 'paths', 'target', 'archive', 'side', 'action', 'recursive', 'operationId', 'snapshotId', 'directory', 'ids', 'requestId', 'keyboard', 'inspectLocks', 'requiredDirectory'];
   const requestContext = { type: request.type };
   for (const key of fields) if (request[key] !== undefined) requestContext[key] = request[key];
   if (request.transfer && typeof request.transfer === 'object') {
     const transfer = {};
-    for (const key of ['mode', 'sourcePath', 'sourceSide', 'targetPath']) if (request.transfer[key] !== undefined) transfer[key] = request.transfer[key];
+    for (const key of ['mode', 'trigger', 'sourcePath', 'sourceSide', 'targetPath', 'requiredDirectory']) if (request.transfer[key] !== undefined) transfer[key] = request.transfer[key];
+    if (requestContext.snapshotId === undefined && typeof sourceState?.snapshotId === 'string') requestContext.snapshotId = sourceState.snapshotId;
+    const ids = Array.isArray(request.transfer.ids) ? request.transfer.ids.filter(id => typeof id === 'string') : [];
+    if (ids.length) {
+      requestContext.ids = ids;
+      const rows = typeof transfer.sourcePath === 'string' ? sourceState?.folders?.[transfer.sourcePath] : undefined;
+      if (Array.isArray(rows)) {
+        const names = new Map(rows.filter(row => typeof row?.name === 'string').map(row => [row.id, row.fsSource || `${transfer.sourcePath.replace(/\/$/, '')}/${row.name}`]));
+        transfer.sourcePaths = ids.map(id => names.get(id)).filter(Boolean);
+      }
+    }
     requestContext.transfer = transfer;
   }
   let sourceIdentityIncluded = false;
   const serialize = (failure, depth = 0) => {
     if (!failure || depth > 6) return undefined;
     const result = {};
-    for (const key of ['name', 'message', 'code', 'path', 'scanPhase', 'expectedDirectory', 'observedDirectory', 'changedFields', 'nativeCode', 'nativeStage', 'hresult', 'nativeCommand', 'nativeCommandId', 'operation', 'requestId', 'generation']) {
+    for (const key of ['name', 'message', 'code', 'path', 'dest', 'errno', 'syscall', 'scanPhase', 'expectedDirectory', 'observedDirectory', 'changedFields', 'nativeCode', 'nativeStage', 'hresult', 'nativeCommand', 'nativeCommandId', 'operation', 'requestId', 'generation']) {
       const value = failure[key];
       if (typeof value === 'string' || typeof value === 'number' || typeof value === 'bigint') result[key] = String(value).slice(0, 4000);
     }
@@ -78,7 +88,8 @@ function operationDiagnostic(error, request, state) {
     const index = Number.isInteger(pane?.tab) ? pane.tab : 0;
     return Array.isArray(pane?.tabs) && typeof pane.tabs[index] === 'string' ? pane.tabs[index].slice(0, 4096) : undefined;
   }).filter(Boolean);
-  return { request: requestContext, panelPaths, timestamp: new Date().toISOString(), platform: process.platform, architecture: process.arch, osRelease: os.release(), extensionVersion, vscodeVersion: vscode.version, runtimeVersion: process.version, failure: serialize(error) };
+  return { request: requestContext, panelPaths, timestamp: new Date().toISOString(), platform: process.platform, architecture: process.arch, osRelease: os.release(), extensionVersion, vscodeVersion: vscode.version, runtimeVersion: process.version, failure: serialize(error),
+    ...(request.transfer?.requiredDirectoryVerified === true ? { lastSuccessfulStep: 'Der Erweiterungshost hat die Zielordnervorbereitung bestätigt.' } : {}) };
 }
 const { catalog: shortcutCatalog, localizedCatalog, effectiveBindings } = require('./shortcut-settings');
 const { resolve: resolveShortcut } = require('./media/bitfroest-shortcuts');
@@ -801,7 +812,7 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
         .replace('<html lang="de">', () => `<html lang="de" data-startup-id="${currentStartup.id}" data-document-id="${documentId}">`)
         .replace('<!--POLICY-->', `<meta name="webview-nonce" content="${nonce}"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${panel.webview.cspSource} 'nonce-${nonce}'; style-src-attr 'unsafe-inline'; script-src 'nonce-${nonce}'; worker-src blob:; connect-src ${panel.webview.cspSource}; img-src ${panel.webview.cspSource} data:; font-src ${panel.webview.cspSource};"><style nonce="${nonce}">${icons.css(panel.webview)}</style>`)
         .replace('<body>', `<body data-vscode-context='{"preventDefaultContextMenuItems":true}' data-shortcut-settings="${encodeURIComponent(JSON.stringify(shortcutState()))}" data-favorite-settings="${encodeURIComponent(JSON.stringify(favoriteSettings()))}" data-startup-error="${encodeURIComponent(t('Die Dateiverwaltung konnte nicht gestartet werden. Diesen Tab schließen und erneut öffnen.'))}" data-language="${encodeURIComponent(language)}" data-file-settings="${encodeURIComponent(JSON.stringify(fileSettings()))}" data-column-settings="${encodeURIComponent(JSON.stringify(columnSettings()))}" data-icon-theme="${encodeURIComponent(JSON.stringify(icons.associations))}">`)
-        .replace('<body ', `<body data-platform="${process.platform}" data-extension-version="${encodeURIComponent(require('./package.json').version)}" data-initial-state="${JSON.stringify(savedState || null).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;')}" `)
+        .replace('<body ', `<body data-platform="${process.platform}" data-extension-version="${encodeURIComponent(extensionVersion)}" data-vscode-version="${encodeURIComponent(vscode.version || '')}" data-initial-state="${JSON.stringify(savedState || null).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;')}" `)
         .replace('<body ', `<body data-startup-elapsed="${elapsed}" data-startup-log-labels="${encodeURIComponent(JSON.stringify({ webviewStarted: t('Webview-Initialisierung läuft'), waitingStyle: t('Warten auf Stylesheet: {resource}'), requestedScript: t('Skript angefordert: {resource}'), loadedScript: t('Skript geladen: {resource}'), loadedStyle: t('Stylesheet geladen: {resource}'), failedScript: t('Skript konnte nicht geladen werden: {resource}'), failedStyle: t('Stylesheet konnte nicht geladen werden: {resource}'), initializing: t('Dateiverwaltung wird initialisiert'), settings: t('Einstellungen und Dateisymbole werden eingerichtet'), restore: t('Ordner und Einträge werden wiederhergestellt'), controls: t('Tastaturbedienung wird registriert'), rendering: t('Dateilisten werden aufgebaut') }))}" data-startup-resource="${encodeURIComponent(t('Ressource geladen: {resource}'))}" data-startup-labels="${encodeURIComponent(JSON.stringify({ close: t('Schließen'), details: t('Details'), select: t('Details auswählen'), copy: t('Fehlerdetails kopieren') }))}" `)
         .replace(/href="([a-z0-9-]+\.css)"/g, (_, name) => `href="${resource(name)}"`)
         .replace(/src="([a-z0-9-]+\.png)"/g, (_, name) => `src="${resource(name)}"`)
@@ -1805,6 +1816,7 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
         if (directoryJob && !isolatedNavigation && filesystemQueue !== navigationQueueTail) navigationReadBase = filesystemQueue;
         const execution = (isolatedNavigation ? Promise.resolve() : directoryJob ? navigationReadBase : filesystemQueue).then(async () => {
           const initialNavigationRevision = navigationRevision;
+          const sourceState = filesystemState;
           let ok = true;
           let cancelled = false;
           let operationError, blockedDeletion;
@@ -1900,7 +1912,7 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
             if ((job || directoryJob || refreshController) && error.name === 'AbortError') { cancelled = true; if (message.type === 'filesystem-delete') filesystemState = retainView(await loadView(savedState), savedState); }
             else {
             ok = false;
-            diagnostic = operationDiagnostic(error, message, message.state || filesystemState);
+            diagnostic = operationDiagnostic(error, message, message.state || filesystemState, sourceState);
             const detail = Number.isInteger(error.deletedCount) ? t('Löschen fehlgeschlagen nach {count} Einträgen: {error}', { count: error.deletedCount, error: renderOperationError(error.cause, t) }) : renderOperationError(error, t);
             operationError = detail;
             if (message.type === 'filesystem-delete' && error.deleteTarget) {

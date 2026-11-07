@@ -1042,6 +1042,79 @@ test('error details copy passes through actual host HTML to the public clipboard
   panel.dispose();
 });
 
+for (const stage of ['host preparation', 'webview transfer planning', 'host apply']) {
+  test(`Send to copies operation diagnostics for a failure during ${stage}`, async t => {
+    const initial = clipboardFixture();
+    initial.panes.forEach(pane => { pane.filter = ''; pane.sort = 'name'; });
+    const target = 'C:/favorite';
+    const error = Object.assign(new Error('An existing destination directory is required.'), { code: 'ENOTDIR', path: target });
+    const app = harness(t, { language: 'en', configuration: { 'favorites.entries': { Work: target } },
+      containsPath: value => value === target || value === 'C:/tmp' || value === 'C:/temp',
+      filesystemLoad: async () => initial, filesystemPrepare: async before => {
+        if (stage === 'host preparation') throw error;
+        return stage === 'host apply' ? { ...before, folders: { ...before.folders, [target]: [] } } : before;
+      }, filesystemApply: async (_before, proposed) => {
+        assert.equal(proposed.folders['C:/tmp'].length, 0);
+        throw Object.assign(new Error('Write denied'), { code: 'EACCES', path: target, syscall: 'rename' });
+      } });
+    await app.command('bitfroest.openPrototype');
+    const panel = app.panels[0];
+    const view = require('./support/webview.cjs').createApp(t, undefined, { html: panel.webview.html });
+    const button = label => [...view.document.querySelectorAll('[data-context-menu] button')].findLast(item =>
+      item.dataset.contextAction !== 'clipboard-copy' && item.querySelector('.menu-label')?.textContent === label);
+    view.row('a.txt').dispatchEvent(new view.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }));
+    const moving = stage === 'host apply';
+    for (const label of ['Send to', 'Work', moving ? 'Move' : 'Copy']) view.click(button(label));
+    const prepare = view.messages.find(message => message.type === 'filesystem-prepare');
+    assert.equal(prepare.requiredDirectory, target);
+    await panel.receive(prepare);
+    const result = panel.messages.findLast(message => message.type === 'filesystem-result');
+    assert.equal(result.ok, stage !== 'host preparation');
+    view.window.dispatchEvent(new view.window.MessageEvent('message', { data: result }));
+    await tick();
+    if (moving) {
+      await panel.receive(view.messages.find(message => message.type === 'filesystem-apply'));
+      const applyResult = panel.messages.findLast(message => message.type === 'filesystem-result');
+      assert.equal(applyResult.ok, false);
+      view.window.dispatchEvent(new view.window.MessageEvent('message', { data: applyResult }));
+    }
+    const details = view.document.querySelector('.operation-error-text');
+    assert.ok(details);
+    assert.match(details.value, /Trigger: send-to/);
+    assert.match(details.value, moving ? /Mode: move/ : /Mode: copy/);
+    assert.match(details.value, /Source path: C:\/tmp/);
+    assert.match(details.value, /C:\/tmp\/a\.txt/);
+    assert.match(details.value, /Target path: C:\/favorite/);
+    assert.match(details.value, /Required destination directory: C:\/favorite/);
+    assert.match(details.value, stage === 'host preparation' ? /Operation: filesystem-prepare/ : moving ? /Operation: filesystem-apply/ : /Operation: transfer-planning/);
+    assert.match(details.value, stage === 'host preparation' ? /Error code: ENOTDIR/ : moving ? /Error code: EACCES/ : /Error code: DESTINATION_NOT_IN_SNAPSHOT/);
+    assert.match(details.value, /Stack:/);
+    assert.match(details.value, /Extension version: 0\./);
+    assert.match(details.value, /VS Code version: \d+\./);
+    const summary = view.document.querySelector('.operation-error-intro').textContent;
+    if (stage === 'webview transfer planning') {
+      assert.match(details.value, /Last confirmed step: The extension host confirmed destination preparation\./);
+      assert.match(summary, /favorite.*is missing from the current file listing/);
+    } else if (stage === 'host preparation') {
+      assert.doesNotMatch(details.value, /Last confirmed step:/);
+      assert.match(summary, /An existing destination directory is required/);
+    } else {
+      assert.match(details.value, /Last confirmed step: The extension host confirmed destination preparation\./);
+      assert.match(details.value, /System call: rename/);
+      assert.match(summary, /Write denied/);
+    }
+    assert.equal(view.messages.some(message => message.type === 'filesystem-apply'), moving);
+    view.click(view.document.querySelector('[data-copy-error]'));
+    await panel.receive(view.messages.find(message => message.type === 'selection-io'));
+    assert.deepEqual(app.clipboardCalls.at(-1), { action: 'writeText', text: details.value });
+    view.click(view.document.querySelector('[data-report-error]'));
+    await panel.receive(view.messages.findLast(message => message.type === 'report-operation-error'));
+    const issue = new URL(app.calls.findLast(call => call.id === 'openExternal').args[0]);
+    assert.doesNotMatch(issue.searchParams.get('body'), /C:[\\/]|a\.txt|Stack:/);
+    panel.dispose();
+  });
+}
+
 test('the error dialog opens a GitHub issue draft with masked paths and URLs', async t => {
   const initial = clipboardFixture();
   initial.panes.forEach(pane => { pane.filter = ''; pane.sort = 'name'; });

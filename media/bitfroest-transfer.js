@@ -90,7 +90,9 @@
     const mask = !options.requiredDirectory && /[*?]/.test(leaf) ? leaf : null;
     const existing = path => Object.keys(folders).find(key => paths.identity(key) === paths.identity(path));
     const existingDirectory = existing(destination);
-    if (options.requiredDirectory && !existingDirectory) throw new Error('Ein vorhandener Zielordner ist erforderlich.');
+    if (options.requiredDirectory && !existingDirectory) {
+      throw Object.assign(new Error('Ein vorhandener Zielordner ist erforderlich.'), { code: 'DESTINATION_NOT_IN_SNAPSHOT', path: destination });
+    }
     const directoryTarget = existingDirectory || /[\\/]"?$/.test(raw) || selected.length > 1 && !mask;
     let directory = directoryTarget ? destination : parent(destination);
     let name = directoryTarget || mask ? undefined : leaf;
