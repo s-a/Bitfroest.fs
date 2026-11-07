@@ -1003,7 +1003,8 @@ function createProvider(options = {}) {
       snapshot = null;
       throw createOperationError('cleanup-failed', { cause: error, paths: [...backups.values()] });
     }
-    const reloadDirectories = baseline.visibleOnly
+    // The transfer planner still needs the loaded subtrees after a partial commit.
+    const reloadDirectories = baseline.visibleOnly && transfer?.checkpoint !== true
       ? [...new Set([...activeDirectories(after), ...(transfer?.requiredDirectory ? [transfer.requiredDirectory] : [])])]
       : [...baseline.loadedDirectories, ...newDirectories.map(item => item.path)];
     const next = inheritedPanes(await load({ directories: await availableViewDirectories(reloadDirectories.filter(directory => roots.includes(directory) || baseline.entries.get(identity(directory))?.root || desired.get(identity(directory))?.type === 'folder')), ...(baseline.visibleOnly ? { visibleOnly: true, deferredDirectories: deferredDirectories(after) } : {}) }), after);
@@ -1062,7 +1063,8 @@ function createProvider(options = {}) {
       if (entries.length !== ids.length || entries.some(entry => !entry)) throw new Error('Die Übertragungsauswahl ist nicht mehr gültig.');
       await validateEntries(snapshot, entries, settings.signal, false);
     }
-    if (settings.requiredDirectory !== undefined) await requireDirectory(settings.requiredDirectory);
+    const requiredDirectory = settings.requiredDirectory;
+    if (requiredDirectory !== undefined) await requireDirectory(requiredDirectory);
     const directories = settings.navigation
       ? await Promise.all((settings.directories || []).map(async directory => {
         const resolved = await resolveNavigation(directory);
@@ -1070,7 +1072,9 @@ function createProvider(options = {}) {
         return resolved.path;
       }))
       : (settings.directories || []).map(allowed);
-    const fresh = await load({ directories: settings.navigation ? directories : [...(snapshot.visibleOnly ? activeDirectories(before) : snapshot.loadedDirectories), ...directories], ...(settings.navigation ? { baseline: snapshot, refreshDirectories: directories, visibleDirectories: settings.visibleDirectories, getVisibleDirectories: settings.getVisibleDirectories, onDirectory: settings.onDirectory } : {}), recursiveDirectories: settings.recursive ? directories : [], signal: settings.signal, onProgress: settings.onProgress });
+    const retainedDirectories = snapshot.visibleOnly ? activeDirectories(before) : snapshot.loadedDirectories;
+    const requestedDirectories = settings.navigation ? directories : [...retainedDirectories, ...(requiredDirectory === undefined ? [] : [allowed(requiredDirectory)]), ...directories];
+    const fresh = await load({ directories: requestedDirectories, ...(settings.navigation ? { baseline: snapshot, refreshDirectories: directories, visibleDirectories: settings.visibleDirectories, getVisibleDirectories: settings.getVisibleDirectories, onDirectory: settings.onDirectory } : {}), recursiveDirectories: settings.recursive ? directories : [], signal: settings.signal, onProgress: settings.onProgress });
     const state = inheritedPanes(fresh, before);
     if (snapshot.state.snapshotId === fresh.snapshotId) snapshot.state = clone(state);
     return state;

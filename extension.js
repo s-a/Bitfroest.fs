@@ -1835,7 +1835,7 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
               let directories = message.type === 'filesystem-navigate' ? [message.path] : message.paths;
               if (!Array.isArray(directories) || directories.length > 128 || directories.some(target => typeof target !== 'string' || target.length > 4096 || !provider.canNavigate(target, message.type === 'filesystem-navigate'))) throw new Error(t('Ungültiger Datei- oder Ordnername.'));
               const requiredDirectory = message.type === 'filesystem-prepare' ? message.requiredDirectory : undefined;
-              if (requiredDirectory !== undefined && (directories.length !== 1 || requiredDirectory !== directories[0])) throw new Error(t('Ein vorhandener Zielordner ist erforderlich.'));
+              if (requiredDirectory !== undefined && (typeof requiredDirectory !== 'string' || requiredDirectory.length > 4096 || !provider.canNavigate(requiredDirectory))) throw new Error(t('Ein vorhandener Zielordner ist erforderlich.'));
               if (message.type === 'filesystem-navigate' && ![0, 1].includes(message.side)) throw new Error(t('Ungültiger Datei- oder Ordnername.'));
               if (message.type === 'filesystem-navigate') {
                 const resolution = await provider.resolveNavigation(message.path);

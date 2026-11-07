@@ -87,6 +87,8 @@ This recording shows the previous confirmation dialog style.
 | Folder under the cursor | Press Space | Mark the folder and calculate its recursive size when folder sizing on Space is enabled. |
 | Column separator | Double-click | Fit the column to its contents. |
 
+When moving a folder with **Send to**, an existing folder with the same name is merged with the source. Files that exist only in the destination are retained.
+
 ### Preview controls
 
 When the window regains focus, Bitfroest.fs checks the open folders and leaves unchanged views in place. X-Ray and Quick Diff keep their scroll position when the displayed file is updated.

@@ -60,6 +60,52 @@ test('Send to uses the generated host view and retains an off-screen destination
   panel.dispose();
 });
 
+test('Send to moves a folder into its existing namesake and preserves unrelated destination files', async t => {
+  const { createProvider } = require('../filesystem-provider');
+  const filesystem = require('node:fs/promises');
+  const directory = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'bitfroest-send-to-merge-'))).replaceAll('\\', '/');
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const left = directory + '/left', right = directory + '/right', favorite = directory + '/favorite';
+  const source = left + '/Project', target = favorite + '/Project';
+  for (const folder of [left, right, favorite, source, target]) fs.mkdirSync(folder);
+  fs.writeFileSync(source + '/shared.txt', 'updated');
+  fs.writeFileSync(source + '/new.txt', 'new');
+  fs.writeFileSync(target + '/shared.txt', 'old');
+  fs.writeFileSync(target + '/keep.txt', 'keep');
+  const saved = await createProvider({ roots: [left, right] }).load({ directories: [left, right], visibleOnly: true });
+  const app = harness(t, { language: 'en', startupRoots: [left, right], workspaceState: { fileManagerState: saved },
+    configuration: { 'favorites.entries': { Work: favorite } },
+    providerFactory: options => createProvider({ ...options, roots: [left, right], readDirectory: undefined, readAttributes: undefined, fs: filesystem }) });
+  await app.command('bitfroest.openPrototype');
+  const panel = app.panels[0];
+  const view = require('./support/webview.cjs').createApp(t, undefined, { html: panel.webview.html });
+  view.row('Project').dispatchEvent(new view.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }));
+  for (const label of ['Send to', 'Work', 'Move']) view.click([...view.document.querySelectorAll('[data-context-menu] button')].findLast(item => item.querySelector('.menu-label')?.textContent === label));
+  let received = panel.messages.length, sent = 0;
+  const exchange = async () => {
+    const outgoing = view.messages.slice(sent);
+    sent = view.messages.length;
+    for (const message of outgoing) if (['filesystem-prepare', 'filesystem-apply'].includes(message.type)) await panel.receive(message);
+    const incoming = panel.messages.slice(received);
+    received = panel.messages.length;
+    for (const data of incoming) view.window.dispatchEvent(new view.window.MessageEvent('message', { data }));
+    await tick();
+  };
+  const conflict = () => view.document.querySelector('[data-conflict-action="overwrite"]');
+  for (let i = 0; i < 8 && !conflict(); i++) await exchange();
+  assert.ok(conflict(), view.document.querySelector('.operation-error-text')?.value);
+  assert.equal(fs.readFileSync(target + '/new.txt', 'utf8'), 'new');
+  assert.equal(fs.readFileSync(target + '/shared.txt', 'utf8'), 'old');
+  view.click(conflict());
+  for (let i = 0; i < 8 && fs.existsSync(source); i++) await exchange();
+  assert.equal(fs.existsSync(source), false, view.document.querySelector('.operation-error-text')?.value);
+  assert.equal(fs.readFileSync(target + '/shared.txt', 'utf8'), 'updated');
+  assert.equal(fs.readFileSync(target + '/new.txt', 'utf8'), 'new');
+  assert.equal(fs.readFileSync(target + '/keep.txt', 'utf8'), 'keep');
+  assert.deepEqual(Array.from(view.state().panes, pane => pane.tabs[pane.tab]), [left, right]);
+  panel.dispose();
+});
+
 test('successful UNC navigation remembers only the share root and exposes it below the drives', async t => {
   const initial = clipboardFixture();
   const previousSystemDrive = process.env.SystemDrive;

@@ -1080,7 +1080,7 @@
   function prepareFolders(paths, action, resume, recursive = true, requireSnapshot = false, transfer) {
     if (!host || !state.realFilesystem) return false;
     const directories = [...new Set(paths)].filter(path => requireSnapshot && !Object.hasOwn(state.folders, path) || (state.unloadedFolders || []).some(unloaded => unloaded === path || recursive && unloaded.startsWith(`${path}/`)));
-    return directories.length ? requestFilesystem({ type: 'filesystem-prepare', paths: directories, action, recursive, ...(transfer ? { transfer, snapshotId: state.snapshotId } : {}) }, resume) : false;
+    return directories.length ? requestFilesystem({ type: 'filesystem-prepare', paths: directories, action, recursive, ...(transfer ? { transfer, requiredDirectory: transfer.requiredDirectory, snapshotId: state.snapshotId } : {}) }, resume) : false;
   }
   function receiveDirectoryMessage(data) {
     const request = navigationRequests.get(data.navigationRequestId) || (!data.navigationRequestId && !filesystemPending && data.type === 'filesystem-result' && navigationRequests.size === 1 ? navigationRequests.values().next().value : undefined);
@@ -2757,7 +2757,7 @@
       state.folders = originalFolders;
       planningJob.hostActive = true;
       planningJob.id = `transfer-checkpoint-${Date.now()}-${++transferSequence}`;
-      planningJob.transfer = pendingTransfer();
+      planningJob.transfer = { ...pendingTransfer(), checkpoint: true };
       filesystemPending = true; transferPending = false;
       render(true); transferProgress();
       return new Promise((resolve, reject) => {
