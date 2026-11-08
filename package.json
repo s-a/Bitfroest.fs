@@ -2,7 +2,7 @@
   "name": "bitfroest-fs-prototype",
   "displayName": "Bitfroest.fs (Beta)",
   "description": "%extension.description%",
-  "version": "0.0.54",
+  "version": "0.0.55",
   "preview": true,
   "publisher": "bitfroest",
   "author": "Stephan Ahlf",
@@ -3836,6 +3836,11 @@
   "extensionKind": [
     "ui"
   ],
+  "overrides": {
+    "monaco-editor": {
+      "dompurify": "3.4.17"
+    }
+  },
   "dependencies": {
     "@floating-ui/dom": "^1.8.0",
     "@vscode-elements/elements-lite": "0.4.0",

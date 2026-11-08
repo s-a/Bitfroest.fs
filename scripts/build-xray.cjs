@@ -12,6 +12,13 @@ const options = {
         .replace("import { languages } from '../../editor/editor.api2.js';", "import { IndentAction } from '../../editor/common/standalone/standaloneEnums.js'; const languages = { IndentAction };"),
       loader: 'js'
     }));
+  } }, { name: 'patched-monaco-sanitizer', setup(build) {
+    // Monaco imports a vendored copy independently of its npm dependency.
+    build.onResolve({ filter: /^\.\/dompurify\/dompurify\.js$/ }, args => (
+      /[\\/]monaco-editor[\\/]esm[\\/]vs[\\/]base[\\/]browser[\\/]domSanitize\.js$/.test(args.importer)
+        ? build.resolve('dompurify', { resolveDir: args.resolveDir, kind: args.kind })
+        : undefined
+    ));
   } }]
 };
 async function main() {

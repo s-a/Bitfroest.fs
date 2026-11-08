@@ -100,6 +100,8 @@ When the selected files have known sizes, the status bar can show overall byte p
 
 ### Preview controls
 
+X-Ray and Quick Diff use the bundled editor. The editor sanitizes the HTML it renders in the file manager webview.
+
 When the window regains focus, Bitfroest.fs checks the open folders and leaves unchanged views in place. X-Ray and Quick Diff keep their scroll position when the displayed file is updated.
 
 | Where | Gesture | Result |
