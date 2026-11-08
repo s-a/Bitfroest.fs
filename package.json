@@ -3837,8 +3837,12 @@
     "ui"
   ],
   "overrides": {
+    "minimatch@>=7 <11.0.1": "11.0.1",
     "monaco-editor": {
       "dompurify": "3.4.17"
+    },
+    "test-exclude": {
+      "glob": "14.0.2"
     }
   },
   "dependencies": {
