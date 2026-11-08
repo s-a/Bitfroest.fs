@@ -325,9 +325,9 @@ test('generated host HTML sorts the configured date column chronologically throu
   assert.equal(view.state().panes[0].columns.find(column => column.key === 'date').field, '[=file.writedate] [=file.writetime.h:m]');
   const order = () => [...section.querySelectorAll('[data-file-grid] [data-file-row][data-id]')].map(row => row.dataset.id);
   view.click(section.querySelector('[data-sort="date"]'));
-  assert.deepEqual(order(), ['aug', 'oct', 'nov']);
-  view.click(section.querySelector('[data-sort="date"]'));
   assert.deepEqual(order(), ['nov', 'oct', 'aug']);
+  view.click(section.querySelector('[data-sort="date"]'));
+  assert.deepEqual(order(), ['aug', 'oct', 'nov']);
   assert.equal(view.messages.some(message => message.type === 'filesystem-apply'), false);
 });
 

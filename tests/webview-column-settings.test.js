@@ -17,16 +17,34 @@ async function settled(app, side = 0) {
 const width = (app, key, side = 0) => app.grid(side).getColumn(key).getActualWidth();
 const resize = (app, key, value, side = 0) => app.grid(side).setColumnWidths([{ key, newWidth: value }], true, 'uiColumnResized');
 
-test('standard date headers sort complete dates and retain folder ordering', t => {
+test('standard date headers sort complete dates newest first and toggle on the next click', t => {
   const pane = () => ({ tabs: ['/left'], tab: 0, selected: [], cursor: null, filter: '', sort: 'name' });
   const files = [{ id: 'nov', name: 'November', type: 'folder', date: '02.11.2026 16:15:40' }, { id: 'aug', name: 'August', type: 'folder', date: '31.08.2026 19:09:55' }, { id: 'oct', name: 'October', type: 'folder', date: '30.10.2026 16:33:26' }];
   const catalog = require('../media/bitfroest-column-settings').catalog;
   const app = createApp(t, { version: 1, active: 0, panes: [pane(), pane()], folders: { '/left': files } }, { columnSettings: { sets: [{ id: 'standard', name: 'Standard', columns: catalog }], activeSet: 'standard' } });
   const order = () => { const ids = []; app.grid().forEachNodeAfterFilterAndSort(node => { if (files.some(file => file.id === node.id)) ids.push(node.id); }); return ids; };
   app.click(app.document.querySelector('[data-sort="date"]'));
-  assert.deepEqual(order(), ['aug', 'oct', 'nov']);
-  app.click(app.document.querySelector('[data-sort="date"]'));
   assert.deepEqual(order(), ['nov', 'oct', 'aug']);
+  app.click(app.document.querySelector('[data-sort="date"]'));
+  assert.deepEqual(order(), ['aug', 'oct', 'nov']);
+});
+
+test('the size header starts with the largest file and toggles on the next click', t => {
+  const app = createApp(t);
+  const clickSize = () => app.click(app.document.querySelector('.pane.active [data-sort="size"]'));
+  const fileSizes = () => {
+    const sizes = [];
+    app.grid().forEachNodeAfterFilterAndSort(node => {
+      if (node.data.size > 0) sizes.push(node.data.size);
+    });
+    return sizes;
+  };
+  const ascending = fileSizes().sort((a, b) => a - b);
+  assert.ok(ascending[0] < ascending.at(-1));
+  clickSize();
+  assert.deepEqual(fileSizes(), ascending.toReversed());
+  clickSize();
+  assert.deepEqual(fileSizes(), ascending);
 });
 
 test('Linux masks Windows-only fields in restored column preferences', t => {

@@ -84,7 +84,6 @@ test('each tab restores its selected file, search and sort direction', t => {
   const app = createApp(t);
   select(app, 'README.md');
   app.click(pane(app).querySelector('[data-sort="size"]'));
-  app.click(pane(app).querySelector('[data-sort="size"]'));
   for (const character of 'README') app.key(character);
   const originalCursor = app.state().panes[0].cursor;
   app.click(tab(app, 1)); select(app, 'architecture.md');

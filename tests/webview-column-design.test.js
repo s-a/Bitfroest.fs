@@ -30,7 +30,7 @@ test('column captions retain complete names and independent sort indicators in b
     assert.equal(pane.querySelector('[data-column="name"]').getAttribute('aria-sort'), 'descending');
     app.click(pane.querySelector('[data-sort="size"]'));
     assert.equal(pane.querySelector('[data-column="name"]').getAttribute('aria-sort'), 'none');
-    assert.equal(pane.querySelector('[data-column="size"]').getAttribute('aria-sort'), 'ascending');
+    assert.equal(pane.querySelector('[data-column="size"]').getAttribute('aria-sort'), 'descending');
   }
   assert.equal(app.messages.some(message => message.type === 'filesystem-apply'), false);
 });

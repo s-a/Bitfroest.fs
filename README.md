@@ -87,6 +87,7 @@ This recording shows the previous confirmation dialog style.
 | File row | Left-drag, with Shift to move | Copy by default. A folder row, the parent row (`..`) or an inactive tab can serve as the destination. |
 | File or folder row | Right-click → **Send to** | Choose a configured favorite, then select **Copy** or **Move**. The standard transfer dialog opens with the favorite as the destination. Review the selection and destination before confirming. |
 | Folder under the cursor | Press Space | Mark the folder and calculate its recursive size when folder sizing on Space is enabled. |
+| Date or Size column header | Click | Sort newest or largest first when switching to the column. Click the active header again to reverse the order. |
 | Column separator | Double-click | Fit the column to its contents. |
 
 When moving a folder with **Send to**, an existing folder with the same name is merged with the source. Files outside the transfer remain in the destination, including files added or replaced while it runs.

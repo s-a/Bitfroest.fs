@@ -74,7 +74,7 @@
         flex: column === filename && !record.manual.has(column.key) ? 1 : null,
         sortable: true,
         resizable: true,
-        sortingOrder: ['asc', 'desc'],
+        sortingOrder: column.key === 'date' || column.key === 'size' ? ['desc', 'asc'] : ['asc', 'desc'],
         sort: p.sort === column.key ? p.descending ? 'desc' : 'asc' : null,
         suppressKeyboardEvent: () => true,
         suppressHeaderKeyboardEvent: params => Boolean(params.event.target.closest('[data-history]')),
