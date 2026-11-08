@@ -261,7 +261,7 @@ Shortcuts apply to the file manager unless a different context is stated. They c
 | Copy and move conflicts | Compare files / compare internally | `Ctrl+F3` / `Ctrl+Shift+F3` |
 | Copy and move dialogs | Select file name parts | `F5` / `F6` in the destination field |
 | Copy and move dialogs | Move to the start of the file name | `Ctrl+Home` in the destination field |
-| Tools | Open a terminal in the current folder | `F9` |
+| Tools | Open a terminal in the current folder using its default profile | `F9` |
 | Tools | Show / hide the file manager | `Ctrl+Alt+Shift+F12` |
 | Tools | Configure favorites, columns, shortcuts and folder-tab storage | — |
 | Tools | Change the interface language | — |

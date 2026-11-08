@@ -13,5 +13,5 @@ bool ResolveDesktopAssociation(const std::wstring& path, bool inspect_only,
                                DesktopAssociationResult* result, DWORD* native_error,
                                const std::atomic<bool>* closed = nullptr);
 bool ResolveTrashView(bool inspect_only, const std::atomic<bool>& closed, DWORD* native_error);
-bool OpenDesktopTerminal(const std::wstring& path, bool inspect_only, std::wstring* parameters,
+bool OpenDesktopTerminal(const std::wstring& path, const std::wstring& encoded_command, bool inspect_only, std::wstring* parameters,
                          const std::atomic<bool>& closed, DWORD* native_error);

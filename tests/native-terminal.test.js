@@ -23,7 +23,7 @@ test('native terminal inspection preserves literal directories and never starts 
       const target = path.join(directory, name); await fs.mkdir(target);
       const result = await session.invoke('shell.openTerminal', { path: target, inspectOnly: true });
       assert.equal(result.requested, false);
-      assert.match(result.parameters, /^-w 0 nt -p "Windows PowerShell" -d "/);
+      assert.match(result.parameters, /^-w 0 nt -d "/);
       assert.ok(result.parameters.includes(target.replaceAll(';', '\\;')));
       assert.equal(result.parameters.at(-1), '"');
     }
@@ -31,6 +31,11 @@ test('native terminal inspection preserves literal directories and never starts 
       assert.throws(() => session.invoke('shell.openTerminal', request), { code: 'InvalidRequest' });
     }
     await assert.rejects(session.invoke('shell.openTerminal', { path: path.join(directory, 'missing'), inspectOnly: true }), { code: 'NotFound' });
+    const payload = 'VwByAGkAdABlAC0ATwB1AHQAcAB1AHQA';
+    const script = await session.invoke('shell.openTerminal', { path: directory, inspectOnly: true, encodedCommand: payload });
+    assert.equal(script.requested, false);
+    assert.ok(script.parameters.endsWith(' --appendCommandLine -- -NoExit -EncodedCommand ' + payload));
+    assert.throws(() => session.invoke('shell.openTerminal', { path: directory, inspectOnly: true, encodedCommand: 'a;nt' }), { code: 'InvalidRequest' });
     const file = path.join(directory, 'file'); await fs.writeFile(file, 'preserved');
     await assert.rejects(session.invoke('shell.openTerminal', { path: file, inspectOnly: true }));
     assert.equal(await fs.readFile(file, 'utf8'), 'preserved');

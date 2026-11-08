@@ -12,6 +12,7 @@ struct DesktopJob {
   const char* operation = "shell.openAssociated";
   std::shared_ptr<SessionState> state;
   std::wstring path;
+  std::wstring encoded_command;
   std::wstring parameters;
   bool inspect_only = false;
   DesktopAssociationResult result;
@@ -71,7 +72,7 @@ void ExecuteNative(DesktopJob* job) {
   try {
     if (job->state->closed) { job->error = "SessionClosed"; return; }
     const bool success = job->action == Action::Terminal
-        ? OpenDesktopTerminal(job->path, job->inspect_only, &job->parameters, job->state->closed, &job->native_error)
+        ? OpenDesktopTerminal(job->path, job->encoded_command, job->inspect_only, &job->parameters, job->state->closed, &job->native_error)
         : job->action == Action::Trash
         ? ResolveTrashView(job->inspect_only, job->state->closed, &job->native_error)
         : job->action == Action::Maximize
@@ -164,6 +165,26 @@ napi_value StartNativeDesktopAssociation(napi_env env, const std::shared_ptr<Ses
 napi_value StartNativeTerminal(napi_env env, const std::shared_ptr<SessionState>& state, napi_value request) {
   auto job = std::make_unique<DesktopJob>(); job->state = state; job->action = Action::Terminal; job->operation = "shell.openTerminal";
   if (!Parse(env, request, job.get())) return Fail(env, "InvalidRequest", "An absolute directory path and optional boolean inspectOnly are required.");
+  bool has_command = false;
+  if (napi_has_named_property(env, request, "encodedCommand", &has_command) != napi_ok) return Fail(env, "InvalidRequest", "Invalid terminal request.");
+  if (has_command) {
+    napi_value value;
+    size_t length = 0;
+    if (napi_get_named_property(env, request, "encodedCommand", &value) != napi_ok ||
+        napi_get_value_string_utf16(env, value, nullptr, 0, &length) != napi_ok || !length || length > 30000 || length % 4)
+      return Fail(env, "InvalidRequest", "encodedCommand must contain a Base64 command.");
+    std::vector<char16_t> buffer(length + 1);
+    if (napi_get_value_string_utf16(env, value, buffer.data(), buffer.size(), &length) != napi_ok)
+      return Fail(env, "InvalidRequest", "Invalid encodedCommand.");
+    for (size_t i = 0; i < length; ++i) {
+      const auto c = buffer[i];
+      if ((c >= u'A' && c <= u'Z') || (c >= u'a' && c <= u'z') ||
+          (c >= u'0' && c <= u'9') || c == u'+' || c == u'/') continue;
+      if (c != u'=' || i < length - 2 || (i == length - 2 && buffer[i + 1] != u'='))
+        return Fail(env, "InvalidRequest", "Invalid encodedCommand.");
+    }
+    job->encoded_command.assign(buffer.begin(), buffer.begin() + length);
+  }
   return Queue(env, std::move(job));
 }
 

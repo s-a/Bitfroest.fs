@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const { openTerminal } = require('../open-terminal');
 const path = require('node:path');
 
-test('Windows opens a PowerShell tab in window zero with a literal starting directory', async () => {
+test('Windows requests a default-profile tab with a literal starting directory', async () => {
   for (const directory of ['C:/', 'C:/folder with spaces', 'C:/a;&%name', '//server/share/folder']) {
     let call, closed = 0;
     const nativeApi = { openSession: () => ({ invoke: async (...args) => { call = args; return { requested: true }; }, close: () => closed++ }) };
@@ -11,6 +11,42 @@ test('Windows opens a PowerShell tab in window zero with a literal starting dire
     assert.deepEqual(call, ['shell.openTerminal', { path: path.win32.normalize(directory) }]);
     assert.equal(closed, 1);
   }
+});
+
+test('Windows encodes script paths and argument values as data before calling the native launcher', async () => {
+  const script = { path: "C:\\test ' ;$().ps1", args: [{ name: 'Mode', value: 'one;$()' }, { name: 'Force', value: true }, 'a b'] };
+  const nativeApi = { openSession: () => ({
+    invoke: async (operation, request) => {
+      assert.equal(operation, 'shell.openTerminal');
+      const command = Buffer.from(request.encodedCommand, 'base64').toString('utf16le');
+      for (const value of [script.path, 'one;$()', 'a b']) {
+        assert.ok(command.includes(Buffer.from(value, 'utf16le').toString('base64')));
+        assert.ok(!command.includes(value));
+      }
+      assert.match(command, /'Force'=\$true/);
+      return { requested: true };
+    }, close() {},
+  }) };
+  await openTerminal('C:/test', { platform: 'win32', nativeApi, script });
+});
+
+test('POSIX waits for the new terminal and passes each argument as a literal word', async () => {
+  let ready, closed, command;
+  let disposed = 0;
+  const terminal = { state: { shell: 'zsh' }, show() {} };
+  const run = openTerminal('/tmp', { platform: 'darwin', window: {
+    createTerminal: () => terminal,
+    onDidChangeTerminalShellIntegration(listener) { ready = listener; return { dispose() { disposed++; } }; },
+    onDidCloseTerminal(listener) { closed = listener; return { dispose() { disposed++; } }; },
+  }, script: { path: '/tmp/backup plan.sh', args: ["a'b", '$(date); x', ''] } });
+  ready({ terminal: {} });
+  closed({});
+  assert.equal(command, undefined);
+  terminal.shellIntegration = { executeCommand: line => { command = line; } };
+  ready({ terminal });
+  await run;
+  assert.equal(command, "'/tmp/backup plan.sh' 'a'\\''b' '$(date); x' ''");
+  assert.equal(disposed, 2);
 });
 
 test('launcher errors propagate without starting a fallback shell', async () => {
@@ -40,5 +76,16 @@ test('invalid paths and unsupported platforms never launch a process', async () 
   for (const directory of ['', 'relative', 'C:/bad\0path', 'zip:C:/file.zip!/']) {
     await assert.rejects(openTerminal(directory, { platform: 'win32', nativeApi: { openSession: () => assert.fail('unexpected launch') } }));
   }
-  await assert.rejects(openTerminal('/tmp', { platform: 'darwin' }), { code: 'ENOTSUPPORTED' });
+  await assert.rejects(openTerminal('/tmp', { platform: 'freebsd' }), { code: 'ENOTSUPPORTED' });
+});
+
+test('macOS opens the integrated terminal with the default profile and requested directory', async () => {
+  let shown = false;
+  await openTerminal('/tmp', { platform: 'darwin', window: {
+    createTerminal(options) {
+      assert.deepEqual(options, { cwd: '/tmp' });
+      return { show() { shown = true; } };
+    },
+  } });
+  assert.equal(shown, true);
 });
