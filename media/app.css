@@ -231,24 +231,7 @@ mark { color: var(--match-foreground, #000000); background: var(--match-backgrou
 #status-eta, #status-elapsed { min-width: 5ch; text-align: right; }
 #status-message, #status-activity { display: inline-flex; align-items: center; gap: var(--icon-text-gap); flex: 1 1 auto; min-width: 0; overflow: hidden; padding: 0 6px; white-space: nowrap; }
 #status-activity[hidden] { display: none; }
-#status-text-region:has(#status-activity:not([hidden])) #status-message[data-outcome="success"],
-#status-text-region:has(#status-activity:not([hidden])) #status-message[data-outcome="info"] { display: none; }
-#status-activity [data-status-text] { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-#status-activity [data-status-icon] { display: inline-flex; flex: 0 0 auto; }
-#status-activity, #status-message[data-outcome="info"] { color: var(--vscode-notificationsInfoIcon-foreground, var(--vscode-statusBar-foreground, var(--text))); }
-#status-message[data-outcome="warning"] { color: var(--vscode-notificationsWarningIcon-foreground, var(--vscode-statusBar-foreground, var(--text))); }
-#status-message[data-outcome="cancelled"] { color: var(--vscode-descriptionForeground, var(--vscode-statusBar-foreground, var(--text))); }
-#status-message [data-status-text] { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-#status-message [data-status-icon] { display: inline-flex; flex: 0 0 auto; }
-#status-message [data-status-icon] svg { width: var(--icon-size); height: var(--icon-size); }
-.statusbar button[data-status-icon] { appearance: none; border: 0; margin: 0; padding: 1px; background: transparent; color: inherit; cursor: pointer; align-items: center; font: inherit; }
-.statusbar button[data-status-icon]:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 1px; }
-.statusbar button[data-status-icon]:active { background: var(--vscode-toolbar-activeBackground); }
-.statusbar button[data-status-icon][data-copy-state="copied"] { color: var(--vscode-testing-iconPassed, var(--vscode-charts-green)); background: var(--vscode-toolbar-hoverBackground); }
-.statusbar button[data-status-icon][data-copy-state="error"] { color: var(--vscode-errorForeground); }
-.statusbar button[data-status-icon][data-copy-state="copied"]::after, .statusbar button[data-status-icon][data-copy-state="error"]::after { content: attr(data-copy-label); margin-left: 4px; }
-#status-message[data-outcome="success"] { color: var(--vscode-testing-iconPassed, var(--vscode-charts-green, inherit)); }
-#status-message[data-outcome="error"] { color: var(--vscode-editorWarning-foreground, var(--vscode-notificationsWarningIcon-foreground, var(--vscode-charts-yellow, inherit))); }
+#status-activity [data-status-text], #status-message [data-status-text] { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 #status-progress-area { position: absolute; inset: 0; min-width: 0; pointer-events: none; }
 .status-cancel-slot:has(> #status-cancel[hidden]), .statusbar #status-cancel[hidden] { display: none; }
 .status-cancel-slot { display: inline-flex; flex: 0 0 auto; width: auto; align-items: center; justify-content: center; }
@@ -273,34 +256,20 @@ body.vscode-high-contrast #status-progress-overall, body.vscode-high-contrast-li
   #status-progress-file { background: Highlight; forced-color-adjust: none; }
 }
 .statusbar [hidden] { display: none !important; }
+#activity-log-copy[data-copy-state="copied"] { color: var(--vscode-testing-iconPassed, var(--vscode-charts-green)); }
+#activity-log-copy[data-copy-state="error"] { color: var(--vscode-errorForeground); }
 .statusbar .statusbar-item { height: 22px; display: inline-flex; align-items: center; gap: 4px; padding: 0 5px; white-space: nowrap; font-size: inherit; }
 .statusbar button:hover, .statusbar button[aria-expanded="true"] { background: var(--vscode-statusBarItem-hoverBackground, var(--hover)); }
 .statusbar button:focus-visible { outline-color: var(--vscode-statusBarItem-focusBorder, var(--accent)); }
-.statusbar svg, .notifications-center svg { width: var(--icon-size); height: var(--icon-size); fill: currentColor; flex-shrink: 0; }
+.statusbar svg, #jobs-center svg { width: var(--icon-size); height: var(--icon-size); fill: currentColor; flex-shrink: 0; }
 .functionbar { display: flex; flex: 0 0 auto; flex-shrink: 0; align-items: center; height: 22px; min-width: 0; }
 body .statusbar > .right-items { flex-direction: row; flex-wrap: nowrap; }
-body > .notifications-center { top: 23px; bottom: auto; right: 7px; width: min(450px, calc(100vw - 14px)); max-height: min(400px, max(0px, calc(100vh - var(--notification-top, 23px) - 8px))); overflow-y: auto; color: var(--vscode-notifications-foreground, var(--text)); background: var(--vscode-notifications-background, var(--surface)); border: 1px solid var(--vscode-notifications-border, var(--line)); box-shadow: 0 2px 8px var(--vscode-widget-shadow, #0005); }
-body > .notifications-center[hidden] { display: none; }
-.notifications-center .notifications-center-header { background: var(--vscode-notificationsHeader-background, var(--surface)); color: var(--vscode-notificationsHeader-foreground, var(--text)); }
-.notifications-center-header-toolbar { display: flex; justify-content: flex-end; }
-.notifications-center button { display: inline-flex; align-items: center; }
-#notifications-list { overflow: auto; max-height: min(360px, calc(100vh - 80px)); overscroll-behavior: contain; }
-.notifications-center .notification-list-item { display: flex; align-items: flex-start; gap: 8px; padding: 10px 8px; border-bottom: 1px solid var(--vscode-notifications-border, var(--line)); }
-.notification-icon { display: flex; padding-top: 2px; }
-.notification-content { flex: 1; min-width: 0; }
-.notification-message { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
-.notification-list-item:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
-.notification-list-item[data-severity="3"] .notification-icon { color: var(--vscode-notificationsErrorIcon-foreground, var(--vscode-errorForeground)); }
-.notification-list-item[data-severity="2"] .notification-icon { color: var(--vscode-notificationsWarningIcon-foreground); }
-.notification-list-item[data-severity="1"] .notification-icon { color: var(--vscode-notificationsInfoIcon-foreground); }
-.notification-list-item.has-transfer .notification-message { display: none; }
-#notifications-empty { padding: 12px; margin: 0; color: var(--muted); }
-.notifications-center [hidden] { display: none !important; }
-.notifications-center .transfer-progress { position: static; width: auto; max-height: none; padding: 0; box-shadow: none; overflow: visible; }
+body > #jobs-center { top: 23px; bottom: auto; right: 7px; overflow-y: auto; color: var(--vscode-notifications-foreground, var(--text)); background: var(--vscode-notifications-background, var(--surface)); border: 1px solid var(--vscode-notifications-border, var(--line)); box-shadow: 0 2px 8px var(--vscode-widget-shadow, #0005); }
+body > #jobs-center[hidden] { display: none; }
+#jobs-center button { display: inline-flex; align-items: center; }
+#jobs-center [hidden] { display: none !important; }
 @media (prefers-reduced-motion: reduce) { body .statusbar, .monaco-progress-container .progress-bit { transition: none; animation: none; } }
 kbd { font: inherit; color: var(--muted); }
-#toast { position: fixed; bottom: 34px; left: 50%; transform: translateX(-50%); background: var(--vscode-notifications-background, var(--surface)); color: var(--vscode-notifications-foreground, var(--text)); border: 1px solid var(--vscode-notifications-border, var(--line)); padding: 6px 10px; max-width: 90%; box-shadow: 0 2px 8px var(--vscode-widget-shadow, #0005); opacity: 0; pointer-events: none; z-index: 30; }
-#toast.visible { opacity: 1; }
 dialog { width: 620px; max-width: calc(100vw - 32px); max-height: calc(100vh - 32px); background: var(--vscode-editorWidget-background, var(--surface)); color: var(--vscode-editorWidget-foreground, var(--text)); border: 1px solid var(--vscode-contrastBorder, var(--vscode-widget-border, var(--line))); border-radius: 0; padding: 0; box-shadow: 0 4px 16px var(--vscode-widget-shadow, #0005); }
 dialog::backdrop { background: var(--vscode-editorWidget-backdropBackground, #0005); }
 dialog.conflict-dialog[open] { display: flex; flex-direction: column; width: min(1040px, calc(100vw - 32px)); max-height: calc(100dvh - 24px); }
@@ -564,7 +533,7 @@ dialog button:disabled { color: var(--vscode-disabledForeground, var(--muted)); 
 .menu-empty { display: block; padding: 4px 8px; color: var(--vscode-descriptionForeground, var(--muted)); }
 .menu-check { margin-left: auto; }
 
-.main-menu, .menu-surface, .pathbar, .tab, .file-table, [data-cell], th, .statusbar, .notifications-center, .lister-heading, #header-actions {
+.main-menu, .menu-surface, .pathbar, .tab, .file-table, [data-cell], th, .statusbar, #jobs-center, .lister-heading, #header-actions {
   --icon-size: var(--icon-base-size);
 }
 
@@ -628,7 +597,6 @@ body .statusbar { height: var(--icon-row-size); min-height: var(--icon-row-size)
 .job-content { white-space:nowrap; flex-wrap:nowrap; cursor:pointer; }
 .job-status-message,.job-status-activity { display:inline-flex; align-items:center; flex:1 1 auto; min-width:0; overflow:hidden; white-space:nowrap; gap:var(--icon-text-gap); }
 .job-status-activity[hidden] { display:none; }
-.job-status-message [data-status-icon],.job-status-activity [data-status-icon] { display:inline-flex; flex-shrink:0; }
 .job-status-message [data-status-text],.job-status-activity [data-status-text] { display:inline-flex; flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .job-status-metrics { gap:8px; font-variant-numeric:tabular-nums; }
 .job-status-percent { min-width:9ch; text-align:right; }

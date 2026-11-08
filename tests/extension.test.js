@@ -542,13 +542,13 @@ test('generated host HTML suppresses file-action context menus while retaining n
   address.dispatchEvent(new view.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }));
   const copy = view.messages.filter(message => message.type === 'selection-io').at(-1);
   assert.ok(copy);
-  assert.notEqual(view.document.querySelector('#status-message').dataset.outcome, 'success');
+  assert.notEqual((await view.copyActivityLog()).currentOutcome, 'success');
   await panel.receive(copy);
   assert.deepEqual(app.clipboardCalls.at(-1), { action: 'writeText', text: copy.text });
   const confirmation = panel.messages.find(message => message.type === 'selection-io-result' && message.requestId === copy.requestId);
   assert.equal(confirmation.ok, true);
   view.window.dispatchEvent(new view.window.MessageEvent('message', { data: confirmation }));
-  assert.match(view.document.querySelector('#status-message').textContent, /Pfad in Zwischenablage kopiert/);
+  assert.match((await view.copyActivityLog()).currentMessage, /Pfad in Zwischenablage kopiert/);
   for (const pane of view.document.querySelectorAll('.pane')) {
     assert.equal(pane.querySelector('[data-parent] .filename').textContent, '..');
     assert.equal(pane.querySelector('[data-parent] [data-icon-reviewed]'), null);
@@ -954,7 +954,7 @@ test('Git Diff opens clean files against HEAD through the public diff command', 
   assert.equal(call.args[3].preview, false);
   assert.equal(panel.messages.at(-1).ok, true);
   view.window.dispatchEvent(new view.window.MessageEvent('message', { data: panel.messages.at(-1) }));
-  assert.equal(view.document.querySelector('#status-message').textContent, 'Git-Diff geöffnet.');
+  assert.equal((await view.copyActivityLog()).currentMessage, 'Git-Diff geöffnet.');
 });
 
 test('Git Diff reports unavailable integration and command errors in the existing status protocol', async t => {
@@ -1138,7 +1138,7 @@ test('error details copy passes through actual host HTML to the public clipboard
   assert.equal(response.ok, true);
   view.window.dispatchEvent(new view.window.MessageEvent('message', { data: response }));
   assert.equal(view.document.querySelector('.operation-error-text').value, text);
-  assert.equal(view.document.querySelector('#status-message').textContent, 'Fehlerdetails kopiert.');
+  assert.equal((await view.copyActivityLog()).currentMessage, 'Fehlerdetails kopiert.');
   panel.dispose();
 });
 
@@ -1352,11 +1352,11 @@ test('native editor action reports a correlated completion only after the editor
     const view = require('./support/webview.cjs').createApp(t, initial, { html: panel.webview.html });
     view.action('edit'); const request = view.messages.find(message => message.type === 'edit'); assert.ok(request);
     assert.match(request.requestId, /^ui-action-\d+$/);
-    assert.equal(view.document.querySelector('#status-message').dataset.outcome, 'info');
+    assert.equal((await view.copyActivityLog()).currentOutcome, 'info');
     await panel.receive(request);
     const reply = panel.messages.find(message => message.type === 'ui-action-result' && message.requestId === request.requestId); assert.ok(reply);
     view.window.dispatchEvent(new view.window.MessageEvent('message', { data: reply }));
-    assert.equal(view.document.querySelector('#status-message').dataset.outcome, fail ? 'error' : 'success');
+    assert.equal((await view.copyActivityLog()).currentOutcome, fail ? 'error' : 'success');
     panel.dispose();
   }
 });
@@ -2192,7 +2192,7 @@ test('Help links in generated host HTML open fixed product destinations', async 
     const result = panel.messages.findLast(message => message.type === 'ui-action-result' && message.requestId === request.requestId);
     assert.equal(result.ok, true);
     view.window.dispatchEvent(new view.window.MessageEvent('message', { data: result }));
-    assert.equal(view.document.querySelector('#status-message').dataset.outcome, 'success');
+    assert.equal((await view.copyActivityLog()).currentOutcome, 'success');
   }
   const count = app.calls.filter(call => call.id === 'openExternal').length;
   for (const id of ['unknown', '__proto__', 'constructor']) await panel.receive({ type: 'open-help-link', id, requestId: 'ui-action-99' });
@@ -2225,7 +2225,7 @@ test('failed license opening reports the actual failure instead of a green comma
   const result = panel.messages.find(message => message.type === 'ui-action-result' && message.requestId === request.requestId); assert.ok(result);
   assert.equal(result.ok, false);
   view.window.dispatchEvent(new view.window.MessageEvent('message', { data: result }));
-  assert.equal(view.document.querySelector('#status-message').dataset.outcome, 'error');
+  assert.equal((await view.copyActivityLog()).currentOutcome, 'error');
 });
 
 test('licenses command and Help in generated host HTML open the same readonly credits', async t => {
@@ -2953,7 +2953,7 @@ test('fresh and restored views authorize existing stylesheets inside their resou
     const mediaRoot = path.join(root, 'media');
     assert.ok(options.localResourceRoots.some(uri => uri.fsPath === mediaRoot));
     const links = [...dom.window.document.querySelectorAll('link[rel="stylesheet"]')];
-    assert.equal(links.length, 10);
+    assert.equal(links.length, 8);
     const elementsRoot = path.join(root, 'node_modules', '@vscode-elements', 'elements-lite', 'components');
     assert.ok(options.localResourceRoots.some(uri => uri.fsPath === elementsRoot));
     const transferCss = fs.readFileSync(path.join(mediaRoot, 'transfer-controls.css'), 'utf8');
@@ -2964,12 +2964,7 @@ test('fresh and restored views authorize existing stylesheets inside their resou
       assert.ok(imported.startsWith(elementsRoot + path.sep));
       assert.ok(fs.statSync(imported).size > 0);
     }
-    const notyfRoot = path.join(root, 'node_modules', 'notyf');
-    assert.ok(options.localResourceRoots.some(uri => uri.fsPath === notyfRoot));
-    assert.ok(links.some(link => link.getAttribute('href') === `webview-resource:${path.join(notyfRoot, 'notyf.min.css')}`));
-    const notyfScript = [...dom.window.document.querySelectorAll('script[src]')].find(script => script.getAttribute('src').endsWith('/notyf/notyf.min.js') || script.getAttribute('src').endsWith('\\notyf\\notyf.min.js'));
-    assert.ok(notyfScript?.nonce && policy.includes(`'nonce-${notyfScript.nonce}'`));
-    for (const name of ['workbench-vendor.css', 'codicons.css', 'app.css', 'file-search.css', 'xray-editor.css', 'bitfroest-notifications.css', 'transfer-controls.css', 'dialog-heading.css', 'path-field.css']) {
+    for (const name of ['workbench-vendor.css', 'codicons.css', 'app.css', 'file-search.css', 'xray-editor.css', 'transfer-controls.css', 'dialog-heading.css', 'path-field.css']) {
       assert.ok(links.some(link => link.getAttribute('href') === `webview-resource:${path.join(mediaRoot, name)}`));
       assert.ok(fs.statSync(path.join(mediaRoot, name)).size > 0);
     }
@@ -4230,7 +4225,7 @@ test('structured recovery failures reach notifications and the webview in the in
   const view = require('./support/webview.cjs').createApp(t, real, { html: app.panels[0].webview.html });
   view.window.dispatchEvent(new view.window.MessageEvent('message', { data: result }));
   assert.ok(view.document.querySelector('.operation-error-text').value.includes(recoveryPath));
-  assert.match(view.document.querySelector('#status-message').textContent, /Recovery is incomplete/);
+  assert.match((await view.copyActivityLog()).currentMessage, /Recovery is incomplete/);
 });
 
 test('workspace state is restored into the HTML safely and saved serially', async t => {
@@ -5671,7 +5666,7 @@ test('language picker marks the VS Code default and reloads host HTML with the s
   const view = require('./support/webview.cjs').createApp(t, undefined, { html: app.panels[0].webview.html });
   assert.equal(view.document.documentElement.lang, 'en');
   assert.equal(view.document.querySelector('#language-toggle').getAttribute('aria-label'), 'Switch language');
-  assert.equal(view.document.querySelector('#notifications-toggle').getAttribute('aria-label'), 'Notifications (0)');
+  assert.equal(view.document.querySelector('#activity-log-copy').getAttribute('aria-label'), 'Copy activity log');
   assert.ok([...view.document.scripts].every(script => script.nonce));
   await app.panels[0].receive({ type: 'app-ready' });
   await app.command('bitfroest.chooseLanguage');
@@ -6015,14 +6010,13 @@ test('header actions and typed status operate in generated host HTML with its CS
   assert.equal(header.querySelector('#functionbar').closest('[role="menubar"]'), null);
   const language = header.querySelector('#language-toggle'); language.focus(); view.key('Enter', {}, language);
   assert.equal(view.messages.at(-1).type, 'choose-language');
-  const toggle = header.querySelector('#notifications-toggle'); view.click(toggle);
-  assert.equal(toggle.getAttribute('aria-expanded'), 'true');
-  view.key('Escape', {}, view.document.activeElement);
-  assert.equal(view.document.activeElement, toggle);
+  assert.ok(header.querySelector('#activity-log-copy'));
+  assert.equal(view.document.querySelector('#notifications-center'), null);
   const status = view.document.querySelector('#statusbar');
   assert.equal(status.querySelector('#functionbar'), null);
   view.action('select-all');
-  assert.ok(status.querySelector('[data-outcome="success"] [data-status-icon]'));
+  assert.equal((await view.copyActivityLog()).messages.at(-1).outcome, 'success');
+  assert.equal(status.querySelector('#status-message').hidden, true);
   view.action('copy');
   view.document.querySelector('#modal-form').dispatchEvent(new view.window.Event('submit', { bubbles: true, cancelable: true }));
   await tick();

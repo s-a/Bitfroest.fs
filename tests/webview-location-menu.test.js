@@ -54,7 +54,7 @@ test('Escape dismisses the pending drive menu and ignores a late host reply', t 
   assert.ok(app.document.querySelector('[data-favorite-toggle]'));
 });
 
-test('a missing drive capability leaves the favorites menu usable and reports the failure in the status bar', t => {
+test('a missing drive capability leaves the favorites menu usable and reports the failure in the status bar', async t => {
   const app = createApp(t, fixture(), { platform: 'win32', language: 'en' });
   app.click(app.document.querySelector('[data-favorites]'));
   const request = app.messages.find(message => message.type === 'location-destinations');
@@ -62,7 +62,7 @@ test('a missing drive capability leaves the favorites menu usable and reports th
   send(app, { ...request, type: 'location-destinations-result', drives: [], recent: [], drivesUnavailable: true });
   assert.ok(app.document.querySelector('[data-favorite-toggle]'));
   assert.equal(app.document.querySelector('[data-favorite-menu] .menu-empty'), null);
-  assert.equal(app.document.querySelector('#status-message').textContent, 'Could not list drives.');
+  assert.equal((await app.copyActivityLog()).currentMessage, 'Could not list drives.');
 });
 
 for (const side of [0, 1]) for (const kind of ['plain', 'git']) test(`${kind} location menu opens outside the grid in panel ${side + 1}`, t => {

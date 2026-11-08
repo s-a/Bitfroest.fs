@@ -148,7 +148,7 @@ test('refresh activity names the busy panels and ends after their actual Git rep
   }
 });
 
-test('navigation activity changes to metadata reading after names without replacing errors', t => {
+test('navigation activity changes to metadata reading after names without replacing errors', async t => {
   const app = createApp(t, fixture());
   finishGit(app, app.messages.find(message => message.type === 'git-status'));
   app.click(app.row('child')); app.key('Enter');
@@ -158,11 +158,11 @@ test('navigation activity changes to metadata reading after names without replac
   assert.ok(activity(app).textContent.includes('Dateieigenschaften lesen'));
   assert.ok(activity(app).textContent.includes('/left/child'));
   send(app, { type: 'filesystem-result', navigationRequestId: request.navigationRequestId, ok: false, error: 'Read failed' });
-  assert.equal(app.document.querySelector('#status-message').textContent, 'Read failed');
-  assert.equal(app.document.querySelector('#status-message').dataset.outcome, 'error');
+  assert.equal((await app.copyActivityLog()).currentMessage, 'Read failed');
+  assert.equal((await app.copyActivityLog()).currentOutcome, 'error');
   finishGit(app, app.messages.filter(message => message.type === 'git-status').at(-1));
   assert.equal(activity(app).hidden, true);
-  assert.equal(app.document.querySelector('#status-message').textContent, 'Read failed');
+  assert.equal((await app.copyActivityLog()).currentMessage, 'Read failed');
 });
 
 test('refresh counts actual metadata steps in the overall plan and keeps current work separate', t => {
@@ -443,7 +443,7 @@ test('activity does not change status ownership and yields to operation progress
   const plan = app.window.BitfroestProgress.statusPlan({ id: 'read', startedAt: 0, steps: ['read'] }); plan.start('read');
   bar.setActivity('Read directory', plan.snapshot());
   assert.equal(bar.version, version);
-  assert.equal(app.document.querySelector('#status-message').textContent, 'Failure');
+  assert.equal(app.document.querySelector('#status-message').hidden, true);
   assert.equal(activity(app).hidden, false);
   const copy = app.window.BitfroestProgress.statusPlan({ id: 'copy', startedAt: 0, steps: ['copy'] }); copy.start('copy');
   bar.setProgress({ title: 'Copying', progress: copy.snapshot() });
@@ -451,7 +451,7 @@ test('activity does not change status ownership and yields to operation progress
   assert.equal(app.document.querySelector('#status-message').textContent, 'Copying');
   copy.complete('copy'); bar.finishProgress({ message: 'Done', outcome: 'success', progress: copy.finishedSnapshot() });
   assert.equal(activity(app).hidden, false);
-  assert.equal(app.document.querySelector('#status-message').textContent, 'Done');
+  assert.equal(app.document.querySelector('#status-message').hidden, true);
   bar.reset(); assert.equal(activity(app).hidden, true); assert.equal(activity(app).textContent, '');
   bar.dispose();
 });
@@ -490,14 +490,14 @@ test('Git elapsed time covers the complete request while open planning leaves ET
 });
 
 
-test('refresh leaves existing status text intact through filesystem completion', t => {
+test('refresh leaves the previous activity log message intact through filesystem completion', async t => {
   const app = createApp(t, fixture());
   finishGit(app, app.messages.find(message => message.type === 'git-status'));
   send(app, { type: 'open-trash-result', ok: true });
-  const status = app.document.querySelector('#status-message'), previous = status.textContent;
+  const previous = (await app.copyActivityLog()).currentMessage;
   assert.ok(previous);
   app.action('refresh');
-  assert.equal(status.textContent, previous);
+  assert.equal((await app.copyActivityLog()).currentMessage, previous);
   send(app, { type: 'filesystem-result', ok: true, state: app.state() });
-  assert.equal(status.textContent, previous);
+  assert.equal((await app.copyActivityLog()).currentMessage, previous);
 });

@@ -22,15 +22,14 @@ test('single-entry counts use the correct English and German nouns without chang
   }
 });
 
-test('recovery details remain selectable until explicit dismissal', t => {
+test('recovery details remain selectable until explicit dismissal', async t => {
   const state = fixture(), app = createApp(t, state, { language: 'en' });
   const callbacks = [];
   app.window.setTimeout = callback => { callbacks.push(callback); return callbacks.length; };
   const detail = 'Recovery incomplete. C:/tmp/<Neuer Ordner>&".stage/content';
   response(app, state, { error: detail });
-  assert.equal(app.document.querySelector('#toast').classList.contains('visible'), false);
-  assert.equal(app.document.querySelector('#toast').textContent, '');
-  assert.equal(app.document.querySelector('#status-message').textContent, detail);
+  assert.equal(app.document.querySelector('#toast'), null);
+  assert.equal((await app.copyActivityLog()).currentMessage, detail);
   callbacks.forEach(callback => callback());
   assert.equal(app.document.querySelector('#modal').open, true);
   const text = app.document.querySelector('.operation-error-text');
@@ -59,12 +58,12 @@ test('a failed operation preserves an existing creation form and its focus', t =
   assert.ok(app.document.querySelector('.operation-error-text'));
 });
 
-test('copy and cut have distinct feedback and temporary cut markers', t => {
+test('copy and cut have distinct feedback and temporary cut markers', async t => {
   const app = createApp(t, fixture(), { language: 'en' }); choose(app);
   app.key('x', { ctrlKey: true });
   const cut = app.messages.find(message => message.type === 'clipboard-write');
   clipboardResponse(app, cut, { paths: ['C:/tmp/Neuer Ordner.txt'], mode: 'move', token: 'cut', source: 'system' });
-  assert.match(app.document.querySelector('#status-message').textContent, /cut|move/i);
+  assert.match((await app.copyActivityLog()).currentMessage, /cut|move/i);
   assert.equal(app.row('Neuer Ordner.txt').classList.contains('is-cut'), true);
   assert.match(app.row('Neuer Ordner.txt').getAttribute('aria-label'), /move/i);
   assert.ok(app.row('Neuer Ordner.txt').querySelector('.cut-marker'));
@@ -72,7 +71,7 @@ test('copy and cut have distinct feedback and temporary cut markers', t => {
   app.key('c', { ctrlKey: true });
   const copy = app.messages.filter(message => message.type === 'clipboard-write').at(-1);
   clipboardResponse(app, copy, { paths: ['C:/tmp/Neuer Ordner.txt'], mode: 'copy', token: 'copy', source: 'system' });
-  assert.match(app.document.querySelector('#status-message').textContent, /copied/i);
+  assert.match((await app.copyActivityLog()).currentMessage, /copied/i);
   assert.equal(app.row('Neuer Ordner.txt').classList.contains('is-cut'), false);
 });
 
@@ -103,14 +102,14 @@ test('confirmed cut moves clear their temporary marker while failed moves retain
   }
 });
 
-test('late clipboard-write acknowledgements cannot restore an older cut selection', t => {
+test('late clipboard-write acknowledgements cannot restore an older cut selection', async t => {
   const app = createApp(t, fixture(), { language: 'en' }); choose(app);
   app.key('x', { ctrlKey: true }); app.key('c', { ctrlKey: true });
   const [cut, copy] = app.messages.filter(message => message.type === 'clipboard-write');
   clipboardResponse(app, copy, { paths: ['C:/tmp/Neuer Ordner.txt'], mode: 'copy', token: 'new', source: 'system' });
   clipboardResponse(app, cut, { paths: ['C:/tmp/Neuer Ordner.txt'], mode: 'move', token: 'old', source: 'system' });
   assert.equal(app.row('Neuer Ordner.txt').classList.contains('is-cut'), false);
-  assert.match(app.document.querySelector('#status-message').textContent, /copied/i);
+  assert.match((await app.copyActivityLog()).currentMessage, /copied/i);
 });
 
 test('a stale dialog-close event cannot steal focus from a failed inline rename', t => {

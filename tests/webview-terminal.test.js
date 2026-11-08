@@ -23,16 +23,16 @@ test('terminal actions preserve text entry and modal dialogs', t => {
   assert.equal(app.messages.some(message => message.type === 'open-terminal'), false);
 });
 
-test('terminal failures appear in the status bar without a modal', t => {
+test('terminal failures are recorded in the activity log without a modal', async t => {
   const app = createApp(t);
   app.document.querySelector('.list').focus(); app.key('F9');
   const request = app.messages.find(message => message.type === 'open-terminal'); assert.ok(request);
   app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'ui-action-result', requestId: request.requestId, ok: false, error: 'Terminal unavailable' } }));
-  assert.match(app.document.body.textContent, /Terminal unavailable/);
+  assert.equal((await app.copyActivityLog()).currentMessage, 'Terminal unavailable');
   assert.equal(app.document.querySelector('#modal').open, false);
 });
 
-test('F9 follows the active pane and reports unsupported platforms only on invocation', t => {
+test('F9 follows the active pane and reports unsupported platforms only on invocation', async t => {
   const app = createApp(t, undefined, { platform: 'darwin' });
   assert.equal(app.messages.some(message => message.type === 'open-terminal'), false);
   app.document.querySelector('.list').focus(); app.key('Tab'); app.key('F9');
@@ -40,6 +40,6 @@ test('F9 follows the active pane and reports unsupported platforms only on invoc
   assert.equal(app.state().active, 1);
   assert.equal(request.path, app.state().panes[1].tabs[app.state().panes[1].tab]);
   app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'ui-action-result', requestId: request.requestId, ok: false, unsupported: true, error: 'Unsupported terminal' } }));
-  assert.equal(app.document.querySelector('#status-message').textContent, 'Unsupported terminal');
+  assert.equal((await app.copyActivityLog()).currentMessage, 'Unsupported terminal');
   assert.equal(app.document.querySelector('#modal').open, false);
 });

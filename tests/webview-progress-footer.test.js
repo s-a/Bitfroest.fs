@@ -10,20 +10,24 @@ test('copied status logs retain native clipboard diagnostics', t => {
   const app = createApp(t, { version: 1, realFilesystem: true, snapshotId: 'clipboard-log', active: 0, panes: [pane('/left'), pane('/right')], folders: { '/left': [], '/right': [] } });
   app.action('refresh');
   app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'clipboard-result', requestId: 'clipboard-native', ok: false, error: 'Native clipboard failure', diagnostic: { failure: { nativeCode: '-2147024809', operation: 'clipboard.writeFiles' } } } }));
-  app.click(app.document.querySelector('#status-activity [data-status-icon], #status-message [data-status-icon]'));
+  const button = app.document.querySelector('#activity-log-copy');
+  assert.ok(button, 'the header exposes the activity log copy action');
+  assert.equal(app.document.querySelector('#notifications-center'), null);
+  assert.equal(app.document.querySelector('.statusbar [data-status-icon]'), null);
+  app.click(button);
   const request = app.messages.findLast(message => message.type === 'status-log-copy'); assert.ok(request);
   const entry = JSON.parse(request.text).context.hostEvents.find(event => event.requestId === 'clipboard-native'); assert.ok(entry);
   assert.equal(entry.diagnostic.failure.nativeCode, '-2147024809');
   assert.equal(entry.diagnostic.failure.operation, 'clipboard.writeFiles');
 });
 
-test('footer icon copies the message and execution log and confirms only a successful reply', async t => {
+test('header bell copies the message and execution log and confirms only a successful reply', async t => {
   const p = path => ({ tabs: [path], tab: 0, selected: [], cursor: null, filter: '', sort: 'name' });
   const app = createApp(t, { version: 1, realFilesystem: true, snapshotId: 'log', active: 0, panes: [p('/left'), p('/right')], folders: { '/left': [], '/right': [] } });
   app.action('refresh');
   const refresh = app.messages.findLast(message => message.type === 'filesystem-refresh');
   app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-refresh-step', refreshRequestId: refresh.refreshRequestId, path: '/left', phase: 'metadata', completed: 50, total: 100, emittedAt: 123 } }));
-  const icon = app.document.querySelector('#status-activity [data-status-icon], #status-message [data-status-icon]');
+  const icon = app.document.querySelector('#activity-log-copy');
   assert.equal(icon.tagName, 'BUTTON');
   app.click(icon);
   const request = app.messages.findLast(message => message.type === 'status-log-copy');
@@ -48,14 +52,14 @@ test('footer icon copies the message and execution log and confirms only a succe
   assert.match(icon.getAttribute('aria-label'), /kopiert/);
 });
 
-test('footer copy failure retains the current message and permits a keyboard retry', async t => {
-  const app = createApp(t), failure = new Error('Clipboard unavailable'); let calls = 0;
-  const bar = app.window.BitfroestStatusbar.create({ t: value => value, actions: [], focusList() {}, onCopyLog: async () => { if (!calls++) throw failure; } });
+test('activity log copy failure retains the current message and permits a keyboard retry', async t => {
+  const app = createApp(t), failure = new Error('Clipboard unavailable'); let calls = 0, report;
+  const bar = app.window.BitfroestStatusbar.create({ t: value => value, actions: [], focusList() {}, onCopyLog: async text => { report = JSON.parse(text); if (!calls++) throw failure; } });
   bar.error('Read failed');
-  const button = app.document.querySelector('#status-message [data-status-icon]');
+  const button = app.document.querySelector('#activity-log-copy');
   app.click(button); await new Promise(resolve => setImmediate(resolve));
   assert.equal(button.dataset.copyState, 'error'); assert.match(button.title, /Clipboard unavailable/);
-  assert.equal(app.document.querySelector('#status-message [data-status-text]').textContent, 'Read failed');
+  assert.equal(report.currentMessage, 'Read failed');
   button.focus(); button.dispatchEvent(new app.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(button.dataset.copyState, 'copied'); assert.equal(calls, 2);
@@ -183,7 +187,7 @@ test('unknown progress, denominator changes and phase resets discard stale estim
   app.bar.finishProgress({ message: 'Abgebrochen', outcome: 'cancelled', progress: app.finished('cancelled') });
   assert.equal(app.timers.size, 0);
   assert.equal(app.document.querySelector('#status-metrics').hidden, true);
-  assert.equal(app.text('#status-message'), 'Abgebrochen');
+  assert.equal(app.text('#status-message'), '');
   app.update({ id: 'next' }); assert.equal(app.text('#status-elapsed'), '00:00');
   app.bar.reset(); assert.equal(app.timers.size, 0);
   app.update(); app.window.dispatchEvent(new app.window.Event('pagehide')); assert.equal(app.timers.size, 0);
@@ -209,7 +213,7 @@ test('measured background activity shares the footer without taking status owner
   app.bar.setActivity('Read metadata', app.snapshot(progress));
   assert.equal(app.text('#status-percent'), '25%/100%');
   assert.equal(app.bar.version, version);
-  assert.equal(app.document.querySelector('#notifications-list').children.length, 0);
+  assert.equal(app.document.querySelector('#notifications-center'), null);
   app.advance(5); assert.equal(app.text('#status-elapsed'), '00:05');
   app.update(); assert.equal(app.text('#status-percent'), '42%/68%');
   app.bar.finishProgress({ message: 'Copy done', progress: app.finished() });
@@ -227,12 +231,12 @@ test('background work displays its own status without an unrelated previous succ
   const message = app.document.querySelector('#status-message');
   const version = app.bar.version;
   app.bar.setActivity('Read directory', app.snapshot(Progress.event({ phase: 'metadata', overall: Progress.known('requests', 0, 2), current: Progress.known('items', 0, 100) })));
-  assert.equal(app.window.getComputedStyle(message).display, 'none');
+  assert.equal(message.hidden, true);
   assert.equal(app.bar.version, version);
   app.bar.setStatus('Read failed', 'error');
-  assert.notEqual(app.window.getComputedStyle(message).display, 'none');
+  assert.equal(message.hidden, true);
   app.bar.setActivity('', null);
-  assert.notEqual(app.window.getComputedStyle(message).display, 'none');
+  assert.equal(message.hidden, true);
   app.bar.dispose();
 });
 

@@ -61,5 +61,5 @@ test('a real move completes later checkpoints using only sources still present a
   assert.deepEqual(await fs.readdir(left), []);
   for (const name of ['a.txt', 'b.txt', 'c.txt']) assert.equal(await fs.readFile(`${right}/${name}`, 'utf8'), `source-${name}`);
   assert.deepEqual(app.state().panes[0].selected, []);
-  assert.match(app.document.querySelector('#status-message').textContent, /3/);
+  assert.match((await app.copyActivityLog()).currentMessage, /3/);
 });

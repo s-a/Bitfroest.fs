@@ -165,11 +165,11 @@ test('a search without matches keeps the current entry while Backspace and Escap
   assert.equal(app.document.querySelector('dialog').open, false);
 });
 
-test('path entry accepts known folders and leaves the source unchanged for invalid paths', t => {
+test('path entry accepts known folders and leaves the source unchanged for invalid paths', async t => {
   const app = createApp(t);
   let input = pane(app).querySelector('.path-input'); input.focus(); input.value = '/not-present'; app.key('Enter', {}, input);
   assert.equal(app.state().panes[0].tabs[0], '/workspace/bitfroest');
-  assert.match(app.document.querySelector('#status-message').textContent, /nicht vorhanden/);
+  assert.match((await app.copyActivityLog()).currentMessage, /nicht vorhanden/);
   input = pane(app).querySelector('.path-input'); input.value = '/workspace/bitfroest/docs/'; app.key('Enter', {}, input);
   assert.equal(app.state().panes[0].tabs[0], '/workspace/bitfroest/docs');
   assert.ok(app.row('architecture.md'));

@@ -10,17 +10,17 @@ const requests = app => app.messages.filter(message => message.type === 'shell-c
 function context(app, target) { const event = new app.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }); target.dispatchEvent(event); return event; }
 const send = (app, data) => app.window.dispatchEvent(new app.window.MessageEvent('message', { data }));
 
-test('native Git Diff completion and failure use the status bar without an operation dialog', t => {
+test('native Git Diff completion and failure use the status bar without an operation dialog', async t => {
   const app = createApp(t, fixture(), { language: 'en' });
   for (const ok of [true, false]) {
     app.action('shell-context-menu'); const request = requests(app).at(-1);
     send(app, { type: 'shell-context-menu-result', requestId: request.requestId, action: 'git-diff', ok, error: 'Git unavailable', refreshed: false });
-    assert.equal(app.document.querySelector('#status-message').textContent, ok ? 'Git diff opened.' : 'Git unavailable');
+    assert.equal((await app.copyActivityLog()).currentMessage, ok ? 'Git diff opened.' : 'Git unavailable');
     assert.equal(app.document.querySelector('#modal').open, false);
   }
 });
 
-test('archive row context reports unavailable status without a native request or error dialog', t => {
+test('archive row context reports unavailable status without a native request or error dialog', async t => {
   const state = fixture(), directory = 'zip:C%3A%2Ftmp%2Fsample.zip!/folder';
   state.panes[0].tabs = [directory];
   state.folders[directory] = state.folders['C:/tmp'];
@@ -30,7 +30,7 @@ test('archive row context reports unavailable status without a native request or
   assert.equal(requests(app).length, 0);
   assert.equal(app.document.querySelector('#modal').open, false);
   assert.equal(app.document.querySelector('.operation-error'), null);
-  assert.equal(app.document.querySelector('#status-message').textContent, 'This action is unavailable inside a ZIP archive.');
+  assert.equal((await app.copyActivityLog()).currentMessage, 'This action is unavailable inside a ZIP archive.');
   assert.deepEqual(Array.from(app.state().panes[0].selected), ['a', 'b']);
 });
 
@@ -135,7 +135,7 @@ test('native execution invalidates clipboard markers without accepting a late wr
   }
 });
 
-test('empty list space keeps its background action while the symbol targets the current folder', t => {
+test('empty list space keeps its background action while the symbol targets the current folder', async t => {
   for (const selector of ['.pane.active .list', '.pane.active [data-parent]']) {
     const app = createApp(t, fixture(), { fileSettings: { useSystemContextMenu: true } });
     const event = context(app, app.document.querySelector(selector));
@@ -147,7 +147,7 @@ test('empty list space keeps its background action while the symbol targets the 
     if (symbolic) {
       assert.equal(requests(app)[0].directory, 'C:/tmp');
       assert.deepEqual(Array.from(requests(app)[0].ids), [app.window.BitfroestGrid.parentId]);
-    } else assert.match(app.document.querySelector('#status-message').textContent, /Ordnerhintergrund/);
+    } else assert.match((await app.copyActivityLog()).currentMessage, /Ordnerhintergrund/);
   }
 });
 

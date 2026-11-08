@@ -86,5 +86,5 @@ test('final host outcomes retain earlier successes and unmark all confirmed copi
   const last = applies(app)[2]; assert.ok(last);
   app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-result', operationId: last.operationId, ok: true, state: confirmed(last), operationOutcome: { completedIds: ['c'], cancelled: false } } })); await tick();
   assert.deepEqual(app.state().panes[0].selected, []);
-  assert.match(app.document.querySelector('#status-message').textContent, /3/);
+  assert.match((await app.copyActivityLog()).currentMessage, /3/);
 });

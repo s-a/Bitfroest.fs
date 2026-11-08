@@ -1,38 +1,32 @@
 (function (root) {
   'use strict';
-  const { NotificationsModel, NotificationChangeType, Severity, StatusbarViewModel, StatusbarAlignment } = root.BitfroestWorkbench;
+  const { Severity, StatusbarViewModel, StatusbarAlignment } = root.BitfroestWorkbench;
   const icons = name => root.BitfroestIcons.svg('workbench', name);
   function create({ t, version, actions, focusList, onCancel, onLanguage, onCopyLog, getLogContext }) {
     /** @type {typeof import('./bitfroest-progress')} */
     const Progress = root.BitfroestProgress;
     const bar = document.querySelector('#statusbar');
     bar.setAttribute('aria-label', t('Statusleiste'));
-    bar.innerHTML = '<div id="status-progress-region"><div id="status-progress-area" class="is-idle"><div id="status-progress-track" role="group" aria-hidden="true"><span id="status-progress-overall" role="progressbar" aria-label=""></span><span id="status-progress-file" role="progressbar" aria-label=""></span></div></div><div id="status-text-region"><span id="status-activity" role="status" aria-live="polite" hidden></span><span id="status-message" role="status" aria-live="polite"></span></div><div id="status-metrics" hidden><span id="status-percent"></span><span id="status-times"><span id="status-eta"></span><span aria-hidden="true">/</span><span id="status-elapsed"></span></span></div></div><span class="status-cancel-slot"><button type="button" id="status-cancel" class="statusbar-item" hidden></button></span>';
+    bar.innerHTML = '<div id="status-progress-region"><div id="status-progress-area" class="is-idle"><div id="status-progress-track" role="group" aria-hidden="true"><span id="status-progress-overall" role="progressbar" aria-label=""></span><span id="status-progress-file" role="progressbar" aria-label=""></span></div></div><div id="status-text-region"><span id="status-activity" role="status" aria-live="polite" hidden><span data-status-text></span></span><span id="status-message" role="status" aria-live="polite" hidden></span></div><div id="status-metrics" hidden><span id="status-percent"></span><span id="status-times"><span id="status-eta"></span><span aria-hidden="true">/</span><span id="status-elapsed"></span></span></div></div><span class="status-cancel-slot"><button type="button" id="status-cancel" class="statusbar-item" hidden></button></span>';
     const headerActions = document.querySelector('#header-actions');
     headerActions.setAttribute('aria-label', t('Dateiaktionen'));
-    headerActions.innerHTML = '<nav id="functionbar" class="functionbar"></nav><div class="header-utilities"><button type="button" id="language-toggle" class="statusbar-item"></button><button type="button" id="notifications-toggle" class="statusbar-item" aria-controls="notifications-center" aria-expanded="false"></button></div>';
+    headerActions.innerHTML = '<nav id="functionbar" class="functionbar"></nav><div class="header-utilities"><button type="button" id="language-toggle" class="statusbar-item"></button><button type="button" id="activity-log-copy" class="statusbar-item"></button></div>';
     const suppressContext = event => { event.preventDefault(); event.stopPropagation(); };
     bar.addEventListener('contextmenu', suppressContext);
     headerActions.dataset.vscodeContext = JSON.stringify({ webviewSection: 'fileActions', preventDefaultContextMenuItems: true });
     headerActions.addEventListener('contextmenu', suppressContext);
-    const versionLabel = version ? `v${version}` : t('Vorschau');
     const functionbar = headerActions.querySelector('#functionbar'); functionbar.setAttribute('aria-label', t('Dateiaktionen'));
     for (const [key, label, command] of actions) {
       const button = document.createElement('button'); button.type = 'button'; button.className = 'statusbar-item'; button.dataset.action = command;
       button.textContent = `${key} ${label}`;
       button.title = button.textContent; button.setAttribute('aria-label', button.textContent); functionbar.append(button);
     }
-    const center = document.querySelector('#notifications-center'); center.setAttribute('aria-label', t('Benachrichtigungen'));
-    center.innerHTML = '<div class="notifications-center-header"><span class="notifications-center-header-title"></span><div class="notifications-center-header-toolbar"><button type="button" id="notifications-clear"></button><button type="button" id="notifications-hide"></button></div></div><div id="notifications-list" class="notifications-list-container"></div><p id="notifications-empty"></p>';
-    center.querySelector('.notifications-center-header-title').textContent = t('Benachrichtigungen');
-    const empty = center.querySelector('#notifications-empty'); empty.textContent = t('Keine neuen Benachrichtigungen');
-    const list = center.querySelector('#notifications-list'), toggle = headerActions.querySelector('#notifications-toggle');
-    const clear = center.querySelector('#notifications-clear'), close = center.querySelector('#notifications-hide');
+    const copyButton = headerActions.querySelector('#activity-log-copy');
     function iconButton(button, icon, label) { button.innerHTML = icons(icon); button.title = t(label); button.setAttribute('aria-label', t(label)); }
-    iconButton(clear, 'clear-all', 'Alle Benachrichtigungen löschen'); iconButton(close, 'close', 'Benachrichtigungen schließen');
+    iconButton(copyButton, 'bell', 'Aktivitätsprotokoll kopieren');
+    copyButton.onclick = () => void copyLog();
     const languageButton = headerActions.querySelector('#language-toggle');
     iconButton(languageButton, 'globe', 'Sprache wechseln'); languageButton.onclick = () => onLanguage?.();
-    const model = new NotificationsModel(), rows = new Map(), unread = new Set();
     const storage = { get() {}, store() {}, remove() {}, onDidChangeValue: () => () => ({ dispose() {} }) };
     const navigation = new StatusbarViewModel(storage);
     const statusMessage = bar.querySelector('#status-message'), progressArea = bar.querySelector('#status-progress-area');
@@ -42,7 +36,7 @@
     const metrics = bar.querySelector('#status-metrics'), percent = bar.querySelector('#status-percent');
     const eta = bar.querySelector('#status-eta'), elapsed = bar.querySelector('#status-elapsed');
     let operation = null, background = null, activityProgress = null, disposed = false, statusVersion = 0, activityText = '', clockTimer = null;
-    const reports = new Map(), messages = []; let omittedMessages = 0, omittedOperations = 0, copyTimer = null, copyState = '', copyError = '';
+    const reports = new Map(), messages = []; let omittedMessages = 0, omittedOperations = 0, copyTimer = null, copyState = '', currentMessage = '';
     function rememberMessage(message, outcome) {
       if (!message || messages.at(-1)?.message === message && messages.at(-1)?.outcome === outcome) return;
       messages.push({ timestamp: new Date().toISOString(), message: String(message), outcome });
@@ -53,23 +47,21 @@
       reports.delete(progress.id); reports.set(progress.id, progress);
       if (reports.size > 8) { reports.delete(reports.keys().next().value); omittedOperations++; }
     }
-    function copyAppearance(button) {
-      const label = copyState === 'copied' ? 'Meldung und Protokoll kopiert.' : copyState === 'error' ? 'Protokoll konnte nicht kopiert werden.' : copyState === 'pending' ? 'Protokoll wird kopiert…' : 'Meldung und Arbeitsprotokoll kopieren';
-      button.dataset.copyState = copyState; button.dataset.copyLabel = copyState === 'copied' ? t('Kopiert') : copyState === 'error' ? t('Kopieren fehlgeschlagen') : '';
-      button.disabled = copyState === 'pending' || !onCopyLog;
-      button.title = t(label) + (copyError ? ` ${copyError}` : ''); button.setAttribute('aria-label', button.title);
-    }
     function showCopyState(value, error = '') {
-      copyState = value; copyError = error;
-      for (const button of bar.querySelectorAll('[data-status-icon]')) copyAppearance(button);
+      copyState = value;
+      const label = value === 'copied' ? 'Aktivitätsprotokoll kopiert.' : value === 'error' ? 'Protokoll konnte nicht kopiert werden.' : value === 'pending' ? 'Protokoll wird kopiert…' : 'Aktivitätsprotokoll kopieren';
+      copyButton.dataset.copyState = value;
+      copyButton.setAttribute('aria-disabled', String(value === 'pending' || !onCopyLog));
+      iconButton(copyButton, value === 'error' ? 'error' : 'bell', label);
+      if (value === 'copied') copyButton.innerHTML = root.BitfroestIcons.svg('status', 'clean');
+      if (error) copyButton.title += ' ' + error;
     }
-    async function copyLog(target) {
+    async function copyLog() {
       if (disposed || copyState === 'pending' || !onCopyLog) return;
       if (copyTimer !== null) { root.clearTimeout(copyTimer); copyTimer = null; }
-      const currentMessage = target.querySelector('[data-status-text]')?.textContent || '';
       showCopyState('pending');
       try {
-        const report = { formatVersion: 1, capturedAt: new Date().toISOString(), extensionVersion: version, currentMessage, context: getLogContext?.() || {}, messages: [...messages], omittedMessages, omittedOperations,
+        const report = { formatVersion: 1, capturedAt: new Date().toISOString(), extensionVersion: version, currentMessage: currentMessage || statusMessage.textContent || activityText, context: getLogContext?.() || {}, messages: [...messages], omittedMessages, omittedOperations,
           operations: [...reports.values()].map(progress => {
             const details = Progress.statusReport(progress);
             return { id: progress.id, startedAt: progress.startedAt, elapsedMs: details.plan.state === 'running' ? Math.max(0, root.performance.now() - progress.startedAt) : details.events.at(-1)?.elapsedMs, lastDisplayedSnapshot: progress, ...details };
@@ -120,6 +112,7 @@
       renderClock();
     }
     const activity = bar.querySelector('#status-activity');
+    const activityLabel = activity.querySelector('[data-status-text]');
     function measurementText(measurement) {
       const units = { bytes: 'Bytes', items: 'Einträge', requests: 'Bestätigte Aufträge', steps: 'Programmschritte' };
       const reasons = { enumerating: 'Gesamtmenge wird ermittelt', 'stream-size-unknown': 'Streamgröße unbekannt', 'native-operation': 'Betriebssystemvorgang ohne Mengenangabe', 'awaiting-confirmation': 'Hostbestätigung', 'remaining-work-unknown': 'Gesamtmenge der weiteren Arbeitsschritte unbekannt' };
@@ -132,7 +125,7 @@
       if (message) rememberProgress(progress);
       activityText = message || '';
       activityProgress = progress;
-      if (activity.textContent !== activityText) { renderStatus(activity, activityText, 'info'); }
+      if (activityLabel.textContent !== activityText) { activityLabel.textContent = activityText; rememberMessage(activityText, 'info'); }
       activity.hidden = !activityText || Boolean(operation);
       if (operation) return;
       if (!activityText || !progress) {
@@ -164,111 +157,23 @@
       updateEstimate(event.overall.kind === 'determinate' ? event.overall.total : undefined, event.overall.completed, event.phase, false, background);
       if (newActivity) updateColors();
     }
-    const running = item => item.hasProgress && !item.progress.state.done;
-    function refresh() {
-      empty.hidden = model.notifications.length > 0;
-      clear.disabled = !model.notifications.some(item => !running(item));
-      toggle.innerHTML = icons(unread.size ? 'bell-dot' : 'bell');
-      const label = t('Benachrichtigungen ({count})', { count: unread.size }); toggle.title = `${label} · ${versionLabel}`; toggle.setAttribute('aria-label', label);
-      toggle.classList.toggle('has-unread', unread.size > 0);
-    }
-    function updateRow(item) {
-      const row = rows.get(item); if (!row) return;
-      row.querySelector('.notification-message').textContent = item.message.raw;
-      row.dataset.severity = String(item.severity);
-      row.querySelector('.notification-icon').innerHTML = icons(item.severity === Severity.Error ? 'error' : item.severity === Severity.Warning ? 'warning' : 'info');
-      row.querySelector('[data-notification-close]').hidden = running(item);
-      row.classList.toggle('has-progress', running(item));
-    }
-    const subscription = model.onDidChangeNotification(event => {
-      const { item, kind } = event;
-      if (kind === NotificationChangeType.ADD) {
-        const row = document.createElement('section'); row.className = 'notification-list-item'; row.tabIndex = 0;
-        row.innerHTML = '<span class="notification-icon" aria-hidden="true"></span><div class="notification-content"><p class="notification-message"></p><div class="notification-details"></div></div><button type="button" data-notification-close></button>';
-        const dismiss = row.querySelector('[data-notification-close]'); iconButton(dismiss, 'close', 'Benachrichtigung löschen');
-        dismiss.onclick = () => { if (!running(item)) item.close(); };
-        rows.set(item, row); list.prepend(row);
-        if (center.hidden) unread.add(item); else item.updateVisibility(true);
-      } else if (kind === NotificationChangeType.REMOVE) {
-        const row = rows.get(item), hadFocus = row?.contains(document.activeElement);
-        row?.remove(); rows.delete(item); unread.delete(item);
-        if (hadFocus) (list.querySelector('section') || close).focus();
-      }
-      updateRow(item); refresh();
-    });
-    function placeCenter() {
-      if (!center.hidden) {
-        const top = `${document.querySelector('.bitfroest-header').getBoundingClientRect().bottom}px`;
-        center.style.top = top; center.style.setProperty('--notification-top', top);
-      }
-    }
-    root.addEventListener('resize', placeCenter);
-    function show(focus = true) {
-      center.hidden = false; center.classList.add('visible'); toggle.setAttribute('aria-expanded', 'true');
-      placeCenter();
-      unread.clear(); for (const item of model.notifications) item.updateVisibility(true); refresh();
-      if (focus) (list.querySelector('section') || close).focus();
-    }
-    function hide(restoreFocus = true) {
-      center.hidden = true; center.classList.remove('visible'); toggle.setAttribute('aria-expanded', 'false');
-      for (const item of model.notifications) item.updateVisibility(false);
-      if (restoreFocus) toggle.focus();
-    }
-    toggle.onclick = () => center.hidden ? show() : hide(); close.onclick = () => hide();
-    clear.onclick = () => { for (const item of [...model.notifications]) if (!running(item)) item.close(); };
-    const onCenterKey = event => {
-      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); hide(); }
-      if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key) && !event.ctrlKey && !event.altKey && !event.metaKey) {
-        const items = [...list.children], current = items.findIndex(row => row.contains(document.activeElement));
-        const index = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : Math.max(0, Math.min(items.length - 1, current + (event.key === 'ArrowDown' ? 1 : -1)));
-        if (items[index]) { event.preventDefault(); items[index].focus(); }
-      }
-    };
-    center.addEventListener('keydown', onCenterKey);
     const entries = [...headerActions.querySelectorAll('button')];
     for (const [index, button] of entries.entries()) navigation.add({ id: button.id || button.dataset.action, name: button.title, alignment: StatusbarAlignment.RIGHT, priority: { primary: entries.length - index, secondary: 0 }, container: button, labelContainer: button, hasCommand: true });
     const onBarKey = event => {
       if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
       if (['Enter', ' '].includes(event.key) && event.target.closest('button')) { event.preventDefault(); event.stopPropagation(); event.target.closest('button').click(); return; }
       if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') { event.preventDefault(); event.key === 'ArrowRight' ? navigation.focusNextEntry() : navigation.focusPreviousEntry(); }
-      if (event.key === 'Escape') { event.preventDefault(); hide(false); focusList(); }
+      if (event.key === 'Escape') { event.preventDefault(); focusList(); }
     };
     headerActions.addEventListener('keydown', onBarKey);
     bar.addEventListener('keydown', onBarKey);
-    function notify(message, severity = Severity.Info, id) {
-      if (disposed || !message) return;
-      rememberMessage(message, `notification:${severity}`);
-      const latest = model.notifications[0];
-      if (!id && latest && !running(latest) && latest.message.raw === String(message) && latest.severity === severity) return;
-      const handle = model.addNotification({ id, message: String(message), severity });
-      const stale = model.notifications.slice(100); for (const item of stale) if (!running(item)) item.close();
-      return handle;
-    }
-    function renderStatus(target, message, outcome = 'info') {
-      rememberMessage(message, outcome);
-      const level = ['info', 'success', 'warning', 'error', 'cancelled'].includes(outcome) ? outcome : 'info';
-      target.dataset.outcome = level;
-      target.replaceChildren();
-      if (message) {
-        const icon = document.createElement('button'); icon.type = 'button'; icon.dataset.statusIcon = ''; copyAppearance(icon);
-        icon.innerHTML = (level === 'success' ? root.BitfroestIcons.svg('status', 'clean') : icons({ info: 'info', warning: 'warning', error: 'error', cancelled: 'close' }[level])).replace(/>\s+</g, '><');
-        icon.querySelector('svg')?.setAttribute('aria-hidden', 'true');
-        icon.onclick = event => { event.stopPropagation(); void copyLog(target); };
-        target.append(icon);
-      }
-      const text = document.createElement('span'); text.dataset.statusText = ''; text.textContent = message || ''; target.append(text);
-      if (message) {
-        target.title = message;
-        const labels = { info: 'Information: {message}', success: 'Erfolgreich: {message}', warning: 'Warnung: {message}', error: 'Fehler: {message}', cancelled: 'Abgebrochen: {message}' };
-        target.setAttribute('aria-label', t(labels[level], { message }));
-      } else { target.removeAttribute('title'); target.removeAttribute('aria-label'); }
-    }
     function setStatus(message, outcome = 'info') {
       statusVersion++;
-      renderStatus(statusMessage, message, outcome);
+      currentMessage = message || '';
+      rememberMessage(message, outcome);
     }
     function setProgress(input) {
-      const { quiet = false, title, statusTitle = title, progress, statusPath, overallValueText, fileValueText, element, modal, cancelRequested, cancelAvailable = true } = input;
+      const { title, statusTitle = title, progress, statusPath, overallValueText, fileValueText, cancelRequested, cancelAvailable = true } = input;
       if (disposed) return;
       const event = Progress.readStatus(progress);
       rememberProgress(event);
@@ -279,21 +184,22 @@
       bar.dataset.statusProgressOwner = 'transfer';
       if (!operation || operation.id !== id) {
         if (!operation) {
-          const noop = () => {};
-          const handle = quiet ? { progress: { infinite: noop, total: noop, worked: noop, done: noop }, updateMessage: noop, updateSeverity: noop, close: noop } : model.addNotification({ id, message: title, progress: { infinite: true } });
-          operation = { id, quiet, handle, item: quiet ? null : model.notifications[0], worked: 0, started: event.startedAt };
+          operation = { id, started: event.startedAt };
           if (clockTimer === null) clockTimer = root.setInterval(renderClock, 1000);
-        } else { operation.id = id; operation.total = undefined; operation.worked = 0; operation.sample = undefined; operation.estimate = undefined; operation.handle.progress.infinite(); }
+        } else { operation.id = id; operation.sample = undefined; operation.estimate = undefined; }
       }
       setActivity(activityText, activityProgress);
-      operation.handle.updateMessage(title); setStatus(statusPath ? `${statusTitle} · ${statusPath}` : title); statusMessage.title = statusPath ? `${title}\n${statusPath}` : title;
+      setStatus(statusPath ? `${statusTitle} · ${statusPath}` : title);
+      statusMessage.hidden = false;
+      statusMessage.title = statusPath ? `${title}\n${statusPath}` : title;
+      const text = document.createElement('span'); text.dataset.statusText = '';
+      statusMessage.replaceChildren(text);
       if (statusPath) {
-        const text = statusMessage.querySelector('[data-status-text]'), split = Math.max(statusPath.lastIndexOf('/'), statusPath.lastIndexOf('\\')) + 1;
-        text.replaceChildren();
+        const split = Math.max(statusPath.lastIndexOf('/'), statusPath.lastIndexOf('\\')) + 1;
         for (const [part, value] of [['operation', `${statusTitle} · `], ['directory', statusPath.slice(0, split)], ['name', statusPath.slice(split)]]) {
           const span = document.createElement('span'); span.dataset[`progress${part[0].toUpperCase()}${part.slice(1)}`] = ''; span.textContent = value; text.append(span);
         }
-      }
+      } else text.textContent = title;
       metrics.hidden = false;
       percent.title = `${t('Gesamtfortschritt')} / ${t('Fortschritt des aktuellen Schritts')}`;
       percent.setAttribute('aria-label', percent.title);
@@ -305,12 +211,10 @@
       currentMeter.setAttribute('aria-valuetext', valueText(event.current, fileValueText));
       if (Number.isFinite(total) && total >= 0 && Number.isFinite(completed)) {
         const worked = completed;
-        if (operation.total !== total) { operation.total = total; operation.worked = 0; operation.handle.progress.total(total); }
-        operation.handle.progress.worked(worked - operation.worked); operation.worked = worked;
         overallMeter.dataset.value = String(worked); overallMeter.dataset.maximum = String(total); overallMeter.style.width = `${event.display.overallPercent}%`;
         overallMeter.classList.remove('indeterminate');
         overallMeter.setAttribute('aria-valuenow', String(worked)); overallMeter.setAttribute('aria-valuemax', String(total));
-      } else { operation.handle.progress.infinite(); overallMeter.style.width = '0%'; overallMeter.classList.add('indeterminate'); overallMeter.removeAttribute('aria-valuenow'); overallMeter.removeAttribute('aria-valuemax'); }
+      } else { overallMeter.style.width = '0%'; overallMeter.classList.add('indeterminate'); overallMeter.removeAttribute('aria-valuenow'); overallMeter.removeAttribute('aria-valuemax'); }
       if (Number.isFinite(fileTotal) && fileTotal >= 0 && Number.isFinite(fileCompleted)) { const value = fileCompleted; currentMeter.dataset.value = String(value); currentMeter.dataset.maximum = String(fileTotal); currentMeter.style.width = `${event.display.currentPercent}%`; currentMeter.setAttribute('aria-valuenow', String(value)); currentMeter.setAttribute('aria-valuemax', String(fileTotal)); }
       else { currentMeter.style.width = '0%'; currentMeter.removeAttribute('aria-valuenow'); currentMeter.removeAttribute('aria-valuemax'); }
       const percentage = value => value === null ? '—' : `${Math.floor(value)}%`;
@@ -319,18 +223,15 @@
       if (progressArea.classList.contains('is-idle')) updateColors();
       progressArea.classList.remove('is-idle'); progressTrack.removeAttribute('aria-hidden');
       cancelButton.hidden = !cancelAvailable; cancelButton.disabled = Boolean(cancelRequested || !cancelAvailable);
-      const row = rows.get(operation.item);
-      if (row && !modal && element) { row.querySelector('.notification-details').append(element); row.classList.add('has-transfer'); }
     }
     function finishProgress({ message, severity = Severity.Info, outcome = 'info', progress } = {}) {
       if (!operation) return;
       const snapshot = Progress.readFinishedStatus(progress);
       rememberProgress(snapshot);
       if (snapshot.plan.id !== operation.id) throw new TypeError('Status plan does not match the active operation');
-      const current = operation; operation = null; stopClock();
-      current.handle.progress.done(); current.handle.updateSeverity(severity); current.handle.updateMessage(message || t('Dateioperation beendet'));
+      operation = null; stopClock();
+      statusMessage.hidden = true; statusMessage.replaceChildren(); statusMessage.removeAttribute('title');
       setStatus(message || t('Dateioperation beendet'), severity === Severity.Error ? 'error' : outcome);
-      rows.get(current.item)?.classList.remove('has-transfer');
       progressArea.classList.add('is-idle'); progressTrack.setAttribute('aria-hidden', 'true');
       cancelButton.hidden = true; cancelButton.disabled = false;
       setActivity(activityText, activityProgress);
@@ -338,24 +239,24 @@
     function reset() {
       operation = null; background = null; activityProgress = null; stopClock();
       bar.dataset.statusProgressOwner = 'idle';
-      activityText = ''; activity.hidden = true; activity.textContent = '';
-      for (const item of [...model.notifications]) item.close();
-      progressArea.classList.add('is-idle'); progressTrack.setAttribute('aria-hidden', 'true'); setStatus(''); hide(false); unread.clear(); refresh();
+      activityText = ''; activity.hidden = true; activityLabel.textContent = '';
+      statusMessage.hidden = true; statusMessage.replaceChildren(); statusMessage.removeAttribute('title');
+      progressArea.classList.add('is-idle'); progressTrack.setAttribute('aria-hidden', 'true'); setStatus('');
       cancelButton.hidden = true; cancelButton.disabled = false;
     }
     function dispose() {
-      if (disposed) return; disposed = true; reset(); themeObserver.disconnect(); subscription.dispose(); model.dispose(); navigation.dispose();
+      if (disposed) return; disposed = true; reset(); themeObserver.disconnect(); navigation.dispose();
       if (copyTimer !== null) root.clearTimeout(copyTimer);
       reports.clear(); messages.length = 0;
-      root.removeEventListener('resize', placeCenter); bar.removeEventListener('contextmenu', suppressContext); headerActions.removeEventListener('contextmenu', suppressContext); headerActions.removeEventListener('keydown', onBarKey);
-      bar.removeEventListener('keydown', onBarKey); center.removeEventListener('keydown', onCenterKey);
+      bar.removeEventListener('contextmenu', suppressContext); headerActions.removeEventListener('contextmenu', suppressContext); headerActions.removeEventListener('keydown', onBarKey);
+      bar.removeEventListener('keydown', onBarKey);
     }
     const onPageHide = () => { dispose(); root.removeEventListener('pagehide', onPageHide); };
     root.addEventListener('pagehide', onPageHide, { once: true });
-    setStatus(''); refresh();
-    return { notify, setProgress, setStatus, setActivity, finishProgress, reset, dispose, get version() { return statusVersion; },
+    setStatus(''); showCopyState('');
+    return { record: rememberMessage, setProgress, setStatus, setActivity, finishProgress, reset, dispose, get version() { return statusVersion; },
       success: message => setStatus(message, 'success'),
-      error: message => { setStatus(message, 'error'); return notify(message, Severity.Error); } };
+      error: message => setStatus(message, 'error') };
   }
   root.BitfroestStatusbar = { create };
 })(window);

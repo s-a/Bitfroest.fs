@@ -54,7 +54,7 @@ for (const side of [0, 1]) {
     assert.deepEqual(app.state().panes.map(p => [...p.tabs]), expected);
     assert.equal(Boolean(app.document.querySelector(`[data-pane="${side}"] [data-id="late"]`)), false);
   });
-  test(`failed navigation on side ${side} preserves a newly opened background tab`, t => {
+  test(`failed navigation on side ${side} preserves a newly opened background tab`, async t => {
     const app = createApp(t, fixture(side));
     click(app, side, `${side ? 'right' : 'left'}-child`); app.key('Enter');
     app.action('background-tab');
@@ -64,9 +64,9 @@ for (const side of [0, 1]) {
     assert.equal(app.state().panes[side].tabs.length, 2);
     assert.equal(app.state().panes[side].tabs[0], side ? '/right' : '/left');
     assert.deepEqual(app.state().panes[side].tabStates[1], background);
-    assert.match(app.document.querySelector('#status-message').textContent, /EACCES/);
+    assert.match((await app.copyActivityLog()).currentMessage, /EACCES/);
   });
-  test(`failed directory tab on side ${side} removes only its own tab`, t => {
+  test(`failed directory tab on side ${side} removes only its own tab`, async t => {
     const app = createApp(t, fixture(side));
     click(app, side, `${side ? 'right' : 'left'}-child`); app.action('open-dir-tab');
     app.action('background-tab');
@@ -76,7 +76,7 @@ for (const side of [0, 1]) {
     assert.equal(app.state().panes[side].tabs.length, 2);
     assert.equal(app.state().panes[side].tabStates.some(tab => tab.id === request.navigationTabId), false);
     assert.deepEqual(app.state().panes[side].tabStates[1], background);
-    assert.match(app.document.querySelector('#status-message').textContent, /EACCES/);
+    assert.match((await app.copyActivityLog()).currentMessage, /EACCES/);
   });
   test(`unknown path on side ${side} clears immediately and obsolete failure cannot undo later navigation`, t => {
     const initial = fixture(side), app = createApp(t, initial);

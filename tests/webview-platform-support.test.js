@@ -9,16 +9,15 @@ function fixture() {
   } };
 }
 
-for (const language of ['de', 'en']) test(`${language} unsupported actions report only in the status bar when invoked`, t => {
+for (const language of ['de', 'en']) test(`${language} unsupported actions are logged only when invoked`, async t => {
   for (const [platform, action] of [['linux', 'shell-context-menu'], ['darwin', 'open-trash'], ['darwin', 'inspect-folder-locks']]) {
     const app = createApp(t, fixture(), { platform, language });
     const unsupported = language === 'de' ? /nicht unterstützt|nicht verfügbar/ : /not supported|unavailable/;
-    assert.doesNotMatch(app.document.querySelector('#status-message').textContent, unsupported);
-    const before = app.messages.length;
+    assert.doesNotMatch((await app.copyActivityLog()).currentMessage, unsupported);
     app.action(action);
-    assert.match(app.document.querySelector('#status-message').textContent, unsupported, `${platform}: ${action}`);
-    assert.equal(app.document.querySelector('#status-message').dataset.outcome, 'info');
+    assert.match((await app.copyActivityLog()).currentMessage, unsupported, `${platform}: ${action}`);
+    assert.equal((await app.copyActivityLog()).currentOutcome, 'info');
     assert.equal(app.document.querySelector('dialog[open]'), null);
-    assert.deepEqual(app.messages.slice(before), []);
+    assert.equal(app.document.querySelector('#status-message').hidden, true);
   }
 });

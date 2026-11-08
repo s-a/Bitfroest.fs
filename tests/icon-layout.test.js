@@ -28,7 +28,6 @@ test('icons share a fixed frame across text fonts and update from live settings'
   const fs = require('node:fs'), path = require('node:path');
   const css = fs.readFileSync(path.join(__dirname, '../media/app.css'), 'utf8');
   assert.doesNotMatch(css, /\b1cap\b|icon-baseline-offset/);
-  assert.match(css, /#status-message \[data-status-icon\] svg \{ width: var\(--icon-size\); height: var\(--icon-size\); \}/);
   assert.match(css, /body \.statusbar \{ height: var\(--icon-row-size\); min-height: var\(--icon-row-size\); \}/);
 });
 

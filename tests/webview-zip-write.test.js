@@ -41,10 +41,10 @@ test('real directory packing keeps phase totals out of the overall track until t
   assert.equal(app.document.querySelectorAll('[data-job-row]').length, 1);
   send({ type: 'filesystem-result', operationId: request.operationId, ok: true, state: saved });
   assert.equal(app.document.querySelectorAll('[data-job-row]').length, 0);
-  assert.equal(app.document.querySelector('#status-message').dataset.outcome, 'success');
+  assert.equal((await app.copyActivityLog()).currentOutcome, 'success');
 });
 
-test('empty ZIP verification waits for the matching host result and preserves success, error and cancellation', t => {
+test('empty ZIP verification waits for the matching host result and preserves success, error and cancellation', async t => {
   for (const language of ['de', 'en']) for (const outcome of ['success', 'error', 'cancelled']) {
     const saved = state(); saved.folders['C:/tmp'][0] = { id: 'source', name: 'empty.txt', type: 'text', fsSource: 'C:/tmp/empty.txt', size: 0 };
     const app = createApp(t, saved, { language }); app.click(app.row('empty.txt')); app.action('pack'); submit(app);
@@ -58,7 +58,7 @@ test('empty ZIP verification waits for the matching host result and preserves su
     assert.match(meter.getAttribute('aria-valuetext'), language === 'de' ? /0 Bytes.*Hostbestätigung/ : /0 bytes.*Host acknowledgment/);
     assert.equal(app.document.querySelector('#status-percent').textContent, '—/—');
     assert.equal(app.document.querySelectorAll('[data-job-row]').length, 1);
-    assert.notEqual(app.document.querySelector('#status-message').dataset.outcome, 'success');
+    assert.notEqual((await app.copyActivityLog()).currentOutcome, 'success');
     send({ type: 'filesystem-result', operationId: 'foreign', ok: true, state: saved });
     assert.equal(app.document.querySelectorAll('[data-job-row]').length, 1);
     if (outcome === 'cancelled') {
@@ -68,11 +68,11 @@ test('empty ZIP verification waits for the matching host result and preserves su
     }
     send({ type: 'filesystem-result', operationId: request.operationId, ok: outcome !== 'error', cancelled: outcome === 'cancelled', ...(outcome === 'error' ? { error: 'CRC mismatch' } : {}), state: saved });
     assert.equal(app.document.querySelectorAll('[data-job-row]').length, 0);
-    assert.equal(app.document.querySelector('#status-message').dataset.outcome, outcome);
-    const finishedMessage = app.document.querySelector('#status-message').textContent;
+    assert.equal((await app.copyActivityLog()).currentOutcome, outcome);
+    const finishedMessage = (await app.copyActivityLog()).currentMessage;
     send({ type: 'filesystem-progress', operationId: request.operationId, progress });
     assert.equal(app.document.querySelectorAll('[data-job-row]').length, 0);
-    assert.equal(app.document.querySelector('#status-message').textContent, finishedMessage);
+    assert.equal((await app.copyActivityLog()).currentMessage, finishedMessage);
   }
 });
 
@@ -98,7 +98,7 @@ test('ZIP preparation reports collected entries and packing uses both known prog
   }
 });
 
-test('ZIP progress names packing and verification, shows literal entries and resets file progress between phases', t => {
+test('ZIP progress names packing and verification, shows literal entries and resets file progress between phases', async t => {
   for (const language of ['de', 'en']) {
     const saved = state(), app = createApp(t, saved, { language });
     app.click(app.row('file.txt')); app.action('pack'); submit(app);
@@ -123,7 +123,7 @@ test('ZIP progress names packing and verification, shows literal entries and res
     app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-result', operationId: request.operationId, ok: true, cancelled: true, archiveCommitted: true, notice: 'saved', state: saved } }));
     assert.equal(app.document.querySelector('#statusbar').dataset.statusProgressOwner, 'background');
     send({ phase: 'packing', currentPath: 'late.txt' });
-    assert.equal(app.document.querySelector('#status-message').textContent, 'saved');
+    assert.equal((await app.copyActivityLog()).currentMessage, 'saved');
   }
 });
 
@@ -248,11 +248,11 @@ test('ZIP-F25 F5 between archive panes starts a pack operation into the destinat
   assert.equal(request?.path, target); assert.equal(request?.sourcePath, source); assert.equal(app.messages.some(message => message.type === 'zip-copy'), false);
 });
 
-test('ZIP post-pack cancellation displays that the archive was saved and releases the file list', t => {
+test('ZIP post-pack cancellation displays that the archive was saved and releases the file list', async t => {
   const saved = state(), app = createApp(t, saved); app.click(app.row('file.txt')); app.action('pack'); submit(app);
   const request = app.messages.find(message => message.type === 'zip-write'), notice = 'ZIP wurde gespeichert; Nachprüfung oder Quellentfernung wurde nicht abgeschlossen.';
   app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-result', operationId: request.operationId, state: saved, ok: true, cancelled: true, archiveCommitted: true, notice } }));
-  assert.equal(app.document.querySelector('#status-message').textContent, notice);
+  assert.equal((await app.copyActivityLog()).currentMessage, notice);
   assert.equal(app.document.querySelector('#panes').inert, false); assert.equal(app.document.querySelector('#status-cancel').hidden, true);
 });
 

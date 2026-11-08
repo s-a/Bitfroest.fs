@@ -53,12 +53,12 @@ test('search forwards current file byte progress and clears it on completion', t
   assert.equal(view.document.querySelector('#status-metrics').hidden, true);
 });
 
-test('host acknowledgments stay indeterminate until their matching response instead of inventing work progress', t => {
+test('host acknowledgments stay indeterminate until their matching response instead of inventing work progress', async t => {
   const view = app(t); view.action('select-all'); view.action('copy-full-names');
   const request = view.messages.find(message => message.type === 'selection-io'); assert.ok(request);
   assert.equal(percent(view), '—/—');
   assert.match(view.document.querySelector('#status-activity').textContent, /Hostbestätigung/);
   send(view, { type: 'selection-io-result', requestId: request.requestId, ok: true });
   assert.equal(view.document.querySelector('#status-metrics').hidden, true);
-  assert.equal(view.document.querySelector('#status-message').dataset.outcome, 'success');
+  assert.equal((await view.copyActivityLog()).currentOutcome, 'success');
 });

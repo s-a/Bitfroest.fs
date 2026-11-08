@@ -296,21 +296,6 @@
     }
   },
   {
-    "name": "Notyf",
-    "version": "3.10.0",
-    "author": "Carlos Roso",
-    "license": "MIT",
-    "licenseUrl": "https://github.com/caroso1222/notyf/blob/master/LICENSE.md",
-    "source": "https://github.com/caroso1222/notyf",
-    "files": [
-      "node_modules/notyf/LICENSE.md"
-    ],
-    "description": {
-      "de": "Benachrichtigungskomponente für die Webview.",
-      "en": "Notification component for the webview."
-    }
-  },
-  {
     "name": "VSCode Elements Lite",
     "version": "0.4.0",
     "author": "VSCode Elements",

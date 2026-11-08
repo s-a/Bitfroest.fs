@@ -42,7 +42,7 @@ function value(app, id, text) {
 
 function names(app, path) { return app.state().folders[path].map(file => file.name); }
 function dialogOpen(app) { return app.document.querySelector('#modal').hasAttribute('open'); }
-function notice(app) { return app.document.querySelector('#status-message').textContent; }
+async function notice(app) { return (await app.copyActivityLog()).currentMessage; }
 
 test('copy duplicates selected files into the other pane without changing their source', async t => {
   const app = createApp(t, fixture());
@@ -91,7 +91,7 @@ test('copy and move reject invalid targets and require decisions for name confli
     assert.equal(dialogOpen(app), true, `${command} must reject ${destination}`);
     assert.equal(JSON.stringify(app.state().folders), before);
     if (conflict || destination === '/left') assert.ok(app.document.querySelector('[data-conflict-action="overwrite"]'));
-    else assert.ok(notice(app).length);
+    else assert.ok((await notice(app)).length);
   }
 });
 
@@ -151,16 +151,16 @@ test('unpack expands files and nested folders into the other pane', t => {
   assert.ok(names(app, '/left').includes('sample.zip'));
 });
 
-test('unpack handles absent payloads, wrong selections, invalid targets and conflicts', t => {
+test('unpack handles absent payloads, wrong selections, invalid targets and conflicts', async t => {
   const absent = fixture(); delete absent.folders['/left/sample.zip!'];
   const appAbsent = createApp(t, absent); choose(appAbsent, 'sample.zip'); appAbsent.action('unpack');
-  assert.equal(dialogOpen(appAbsent), false); assert.match(notice(appAbsent), /keine Beispieldaten/);
+  assert.equal(dialogOpen(appAbsent), false); assert.match(await notice(appAbsent), /keine Beispieldaten/);
   const appWrong = createApp(t, fixture()); choose(appWrong, 'b.txt'); appWrong.action('unpack');
-  assert.equal(dialogOpen(appWrong), false); assert.match(notice(appWrong), /ZIP-Archiv/);
+  assert.equal(dialogOpen(appWrong), false); assert.match(await notice(appWrong), /ZIP-Archiv/);
   for (const [target, conflict] of [['/missing', false], ['/left/sample.zip!', false], ['/left/sample.zip!/data', false], ['/right', true]]) {
     const saved = fixture(); if (conflict) saved.folders['/right'].push({ id: '80', name: 'MANIFEST.TXT', type: 'text', size: 0 });
     const app = createApp(t, saved); choose(app, 'sample.zip'); app.action('unpack'); value(app, 'value', target); submit(app);
-    assert.equal(dialogOpen(app), true); assert.ok(notice(app).length);
+    assert.equal(dialogOpen(app), true); assert.ok((await notice(app)).length);
   }
 });
 
@@ -210,18 +210,18 @@ test('view retains an embedded lister while edit sends the selected content and 
   assert.equal(dialogOpen(app), false);
 });
 
-test('operations without a selection report a notice without sending editor requests', t => {
+test('operations without a selection report a notice without sending editor requests', async t => {
   const app = createApp(t, fixture());
   for (const command of ['copy', 'move', 'delete', 'pack', 'unpack', 'rename', 'view', 'edit']) {
-    app.action(command); assert.equal(dialogOpen(app), false); assert.match(notice(app), /markieren/);
+    app.action(command); assert.equal(dialogOpen(app), false); assert.match(await notice(app), /markieren/);
   }
   assert.equal(app.messages.filter(message => ['preview', 'edit'].includes(message.type)).length, 0);
 });
 
-test('an active modal blocks other host actions and closes without applying changes', t => {
+test('an active modal blocks other host actions and closes without applying changes', async t => {
   const app = createApp(t, fixture());
   app.action('mkdir'); value(app, 'value', 'Not yet'); app.action('swap');
-  assert.match(notice(app), /Dialog schließen/);
+  assert.match(await notice(app), /Dialog schließen/);
   assert.equal(app.state().active, 0);
   app.click(app.document.querySelector('#modal-close'));
   assert.equal(dialogOpen(app), false); assert.ok(!names(app, '/left').includes('Not yet'));

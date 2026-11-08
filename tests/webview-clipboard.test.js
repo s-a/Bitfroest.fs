@@ -41,12 +41,12 @@ test('Escape cancels a pending native write and ignores its late success', t => 
   assert.equal(app.messages.filter(message => message.type === 'inputFocus').at(-1).paste, false);
 });
 
-test('a late reset result does not replace a newer operation status', t => {
+test('a late reset result does not replace a newer operation status', async t => {
   const app = createApp(t, fixture(true), { platform: 'win32' }); select(app); app.action('clipboard-copy');
   app.key('Escape'); const reset = app.messages.find(message => message.type === 'clipboard-reset');
-  app.action('select-all'); const message = app.document.querySelector('#status-message').textContent;
+  app.action('select-all'); const message = (await app.copyActivityLog()).currentMessage;
   respond(app, reset, { matched: true });
-  assert.equal(app.document.querySelector('#status-message').textContent, message);
+  assert.equal((await app.copyActivityLog()).currentMessage, message);
 });
 
 test('Escape respects text input and quick search before clearing clipboard intent', t => {
@@ -280,7 +280,7 @@ test('native paste availability refreshes silently and ignores an obsolete statu
   assert.equal(focus().paste, true);
 });
 
-test('text clipboard changes immediately disable native file paste while read failures remain silent', t => {
+test('text clipboard changes immediately disable native file paste while read failures remain silent', async t => {
   const app = createApp(t, fixture(true), { platform: 'win32' });
   const focus = () => app.messages.filter(message => message.type === 'inputFocus').at(-1);
   const status = app.messages.find(message => message.type === 'clipboard-status');
@@ -291,7 +291,7 @@ test('text clipboard changes immediately disable native file paste while read fa
   respond(app, next, { ok: false, error: 'Clipboard busy' });
   assert.equal(focus().paste, false);
   assert.equal(app.document.querySelector('#modal').open, false);
-  assert.equal(app.document.querySelector('#status-message').textContent.includes('Clipboard busy'), false);
+  assert.equal((await app.copyActivityLog()).currentMessage.includes('Clipboard busy'), false);
 });
 
 test('a status reply from an older document cannot enable paste after reloading', t => {
@@ -323,13 +323,13 @@ test('platforms without a system file clipboard keep paste available for their i
   assert.equal(app.messages.some(message => message.type === 'clipboard-write'), false);
 });
 
-test('Linux copy routes the file selection through the native clipboard protocol', t => {
+test('Linux copy routes the file selection through the native clipboard protocol', async t => {
   const app = createApp(t, linuxFixture(), { platform: 'linux' }); select(app);
   app.action('clipboard-copy');
   const write = app.messages.find(message => message.type === 'clipboard-write');
   assert.ok(write);
   assert.equal(write.paths[0], '/tmp/a.txt');
-  assert.equal(app.document.querySelector('#status-message').dataset.outcome, 'info');
+  assert.equal((await app.copyActivityLog()).currentOutcome, 'info');
   respond(app, write, { selection: { paths: write.paths, mode: 'copy', token: 'linux:2:1', source: 'system' } });
   assert.equal(app.messages.some(message => message.type === 'clipboard-status'), true);
 });
@@ -345,14 +345,14 @@ test('Linux copy preserves a literal backslash in a POSIX filename', t => {
   assert.equal(write.paths[0], '/tmp/literal\\name.txt');
 });
 
-test('Linux clipboard protocol unavailability keeps the internal selection and reports at the status bar', t => {
+test('Linux clipboard protocol unavailability keeps the internal selection and reports at the status bar', async t => {
   const app = createApp(t, linuxFixture(), { platform: 'linux' }); select(app);
   app.action('clipboard-cut');
   const write = app.messages.find(message => message.type === 'clipboard-write');
   assert.ok(write);
   respond(app, write, { ok: false, unavailable: true, error: 'Wayland data control is unavailable.' });
   assert.equal(app.messages.filter(message => message.type === 'inputFocus').at(-1).paste, true);
-  assert.equal(app.document.querySelector('#status-message').dataset.outcome, 'info');
+  assert.equal((await app.copyActivityLog()).currentOutcome, 'info');
   assert.equal(app.document.querySelector('dialog[open]'), null);
 });
 
@@ -368,7 +368,7 @@ test('Linux move completion remains successful when a foreign clipboard owner ca
   app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-result', ok: true, state: confirmed } })); await tick();
   const ack = app.messages.find(message => message.type === 'clipboard-ack'); assert.ok(ack);
   respond(app, ack, { matched: false });
-  assert.equal(app.document.querySelector('#status-message').dataset.outcome, 'success');
+  assert.equal((await app.copyActivityLog()).currentOutcome, 'success');
   assert.equal(app.messages.filter(message => message.type === 'clipboard-ack').length, 1);
   assert.equal(app.state().folders['/tmp'].length, 0);
   const applies = app.messages.filter(message => message.type === 'filesystem-apply').length;

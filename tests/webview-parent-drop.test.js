@@ -73,7 +73,7 @@ test('parent drop reads the immediate target and resolves existing files before 
     assert.equal(app.state().folders['C:/base'].find(file => file.name === 'film.mp4').size, 999);
     send(app, { type: 'filesystem-result', operationId: apply.operationId, ok: false, error: 'Target denied', state: fresh }); await tick();
     assert.ok(app.row('film.mp4'));
-    assert.equal(app.document.querySelector('#status-message').dataset.outcome, 'error');
+    assert.equal((await app.copyActivityLog()).currentOutcome, 'error');
   }
 });
 
@@ -104,7 +104,7 @@ test('a cached parent missing an existing target is reread before a left-drop ca
   assert.deepEqual([...request.paths], ['C:/base']); assert.equal(request.recursive, false);
   assert.equal(app.messages.some(message => message.type === 'filesystem-apply'), false);
   assert.ok(app.row('film.mp4'));
-  assert.notEqual(app.document.querySelector('#status-message').dataset.outcome, 'success');
+  assert.notEqual((await app.copyActivityLog()).currentOutcome, 'success');
   const fresh = app.state(); fresh.snapshotId = 'fresh-parent';
   fresh.folders['C:/base'].push({ id: 'existing', name: 'film.mp4', type: 'text', size: 999, fsSource: 'C:/base/film.mp4' });
   send(app, { type: 'filesystem-result', ok: true, state: fresh }); await tick();

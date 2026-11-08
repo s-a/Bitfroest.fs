@@ -125,7 +125,7 @@ test('copy progress keeps the whole transfer separate from each conflict checkpo
   assert.equal(current.getAttribute('aria-valuenow'), '4');
   assert.equal(current.getAttribute('aria-valuemax'), '8');
   send(app, { type: 'filesystem-result', operationId: last.operationId, ok: true, state: last.state });
-  app.click(app.document.querySelector('#status-message [data-status-icon]'));
+  app.click(app.document.querySelector('#activity-log-copy'));
   const reportRequest = app.messages.findLast(message => message.type === 'status-log-copy');
   const trace = JSON.parse(reportRequest.text).context.transferEvents;
   assert.deepEqual(trace.map(event => event.stage), ['dialog-opened', 'confirmed', 'queued', 'write-requested', 'write-acknowledged', 'conflict-decision', 'write-requested', 'write-acknowledged', 'conflict-decision', 'write-requested', 'write-acknowledged', 'finished']);
@@ -139,7 +139,6 @@ test('active progress keeps localized operation and literal source/final target 
     const app = createApp(t, fixture(), { language });
     const request = await start(app, mode, '/right/Final & Ziel.txt');
     assert.ok(request);
-    app.document.querySelector('#toast').textContent = '';
     const title = app.document.querySelector('[data-progress-title]');
     assert.ok(title, 'operation label remains inside the active progress region');
     assert.equal(title.textContent, language === 'en' ? mode === 'move' ? 'Moving…' : 'Copying…' : mode === 'move' ? 'Verschieben läuft…' : 'Kopieren läuft…');

@@ -139,7 +139,7 @@ test('favorites navigate while a background copy is waiting in its JavaScript pl
   assert.ok(app.document.querySelector('[data-favorite-menu]'));
   app.click(app.document.querySelector('[data-favorite-entry]'));
   assert.equal(app.messages.some(message => message.type === 'filesystem-navigate' && message.path === '/elsewhere'), false);
-  assert.match(app.document.querySelector('#status-message').textContent, /Verzeichnisanfrage wartet auf Kopierplanung/);
+  assert.match((await app.copyActivityLog()).currentMessage, /Verzeichnisanfrage wartet auf Kopierplanung/);
   app.click(app.document.querySelector('#status-cancel'));
   release(); await tick();
   assert.equal(app.messages.filter(message => message.type === 'filesystem-apply').length, 0);
@@ -267,10 +267,10 @@ test('conflict F3 shortcuts use frozen real source and target URIs while preserv
 
 test('real copy reports progress in the statusbar until the host confirms success and exposes host failure without false success',async t=>{
  for(const ok of [true,false]){const state=fixture();state.realFilesystem=true;state.folders['/right']=[];state.folders['/left'][0].fsSource='/left/same.txt';const app=createApp(t,state);choose(app,'same.txt');app.action('copy');submit(app);await tick();
- assert.match(app.document.querySelector('#status-message').textContent,/läuft/);assert.equal(app.document.querySelector('#toast').classList.contains('visible'),false);assert.equal(app.document.querySelector('#panes').inert,false);assert.equal(app.document.querySelector('#functionbar').inert,true);
+ assert.match(app.document.querySelector('#status-message').textContent,/läuft/);assert.equal(app.document.querySelector('#toast'),null);assert.equal(app.document.querySelector('#panes').inert,false);assert.equal(app.document.querySelector('#functionbar').inert,true);
  const pending=app.messages.find(message=>message.type==='filesystem-apply');assert.ok(pending);const confirmed=ok?confirmFixtureTransfer(state, pending):state;
  app.window.dispatchEvent(new app.window.MessageEvent('message',{data:{type:'filesystem-result',ok,state:confirmed,error:ok?undefined:'Zugriff verweigert'}}));
- if(ok) assert.match(app.document.querySelector('#status-message').textContent,/1 Datei kopiert/); else assert.match(app.document.querySelector('.operation-error-text').value,/Zugriff verweigert/);assert.equal(app.document.querySelector('#panes').inert,false);
+ if(ok) assert.match((await app.copyActivityLog()).currentMessage,/1 Datei kopiert/); else assert.match(app.document.querySelector('.operation-error-text').value,/Zugriff verweigert/);assert.equal(app.document.querySelector('#panes').inert,false);
  }
 });
 

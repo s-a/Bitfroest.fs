@@ -177,7 +177,7 @@ test('sorting from the menu works when its column is hidden', t => {
   assert.equal(app.state().panes[0].sort, 'size');
 });
 
-test('sort actions identify their criterion and report the active direction in both languages', t => {
+test('sort actions identify their criterion and report the active direction in both languages', async t => {
   const labels = {
     de: ['Nach Namen sortieren', 'Nach Erweiterung sortieren', 'Nach Datum/Zeit sortieren', 'Nach Größe sortieren'],
     en: ['Sort by name', 'Sort by extension', 'Sort by date and time', 'Sort by size']
@@ -196,10 +196,10 @@ test('sort actions identify their criterion and report the active direction in b
       assert.equal(app.state().panes[0].sort, sort);
       const firstDirection = sort === 'name' ? 1 : 0;
       assert.equal(app.state().panes[0].descending, Boolean(firstDirection));
-      assert.match(app.document.querySelector('#status-message').textContent, new RegExp(`${language === 'de' ? 'Sortiert nach' : 'Sorted by'}.*${sortNames[language][index]}.*${direction[language][firstDirection]}`, 'i'));
+      assert.match((await app.copyActivityLog()).currentMessage, new RegExp(`${language === 'de' ? 'Sortiert nach' : 'Sorted by'}.*${sortNames[language][index]}.*${direction[language][firstDirection]}`, 'i'));
       choose(app, `sort:${sort}`, index % 2 ? 'Enter' : undefined);
       assert.equal(app.state().panes[0].descending, !firstDirection);
-      assert.match(app.document.querySelector('#status-message').textContent, new RegExp(`${language === 'de' ? 'Sortiert nach' : 'Sorted by'}.*${sortNames[language][index]}.*${direction[language][1 - firstDirection]}`, 'i'));
+      assert.match((await app.copyActivityLog()).currentMessage, new RegExp(`${language === 'de' ? 'Sortiert nach' : 'Sorted by'}.*${sortNames[language][index]}.*${direction[language][1 - firstDirection]}`, 'i'));
       assert.equal(app.state().panes[1].sort, right.sort);
       assert.equal(app.state().panes[1].descending, right.descending);
       assert.deepEqual(app.state().panes[1].selected, right.selected);

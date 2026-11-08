@@ -150,7 +150,7 @@ test('address copy feedback follows successful host confirmation in the originat
   assert.equal(address.classList.contains('path-copy-feedback'), false);
 });
 
-test('address right-click copies the complete clicked pane path and confirms only acknowledged writes', t => {
+test('address right-click copies the complete clicked pane path and confirms only acknowledged writes', async t => {
   for (const language of ['de', 'en']) for (const side of [0, 1]) for (const selector of ['[data-breadcrumb]', '[data-path-edit]', '.path-breadcrumbs']) {
     const saved = fixture(); saved.panes[1].tabs = ['/work'];
     const app = createApp(t, saved, { language });
@@ -165,17 +165,16 @@ test('address right-click copies the complete clicked pane path and confirms onl
     assert.equal(event.defaultPrevented, true);
     const request = app.messages.filter(message => message.type === 'selection-io').at(-1);
     assert.ok(request); assert.equal(request.action, 'copy'); assert.equal(request.text, directory);
-    const status = app.document.querySelector('#status-message');
-    assert.notEqual(status.dataset.outcome, 'success');
+    assert.notEqual((await app.copyActivityLog()).currentOutcome, 'success');
     send(app, { type: 'selection-io-result', requestId: 'unrelated', ok: true });
-    assert.notEqual(status.dataset.outcome, 'success');
+    assert.notEqual((await app.copyActivityLog()).currentOutcome, 'success');
     send(app, { type: 'selection-io-result', requestId: request.requestId, ok: true });
-    assert.equal(status.dataset.outcome, 'success');
-    assert.equal(status.textContent, language === 'de' ? 'Pfad in Zwischenablage kopiert.' : 'Path copied to clipboard.');
+    assert.equal((await app.copyActivityLog()).currentOutcome, 'success');
+    assert.equal((await app.copyActivityLog()).currentMessage, language === 'de' ? 'Pfad in Zwischenablage kopiert.' : 'Path copied to clipboard.');
     target.dispatchEvent(new app.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }));
     const failed = app.messages.filter(message => message.type === 'selection-io').at(-1);
     send(app, { type: 'selection-io-result', requestId: failed.requestId, ok: false, error: 'Clipboard unavailable' });
-    assert.equal(status.dataset.outcome, 'error'); assert.match(status.textContent, /Clipboard unavailable/);
+    assert.equal((await app.copyActivityLog()).currentOutcome, 'error'); assert.match((await app.copyActivityLog()).currentMessage, /Clipboard unavailable/);
     assert.equal(app.document.querySelector('[data-context-menu]:not([hidden])'), null);
     assert.deepEqual(app.state().panes.map(p => p.tabs), saved.panes.map(p => p.tabs));
   }

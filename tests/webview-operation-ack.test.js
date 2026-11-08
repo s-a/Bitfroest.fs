@@ -7,39 +7,39 @@ function fixture() {
 }
 const submit = app => app.document.querySelector('#modal-form').dispatchEvent(new app.window.Event('submit', { bubbles: true, cancelable: true }));
 const reply = (app, data) => app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-result', ...data } }));
-test('inline rename reports success only after host acknowledgement and never on error or cancellation', t => {
+test('inline rename reports success only after host acknowledgement and never on error or cancellation', async t => {
   for (const outcome of ['success', 'error', 'cancelled', 'unchanged']) {
     const original = fixture(), app = createApp(t, structuredClone(original), { language: 'en' });
     app.action('rename-one');
     const input = app.document.querySelector('.inline-rename');
     input.value = 'renamed.txt'; app.key('Enter', {}, input);
     const request = app.messages.find(item => item.type === 'filesystem-apply'); assert.ok(request);
-    assert.match(app.document.querySelector('#status-message').textContent, /progress/i);
-    assert.doesNotMatch(app.document.querySelector('#status-message').textContent, /renamed/i);
+    assert.match((await app.copyActivityLog()).currentMessage, /progress/i);
+    assert.doesNotMatch((await app.copyActivityLog()).currentMessage, /renamed/i);
     reply(app, outcome === 'success' ? { ok: true, state: structuredClone(request.state) }
       : outcome === 'error' ? { ok: false, error: 'Blocked', state: original }
       : { ok: true, cancelled: outcome === 'cancelled', state: original });
-    const status = app.document.querySelector('#status-message');
-    if (outcome === 'success') { assert.equal(status.textContent, 'Entry renamed.'); assert.equal(status.dataset.outcome, 'success'); }
-    else assert.doesNotMatch(status.textContent, /Entry renamed/i);
+    const status = await app.copyActivityLog();
+    if (outcome === 'success') { assert.equal(status.currentMessage, 'Entry renamed.'); assert.equal(status.currentOutcome, 'success'); }
+    else assert.doesNotMatch(status.currentMessage, /Entry renamed/i);
   }
 });
-test('real folder and file creation report success only after successful host acknowledgement', t => {
+test('real folder and file creation report success only after successful host acknowledgement', async t => {
   for (const [kind, name, expected] of [['mkdir', 'Future', 'Folder created'], ['mkdir', 'one|two', 'Folders created'], ['new-file', 'one.txt|two.txt', 'Files created'], ['new-file', 'single.txt', 'File system updated']]) {
     const app = createApp(t, fixture(), { language: 'en' }); app.action(kind); app.document.querySelector('#value').value = name; submit(app);
     const request = app.messages.find(item => item.type === 'filesystem-apply'); assert.ok(request);
-    assert.doesNotMatch(app.document.querySelector('#status-message').textContent, /created/i);
-    assert.match(app.document.querySelector('#status-message').textContent, /progress|Creating|running/i);
+    assert.doesNotMatch((await app.copyActivityLog()).currentMessage, /created/i);
+    assert.match((await app.copyActivityLog()).currentMessage, /progress|Creating|running/i);
     assert.equal(app.messages.some(item => item.type === 'edit'), false);
     reply(app, { ok: true, state: structuredClone(request.state) });
     if (expected === 'File system updated') {
-      assert.match(app.document.querySelector('#status-message').textContent, /Action in progress/);
+      assert.match((await app.copyActivityLog()).currentMessage, /Action in progress/);
       assert.equal(app.messages.filter(item => item.type === 'edit').length, 1);
       const edit = app.messages.find(item => item.type === 'edit');
       assert.match(edit.requestId, /^ui-action-/);
       app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'ui-action-result', requestId: edit.requestId, ok: true } }));
-      assert.match(app.document.querySelector('#status-message').textContent, /opened for editing/i);
-    } else assert.equal(app.document.querySelector('#status-message').textContent, expected);
+      assert.match((await app.copyActivityLog()).currentMessage, /opened for editing/i);
+    } else assert.equal((await app.copyActivityLog()).currentMessage, expected);
   }
 });
 test('copy and move feedback stays pending until the host confirms either success or failure', async t => {
@@ -47,35 +47,35 @@ test('copy and move feedback stays pending until the host confirms either succes
     const original = fixture(), app = createApp(t, structuredClone(original), { language: 'en' }); app.action(mode); submit(app);
     await new Promise(resolve => setImmediate(resolve));
     const request = app.messages.find(item => item.type === 'filesystem-apply'); assert.ok(request);
-    assert.match(app.document.querySelector('#status-message').textContent, /Copying|Moving/);
-    assert.doesNotMatch(app.document.querySelector('#status-message').textContent, /copied|moved/i);
+    assert.match((await app.copyActivityLog()).currentMessage, /Copying|Moving/);
+    assert.doesNotMatch((await app.copyActivityLog()).currentMessage, /copied|moved/i);
     reply(app, { ok, state: ok ? structuredClone(request.state) : original, error: ok ? undefined : 'Blocked' });
-    if (ok) assert.match(app.document.querySelector('#status-message').textContent, mode === 'copy' ? /copied/ : /moved/);
-    else { assert.doesNotMatch(app.document.querySelector('#status-message').textContent, /copied|moved|Copying|Moving/i); assert.ok(app.document.querySelector('.operation-error-text').value.endsWith('Blocked')); }
+    if (ok) assert.match((await app.copyActivityLog()).currentMessage, mode === 'copy' ? /copied/ : /moved/);
+    else { assert.doesNotMatch((await app.copyActivityLog()).currentMessage, /copied|moved|Copying|Moving/i); assert.ok(app.document.querySelector('.operation-error-text').value.endsWith('Blocked')); }
   }
 });
-test('failed real creation keeps the original input and cannot leave a premature success message', t => {
+test('failed real creation keeps the original input and cannot leave a premature success message', async t => {
   for (const kind of ['mkdir', 'new-file']) {
     const original = fixture(), app = createApp(t, structuredClone(original), { language: 'en' }); app.action(kind);
     const name = kind === 'mkdir' ? 'Future' : 'one.txt|two.txt'; app.document.querySelector('#value').value = name; submit(app);
-    assert.doesNotMatch(app.document.querySelector('#status-message').textContent, /created/i);
+    assert.doesNotMatch((await app.copyActivityLog()).currentMessage, /created/i);
     reply(app, { ok: false, state: original, error: 'Write blocked' });
     assert.equal(app.document.querySelector('#value').value, name); assert.equal(app.document.activeElement, app.document.querySelector('#value'));
-    assert.doesNotMatch(app.document.querySelector('#status-message').textContent, /created|progress|running/i);
+    assert.doesNotMatch((await app.copyActivityLog()).currentMessage, /created|progress|running/i);
     assert.match(app.document.querySelector('.operation-error-text').value, /Write blocked/);
     assert.equal(app.messages.some(item => item.type === 'edit'), false);
   }
 });
-test('real inline rename and deletion replace old success feedback with an in-progress status', t => {
+test('real inline rename and deletion replace old success feedback with an in-progress status', async t => {
   for (const kind of ['rename-one', 'delete']) {
     const original = fixture(), app = createApp(t, structuredClone(original), { language: 'en' });
-    app.document.querySelector('#status-message').textContent = 'Folder created'; app.action(kind);
+    app.action(kind);
     if (kind === 'rename-one') { const input = app.document.querySelector('.inline-rename'); input.value = 'renamed.txt'; app.key('Enter', {}, input); }
     else submit(app);
-    assert.doesNotMatch(app.document.querySelector('#status-message').textContent, /created|updated/i);
-    assert.match(app.document.querySelector('#status-message').textContent, /progress|running|Deleting/i);
+    assert.doesNotMatch((await app.copyActivityLog()).currentMessage, /created|updated/i);
+    assert.match((await app.copyActivityLog()).currentMessage, /progress|running|Deleting/i);
     reply(app, { ok: false, state: original, error: 'Operation blocked' });
-    assert.doesNotMatch(app.document.querySelector('#status-message').textContent, /created|updated|progress|running|Deleting/i);
+    assert.equal(app.document.querySelector('#status-message').hidden, true);
   }
 });
 test('error copy preserves full details and recovery paths in every error presentation', async t => {
@@ -165,13 +165,13 @@ test('illustrated error disclosure preserves dialog input and dismisses standalo
   assert.equal(app.document.querySelector('.operation-error'), null);
 });
 
-test('real batch rename success feedback is host-gated and never labelled as sample data', t => {
+test('real batch rename success feedback is host-gated and never labelled as sample data', async t => {
   const app = createApp(t, fixture(), { language: 'en' }); app.action('rename');
   app.document.querySelector('#mask').value = '[N]-new'; submit(app);
   const request = app.messages.find(item => item.type === 'filesystem-apply'); assert.ok(request);
-  assert.doesNotMatch(app.document.querySelector('#status-message').textContent, /renamed|sample/i);
-  assert.match(app.document.querySelector('#status-message').textContent, /progress/i);
+  assert.doesNotMatch((await app.copyActivityLog()).currentMessage, /renamed|sample/i);
+  assert.match((await app.copyActivityLog()).currentMessage, /progress/i);
   reply(app, { ok: true, state: structuredClone(request.state) });
-  assert.match(app.document.querySelector('#status-message').textContent, /renamed/i);
-  assert.doesNotMatch(app.document.querySelector('#status-message').textContent, /sample/i);
+  assert.match((await app.copyActivityLog()).currentMessage, /renamed/i);
+  assert.doesNotMatch((await app.copyActivityLog()).currentMessage, /sample/i);
 });

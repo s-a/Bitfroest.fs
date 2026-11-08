@@ -192,7 +192,7 @@
       const target = normalized(value);
       const finish = () => {
         const existing = Object.keys(state.folders).find(path => favoriteIdentity(path) === favoriteIdentity(target));
-        if (!existing) { toast(t('Dieser Pfad ist in den Beispieldaten nicht vorhanden.')); return; }
+        if (!existing) { logMessage(t('Dieser Pfad ist in den Beispieldaten nicht vorhanden.')); return; }
         tabs.navigate(state.panes[index], existing); state.active = side; render(true);
       };
       if (host && state.realFilesystem) {
@@ -303,7 +303,7 @@
     if (!destinationRequest || destinationRequest.requestId !== data.requestId || !destinationRequest.popup.isConnected) return;
     const { popup, trigger } = destinationRequest;
     destinationRequest = undefined;
-    if (data.drivesUnavailable) toast(t('Laufwerke konnten nicht ermittelt werden.'));
+    if (data.drivesUnavailable) logMessage(t('Laufwerke konnten nicht ermittelt werden.'));
     if (!data.drives.length && !data.recent.length) return;
     const destination = path => ({ id: path, destination: path, label: displayPath(path) });
     const items = [{ separator: true }, ...data.drives.map(destination)];
@@ -414,18 +414,18 @@
     return requestId;
   }
   function copyClipboard(mode, contextSelection) {
-    if (selected().some(row => row.archive)) { toast(t('Dateioperationen innerhalb von Archiven sind nicht verfügbar. F3 zeigt den Inhalt schreibgeschützt an.')); return; }
+    if (selected().some(row => row.archive)) { logMessage(t('Dateioperationen innerhalb von Archiven sind nicht verfügbar. F3 zeigt den Inhalt schreibgeschützt an.')); return; }
     let captured;
     try { captured = window.BitfroestClipboard.capture(contextSelection ? { ...state, panes: state.panes.map((p, index) => index === state.active ? { ...p, selected: contextSelection.ids, cursor: null } : p) } : state, mode, nativePlatform); }
-    catch (error) { toast(t(error.message)); return; }
+    catch (error) { logMessage(t(error.message)); return; }
     if (!captured) return;
     clipboardPasteGeneration = null; clipboardPasteRequestId = null;
     const generation = ++clipboardGeneration;
     resetCompletedClipboardMoves();
     setClipboardSelection({ ...captured, source: 'internal' });
-    if (!host || !state.realFilesystem) { toast(t(mode === 'move' ? 'Dateiauswahl intern zum Verschieben vorgemerkt.' : 'Dateiauswahl intern in die Zwischenablage übernommen.'), 'success'); return; }
-    if (!systemFileClipboardSupported) { nativeClipboardUnavailable = true; toast(t('System-Datei-Zwischenablage nicht verfügbar; Auswahl nur intern übernommen.'), 'info'); return; }
-    toast(t('Auswahl wird übertragen…'), 'info');
+    if (!host || !state.realFilesystem) { logMessage(t(mode === 'move' ? 'Dateiauswahl intern zum Verschieben vorgemerkt.' : 'Dateiauswahl intern in die Zwischenablage übernommen.'), 'success'); return; }
+    if (!systemFileClipboardSupported) { nativeClipboardUnavailable = true; logMessage(t('System-Datei-Zwischenablage nicht verfügbar; Auswahl nur intern übernommen.'), 'info'); return; }
+    logMessage(t('Auswahl wird übertragen…'), 'info');
     const statusVersion = statusbar.version;
     clipboardWriteRequestId = clipboardRequest({ type: 'clipboard-write', ...captured }, response => {
       if (generation !== clipboardGeneration) return;
@@ -439,7 +439,7 @@
     const generation = ++clipboardGeneration;
     clipboardPasteGeneration = null; clipboardPasteRequestId = null; clipboardWriteRequestId = null;
     setClipboardSelection(null);
-    toast(t('Kopier- und Ausschneidevormerkung aufgehoben.'), 'info');
+    logMessage(t('Kopier- und Ausschneidevormerkung aufgehoben.'), 'info');
     const statusVersion = statusbar.version;
     if (!selection || !host || !state.realFilesystem || !systemFileClipboardSupported || nativeClipboardUnavailable) {
       return;
@@ -463,15 +463,15 @@
         if (paths.length !== selection.paths.length) selection = paths.length ? { ...selection, paths } : null;
         if (!selection) {
           setClipboardSelection(null);
-          toast(t('Die Dateien aus dieser Zwischenablage wurden bereits übertragen.'), 'info');
+          logMessage(t('Die Dateien aus dieser Zwischenablage wurden bereits übertragen.'), 'info');
           return;
         }
       }
       setClipboardSelection(selection);
-      if (!selection) { toast(t('Die Zwischenablage enthält keine Dateien.')); return; }
+      if (!selection) { logMessage(t('Die Zwischenablage enthält keine Dateien.')); return; }
       let plan;
       try { plan = window.BitfroestClipboard.inspectPaste(state, selection, targetPath, nativePlatform); }
-      catch (error) { toast(t(error.message)); return; }
+      catch (error) { logMessage(t(error.message)); return; }
       if (!plan.ready) { requestFilesystem({ type: 'filesystem-prepare', paths: plan.directories, action: 'clipboard-paste', recursive: false }, () => start(selection)); return; }
       const completions = [], policyState = { value: 'ask' };
       const finish = () => {
@@ -486,8 +486,8 @@
           const moveGeneration = clipboardGeneration;
           clipboardRequest({ type: 'clipboard-ack', token: selection.token, paths: acknowledgedSelection.paths, mode: selection.mode, remainingPaths }, response => {
             if (moveGeneration !== clipboardGeneration) return;
-            if (!response.ok) toast(t(response.error));
-            else if (!response.matched) toast(t('Dateien übertragen; inzwischen geänderte Zwischenablage bleibt unverändert.'), 'success');
+            if (!response.ok) logMessage(t(response.error));
+            else if (!response.matched) logMessage(t('Dateien übertragen; inzwischen geänderte Zwischenablage bleibt unverändert.'), 'success');
           });
         }
       };
@@ -506,7 +506,7 @@
     };
     if (host && state.realFilesystem && !systemFileClipboardSupported) {
       if (clipboardSelection) start(clipboardSelection);
-      else toast(t('Die System-Datei-Zwischenablage wird auf diesem Betriebssystem noch nicht unterstützt.'), 'info');
+      else logMessage(t('Die System-Datei-Zwischenablage wird auf diesem Betriebssystem noch nicht unterstützt.'), 'info');
       return;
     }
     if (!host || !state.realFilesystem || nativeClipboardUnavailable) { start(clipboardSelection); return; }
@@ -517,7 +517,7 @@
       if (generation !== clipboardGeneration || !validRead()) return;
       if (response.ok) start(response.selection);
       else if (response.unavailable) { nativeClipboardUnavailable = true; start(clipboardSelection); }
-      else toast(t(response.error));
+      else logMessage(t(response.error));
     });
     clipboardPasteRequestId = requestId;
   }
@@ -790,7 +790,7 @@
       const request = { type: 'folder-size', operationId, snapshotId: state.snapshotId, path };
       folderSizeRequests.set(operationId, request);
       statusTask(operationId, t('Ordnergröße wird ermittelt…'), Progress.event({ phase: 'folder-size', overall: Progress.unknown('items', 0, 'enumerating'), current: Progress.unknown('items', 0, 'enumerating') }));
-      toast(t('Ordnergröße wird ermittelt…'), 'info');
+      logMessage(t('Ordnergröße wird ermittelt…'), 'info');
       folderSizeBatch.statusVersion = statusbar.version;
       host.postMessage(request);
       return;
@@ -808,7 +808,7 @@
     }
     folderSizes.set(path, total);
     refreshFolderSizeDisplay(path);
-    toast(t('Ordnergröße ermittelt.'), 'success');
+    logMessage(t('Ordnergröße ermittelt.'), 'success');
   }
   let filesystemResume = null;
   let creationFailure = null;
@@ -910,7 +910,7 @@
       button.onclick = () => cancelTransfer('progress-panel');
       actions.append(label, button); element.append(title, paths, meters, actions); (transferJob.modalPreparation ? $('#modal-body') : document.body).append(element);
     }
-    element.hidden = Boolean(operationQueue?.active && !transferJob.modalPreparation);
+    element.hidden = !transferJob.modalPreparation;
     const progressContainer = transferJob.modalPreparation ? $('#modal-body') : document.body;
     if (element.parentElement !== progressContainer) progressContainer.append(element);
     if (transferJob.modalPreparation) $('#modal-cancel').hidden = true;
@@ -965,7 +965,7 @@
     const statusProgress = reported || transferJob.reportedProgress || Progress.event({ phase: transferJob.phase || 'preparing', overall: measurement(transferJob.completedBytes, transferJob.totalBytes), current: measurement(transferJob.currentTransferred, transferJob.currentTotal) });
     const statusPlanId = transferJob.queueJobId || transferJob.id;
     const statusSnapshot = plannedStatus(Progress.event({ ...statusProgress, id: statusPlanId })); transferStatusPlan = statusPlans.get(statusPlanId);
-    statusbar.setProgress({ quiet: Boolean(operationQueue?.active), title, statusTitle, progress: statusSnapshot, statusPath: transferJob.currentPath && displayPath(transferJob.currentPath), overallValueText, fileValueText, element, modal: transferJob.modalPreparation, cancelRequested: transferJob.cancelRequested, cancelAvailable: true });
+    statusbar.setProgress({ title, statusTitle, progress: statusSnapshot, statusPath: transferJob.currentPath && displayPath(transferJob.currentPath), overallValueText, fileValueText, cancelRequested: transferJob.cancelRequested, cancelAvailable: true });
     if (operationQueue?.active) { operationQueue.active.progress = statusSnapshot; operationQueue.active.control = $('#status-progress-region').cloneNode(true); operationQueue.active.cancelling = Boolean(transferJob.cancelRequested); operationQueue.active.currentPath = transferJob.currentPath; }
     jobView?.update(operationQueue.items);
   }
@@ -1089,7 +1089,7 @@
       filesystemTaskId = message.taskRequestId = `filesystem-task-${++filesystemTaskSequence}`;
       statusTask('filesystem', t(message.type === 'filesystem-delete' ? 'Löschen wird ausgeführt' : 'Aktion wird ausgeführt…') + ` · ${t('Hostbestätigung')}`);
     }
-    if (message.type === 'filesystem-delete') toast(t('Löschen wird ausgeführt'), 'info');
+    if (message.type === 'filesystem-delete') logMessage(t('Löschen wird ausgeführt'), 'info');
     host.postMessage({ ...message, ...(refreshingFilesystem ? { refreshRequestId } : {}), state });
     if (refreshingFilesystem) updateDirectoryActivity();
     return true;
@@ -1174,7 +1174,7 @@
           else document.querySelector(`[data-pane="${active}"] .list`)?.focus();
         }
       }
-    } else if (contextValid && !data.ok) toast(data.error || t('Dateioperation fehlgeschlagen.'), 'error');
+    } else if (contextValid && !data.ok) logMessage(data.error || t('Dateioperation fehlgeschlagen.'), 'error');
     requestGitStatus(); updateDirectoryActivity(); flushQueuedOperation(); flushFocusRefresh();
     return true;
   }
@@ -1202,7 +1202,7 @@
         prioritizeFilesystemOperation();
         if (!filesystemPending) {
           pendingFilesystemKind = 'filesystem-apply'; filesystemPending = true; $('#panes').inert = !operationQueue?.active; $('#functionbar').inert = true;
-          if (!transferJob) { toast(t('Dateioperation läuft…'), 'info'); statusTask('filesystem', t('Dateioperation läuft…') + ` · ${t('Hostbestätigung')}`); }
+          if (!transferJob) { logMessage(t('Dateioperation läuft…'), 'info'); statusTask('filesystem', t('Dateioperation läuft…') + ` · ${t('Hostbestätigung')}`); }
           traceTransfer(transferJob?.transfer, 'write-requested', { operationId: transferJob?.id, checkpoint: false });
           host.postMessage({ type: 'filesystem-apply', ...(transferWrite ? { operationId: transferJob.id, transfer: transferWrite } : { state }) });
         }
@@ -1765,7 +1765,7 @@
     if (!file) return;
     const source = resultView(p) ? parent(file.fsSource) : currentPath(p);
     if (confirmed && (confirmed.side !== state.active || confirmed.source !== source || confirmed.id !== file.id || confirmed.name !== file.name)) return;
-    if (file.archive && !state.archiveLocations?.[source]) return toast(t('Dateioperationen innerhalb von Archiven sind nicht verfügbar. F3 zeigt den Inhalt schreibgeschützt an.'));
+    if (file.archive && !state.archiveLocations?.[source]) return logMessage(t('Dateioperationen innerhalb von Archiven sind nicht verfügbar. F3 zeigt den Inhalt schreibgeschützt an.'));
     const target = activeRow(file.id)?.querySelector('[data-filename]');
     if (!target) return;
     const existing = target.querySelector('input');
@@ -1789,7 +1789,7 @@
       const extension = columns.splitName(file).extension;
       const name = input.value && !input.value.includes('.') && extension ? `${input.value}.${extension}` : input.value;
       const reserved = /^[a-z]:\//i.test(source) && /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i.test(name.split('.')[0].trimEnd());
-      if (commit && name !== oldName && (!validName(name) || [...name].some(character => character.charCodeAt(0) < 32) || reserved || (state.folders[source] || []).some(other => other !== file && other.name.toLowerCase() === name.toLowerCase()))) { toast(t('Der Name ist ungültig oder bereits vergeben.')); input.focus(); return; }
+      if (commit && name !== oldName && (!validName(name) || [...name].some(character => character.charCodeAt(0) < 32) || reserved || (state.folders[source] || []).some(other => other !== file && other.name.toLowerCase() === name.toLowerCase()))) { logMessage(t('Der Name ist ungültig oder bereits vergeben.')); input.focus(); return; }
       if (commit && name !== oldName && file.type === 'folder') {
         const context = { side: state.active, source, id: file.id, name: oldName };
         if (prepareFolders([join(source, oldName)], 'rename-one', () => startRename(name, context))) { stopEditing(); return; }
@@ -1813,7 +1813,7 @@
       const pending = state.realFilesystem && JSON.stringify(state.folders) !== confirmedFolders;
       if (pending && completed) filesystemResume = completed;
       render(focusList);
-      if (commit && name !== oldName && !pending) toast(t('Eintrag umbenannt.'), 'success');
+      if (commit && name !== oldName && !pending) logMessage(t('Eintrag umbenannt.'), 'success');
       if (!pending) completed?.();
     }
     input.addEventListener('keydown', event => {
@@ -1965,9 +1965,9 @@
     persist();
   }
   const actions = [['F2', t('Umbenennen'), 'rename-one'], ['F3', t('Anzeigen'), 'view'], ['F4', t('Bearbeiten'), 'edit'], ['F5', t('Kopieren'), 'copy'], ['F6', t('Verschieben'), 'move'], ['F7', t('Neuer Ordner'), 'mkdir'], ['F8', t('Löschen'), 'delete']];
-  const lister = window.BitfroestListerView.create({ host, state: () => state, t, escape, modal, restore: render, edit: file => preview(file, true), notify: toast, report: reportStatus, remember: rememberScroll, task: statusTask });
+  const lister = window.BitfroestListerView.create({ host, state: () => state, t, escape, modal, restore: render, edit: file => preview(file, true), notify: logMessage, report: reportStatus, remember: rememberScroll, task: statusTask });
   const previewManager = window.BitfroestPreview.create();
-  const quickDiff = window.BitfroestQuickDiff.create({ host, t, state: () => state, currentPath, isArchive: isArchiveLocation, notify: toast, task: xrayTask, preview: previewManager, decorate: refreshFileColors, reveal: revealQuickDiffEntry, copy: (text, slash) => selectionIO('copy', text, [{ start: 0, length: text.length }], undefined, slash ? 'slash' : 'native'), beforeStart: () => { document.querySelectorAll("[data-lister-close]").forEach(button => button.click()); }, });
+  const quickDiff = window.BitfroestQuickDiff.create({ host, t, state: () => state, currentPath, isArchive: isArchiveLocation, notify: logMessage, task: xrayTask, preview: previewManager, decorate: refreshFileColors, reveal: revealQuickDiffEntry, copy: (text, slash) => selectionIO('copy', text, [{ start: 0, length: text.length }], undefined, slash ? 'slash' : 'native'), beforeStart: () => { document.querySelectorAll("[data-lister-close]").forEach(button => button.click()); }, });
   function revealQuickDiffEntry({ entry, root, side, previewState }) {
     const target = join(root, entry.path), directory = parent(target);
     const finish = () => {
@@ -1979,12 +1979,12 @@
       p.cursor = file?.id || null; p.selected = file ? [file.id] : [];
       render(true, undefined, false);
       if (file) fileGrid.ensure(document.querySelector(`[data-pane="${side}"]`), file.id);
-      else toast(t('Die Datei ist nicht mehr vorhanden. Der Ordner wurde geöffnet.'), 'info');
+      else logMessage(t('Die Datei ist nicht mehr vorhanden. Der Ordner wurde geöffnet.'), 'info');
     };
     if (host && state.realFilesystem) requestFilesystem({ type: 'filesystem-navigate', path: directory, side }, finish);
     else finish();
   }
-  const xray = window.BitfroestXray.create({ host, t, state: () => state, currentPath, files, isArchive: isArchiveLocation, settings: () => fileSettings, task: xrayTask, notify: toast, preview: previewManager, beforeStart: () => { previewManager.activate("xray", () => xray.stop()); document.querySelectorAll("[data-lister-close]").forEach(button => button.click()); }, compact: (side, enabled) => fileGrid.compact(document.querySelector(`[data-pane="${side}"]`), enabled), restoreFocus: side => { state.active = side; document.querySelector(`[data-pane="${side}"] .list`)?.focus({ preventScroll: true }); } });
+  const xray = window.BitfroestXray.create({ host, t, state: () => state, currentPath, files, isArchive: isArchiveLocation, settings: () => fileSettings, task: xrayTask, notify: logMessage, preview: previewManager, beforeStart: () => { previewManager.activate("xray", () => xray.stop()); document.querySelectorAll("[data-lister-close]").forEach(button => button.click()); }, compact: (side, enabled) => fileGrid.compact(document.querySelector(`[data-pane="${side}"]`), enabled), restoreFocus: side => { state.active = side; document.querySelector(`[data-pane="${side}"] .list`)?.focus({ preventScroll: true }); } });
   const fileSearch = window.BitfroestFileSearch.create({ host, t, escape, report: reportStatus, task: statusTask,
     context: () => ({ path: currentPath(pane()), selected: selected().map(row => row.fsSource || join(currentPath(pane()), row.name)), side: state.active, state }),
     apply: (fresh, rows, source, id, name) => {
@@ -2121,9 +2121,9 @@
   let uiActionSequence = 0;
   function hostAction(type, payload = {}) {
     if (!host) return;
-    if (!nativeDesktopSupported && ['open', 'open-trash'].includes(type)) { toast(t('Diese Funktion wird auf diesem Betriebssystem noch nicht unterstützt.'), 'info'); return; }
+    if (!nativeDesktopSupported && ['open', 'open-trash'].includes(type)) { logMessage(t('Diese Funktion wird auf diesem Betriebssystem noch nicht unterstützt.'), 'info'); return; }
     const requestId = `ui-action-${++uiActionSequence}`;
-    toast(t('Aktion wird ausgeführt…'), 'info');
+    logMessage(t('Aktion wird ausgeführt…'), 'info');
     uiActionRequests.set(requestId, { type, statusVersion: statusbar.version });
     statusTask(requestId, t('Aktion wird ausgeführt…') + ` · ${t('Hostbestätigung')}`);
     host.postMessage({ type, ...payload, requestId });
@@ -2142,11 +2142,11 @@
     const invalid = action === 'git-history' ? 'Ungültige Auswahl für Git History.' : 'Ungültige Dateiauswahl für Git Diff.';
     const matches = gitMenuSelection && selection?.directory === gitMenuSelection.directory && selection.snapshotId === gitMenuSelection.snapshotId && selection.ids?.length === 1 && selection.ids[0] === gitMenuSelection.ids[0];
     const captured = matches ? gitMenuSelection : captureGitDiff(selection, action);
-    if (!captured) { toast(t(invalid), 'error'); return; }
+    if (!captured) { logMessage(t(invalid), 'error'); return; }
     if (filesystemPending && refreshingFilesystem && !transferPending && !navigationRequests.size) { gitMenuSelection = captured; pendingGitDiff = { selection: captured, action }; return; }
-    if (filesystemPending || transferPending || navigationRequests.size) { toast(t('Eine Dateisystemoperation läuft bereits.'), 'info'); return; }
+    if (filesystemPending || transferPending || navigationRequests.size) { logMessage(t('Eine Dateisystemoperation läuft bereits.'), 'info'); return; }
     const file = state.folders[captured.directory]?.find(file => file.id === captured.ids[0]);
-    if (![captured.snapshotId, captured.refreshSnapshot].includes(state.snapshotId) || !state.panes.some(p => currentPath(p) === captured.directory) || !file || action !== 'git-history' && file.type === 'folder' || (file.fsSource || join(captured.directory, file.name)) !== captured.path) { gitMenuSelection = null; toast(t(invalid), 'error'); return; }
+    if (![captured.snapshotId, captured.refreshSnapshot].includes(state.snapshotId) || !state.panes.some(p => currentPath(p) === captured.directory) || !file || action !== 'git-history' && file.type === 'folder' || (file.fsSource || join(captured.directory, file.name)) !== captured.path) { gitMenuSelection = null; logMessage(t(invalid), 'error'); return; }
     gitMenuSelection = null;
     hostAction(action, { directory: captured.directory, ids: captured.ids, snapshotId: state.snapshotId });
   }
@@ -2178,9 +2178,9 @@
     return () => state.panes.includes(p) && currentPath(p) === path && p.tabStates?.[p.tab]?.id === tab && state.snapshotId === snapshot;
   }
   function selectionIO(action, text, pathRanges, successMessage, pathStyle = 'native', onSuccess) {
-    if (!host) { toast(t('Diese Auswahlaktion benötigt den Erweiterungshost.')); return; }
+    if (!host) { logMessage(t('Diese Auswahlaktion benötigt den Erweiterungshost.')); return; }
     const requestId = `selection-${++selectionSequence}`;
-    toast(t('Auswahl wird übertragen…'), 'info');
+    logMessage(t('Auswahl wird übertragen…'), 'info');
     selectionRequests.set(requestId, { p: pane(), valid: selectionContext(pane()), action, statusVersion: statusbar.version, successMessage, onSuccess });
     statusTask(requestId, t('Auswahl wird übertragen…') + ` · ${t('Hostbestätigung')}`);
     host.postMessage({ type: 'selection-io', requestId, action, text, ...(pathRanges?.length ? { pathRanges } : {}), ...(pathStyle !== 'native' ? { pathStyle } : {}) });
@@ -2219,7 +2219,7 @@
       const messages = { 'select-all': includeDirectories ? 'Alle Einträge markiert.' : 'Alle Dateien markiert.', clear: 'Auswahl aufgehoben.', invert: 'Auswahl umgekehrt.',
         'select-group': 'Gruppe markiert.', 'unselect-group': 'Gruppenmarkierung entfernt.', 'select-search-matches': 'Suchtreffer markiert.',
         'select-extension': 'Dateien mit gleicher Erweiterung markiert.', 'unselect-extension': 'Markierung gleicher Erweiterungen entfernt.' };
-      toast(t(messages[command]), 'success');
+      logMessage(t(messages[command]), 'success');
     };
     const merge = (matched, remove) => {
       p.cursorSelection = null;
@@ -2246,11 +2246,11 @@
             fileSearch.evaluatePreset(mask.slice(1), eligible, true).then(ids => {
               if (!valid() || $('#value') !== dialog || !$('#modal').open) return;
               merge(eligible.filter(row => ids.includes(row.id)), remove); $('#modal').close();
-            }).catch(error => toast(error.message));
+            }).catch(error => logMessage(error.message));
             return false;
           }
           merge(selectionMatches(eligible, mask), remove); return true;
-        } catch { toast(t('Ungültiger Auswahlfilter.')); return false; }
+        } catch { logMessage(t('Ungültiger Auswahlfilter.')); return false; }
       });
       return true;
     }
@@ -2262,8 +2262,8 @@
       }
       return true;
     }
-    if (command === 'save-selection') { rememberSelection(p); toast(t('Auswahl gemerkt.'), 'success'); return true; }
-    if (command === 'restore-selection') { const names = rememberedSelections[state.panes.indexOf(p)]; if (names) { restoreSelection(p, names); toast(t('Auswahl wiederhergestellt.'), 'success'); } else toast(t('Keine gemerkte Auswahl vorhanden.')); return true; }
+    if (command === 'save-selection') { rememberSelection(p); logMessage(t('Auswahl gemerkt.'), 'success'); return true; }
+    if (command === 'restore-selection') { const names = rememberedSelections[state.panes.indexOf(p)]; if (names) { restoreSelection(p, names); logMessage(t('Auswahl wiederhergestellt.'), 'success'); } else logMessage(t('Keine gemerkte Auswahl vorhanden.')); return true; }
     if (command === 'save-selection-file' || command === 'load-selection-file') {
       selectionIO(command === 'save-selection-file' ? 'save' : 'load', rows.filter(row => p.selected.includes(row.id)).map(row => row.name).join('\r\n'));
       return true;
@@ -2301,10 +2301,10 @@
     }
     return false;
   }
-  function toast(text, outcome = 'error') { const message = t(text); statusbar.setStatus(message, outcome); $('#toast').classList.remove('visible'); $('#toast').textContent = ''; }
+  function logMessage(text, outcome = 'error') { statusbar.setStatus(t(text), outcome); }
   function reportStatus(message, outcome = 'info', version) {
     if (version !== undefined && version !== statusbar.version) return;
-    toast(message, outcome); return statusbar.version;
+    logMessage(message, outcome); return statusbar.version;
   }
   function go(path, loadingEntry) {
     path = Object.keys(state.archiveLocations || {}).find(value => displayArchivePath(value) === path) || path;
@@ -2329,8 +2329,8 @@
       if (input) input.closest('.path-address').classList.add('is-editing');
       requestFilesystem({ type: 'filesystem-navigate', path, side }, undefined, rollback); return;
     }
-    if (!Object.hasOwn(state.folders, path)) return toast(t('Dieser Pfad ist in den Beispieldaten nicht vorhanden.'));
-    rememberScroll(); const previousViews = state.panes.map(paneDisplayState); delete pane().tabStates[pane().tab].searchResult; tabs.navigate(pane(), path); render(true, previousViews); toast(t('Verzeichnis geöffnet: {path}', { path: displayArchivePath(path) }), 'success');
+    if (!Object.hasOwn(state.folders, path)) return logMessage(t('Dieser Pfad ist in den Beispieldaten nicht vorhanden.'));
+    rememberScroll(); const previousViews = state.panes.map(paneDisplayState); delete pane().tabStates[pane().tab].searchResult; tabs.navigate(pane(), path); render(true, previousViews); logMessage(t('Verzeichnis geöffnet: {path}', { path: displayArchivePath(path) }), 'success');
   }
   function historyMarkup(p) {
     const tab = p.tabStates[p.tab];
@@ -2403,7 +2403,7 @@
     if (!fromClipboard || !host) return;
     clipboardRequest({ type: 'clipboard-path-read' }, response => {
       if (generation !== pathRequestGeneration || document.activeElement !== input || state.active !== side || pane() !== activePane || currentPath(activePane) !== originalPath || $('#modal').open || filesystemPending || transferPending) return;
-      if (!response.ok) { toast(response.error); return; }
+      if (!response.ok) { logMessage(response.error); return; }
       input.value = displayPath(response.path); input.select();
       if (state.realFilesystem) {
         const navigation = { generation, input, side, valid: false };
@@ -2498,7 +2498,6 @@
   }
   function showOperationFailure(message, { inline = false, diagnostic = null, notify = true } = {}) {
     if (notify) statusbar.error(message); else statusbar.setStatus(message, 'error');
-    clearTimeout(toast.timer); $('#toast').classList.remove('visible');
     operationFailure = message;
     operationFailureDiagnostic = diagnostic;
     operationFailureInline = inline && Boolean(document.querySelector('.inline-rename'));
@@ -2579,7 +2578,7 @@
       const lines = (file.content || '').split('\n');
       body = `<article class="markdown-preview">${lines.map(line => line.startsWith('## ') ? `<h2>${escape(line.slice(3))}</h2>` : line.startsWith('# ') ? `<h1>${escape(line.slice(2))}</h1>` : line.startsWith('- ') ? `<ul><li>${escape(line.slice(2))}</li></ul>` : `<p>${escape(line)}</p>`).join('')}</article>`;
     } else body = `<pre class="preview-text">${escape(file.content || t('Keine Textvorschau verfügbar.'))}</pre>`;
-    modal(file.name, body, edit ? t('Mockup speichern') : null, () => { file.content = $('.editor').value; file.size = new TextEncoder().encode(file.content).length; render(); toast(t('Beispieldatei aktualisiert'), 'success'); return true; });
+    modal(file.name, body, edit ? t('Mockup speichern') : null, () => { file.content = $('.editor').value; file.size = new TextEncoder().encode(file.content).length; render(); logMessage(t('Beispieldatei aktualisiert'), 'success'); return true; });
   }
   function conflictMetadata(file) {
     const known = (key, text = String(key)) => ({ key, text });
@@ -2652,7 +2651,7 @@
           const reserved = /^[a-z]:\//i.test(conflict.targetPath) && /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i.test(name.split('.')[0].trimEnd());
           const occupied = (state.folders[parent(conflict.targetPath)] || []).some(file => file.name.toLocaleLowerCase() === name.toLocaleLowerCase());
           if (!validName(name) || [...name].some(character => character.charCodeAt(0) < 32) || reserved || occupied) {
-            toast(t('Der neue Dateiname ist ungültig oder bereits vorhanden.')); input.focus(); return;
+            logMessage(t('Der neue Dateiname ist ungültig oder bereits vorhanden.')); input.focus(); return;
           }
         }
         settled = true; conflictAction = null; dialog.removeEventListener('close', cancelled); dialog.removeEventListener('click', clicked); delete $('#modal-cancel').dataset.conflictAction;
@@ -2670,12 +2669,12 @@
         if (command.includes('compare')) {
           if (nativeComparison) host.postMessage({ type: 'compare', sourcePath: conflict.source.fsSource, targetPath: conflict.target.fsSource });
           else if (sampleComparison) { const output = $('#conflict-comparison'); output.hidden = false; output.textContent = ui`QUELLE\n${conflict.source.content}\n\nZIEL\n${conflict.target.content}`; }
-          else toast(t('Keine vollständigen Dateien für einen Vergleich verfügbar.'));
+          else logMessage(t('Keine vollständigen Dateien für einen Vergleich verfügbar.'));
         } else {
           const file = command.includes('source') ? conflict.source : conflict.target;
           if (host && (!state.realFilesystem && typeof file.content === 'string' || state.realFilesystem && typeof file.fsSource === 'string')) host.postMessage({ type: state.realFilesystem ? 'conflict-preview' : 'preview', ...(state.realFilesystem ? { path: file.fsSource } : { content: file.content }), plain: command.endsWith('plain'), language: command.endsWith('plain') ? 'plaintext' : file.type === 'markdown' ? 'markdown' : 'plaintext' });
           else if (!state.realFilesystem && typeof file.content === 'string') { const output = $('#conflict-comparison'); output.hidden = false; output.textContent = file.content; }
-          else toast(t('Keine vollständigen Dateien für einen Vergleich verfügbar.'));
+          else logMessage(t('Keine vollständigen Dateien für einen Vergleich verfügbar.'));
         }
         return true;
       };
@@ -2695,14 +2694,14 @@
       const completeName = value => value && !value.includes('.') && extension ? `${value}.${extension}` : value;
       modal(t('Dateiname im Zielordner'), `<section class="individual-rename"><p id="modal-description" class="dialog-description">${t('Den Namen für diesen Eintrag im Zielordner festlegen.')}</p><dl class="rename-context"><div><dt>${t('Bisheriger Name')}</dt><dd data-rename-source>${escape(source.name)}</dd></div><div><dt>${t('Zielordner')}</dt><dd data-rename-directory>${pathDisplay(directory)}</dd></div></dl>${field(t('Neuer Dateiname'), source.name)}<div id="rename-preview" class="rename-preview"><span>${t('Name im Zielordner')}</span><output for="value" data-rename-preview aria-live="polite">${escape(source.name)}</output></div></section>`, mode === 'move' ? t('Verschieben') : t('Kopieren'), () => {
         const name = completeName($('#value').value);
-        if (!validName(name) || [...name].some(character => character.charCodeAt(0) < 32) || /^[a-z]:\//i.test(directory) && /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(name)) { toast(t('Der neue Dateiname ist ungültig oder bereits vorhanden.')); $('#value').focus(); return false; }
+        if (!validName(name) || [...name].some(character => character.charCodeAt(0) < 32) || /^[a-z]:\//i.test(directory) && /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(name)) { logMessage(t('Der neue Dateiname ist ungültig oder bereits vorhanden.')); $('#value').focus(); return false; }
         if (source.type === 'folder') {
           const target = join(directory, name);
           if (prepareFolders([target], 'copy', () => {
             for (const [path, rows] of Object.entries(state.folders)) if (inTree(path, target)) folders[path] = rows;
             finish({ name });
           })) {
-            transferPreparationFailure = cancelled => { if (cancelled) finish({ action: 'cancel' }); else { toast(t('Dateioperation fehlgeschlagen; Verzeichnisse erneut eingelesen')); $('#value')?.focus(); } };
+            transferPreparationFailure = cancelled => { if (cancelled) finish({ action: 'cancel' }); else { logMessage(t('Dateioperation fehlgeschlagen; Verzeichnisse erneut eingelesen')); $('#value')?.focus(); } };
             return false;
           }
         }
@@ -2943,7 +2942,7 @@
     const progress = finishTransferStatus('error');
     if (progress) statusbar.finishProgress({ message, severity: window.BitfroestWorkbench.Severity.Error, progress });
     if (transferJob?.hostActive === false) { transferJob = null; transferProgress(); }
-    if (state.realFilesystem) { render(true); showOperationFailure(message, { diagnostic, notify: !operationQueue?.active }); } else toast(message);
+    if (state.realFilesystem) { render(true); showOperationFailure(message, { diagnostic, notify: !operationQueue?.active }); } else logMessage(message);
     options.onComplete?.({ completed: 0, completedIds: [], ...error.confirmedTransfer, confirmed: Boolean(error.confirmedTransfer), errors: [message], cancelled: false });
     return message;
   }
@@ -2966,7 +2965,7 @@
     modal(t('Archiv entpacken'), `${selectionCount(picked.length)}${zipUnpackFields(targetPath || currentPath(state.panes[1 - sourceSide]))}`, t('Entpacken'), () => {
       const enteredTarget = $('#value').value.trim();
       const target = enteredTarget ? inputPath(enteredTarget, targetPath || currentPath(state.panes[1 - sourceSide])) : '';
-      if (state.archiveLocations?.[target]) { toast(t('Ein Zielordner ist erforderlich.')); return false; }
+      if (state.archiveLocations?.[target]) { logMessage(t('Ein Zielordner ist erforderlich.')); return false; }
       sendZipWrite({ messageType: 'zip-copy', path: sourcePath, sourceSide, targetSide: 1 - sourceSide, ids: picked.map(row => row.id), target, ...zipUnpackOptions() });
       return true;
     });
@@ -2991,7 +2990,7 @@
   function sendZipWriteNow(request, completed, foreground = false) {
     prioritizeFilesystemOperation();
     if (filesystemPending) {
-      if (foreground) { toast(t('Während einer Dateisystemoperation ist diese Aktion nicht verfügbar.')); return; }
+      if (foreground) { logMessage(t('Während einer Dateisystemoperation ist diese Aktion nicht verfügbar.')); return; }
       runQueuedOperation(operationQueue.active, () => sendZipWriteNow(request, completed)); return;
     }
     const operationId = `zip-write-${Date.now()}-${++transferSequence}`;
@@ -3017,12 +3016,12 @@
   }
   function runTransfer({ sourceSide = state.active, targetSide = 1 - sourceSide, sourcePath: providedSourcePath, ids, targetPath, targetIsDirectory = false, mode = 'copy', onComplete, validateSelection, validateSources, sourceGroups, trigger, showInStatus }) {
     if ((filesystemPending && !operationQueue?.active && !refreshingFilesystem) || transferPending) return;
-    if (validateSelection && !validateSelection()) return toast(t('Die gezogene Auswahl wurde geändert. Bitte erneut ziehen.'));
+    if (validateSelection && !validateSelection()) return logMessage(t('Die gezogene Auswahl wurde geändert. Bitte erneut ziehen.'));
     const sourcePane = state.panes[sourceSide];
     rememberSelection(sourcePane);
     const sourcePath = providedSourcePath || currentPath(sourcePane);
     if (state.archiveLocations?.[sourcePath]) {
-      if (mode !== 'copy') return toast(t('Änderungen innerhalb von ZIP-Archiven sind im Pilot nicht verfügbar.'));
+      if (mode !== 'copy') return logMessage(t('Änderungen innerhalb von ZIP-Archiven sind im Pilot nicht verfügbar.'));
       const chosen = ids || (sourcePane.selected.length ? sourcePane.selected : [sourcePane.cursor]);
       const target = targetPath || currentPath(state.panes[1 - sourceSide]);
       if (state.archiveLocations?.[target]) return zipPack((state.folders[sourcePath] || []).filter(row => chosen.includes(row.id)), sourcePath, target, false, sourceSide);
@@ -3034,7 +3033,7 @@
     }
     const pickedIds = ids || (sourcePane.selected.length ? sourcePane.selected : sourcePane.cursor ? [sourcePane.cursor] : []);
     const picked = (state.folders[sourcePath] || []).filter(file => pickedIds.includes(file.id));
-    if (!picked.length) { toast(t('Zuerst eine Datei oder einen Ordner auswählen.')); onComplete?.({ confirmed: false, completed: 0, completedIds: [], errors: [], cancelled: true }); return; }
+    if (!picked.length) { logMessage(t('Zuerst eine Datei oder einen Ordner auswählen.')); onComplete?.({ confirmed: false, completed: 0, completedIds: [], errors: [], cancelled: true }); return; }
     const policies = [['ask', t('Bei Konflikten nachfragen')], ['overwrite-all', t('Alle überschreiben')], ['skip-all', t('Alle vorhandenen überspringen')], ['overwrite-older', t('Alle älteren überschreiben')], ['overwrite-older-equal', t('Alle älteren und gleich alten überschreiben')], ['rename-older-target', t('Ältere Ziele umbenennen, neuere überspringen')], ['autorename-source', t('Kopien automatisch umbenennen')], ['autorename-target', t('Vorhandene Ziele automatisch umbenennen')], ['larger', t('Nur größere Dateien kopieren')], ['smaller', t('Nur kleinere Dateien kopieren')]];
     const trace = { mode, trigger, ids: picked.map(file => file.id), traceId: `transfer-trace-${Date.now()}-${++transferTraceSequence}` };
     traceTransfer(trace, 'dialog-opened');
@@ -3058,11 +3057,11 @@
     </section>`, mode === 'move' ? t('Verschieben') : t('Kopieren'), () => {
       let destination = $('#value').value;
       if (sourceGroups?.length && sourceGroups.reduce((sum, group) => sum + group.ids.length, 0) > 1 && destination.trim() && !/[\\/]$/.test(destination)) destination += '/';
-      if (validateSelection && !validateSelection()) { toast(t('Die gezogene Auswahl wurde geändert. Bitte erneut ziehen.')); return false; }
-      if (validateSources && !validateSources()) { toast(t('Die Übertragungsauswahl ist nicht mehr gültig.')); return false; }
+      if (validateSelection && !validateSelection()) { logMessage(t('Die gezogene Auswahl wurde geändert. Bitte erneut ziehen.')); return false; }
+      if (validateSources && !validateSources()) { logMessage(t('Die Übertragungsauswahl ist nicht mehr gültig.')); return false; }
       const requiredDirectory = targetIsDirectory && paths.identity(inputPath(destination, sourcePath)) === paths.identity(inputPath(targetPath, sourcePath)) ? inputPath(targetPath, sourcePath) : undefined;
       try { if (!requiredDirectory || Object.hasOwn(state.folders, requiredDirectory)) for (const group of sourceGroups || [{ sourcePath, ids: picked.map(file => file.id) }]) window.BitfroestTransfer.planTarget({ folders: state.folders, sourcePath: group.sourcePath, ids: group.ids, targetPath: destination }); }
-      catch (error) { toast(error.message); return false; }
+      catch (error) { logMessage(error.message); return false; }
       const options = { ...trace, sourceSide, targetSide, sourcePath, targetPath: requiredDirectory || destination, requiredDirectory, verifyAfterCopy: $('#transfer-verify').checked, individualNames: $('#transfer-individual').checked, filter: $('#transfer-filter').value, policy: $('#transfer-policy').value, onComplete, validateSelection, validateSources, showInStatus };
       traceTransfer(options, 'confirmed', { decision: options.policy });
       if (sourceGroups?.length) {
@@ -3096,7 +3095,7 @@
   }
   function transferResultSelection(picked, mode, targetPath) {
     if (!picked.length) return;
-    if (picked.some(row => row.archive)) return toast(t('Dateioperationen innerhalb von Archiven sind nicht verfügbar. F3 zeigt den Inhalt schreibgeschützt an.'));
+    if (picked.some(row => row.archive)) return logMessage(t('Dateioperationen innerhalb von Archiven sind nicht verfügbar. F3 zeigt den Inhalt schreibgeschützt an.'));
     const groups = [];
     for (const row of picked) { const sourcePath = parent(row.fsSource); let group = groups.find(group => group.sourcePath === sourcePath); if (!group) { group = { sourcePath, ids: [] }; groups.push(group); } group.ids.push(row.id); }
     runTransfer({ sourceSide: state.active, sourcePath: groups[0].sourcePath, ids: groups[0].ids, sourceGroups: groups, targetPath, mode });
@@ -3136,29 +3135,29 @@
   function action(kind, frozen) {
     const command = window.BitfroestJobs.commandForAction(kind);
     if ((filesystemPending && !refreshingFilesystem && !(operationQueue?.active && (command?.supportsBackgroundOperation.enabled || ['parent', 'up', 'open'].includes(kind)))) || transferPending) return;
-    if (frozen && !validDraggedFiles(frozen)) return toast(t('Die gezogene Auswahl wurde geändert. Bitte erneut ziehen.'));
-    if (state.realFilesystem && kind === 'reset') return toast(t('Diese Aktion ist für das reale Dateisystem noch nicht verfügbar.'));
+    if (frozen && !validDraggedFiles(frozen)) return logMessage(t('Die gezogene Auswahl wurde geändert. Bitte erneut ziehen.'));
+    if (state.realFilesystem && kind === 'reset') return logMessage(t('Diese Aktion ist für das reale Dateisystem noch nicht verfügbar.'));
     const p = frozen ? state.panes[frozen.side] : pane(), source = currentPath(p), marked = selected(), picked = frozen?.currentDirectory ? [currentFolder(p)] : frozen ? files(p).filter(file => frozen.ids.includes(file.id)) : marked.length ? marked : files(p).filter(file => file.id === p.cursor);
     if (['copy', 'copy-same', 'move', 'delete', 'delete-alternate', 'delete-permanently', 'rename', 'pack', 'pack-move', 'unpack', 'mkdir', 'mkdir-other', 'new-file'].includes(kind)) rememberSelection(p);
     if (state.realFilesystem && ['pack', 'pack-move'].includes(kind)) return zipPack(picked, source, currentPath(state.panes[1 - state.active]), kind === 'pack-move');
-    if (state.realFilesystem && kind === 'test-archives' && !picked.length && !state.archiveLocations?.[source]) return toast(t('Zuerst eine Datei oder einen Ordner auswählen.'));
+    if (state.realFilesystem && kind === 'test-archives' && !picked.length && !state.archiveLocations?.[source]) return logMessage(t('Zuerst eine Datei oder einen Ordner auswählen.'));
     if (state.realFilesystem && kind === 'test-archives') return sendZipWrite({ messageType: 'zip-test', path: source, sourcePath: source, sourceSide: state.active, targetSide: state.active, ids: picked.map(row => row.id) });
     if (state.realFilesystem && kind === 'unpack') {
-      if (!picked.length || picked.some(row => !/\.zip$/i.test(row.name))) return toast(t('Zum Entpacken zuerst ein ZIP-Archiv markieren.'));
+      if (!picked.length || picked.some(row => !/\.zip$/i.test(row.name))) return logMessage(t('Zum Entpacken zuerst ein ZIP-Archiv markieren.'));
       modal(t('Archiv entpacken'), selectionCount(picked.length) + zipUnpackFields(currentPath(state.panes[1 - state.active]), true), t('Entpacken'), () => { const target = $('#value').value.trim(); sendZipWrite({ messageType: 'zip-unpack', sourcePath: source, sourceSide: state.active, targetSide: 1 - state.active, ids: picked.map(row => row.id), target: target ? inputPath(target, currentPath(state.panes[1 - state.active])) : '', ...zipUnpackOptions() }); return true; }); $('#value').required = false; return;
     }
     if (state.archiveLocations?.[source] && ['delete', 'delete-alternate', 'delete-permanently'].includes(kind)) {
       if (!picked.length) return;
       return modal(t('Auswahl löschen'), `${selectionCount(picked.length)}<p>${picked.map(file => escape(file.name)).join('<br>')}</p>`, t('Löschen'), () => { sendZipWrite({ action: 'remove', path: source, ids: picked.map(row => row.id) }); return true; });
     }
-    if (state.archiveLocations?.[source] && !['copy', 'swap', 'mkdir', 'new-file', 'view', 'edit'].includes(kind)) return toast(t('Diese Aktion ist innerhalb eines ZIP-Archivs nicht verfügbar.'));
+    if (state.archiveLocations?.[source] && !['copy', 'swap', 'mkdir', 'new-file', 'view', 'edit'].includes(kind)) return logMessage(t('Diese Aktion ist innerhalb eines ZIP-Archivs nicht verfügbar.'));
     if (state.archiveLocations?.[source] && kind === 'copy') return state.archiveLocations?.[currentPath(state.panes[1 - state.active])] ? zipPack(picked, source, currentPath(state.panes[1 - state.active])) : runZipCopy(frozen?.side ?? state.active, source, picked);
     if (state.archiveLocations?.[source] && ['mkdir', 'new-file'].includes(kind)) return modal(t(kind === 'mkdir' ? 'Neuer Ordner' : 'Neue Textdatei'), pathRow(t('Erstellen in'), pathDisplay(source)) + field(t('Name'), ''), t('Erstellen'), () => {
       const name = $('#value').value; if (!validName(name)) return false;
       sendZipWrite({ action: kind, path: source, name }, kind === 'new-file' ? () => { const file = state.folders[source]?.find(row => row.name === name); if (file) hostAction('edit', { path: file.fsSource }); } : undefined); return true;
     });
-    if (kind === 'reset') { state = initial(); render(true); toast(t('Beispieldaten zurückgesetzt'), 'success'); return; }
-    if (kind === 'swap') { state.panes.reverse(); rememberedSelections.reverse(); state.active = 1 - state.active; render(true); toast(t('Seiten getauscht.'), 'success'); return; }
+    if (kind === 'reset') { state = initial(); render(true); logMessage(t('Beispieldaten zurückgesetzt'), 'success'); return; }
+    if (kind === 'swap') { state.panes.reverse(); rememberedSelections.reverse(); state.active = 1 - state.active; render(true); logMessage(t('Seiten getauscht.'), 'success'); return; }
     if (kind === 'mkdir' || kind === 'mkdir-other' || kind === 'new-file') {
       const targetPane = kind === 'mkdir-other' ? state.panes[1 - state.active] : p, targetPath = currentPath(targetPane);
       const file = kind === 'new-file', openedAt = new Date(), cursor = files(p).find(item => item.id === p.cursor);
@@ -3168,7 +3167,7 @@
         let plan;
         const entered = $('#value').value;
         try { plan = window.BitfroestFileNames.plan(entered, { base: targetPath, folders: state.folders, kind: file ? 'file' : 'folder', allowExisting: !file, now: openedAt, currentName: cursor?.name, currentType: cursor?.type }); }
-        catch (error) { toast(t(error.message)); return false; }
+        catch (error) { logMessage(t(error.message)); return false; }
         if (prepareFolders([...plan.paths, ...plan.directories].map(parent), kind, create, false)) return false;
         window.BitfroestFileNames.ensureDirectories(state.folders, plan.directories, name => entry(name, 'folder'));
         if (file) for (const path of plan.paths) state.folders[parent(path)].push(entry(base(path), 'text'));
@@ -3180,7 +3179,7 @@
         };
         const afterCreation = () => {
           focusCreated();
-          if (!state.realFilesystem || changed) toast(t(file ? plan.paths.length === 1 ? 'Datei erstellt' : 'Dateien erstellt' : plan.paths.length === 1 ? 'Ordner erstellt' : 'Mehrere Ordner erstellt'), 'success');
+          if (!state.realFilesystem || changed) logMessage(t(file ? plan.paths.length === 1 ? 'Datei erstellt' : 'Dateien erstellt' : plan.paths.length === 1 ? 'Ordner erstellt' : 'Mehrere Ordner erstellt'), 'success');
           if (file && plan.openEditor) {
             const path = plan.paths[0], created = state.folders[parent(path)].find(item => item.name === base(path));
             preview(created, true);
@@ -3195,8 +3194,8 @@
       const show = value => modal(t(file ? 'Neue Textdatei' : 'Neuer Ordner'), `${pathRow(t('Erstellen in'), pathDisplay(targetPath))}${field(t(file ? 'Dateiname' : 'Ordnername'), value)}`, t(file ? 'Datei erstellen' : 'Ordner erstellen'), create);
       show(file ? '' : proposed); return;
     }
-    if (!picked.length) return toast(t('Zuerst eine oder mehrere Dateien markieren.'));
-    if (picked.some(row => row.archive) && !['view', 'edit'].includes(kind)) return toast(t('Dateioperationen innerhalb von Archiven sind nicht verfügbar. F3 zeigt den Inhalt schreibgeschützt an.'));
+    if (!picked.length) return logMessage(t('Zuerst eine oder mehrere Dateien markieren.'));
+    if (picked.some(row => row.archive) && !['view', 'edit'].includes(kind)) return logMessage(t('Dateioperationen innerhalb von Archiven sind nicht verfügbar. F3 zeigt den Inhalt schreibgeschützt an.'));
     if (kind === 'view' || kind === 'edit') return preview(picked[0], kind === 'edit');
     if (['delete', 'delete-alternate', 'delete-permanently'].includes(kind)) {
       const selectedPaths = picked.map(file => frozen?.currentDirectory || resultView(p) ? file.fsSource : join(source, file.name));
@@ -3207,7 +3206,7 @@
       const warningText = networkPaths.length ? t('Netzwerkpfade werden endgültig gelöscht und nicht in den Papierkorb verschoben.') : t('Die ausgewählten Einträge werden nicht in den Papierkorb verschoben, sondern endgültig gelöscht.');
       const warning = state.realFilesystem && (!useTrash || mixed) ? `<p id="modal-description">${warningText}</p>${mixed ? `<p>${networkPaths.map(target => escape(target)).join('<br>')}</p>` : ''}` : '';
       modal(state.realFilesystem ? t(mixed ? 'Auswahl löschen?' : useTrash ? 'In den Papierkorb verschieben?' : 'Endgültig löschen?') : t('Auswahl löschen?'), selectionCount(picked.length) + ui`<p>${mixed ? t('Lokale Einträge werden in den Papierkorb verschoben. Netzwerkpfade werden endgültig gelöscht.') : `${count('entry', picked.length)} ${state.realFilesystem ? t(useTrash ? picked.length === 1 ? 'wird in den Papierkorb verschoben.' : 'werden in den Papierkorb verschoben.' : picked.length === 1 ? 'wird endgültig gelöscht.' : 'werden endgültig gelöscht.') : t(picked.length === 1 ? 'wird aus den Beispieldaten entfernt.' : 'werden aus den Beispieldaten entfernt.')}`}</p>${warning}<p>${picked.map(file => escape(file.name)).join('<br>')}</p>`, state.realFilesystem ? t(mixed ? 'Löschen' : useTrash ? 'In den Papierkorb' : 'Endgültig löschen') : t('Mockup löschen'), function removeSelection() {
-        if (frozen && !validDraggedFiles(frozen)) { toast(t('Die gezogene Auswahl wurde geändert. Bitte erneut ziehen.')); return false; }
+        if (frozen && !validDraggedFiles(frozen)) { logMessage(t('Die gezogene Auswahl wurde geändert. Bitte erneut ziehen.')); return false; }
         if (state.realFilesystem) {
           const paths = selectedPaths;
           $('#modal').close();
@@ -3216,7 +3215,7 @@
           return false;
         }
         picked.forEach(file => removeTree(join(source, file.name), file.type === 'archive'));
-        state.folders[source] = files(p).filter(file => !picked.some(item => item.id === file.id)); p.selected = []; p.cursor = null; render(true); toast(state.realFilesystem ? t('Löschen wird ausgeführt') : t('Auswahl aus Beispieldaten gelöscht'), state.realFilesystem ? 'info' : 'success'); return true;
+        state.folders[source] = files(p).filter(file => !picked.some(item => item.id === file.id)); p.selected = []; p.cursor = null; render(true); logMessage(state.realFilesystem ? t('Löschen wird ausgeführt') : t('Auswahl aus Beispieldaten gelöscht'), state.realFilesystem ? 'info' : 'success'); return true;
       });
       if (state.realFilesystem && (!useTrash || mixed)) $('#modal-cancel').focus();
       return;
@@ -3231,25 +3230,25 @@
     if (kind === 'pack') {
       modal(t('Auswahl packen'), ui`<p>${picked.length} Einträge als neues Beispielarchiv zusammenfassen.</p>${field(t('Archivname'), 'Auswahl.zip')}`, t('ZIP erstellen'), () => {
         const name = $('#value').value;
-        if (!validName(name) || !name.toLowerCase().endsWith('.zip') || !uniqueName(files(p), name)) { toast(t('Bitte einen freien ZIP-Dateinamen eingeben.')); return false; }
+        if (!validName(name) || !name.toLowerCase().endsWith('.zip') || !uniqueName(files(p), name)) { logMessage(t('Bitte einen freien ZIP-Dateinamen eingeben.')); return false; }
         const target = `${join(source, name)}!`;
         state.folders[target] = picked.map(file => ({ ...clone(file), id: String(nextId++) }));
         picked.forEach(file => { copyTree(join(source, file.name), join(target, file.name)); if (file.type === 'archive') copyTree(`${join(source, file.name)}!`, `${join(target, file.name)}!`); });
-        files(p).push(entry(name, 'archive', Math.round(picked.reduce((sum, f) => sum + f.size, 0) * .7))); render(); toast(t('Beispielarchiv erstellt · keine echte Kompression'), 'success'); return true;
+        files(p).push(entry(name, 'archive', Math.round(picked.reduce((sum, f) => sum + f.size, 0) * .7))); render(); logMessage(t('Beispielarchiv erstellt · keine echte Kompression'), 'success'); return true;
       }); return;
     }
     if (kind === 'unpack') {
       const archive = picked.find(file => file.type === 'archive');
-      if (!archive) return toast(t('Zum Entpacken zuerst ein ZIP-Archiv markieren.'));
+      if (!archive) return logMessage(t('Zum Entpacken zuerst ein ZIP-Archiv markieren.'));
       const contentPath = `${join(source, archive.name)}!`;
-      if (!Object.hasOwn(state.folders, contentPath)) return toast(t('Für dieses Archiv sind keine Beispieldaten hinterlegt.'));
+      if (!Object.hasOwn(state.folders, contentPath)) return logMessage(t('Für dieses Archiv sind keine Beispieldaten hinterlegt.'));
       const target = currentPath(state.panes[1 - state.active]);
       modal(t('Archiv entpacken'), ui`<p>${escape(archive.name)} → Gegenseite</p>` + pathRow(t('Zielordner'), pathInput(t('Zielordner'), target)), t('Entpacken'), () => {
         const destination = $('#value').value;
-        if (!Object.hasOwn(state.folders, destination) || destination === contentPath || destination.startsWith(`${contentPath}/`)) { toast(t('Bitte einen anderen vorhandenen Zielordner wählen.')); return false; }
-        if (state.folders[contentPath].some(file => !uniqueName(state.folders[destination], file.name))) { toast(t('Namenskonflikt im Ziel. Bitte einen anderen Zielordner wählen.')); return false; }
+        if (!Object.hasOwn(state.folders, destination) || destination === contentPath || destination.startsWith(`${contentPath}/`)) { logMessage(t('Bitte einen anderen vorhandenen Zielordner wählen.')); return false; }
+        if (state.folders[contentPath].some(file => !uniqueName(state.folders[destination], file.name))) { logMessage(t('Namenskonflikt im Ziel. Bitte einen anderen Zielordner wählen.')); return false; }
         state.folders[contentPath].forEach(file => { state.folders[destination].push({ ...clone(file), id: String(nextId++) }); copyTree(join(contentPath, file.name), join(destination, file.name)); if (file.type === 'archive') copyTree(`${join(contentPath, file.name)}!`, `${join(destination, file.name)}!`); });
-        render(); toast(t('Beispielarchiv entpackt'), 'success'); return true;
+        render(); logMessage(t('Beispielarchiv entpackt'), 'success'); return true;
       });
     }
   }
@@ -3258,10 +3257,10 @@
     modal(t('Mehrfach-Umbenennen'), selectionCount(picked.length) + ui(['<p>Die Vorschau wird beim Eingeben aktualisiert. [N] = Name, [C] = Zähler.</p><div class="field-row">']) + field(t('Namensmaske'), '[N]_[C]', 'mask') + field(t('Zähler beginnt bei'), '1', 'counter') + '</div><div class="field-row">' + field(t('Suchen (optional)'), '', 'search') + field(t('Ersetzen durch'), '', 'replacement') + ui(['</div><div class="field"><label for="casing">Groß-/Kleinschreibung</label><select id="casing"><option value="keep">Unverändert</option><option value="lower">kleinbuchstaben</option><option value="upper">GROSSBUCHSTABEN</option></select></div><table class="rename-table"><thead><tr><th>Alter Name</th><th>Neuer Name</th></tr></thead><tbody id="rename-preview"></tbody></table>']), t('Umbenennen'), function applyNames() {
       if (prepareFolders(picked.flatMap((file, index) => file.type === 'folder' ? [join(directories[index], file.name)] : []), 'rename', applyNames)) return false;
       const current = picked.map((file, index) => (state.folders[directories[index]] || []).find(row => row.id === file.id && row.name === file.name && row.type === file.type));
-      if (current.some(file => !file)) { toast(t('Die gezogene Auswahl wurde geändert. Bitte erneut ziehen.')); return false; }
+      if (current.some(file => !file)) { logMessage(t('Die gezogene Auswahl wurde geändert. Bitte erneut ziehen.')); return false; }
       picked = current;
       const names = renamedNames();
-      if (names.some(name => !validName(name)) || new Set(names.map((name, index) => join(directories[index], name).toLowerCase())).size !== names.length || names.some((name, index) => (state.folders[directories[index]] || []).some(file => !picked.includes(file) && file.name.toLowerCase() === name.toLowerCase()))) { toast(t('Die Vorschau enthält ungültige Namen oder Namenskonflikte.')); return false; }
+      if (names.some(name => !validName(name)) || new Set(names.map((name, index) => join(directories[index], name).toLowerCase())).size !== names.length || names.some((name, index) => (state.folders[directories[index]] || []).some(file => !picked.includes(file) && file.name.toLowerCase() === name.toLowerCase()))) { logMessage(t('Die Vorschau enthält ungültige Namen oder Namenskonflikte.')); return false; }
       const previous = picked.map(file => file.name);
       const trees = [];
       picked.forEach((file, index) => {
@@ -3271,7 +3270,7 @@
       moveResultReferences(picked.map((file, index) => [join(directories[index], previous[index]), join(directories[index], names[index])]));
       trees.forEach(([old]) => delete state.folders[old]); trees.forEach(([, target, value]) => { state.folders[target] = value; });
       picked.forEach((file, index) => { file.name = names[index]; });
-      const completed = () => toast(`${count('entry', picked.length)} ${t('umbenannt')}${state.realFilesystem ? '' : ui([' · Beispieldaten'])}`, 'success');
+      const completed = () => logMessage(`${count('entry', picked.length)} ${t('umbenannt')}${state.realFilesystem ? '' : ui([' · Beispieldaten'])}`, 'success');
       const pending = state.realFilesystem && JSON.stringify(state.folders) !== confirmedFolders;
       if (pending) filesystemResume = completed;
       $('#modal').close(); render(); if (!pending) completed(); return true;
@@ -3356,7 +3355,7 @@
     finish: (job, result) => {
       jobTabFallbacks.delete(job.id);
       if (result.error && operationFailure !== result.error) showOperationFailure(result.error, { notify: false });
-      statusbar.notify(`${job.request.title} · ${job.request.target} · ${result.error || result.message || t(result.cancelled ? 'Abgebrochen' : 'Dateioperation beendet')}`, result.error || result.ok === false ? window.BitfroestWorkbench.Severity.Error : undefined, job.id);
+      statusbar.record(`${job.request.title} · ${job.request.target} · ${result.error || result.message || t(result.cancelled ? 'Abgebrochen' : 'Dateioperation beendet')}`, result.error || result.ok === false ? 'error' : result.cancelled ? 'cancelled' : 'info');
     },
     change: () => jobView?.update(operationQueue.items)
   });
@@ -3404,7 +3403,7 @@
         if (!$('#modal').open || p.tabStates[p.tab].id !== activeId) return;
         p.selected = window.BitfroestSearchDuplicates.selectDuplicates(rows, settings); render();
         if (close) { $('#modal').close(); render(true); }
-      } catch (error) { toast(error.message); }
+      } catch (error) { logMessage(error.message); }
       finally { applying = false; }
     };
     modal(t('Doppelte Dateien markieren'), `<div class="field-row">${field(t('Markieren nach Name/Erweiterung'), '*', 'duplicate-name')}${field(t('Markierung entfernen nach Name/Erweiterung'), '', 'duplicate-remove')}</div><div class="field-row">${select('duplicate-date', 'Markieren nach Datum/Zeit', dateOptions)}${select('duplicate-size', 'Markieren nach Dateigröße', sizeOptions)}</div><details class="dialog-options"><summary>${t('Markieren nach Ordner')}</summary><label><input id="duplicate-use-folders" type="checkbox"> ${t('Nur in gewählten Ordnern markieren')}</label><select id="duplicate-folders" multiple size="5" aria-label="${t('Ordner')}">${folders.map(folder => `<option value="${escape(folder)}" selected>${escape(displayPath(folder))}</option>`).join('')}</select><div>${['all', 'none', 'invert'].map((key, index) => `<button type="button" data-duplicate-folders="${key}">${t(['Alle', 'Keine', 'Umkehren'][index])}</button>`).join('')}</div><label><input id="duplicate-subfolders" type="checkbox"> ${t('Auch alle Unterordner markieren')}</label>${field(t('Ordner mit Muster markieren'), '', 'duplicate-pattern')}<label><input id="duplicate-parent" type="checkbox"> ${t('Dieses Muster nur auf das direkte Vaterverzeichnis anwenden')}</label></details><label><input id="duplicate-keep-one" type="checkbox"> ${t('Mindestens eine Datei pro Gruppe nicht markieren')}</label><div class="field-row">${[1, 2, 3].map(i => select(`duplicate-keep-${i}`, `${t('Priorität')} ${i}`, keep)).join('')}</div><p class="dialog-hint">${t('Masken, reguläre Ausdrücke mit < und gespeicherte Suchen mit > werden unterstützt.')}</p><button type="button" data-duplicate-apply>${t('Anwenden')}</button>`, t('OK'), () => { applySelection(true); return false; });
@@ -3428,7 +3427,7 @@
     if (['copy-full-names', 'copy-full-names-slash'].includes(command) && quickDiff.copyPath(command === 'copy-full-names-slash')) return;
     if (command === 'open-terminal') {
       if ($('#modal').open || document.activeElement?.matches('input,textarea,select,[contenteditable="true"]') || !document.activeElement?.closest('.list') || filesystemPending) return;
-      if (state.archiveLocations?.[currentPath(pane())] || currentPath(pane()).startsWith('zip:')) return toast(t('Diese Aktion ist innerhalb eines ZIP-Archivs nicht verfügbar.'));
+      if (state.archiveLocations?.[currentPath(pane())] || currentPath(pane()).startsWith('zip:')) return logMessage(t('Diese Aktion ist innerhalb eines ZIP-Archivs nicht verfügbar.'));
       if (pane().tabStates?.[pane().tab]?.searchResult) return;
       hostAction('open-terminal', { path: currentPath(pane()) }); return;
     }
@@ -3438,7 +3437,7 @@
     if (command === 'settings') { hostAction('configure-settings'); return; }
     if (command === 'licenses') { hostAction('show-licenses'); return; }
     if (command.startsWith('help-link:')) { hostAction('open-help-link', { id: command.slice(10) }); return; }
-    if (state.archiveLocations?.[currentPath(pane())] && ['shell-context-menu', 'inspect-folder-locks', 'clipboard-copy', 'clipboard-cut', 'clipboard-paste', 'copy-same'].includes(command)) return toast(t('Diese Aktion ist innerhalb eines ZIP-Archivs nicht verfügbar.'));
+    if (state.archiveLocations?.[currentPath(pane())] && ['shell-context-menu', 'inspect-folder-locks', 'clipboard-copy', 'clipboard-cut', 'clipboard-paste', 'copy-same'].includes(command)) return logMessage(t('Diese Aktion ist innerhalb eines ZIP-Archivs nicht verfügbar.'));
     if (command.startsWith('search-key:')) { fileSearch.key(command.slice(11)); return; }
     if (command === 'search' || command === 'search-separate') { if (!filesystemPending && !transferPending && !$('#modal').open) fileSearch.open(command === 'search-separate'); return; }
     if (fileSearch.contains(document.activeElement)) return;
@@ -3454,7 +3453,7 @@
       if (state.unloadedFolders?.includes(p.tabs[next])) return;
     }
     if (selectionAction && selectionCommand(command, reverseDirectories)) return;
-    if (command === 'open-trash') { if (host) hostAction('open-trash'); else toast(t('Die Papierkorbansicht ist auf diesem System nicht verfügbar.')); return; }
+    if (command === 'open-trash') { if (host) hostAction('open-trash'); else logMessage(t('Die Papierkorbansicht ist auf diesem System nicht verfügbar.')); return; }
     if (command === 'toggle-selection-next') {
       if (!document.activeElement?.closest('.list') || document.activeElement.matches('input,textarea,select,[contenteditable="true"]') || $('#modal').open) return;
       const p = pane(), list = visible(p), index = list.findIndex(file => file.id === p.cursor);
@@ -3462,7 +3461,7 @@
       p.cursorSelection = null;
       p.selected = p.selected.includes(p.cursor) ? p.selected.filter(id => id !== p.cursor) : [...p.selected, p.cursor];
       p.cursor = list[Math.min(index + 1, list.length - 1)].id;
-      rememberSelectionAnchor(p); focusSelection(); activeRow(p.cursor)?.scrollIntoView({ block: 'nearest' }); toast(t('Markierung geändert.'), 'success'); return;
+      rememberSelectionAnchor(p); focusSelection(); activeRow(p.cursor)?.scrollIntoView({ block: 'nearest' }); logMessage(t('Markierung geändert.'), 'success'); return;
     }
     if (command === 'clipboard-copy' || command === 'clipboard-cut') { copyClipboard(command === 'clipboard-cut' ? 'move' : 'copy', contextSelection); return; }
     if (command === 'clipboard-paste') { pasteClipboard(); return; }
@@ -3473,7 +3472,7 @@
     }
     if (command === 'swap-paths') {
       rememberScroll(); const left = currentPath(state.panes[0]), right = currentPath(state.panes[1]);
-      tabs.navigate(state.panes[0], right); tabs.navigate(state.panes[1], left); render(true); toast(t('Pfade getauscht.'), 'success'); return;
+      tabs.navigate(state.panes[0], right); tabs.navigate(state.panes[1], left); render(true); logMessage(t('Pfade getauscht.'), 'success'); return;
     }
     if (['new-tab', 'background-tab', 'close-tab', 'next-tab', 'previous-tab', 'open-dir-tab', 'open-dir-other-tab', 'back', 'forward', 'history-jump'].includes(command)) {
       rememberScroll(); const p = pane(), previousViews = state.panes.map(paneDisplayState), previousPath = currentPath(p), previousTab = p.tabStates[p.tab].id, previousSide = state.active;
@@ -3486,7 +3485,7 @@
         if (saved?.source === state.active) { (tab.historyPreviews ||= {})[tab.historyIndex] = saved; quickDiff.stop(); }
       }
       if (command === 'new-tab' || command === 'background-tab') tabs.duplicate(p, { background: command === 'background-tab' });
-      if (command === 'close-tab' && !tabs.close(p, contextSelection?.tabId ? p.tabStates.findIndex(tab => tab.id === contextSelection.tabId) : p.tab)) return toast(t('Der letzte Ordner-Tab bleibt geöffnet.'));
+      if (command === 'close-tab' && !tabs.close(p, contextSelection?.tabId ? p.tabStates.findIndex(tab => tab.id === contextSelection.tabId) : p.tab)) return logMessage(t('Der letzte Ordner-Tab bleibt geöffnet.'));
       if (command === 'next-tab' || command === 'previous-tab') tabs.step(p, command === 'next-tab' ? 1 : -1);
       if (command === 'back' || command === 'forward') tabs[command](p);
       if (command === 'history-jump') {
@@ -3515,12 +3514,12 @@
       if (host && state.realFilesystem && !resultView(pane()) && (state.unloadedFolders?.includes(currentPath(pane())) || currentPath(pane()) !== previousPath || pane().tabStates[pane().tab].id !== previousTab || state.active !== previousSide)) {
         render(true, previousViews, false);
         const message = { type: 'filesystem-navigate', path: currentPath(pane()), side: state.active };
-        const resume = () => { focusSelection(); restoreHistoryPreview(); toast(t('Ordner-Tab geändert.'), 'success'); };
+        const resume = () => { focusSelection(); restoreHistoryPreview(); logMessage(t('Ordner-Tab geändert.'), 'success'); };
         if (command === 'close-tab' && filesystemPending && !operationQueue?.active) deferNavigationRead(message, resume);
         else requestFilesystem(message, resume, navigationRollback);
         return;
       }
-      render(true, previousViews); restoreHistoryPreview(); toast(t('Ordner-Tab geändert.'), 'success'); return;
+      render(true, previousViews); restoreHistoryPreview(); logMessage(t('Ordner-Tab geändert.'), 'success'); return;
     }
     if (command === 'rename-one') { startRename(); return; }
     if (command === 'search-next' || command === 'search-previous') { applySearch(pane().filter, command === 'search-next' ? 1 : -1); return; }
@@ -3531,7 +3530,7 @@
       const labels = { name: 'Name', type: 'Erweiterung', date: 'Datum und Zeit', size: 'Größe' };
       const message = t('Sortiert nach {0} ({1}).')
         .replace('{0}', t(labels[sort])).replace('{1}', t(p.descending ? 'absteigend' : 'aufsteigend'));
-      render(true); toast(message, 'success'); return;
+      render(true); logMessage(message, 'success'); return;
     }
     if (command === 'refresh' && quickDiff.refresh()) return;
     if (command === 'refresh' && operationQueue?.active) { requestFilesystem({ type: 'filesystem-navigate', path: currentPath(pane()), side: state.active }); return; }
@@ -3566,7 +3565,7 @@
         if (filesystemPending && !operationQueue?.active && state.unloadedFolders?.includes(p.tabs[Number(target.closest('[data-tab]').dataset.tab)])) return;
         rememberScroll(); tabs.activate(p, Number(target.closest('[data-tab]').dataset.tab));
         render(true, undefined, false);
-        if (host && state.realFilesystem && !resultView(p)) requestFilesystem({ type: 'filesystem-navigate', path: currentPath(p), side: state.active }, () => { focusSelection(); toast(t('Ordner-Tab geändert.'), 'success'); });
+        if (host && state.realFilesystem && !resultView(p)) requestFilesystem({ type: 'filesystem-navigate', path: currentPath(p), side: state.active }, () => { focusSelection(); logMessage(t('Ordner-Tab geändert.'), 'success'); });
         else requestGitStatus();
         return;
       }
@@ -3655,7 +3654,7 @@
     const signature = parentRow && JSON.stringify(parentRow);
     const origin = currentPath(state.panes[destination.side]);
     const validate = () => validDraggedFiles(source) && (Object.hasOwn(state.folders, path) || destination.parent && currentPath(state.panes[destination.side]) === origin) && (!signature || JSON.stringify((state.folders[parent(path)] || []).find(file => file.type === 'folder' && file.name === base(path))) === signature);
-    if (!validate()) { toast(t('Die gezogene Auswahl wurde geändert. Bitte erneut ziehen.')); return; }
+    if (!validate()) { logMessage(t('Die gezogene Auswahl wurde geändert. Bitte erneut ziehen.')); return; }
     runTransfer({ sourceSide: source.side, sourcePath: source.sourcePath, targetSide: destination.side, ids: source.ids, targetPath: destination.parent ? path.replace(/\/$/, '') + '/' : path, targetIsDirectory: destination.parent, mode, validateSelection: validate });
   }
   function pointerDestination(event) {
@@ -3721,7 +3720,7 @@
       if (!$('#modal').open && !(filesystemPending && !refreshingFilesystem) && !transferPending) action(event.shiftKey ? 'delete-alternate' : 'delete', gesture.source);
       return;
     }
-    if (window.BitfroestTransfer.dropMode(event) === 'link') { toast(t('Verknüpfungen sind für diese Dateiaktion noch nicht verfügbar.')); return; }
+    if (window.BitfroestTransfer.dropMode(event) === 'link') { logMessage(t('Verknüpfungen sind für diese Dateiaktion noch nicht verfügbar.')); return; }
     if (destination) pointerFileDrop(gesture.source, destination, pointerDropMode(gesture, event));
   });
   document.addEventListener('pointercancel', event => { if (fileDragPointer?.id === event.pointerId) cancelPointerDrag(); });
@@ -3873,7 +3872,7 @@
       if (!validFileDropTarget(dragged, destination)) { if (event.dataTransfer) event.dataTransfer.dropEffect = 'none'; showFileDragFeedback(event, window.BitfroestTransfer.dropMode(event), dragged, false); return; }
       event.preventDefault();
       const mode = window.BitfroestTransfer.dropMode(event);
-      if (mode === 'link' && dragged.mode !== 'link') toast(t('Verknüpfungen sind für diese Dateiaktion noch nicht verfügbar.'));
+      if (mode === 'link' && dragged.mode !== 'link') logMessage(t('Verknüpfungen sind für diese Dateiaktion noch nicht verfügbar.'));
       dragged.mode = mode;
       if (event.dataTransfer) event.dataTransfer.dropEffect = mode === 'link' ? 'none' : mode;
       destination.element.classList.add('drop-target'); $('#panes').dataset.dropMode = mode;
@@ -3895,7 +3894,7 @@
   $('#functionbar').addEventListener('drop', event => {
     const source = dragged; dragged = null; clearDropTarget();
     if (!event.target.closest('[data-action="delete"]') || !internalDeleteDrop(event) || filesystemPending && !refreshingFilesystem || $('#modal').open || event.ctrlKey || event.metaKey || event.altKey) return;
-    if (!validDraggedFiles(source)) { if (source?.kind === 'files') toast(t('Die gezogene Auswahl wurde geändert. Bitte erneut ziehen.')); return; }
+    if (!validDraggedFiles(source)) { if (source?.kind === 'files') logMessage(t('Die gezogene Auswahl wurde geändert. Bitte erneut ziehen.')); return; }
     event.preventDefault(); action(event.shiftKey ? 'delete-alternate' : 'delete', source);
   });
   $('#functionbar').addEventListener('dragend', () => { dragged = null; clearDropTarget(); });
@@ -3907,7 +3906,7 @@
       const destination = fileDropTarget(event.target), source = dragged;
       dragged = null; clearDropTarget();
       const mode = window.BitfroestTransfer.dropMode(event);
-      if (mode === 'link') { toast(t('Verknüpfungen sind für diese Dateiaktion noch nicht verfügbar.')); return; }
+      if (mode === 'link') { logMessage(t('Verknüpfungen sind für diese Dateiaktion noch nicht verfügbar.')); return; }
       if (validDraggedFiles(source) && validFileDropTarget(source, destination)) runTransfer({ sourceSide: source.side, sourcePath: source.sourcePath, targetSide: destination.side, ids: source.ids, targetPath: destination.parent ? destination.path.replace(/\/$/, '') + '/' : destination.path, targetIsDirectory: destination.parent, mode, validateSelection: () => validDraggedFiles(source) });
       return;
     }
@@ -4142,12 +4141,12 @@
   function browserMenu() { modal(t('Dateimanager-Befehle'), '<div class="browser-command-list">' + [[t('Seiten tauschen'), 'swap'], [t('Packen'), 'pack'], [t('Entpacken'), 'unpack'], [t('Mehrfach-Umbenennen'), 'rename'], [t('Alle markieren'), 'select-all'], [t('Auswahl umkehren'), 'invert'], [t('Auswahl aufheben'), 'clear'], [t('Beispieldaten zurücksetzen'), 'reset'], [t('Hilfe'), 'help']].map(([label, command]) => `<button type="button" data-browser-action="${command}">${label}</button>`).join('') + '</div>', null, null); }
   function requestShellMenu(keyboard, inspectLocks = false, contextSelection) {
     const directory = contextSelection ? contextSelection.directory : currentPath(pane());
-    if (state.archiveLocations?.[directory] || directory?.startsWith('zip:')) { toast(t('Diese Aktion ist innerhalb eines ZIP-Archivs nicht verfügbar.'), 'info'); return; }
-    if (nativePlatform && (inspectLocks ? !['win32', 'linux'].includes(nativePlatform) : nativePlatform !== 'win32')) { toast(t('Diese Funktion wird auf diesem Betriebssystem noch nicht unterstützt.'), 'info'); return; }
+    if (state.archiveLocations?.[directory] || directory?.startsWith('zip:')) { logMessage(t('Diese Aktion ist innerhalb eines ZIP-Archivs nicht verfügbar.'), 'info'); return; }
+    if (nativePlatform && (inspectLocks ? !['win32', 'linux'].includes(nativePlatform) : nativePlatform !== 'win32')) { logMessage(t('Diese Funktion wird auf diesem Betriebssystem noch nicht unterstützt.'), 'info'); return; }
     if (!host || !state.realFilesystem || shellMenuPending || $('#modal').open) return;
-    if (filesystemPending || navigationRequests.size || transferPending) { toast(t('Während einer Dateioperation ist das Systemmenü nicht verfügbar.')); return; }
+    if (filesystemPending || navigationRequests.size || transferPending) { logMessage(t('Während einer Dateioperation ist das Systemmenü nicht verfügbar.')); return; }
     const p = pane(), ids = contextSelection && Array.isArray(contextSelection.ids) ? [...contextSelection.ids] : p.selected.length ? [...p.selected] : p.cursor ? [p.cursor] : [];
-    if (!ids.length) { toast(t('Für das Systemmenü zuerst eine Datei oder einen Ordner auswählen.')); return; }
+    if (!ids.length) { logMessage(t('Für das Systemmenü zuerst eine Datei oder einen Ordner auswählen.')); return; }
     const requestId = `shell-menu-${++shellMenuSequence}`;
     shellMenuPending = { requestId };
     statusTask(requestId, t('Aktion wird ausgeführt…') + ` · ${t('Hostbestätigung')}`);
@@ -4195,9 +4194,9 @@
       if (event.data.clipboardInvalidated) { clipboardGeneration++; setClipboardSelection(null); refreshClipboardAvailability(); }
       if (event.data.refreshed) focusRefreshRequested = false;
       if (event.data.gitChanged) { gitBindings.clear(); gitDirectories.clear(); directoryCache.clearGit(); refreshGitDisplay(); if (event.data.action === 'git-ignore') action('refresh'); else requestGitStatus(); }
-      if (['git-untrack', 'git-ignore'].includes(event.data.action)) toast(event.data.cancelled ? t('Aktion abgebrochen.') : event.data.ok ? t('Datei aus Git entfernt; lokal erhalten.') : event.data.error, event.data.ok ? 'success' : 'error');
-      if (event.data.action === 'git-diff' || event.data.action === 'git-history') toast(event.data.ok ? t(event.data.action === 'git-history' ? 'Git History geöffnet.' : 'Git-Diff geöffnet.') : event.data.error, event.data.ok ? 'success' : 'error');
-      else if (!event.data.ok) { if (event.data.unsupported) toast(event.data.error, 'info'); else showOperationFailure(event.data.error || t('Das native Systemmenü konnte nicht geöffnet werden.'), { diagnostic: event.data.diagnostic }); }
+      if (['git-untrack', 'git-ignore'].includes(event.data.action)) logMessage(event.data.cancelled ? t('Aktion abgebrochen.') : event.data.ok ? t('Datei aus Git entfernt; lokal erhalten.') : event.data.error, event.data.ok ? 'success' : 'error');
+      if (event.data.action === 'git-diff' || event.data.action === 'git-history') logMessage(event.data.ok ? t(event.data.action === 'git-history' ? 'Git History geöffnet.' : 'Git-Diff geöffnet.') : event.data.error, event.data.ok ? 'success' : 'error');
+      else if (!event.data.ok) { if (event.data.unsupported) logMessage(event.data.error, 'info'); else showOperationFailure(event.data.error || t('Das native Systemmenü konnte nicht geöffnet werden.'), { diagnostic: event.data.diagnostic }); }
       flushFocusRefresh(); return;
     }
     if (host && event.data?.type === 'clipboard-changed') {
@@ -4213,7 +4212,7 @@
     if (host && event.data?.type === 'action' && event.data.action === 'transfer-name-start') { startTransferName(); return; }
     if (host && event.data?.type === 'language-changed') { document.body.inert = false; requestLanguageReload(); return; }
     if (host && event.data?.type === 'language-picker-closed') { document.querySelector('#language-toggle').focus(); return; }
-    if (host && event.data?.type === 'copy-verification-setting-error') { toast(event.data.error, 'error'); return; }
+    if (host && event.data?.type === 'copy-verification-setting-error') { logMessage(event.data.error, 'error'); return; }
     if (host && event.data?.type === 'file-settings') {
       fileSettings = event.data.settings || {};
       const before = window.BitfroestIcons.layout().size;
@@ -4228,7 +4227,7 @@
       });
       return;
     }
-    if (host && event.data?.type === 'open-trash-result') { if (!event.data.ok) showOperationFailure(event.data.error || t('Der Papierkorb konnte nicht geöffnet werden.'), { inline: Boolean(document.querySelector('.inline-rename')) }); else toast(t('Papierkorb geöffnet.'), 'success'); return; }
+    if (host && event.data?.type === 'open-trash-result') { if (!event.data.ok) showOperationFailure(event.data.error || t('Der Papierkorb konnte nicht geöffnet werden.'), { inline: Boolean(document.querySelector('.inline-rename')) }); else logMessage(t('Papierkorb geöffnet.'), 'success'); return; }
     if (host && event.data?.type === 'filesystem-transfer-progress') {
       if (transferJob?.id === event.data.operationId && transferJob.transfer) {
         const batch = TransferProgress.readTransferBatch(event.data.progress);
@@ -4268,7 +4267,7 @@
         const message = result.error || t('Die Ordnergröße konnte nicht ermittelt werden.');
         if (folderSizeBatch) folderSizeBatch.error = message;
         if (folderSizeBatch?.statusVersion === statusbar.version) { statusbar.error(message); folderSizeBatch.statusVersion = statusbar.version; }
-        else statusbar.notify(message, window.BitfroestWorkbench.Severity.Error);
+        else statusbar.record(message, 'error');
       } else if (folderSizeBatch) folderSizeBatch.cancelled = true;
       if (!folderSizeRequests.size) {
         reportStatus(folderSizeBatch?.error || t(folderSizeBatch?.cancelled ? 'Ordnergrößenberechnung abgebrochen.' : 'Ordnergröße ermittelt.'), folderSizeBatch?.error ? 'error' : folderSizeBatch?.cancelled ? 'cancelled' : 'success', folderSizeBatch?.statusVersion);
@@ -4381,7 +4380,7 @@
       else if (event.data.ok && !resume && !continuePreparation && (event.data.notice || cancelled || completedTransferJob)) statusbar.setStatus(resultMessage, outcome);
       if (failedRename && event.data.ok && !cancelled && event.data.state?.realFilesystem) {
         const entries = event.data.state.folders?.[failedRename.source] || [];
-        if (entries.some(file => file.name === failedRename.proposal) && !entries.some(file => file.name === failedRename.oldName)) toast(t('Eintrag umbenannt.'), 'success');
+        if (entries.some(file => file.name === failedRename.proposal) && !entries.some(file => file.name === failedRename.oldName)) logMessage(t('Eintrag umbenannt.'), 'success');
       }
       if (event.data.ok && !event.data.cancelled && resume) resume();
       if (event.data.ok && !event.data.cancelled && !resume && event.data.resumeNavigation) {
@@ -4389,7 +4388,6 @@
         if (resultView(pane())) { rememberScroll(); tabs.openPath(pane(), event.data.resumeNavigation.path); }
         go(event.data.resumeNavigation.path);
       }
-      if (!event.data.ok) { clearTimeout(toast.timer); $('#toast').textContent = ''; $('#toast').classList.remove('visible'); }
       if (!event.data.ok && failedCreation) failedCreation();
       if (!event.data.ok && failedTransferPreparation) failedTransferPreparation();
       if (event.data.cancelled && failedTransferPreparation) failedTransferPreparation(true);
@@ -4400,7 +4398,7 @@
         }
         else showOperationFailure(error, { inline: Boolean(failedRename && restoreRename(failedRename)), diagnostic: event.data.diagnostic, notify: !operationQueue?.active });
       }
-      if (pendingGitDiff) { const selection = pendingGitDiff; pendingGitDiff = null; if (event.data.ok) requestGitDiff(selection.selection, selection.action); else { gitMenuSelection = null; toast(t(selection.action === 'git-history' ? 'Ungültige Auswahl für Git History.' : 'Ungültige Dateiauswahl für Git Diff.'), 'error'); } }
+      if (pendingGitDiff) { const selection = pendingGitDiff; pendingGitDiff = null; if (event.data.ok) requestGitDiff(selection.selection, selection.action); else { gitMenuSelection = null; logMessage(t(selection.action === 'git-history' ? 'Ungültige Auswahl für Git History.' : 'Ungültige Dateiauswahl für Git Diff.'), 'error'); } }
     if (completedTransferJob?.queueJobId && operationQueue.active?.id === completedTransferJob.queueJobId && !continuePreparation) operationQueue.complete(completedTransferJob.queueJobId, { ok: event.data.ok, cancelled, message: resultMessage, ...(!event.data.ok ? { error } : {}) });
       flushQueuedOperation(); flushDeferredNavigationReads(); flushPanelRefreshes(); flushFocusRefresh(); return;
     }
@@ -4494,7 +4492,7 @@
       transferJob?.controller?.abort();
       statusTasks.clear(); refreshMeasurements.clear(); statusPlans.clear();
       filesystemTaskId = null;
-      transferJob = null; transferStatusPlan = null; transferProgress(); statusbar.reset(); clearTimeout(toast.timer); $('#toast').classList.remove('visible');
+      transferJob = null; transferStatusPlan = null; transferProgress(); statusbar.reset();
       transferCompletion = null; transferPreparationFailure = null; transferPending = false; filesystemResume = null;
       $('#panes').inert = false; $('#functionbar').inert = false;
       if ($('#modal').open) $('#modal').close();
@@ -4516,7 +4514,7 @@
     }
     if (host && event.data?.type === 'action' && typeof event.data.action === 'string') {
       if ($('#modal').open && conflictAction?.(event.data.action)) return;
-      if ($('#modal').open) { toast(t('Zuerst den geöffneten Dialog schließen.')); return; }
+      if ($('#modal').open) { logMessage(t('Zuerst den geöffneten Dialog schließen.')); return; }
       if (event.data.action === 'inspect-folder-locks' && event.data.contextSelection) { requestShellMenu(true, true, event.data.contextSelection); return; }
       const contextSelection = event.data.contextSelection;
       if (contextSelection && ['clipboard-copy', 'clipboard-cut', 'clipboard-paste'].includes(event.data.action)) {
@@ -4676,7 +4674,7 @@
         showContextMenu(event, section, 'files', JSON.parse((row || list).dataset.vscodeContext)); return;
       }
       event.preventDefault(); event.stopPropagation();
-      if (!row) { toast(t('Das Systemmenü für den Ordnerhintergrund ist noch nicht verfügbar.')); return; }
+      if (!row) { logMessage(t('Das Systemmenü für den Ordnerhintergrund ist noch nicht verfügbar.')); return; }
       requestShellMenu(false); return;
     }
     if (!host) { event.preventDefault(); browserMenu(); }

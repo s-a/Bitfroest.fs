@@ -8,7 +8,7 @@ test('language icon precedes jobs and notifications and requests the native lang
   const button = app.document.querySelector('#language-toggle');
   assert.ok(button);
   assert.equal(button.nextElementSibling.id, 'jobs-toggle');
-  assert.equal(button.nextElementSibling.nextElementSibling.id, 'notifications-toggle');
+  assert.equal(button.nextElementSibling.nextElementSibling.id, 'activity-log-copy');
   assert.ok(button.querySelector('svg'));
   assert.equal(button.getAttribute('aria-label'), 'Sprache wechseln');
   app.click(button);

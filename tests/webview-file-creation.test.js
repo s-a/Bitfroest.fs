@@ -78,11 +78,11 @@ test('opening a creation dialog cancels a delayed rename of the previously click
   assert.equal(app.document.activeElement, app.document.querySelector('#value'));
 });
 
-test('invalid creation names report localized errors without losing their entered value', t => {
+test('invalid creation names report localized errors without losing their entered value', async t => {
   for (const language of ['en', 'de']) {
     const app = createApp(t, undefined, { language });
     app.action('new-file'); app.document.querySelector('#value').value = '../outside.txt'; submit(app);
-    assert.match(app.document.querySelector('#status-message').textContent, language === 'en' ? /Invalid name/ : /Ungültiger Name/);
+    assert.match((await app.copyActivityLog()).currentMessage, language === 'en' ? /Invalid name/ : /Ungültiger Name/);
     assert.equal(app.document.querySelector('#value').value, '../outside.txt');
     assert.equal(app.document.activeElement, app.document.querySelector('#value'));
   }

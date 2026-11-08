@@ -265,7 +265,7 @@ test('process rows use the shared refresh spinner and selecting a waiting job do
   assert.equal(app.messages.some(message => message.type === 'filesystem-cancel'), false, 'only the selected waiting job is cancelled');
   assert.equal(app.document.querySelector('#status-percent').textContent, '42%/68%');
 });
-test('process row text, status icon and metrics retain one non-wrapping baseline', t => {
+test('process row text, status icon and metrics retain one non-wrapping baseline', async t => {
   const app = createApp(t, fixture()); app.action('select-all'); app.action('pack'); submit(app);
   const request = app.messages.find(message => message.type === 'zip-write');
   app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-progress', operationId: request.operationId, progress: { phase: 'packing', currentPath: 'very/long/a.txt', completedBytes: 42, totalBytes: 100, transferred: 68, total: 100 } } }));
@@ -294,7 +294,7 @@ for (const active of [0, 1]) test(`one selected batch produces one job row in th
   app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-result', operationId: request.operationId, ok: false, error: 'fixture failure' } }));
   assert.equal(app.messages.filter(message => message.type === 'zip-write').length, 2, 'failure dialog does not stall the next job');
   assert.equal(app.document.querySelectorAll('[data-job-row]').length, 1);
-  assert.equal(app.document.querySelectorAll('#notifications-list .notification-list-item').length, 1, 'only the failed terminal job is notified');
+  assert.equal((await app.copyActivityLog()).messages.filter(entry => entry.outcome === 'error' && entry.message.includes(' · ')).length, 1, 'only the failed terminal job is logged with job details');
 });
 test('navigation requests are sent during a queued ZIP operation without cancelling it', t => {
   const app = createApp(t, fixture()); app.action('select-all'); app.action('pack'); submit(app);

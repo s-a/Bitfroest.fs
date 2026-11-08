@@ -156,7 +156,7 @@ Linux file clipboard access uses the current extension host's desktop session. I
 
 A completed move is confirmed by the file-operation backend. Partial completion updates the payload served by the owned clipboard source; clients that have already cached its contents receive no guaranteed refresh notification. Another application consuming a cut selection does not provide a standardized move-completion notification. Clipboard contents published by the extension remain available while their native session is active.
 
-When an operating system function is unavailable, the file manager reports it in its lower status bar when that function is used. VS Code remote hosts, browser use and processor architectures beyond the published packages are not covered by a general compatibility claim.
+When an operating system function is unavailable, the file manager records it in the activity log when that function is used. VS Code remote hosts, browser use and processor architectures beyond the published packages are not covered by a general compatibility claim.
 
 ## Beta notice
 
@@ -282,7 +282,7 @@ Licensed under the [Apache License 2.0](LICENSE). Project attribution is recorde
 
 **Copy Details** in a file operation error dialog copies the available diagnostic information. For transfer failures, this can include the triggering command, selected files, destination and error code. Recognized paths are shortened. Stack frames retain function names, file names and line numbers.
 
-The status bar's **Copy message and activity log** action includes transfer confirmations, conflict decisions, host acknowledgements and outcomes. Review the activity log before sharing it because it can include local paths.
+Select the bell in the upper-right corner to copy the activity log to the clipboard as JSON. It includes recent messages, transfer confirmations, conflict decisions, host acknowledgements and outcomes. The bottom status bar displays active progress and its cancellation control. Review the activity log before sharing it because it can include local paths.
 
 **Report on GitHub** opens a prefilled issue for review. The report includes a shortened error message, error codes and version information. Recognized paths retain up to three trailing components, which may contain names. Recognized URLs are masked. Stack traces and panel paths are excluded.
 

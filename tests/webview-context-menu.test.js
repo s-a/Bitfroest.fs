@@ -114,10 +114,9 @@ for (const [mode, label, ids] of [['copy', 'Copy', ['a']], ['move', 'Move', ['a'
     assert.equal(write.transfer.mode, mode);
     assert.deepEqual(Array.from(write.transfer.ids), ids);
     assert.equal(write.transfer.changes.length, ids.length);
-    const status = app.document.querySelector('#status-message');
-    assert.doesNotMatch(status.textContent, /copied|moved/i);
+    assert.doesNotMatch((await app.copyActivityLog()).currentMessage, /copied|moved/i);
     post(app, { type: 'filesystem-result', operationId: write.operationId, ok: true, state: confirmFixtureTransfer(saved, write) });
-    assert.match(status.textContent, mode === 'copy' ? /copied/i : /moved/i);
+    assert.match((await app.copyActivityLog()).currentMessage, mode === 'copy' ? /copied/i : /moved/i);
   });
 }
 
@@ -208,7 +207,7 @@ test('Send to reports that nothing was moved when all selected files are skipped
   app.click(app.document.querySelector('[data-conflict-action="skip"]'));
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(app.messages.some(message => message.type === 'filesystem-apply'), false);
-  assert.match(app.document.querySelector('#status-message').textContent, /No files or folders were moved.*1 skipped/i);
+  assert.match((await app.copyActivityLog()).currentMessage, /No files or folders were moved.*1 skipped/i);
 });
 
 test('file delete popup confirms its captured selection and allows cancellation', t => {

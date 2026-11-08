@@ -45,7 +45,7 @@ test('Git file actions are limited to one file and the location Git menu opens l
   const request = app.messages.find(m => m.type === 'git-history-directory'); assert.equal(request.directory, '/repo'); assert.equal(request.snapshotId, 'one');
 });
 
-test('Git History preserves folder selection through focus refresh and reports failed refresh without opening history', t => {
+test('Git History preserves folder selection through focus refresh and reports failed refresh without opening history', async t => {
   for (const ok of [true, false]) {
     const app = createApp(t, fixture()); reply(app, app.messages.find(m => m.type === 'git-status'));
     app.row('folder').dispatchEvent(new app.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 }));
@@ -57,7 +57,7 @@ test('Git History preserves folder selection through focus refresh and reports f
     const requests = app.messages.filter(m => m.type === 'git-history');
     assert.equal(requests.length, ok ? 1 : 0);
     if (ok) { assert.deepEqual([...requests[0].ids], ['b']); assert.equal(requests[0].snapshotId, 'refreshed'); }
-    else assert.equal(app.document.querySelector('#status-message').textContent, 'Ungültige Auswahl für Git History.');
+    else assert.equal((await app.copyActivityLog()).currentMessage, 'Ungültige Auswahl für Git History.');
   }
 });
 
@@ -169,7 +169,7 @@ test('Git menu invocation survives focus refresh before or after command deliver
   }
 });
 
-test('Git menu rejects a renamed target after focus refresh without opening the new selection', t => {
+test('Git menu rejects a renamed target after focus refresh without opening the new selection', async t => {
   const app = createApp(t, fixture()); reply(app, app.messages.find(message => message.type === 'git-status'));
   app.row('a.txt').dispatchEvent(new app.window.MouseEvent('contextmenu', { bubbles: true, button: 2 }));
   const selection = JSON.parse(app.row('a.txt').dataset.vscodeContext);
@@ -178,7 +178,7 @@ test('Git menu rejects a renamed target after focus refresh without opening the 
   const next = structuredClone(app.state()); next.snapshotId = 'changed'; next.folders['/repo'][0].name = 'renamed.txt';
   app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-result', ok: true, state: next } }));
   assert.equal(app.messages.filter(message => message.type === 'git-diff').length, 0);
-  assert.equal(app.document.querySelector('#status-message').textContent, 'Ungültige Dateiauswahl für Git Diff.');
+  assert.equal((await app.copyActivityLog()).currentMessage, 'Ungültige Dateiauswahl für Git Diff.');
 });
 
 test('returning DOM focus from the Git menu does not refresh the filesystem or discard Diff', t => {

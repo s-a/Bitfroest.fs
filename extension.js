@@ -747,7 +747,7 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
     if (panel) { clearTimeout(startupWatchdog); panel.reveal(); return; }
     const webviewOptions = {
       enableScripts: true,
-      localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, 'media'), vscode.Uri.joinPath(context.extensionUri, 'node_modules', 'ag-grid-community', 'dist'), vscode.Uri.joinPath(context.extensionUri, 'node_modules', 'notyf'), vscode.Uri.joinPath(context.extensionUri, 'node_modules', '@floating-ui'), vscode.Uri.joinPath(context.extensionUri, 'node_modules', '@vscode-elements', 'elements-lite', 'components'), ...icons.roots]
+      localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, 'media'), vscode.Uri.joinPath(context.extensionUri, 'node_modules', 'ag-grid-community', 'dist'), vscode.Uri.joinPath(context.extensionUri, 'node_modules', '@floating-ui'), vscode.Uri.joinPath(context.extensionUri, 'node_modules', '@vscode-elements', 'elements-lite', 'components'), ...icons.roots]
     };
     panel = loadingPanel;
     panel.webview.options = webviewOptions;
@@ -826,8 +826,6 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
         .replace('<ol id="startup-log" role="log" aria-live="polite"></ol>', () => `<ol id="startup-log" role="log" aria-live="polite">${startupRows}</ol>`)
         .replace('Startup log', () => t('Startprotokoll'))
         .replace('Copy startup log', () => t('Startprotokoll kopieren'))
-        .replace('href="../node_modules/notyf/notyf.min.css"', () => `href="${resource('../node_modules/notyf/notyf.min.css')}"`)
-        .replace('<script src="../node_modules/notyf/notyf.min.js"></script>', () => `<script nonce="${nonce}" src="${resource('../node_modules/notyf/notyf.min.js')}"></script>`)
         .replace('<script src="../node_modules/@floating-ui/utils/dist/floating-ui.utils.umd.js"></script>', () => `<script nonce="${nonce}" src="${resource('../node_modules/@floating-ui/utils/dist/floating-ui.utils.umd.js')}"></script>`)
         .replace('<script src="../node_modules/@floating-ui/core/dist/floating-ui.core.umd.js"></script>', () => `<script nonce="${nonce}" src="${resource('../node_modules/@floating-ui/core/dist/floating-ui.core.umd.js')}"></script>`)
         .replace('<script src="../node_modules/@floating-ui/dom/dist/floating-ui.dom.umd.js"></script>', () => `<script nonce="${nonce}" src="${resource('../node_modules/@floating-ui/dom/dist/floating-ui.dom.umd.js')}"></script>`)

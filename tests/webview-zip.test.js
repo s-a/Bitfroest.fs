@@ -42,7 +42,7 @@ test('pack dialog uses the cursor without marks and the source folder for multip
     assert.equal(app.document.querySelector('#value').value, `C:\\temp\\${multiple ? 'tmp' : 'Two'}.zip`);
   }
 });
-test('real ZIP activation requests metadata, enters only after host response, and leaves archive root', t => {
+test('real ZIP activation requests metadata, enters only after host response, and leaves archive root', async t => {
   const app = createApp(t, initial());
   app.click(app.row('sample.zip')); app.key('Enter');
   const request = app.messages.find(message => message.type === 'zip-open');
@@ -56,9 +56,9 @@ test('real ZIP activation requests metadata, enters only after host response, an
   app.window.dispatchEvent(new app.window.MessageEvent('message', { data: { type: 'filesystem-result', ok: true, state, resumeNavigation: { side: 0, path: root } } }));
   assert.equal(app.state().panes[0].tabs[0], root);
   assert.equal(app.document.querySelector('.pane.active .path-input').value, 'C:\\tmp\\sample.zip!');
-  assert.match(app.document.querySelector('#status-message').textContent, /Verzeichnis geöffnet: C:\\tmp\\sample\.zip!/);
+  assert.match((await app.copyActivityLog()).currentMessage, /Verzeichnis geöffnet: C:\\tmp\\sample\.zip!/);
   app.click(app.row('docs')); app.key('Enter'); assert.equal(app.state().panes[0].tabs[0], `${root}/docs`);
-  assert.match(app.document.querySelector('#status-message').textContent, /Verzeichnis geöffnet: C:\\tmp\\sample\.zip!\\docs/);
+  assert.match((await app.copyActivityLog()).currentMessage, /Verzeichnis geöffnet: C:\\tmp\\sample\.zip!\\docs/);
   app.key('Backspace'); app.key('Backspace'); assert.equal(app.state().panes[0].tabs[0], 'C:/tmp');
 });
 test('ZIP F5 waits for confirmation and sends selected IDs; writes and moves stay unavailable', t => {

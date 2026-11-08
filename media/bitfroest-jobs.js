@@ -112,7 +112,7 @@
     const empty = document.createElement('p'); empty.textContent = t('Keine ausstehenden Aufträge');
     panel.setAttribute('role', 'region'); panel.setAttribute('aria-label', t('Aufträge'));
     button.setAttribute('aria-controls', panel.id); button.setAttribute('aria-expanded', 'false');
-    document.querySelector('#notifications-toggle').before(button); document.body.append(panel);
+    document.querySelector('#activity-log-copy').before(button); document.body.append(panel);
     function close() { panel.hidden = true; panel.classList.remove('visible'); button.setAttribute('aria-expanded', 'false'); }
     function select(job, element) {
       selectedId = job.id;

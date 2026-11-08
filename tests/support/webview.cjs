@@ -91,7 +91,17 @@ function createApp(t, saved, options = {}) {
   const key = (key, extra = {}, target = document.activeElement) => target.dispatchEvent(new window.KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...extra }));
   const action = value => window.dispatchEvent(new window.MessageEvent('message', { data: { type: 'action', action: value } }));
   const row = name => [...document.querySelectorAll('.pane.active [data-file-row][data-id]')].find(element => element.title === name || element.querySelector('[data-cell]')?.title === name);
-  return { window, document, messages, click, key, action, row, grid: (side = persisted?.active || 0) => window.agGrid.getGridApi(`files-${side}`), state: () => options.host === false ? JSON.parse(window.sessionStorage.getItem('bitfroest-demo')) : persisted };
+  async function copyActivityLog() {
+    const before = messages.length;
+    click(document.querySelector('#activity-log-copy'));
+    const request = messages.slice(before).find(message => message.type === 'status-log-copy');
+    if (!request) throw new Error('Activity log copy request was not sent');
+    window.dispatchEvent(new window.MessageEvent('message', { data: { type: 'status-log-copy-result', requestId: request.requestId, ok: true } }));
+    await Promise.resolve();
+    const report = JSON.parse(request.text);
+    return { ...report, currentOutcome: report.messages.findLast(entry => entry.message === report.currentMessage)?.outcome };
+  }
+  return { window, document, messages, click, key, action, row, copyActivityLog, grid: (side = persisted?.active || 0) => window.agGrid.getGridApi(`files-${side}`), state: () => options.host === false ? JSON.parse(window.sessionStorage.getItem('bitfroest-demo')) : persisted };
 }
 
 
