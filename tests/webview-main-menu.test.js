@@ -6,7 +6,7 @@ test('Help groups product links, documentation, issue reporting and acknowledgem
   for (const language of ['de', 'en']) for (const key of [null, 'Enter', ' ']) {
     const app = createApp(t, undefined, { language });
     const menu = app.document.querySelector('[data-main-menu]');
-    const help = [...menu.querySelectorAll(':scope > button')].at(-1);
+    const help = [...menu.querySelectorAll(':scope > button')].find(button => button.dataset.menuGroup === 'Hilfe');
     app.click(help);
     const rows = [...menu.querySelector('[role="menu"]').children].filter(row => row.dataset.group === 'Hilfe');
     assert.deepEqual(rows.map(row => row.getAttribute('role') === 'separator' ? '---' : row.textContent.trim()), language === 'de'
@@ -32,7 +32,7 @@ test('Help opens license acknowledgements by mouse and keyboard without changing
   for (const language of ['de', 'en']) for (const key of [null, 'Enter', ' ']) {
     const app = createApp(t, undefined, { language });
     const menu = app.document.querySelector('[data-main-menu]');
-    const help = [...menu.querySelectorAll(':scope > button')].at(-1);
+    const help = [...menu.querySelectorAll(':scope > button')].find(button => button.dataset.menuGroup === 'Hilfe');
     app.click(help);
     const entry = menu.querySelector('[data-menu-action="licenses"]');
     assert.ok(entry, 'Help contains the active license entry');
@@ -55,8 +55,8 @@ test('application menu exposes supported reference groups without placeholders',
     const app = createApp(t, undefined, { language });
     const menu = app.document.querySelector('[data-main-menu]');
     assert.deepEqual([...menu.querySelectorAll(':scope > button')].map(button => button.textContent), language === 'de'
-      ? ['Dateien', 'Markierung', 'Befehle', 'Ansicht', 'Konfigurieren', 'Hilfe']
-      : ['Files', 'Mark', 'Commands', 'View', 'Configuration', 'Help']);
+      ? ['Dateien', 'Markierung', 'Befehle', 'Ansicht', 'Konfigurieren', 'Hilfe', 'System']
+      : ['Files', 'Mark', 'Commands', 'View', 'Configuration', 'Help', 'System']);
     assert.doesNotMatch(menu.textContent, /Mock|Platzhalter/);
     for (const trigger of menu.querySelectorAll(':scope > button')) {
       app.click(trigger);
@@ -220,15 +220,35 @@ test('menu arrows wrap between entries and supported groups, and outside clicks 
   assert.equal(app.document.activeElement.dataset.menuAction, 'unpack');
   app.key('ArrowUp'); assert.equal(app.document.activeElement, first);
   app.key('ArrowLeft');
+  assert.equal(app.document.activeElement.dataset.menuAction, 'script-search');
+  app.key('ArrowUp'); assert.equal(app.document.activeElement.dataset.menuAction, 'script-history');
+  app.key('ArrowLeft');
   assert.equal(app.document.activeElement.dataset.menuAction, 'help-link:marketplace');
   app.key('ArrowUp'); assert.equal(app.document.activeElement.dataset.menuAction, 'licenses');
   app.key('ArrowDown'); assert.equal(app.document.activeElement.dataset.menuAction, 'help-link:marketplace');
   app.key('ArrowDown'); assert.equal(app.document.activeElement.dataset.menuAction, 'help-link:github');
   app.key('ArrowDown'); assert.equal(app.document.activeElement.dataset.menuAction, 'help-link:documentation');
+  app.key('ArrowRight'); assert.equal(app.document.activeElement.dataset.menuAction, 'script-search');
   app.key('ArrowRight'); assert.equal(app.document.activeElement, first);
   app.click(app.document.querySelector('.pane.active .list'));
   assert.equal(menu.querySelector('[role="menu"]').hidden, true);
   assert.ok(triggers.every(trigger => trigger.getAttribute('aria-expanded') === 'false'));
+});
+
+test('System opens script search and usage history with the active folder and restores menu focus', t => {
+  const app = createApp(t);
+  const menu = app.document.querySelector('[data-main-menu]');
+  const system = menu.querySelector('[data-menu-group="System"]');
+  assert.ok(system);
+  assert.equal(app.messages.some(message => message.type.startsWith('script-')), false);
+  for (const action of ['script-search', 'script-history']) {
+    app.click(system);
+    const entry = menu.querySelector('[data-menu-action="' + action + '"]');
+    entry.focus();
+    app.key('Enter', {}, entry);
+    assert.equal(app.document.activeElement, system);
+    assert.ok(app.messages.some(message => message.type === action && typeof message.path === 'string'));
+  }
 });
 
 

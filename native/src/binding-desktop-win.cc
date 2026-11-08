@@ -12,6 +12,7 @@ struct DesktopJob {
   const char* operation = "shell.openAssociated";
   std::shared_ptr<SessionState> state;
   std::wstring path;
+  std::wstring profile;
   std::wstring encoded_command;
   std::wstring parameters;
   bool inspect_only = false;
@@ -72,7 +73,7 @@ void ExecuteNative(DesktopJob* job) {
   try {
     if (job->state->closed) { job->error = "SessionClosed"; return; }
     const bool success = job->action == Action::Terminal
-        ? OpenDesktopTerminal(job->path, job->encoded_command, job->inspect_only, &job->parameters, job->state->closed, &job->native_error)
+        ? OpenDesktopTerminal(job->path, job->profile, job->encoded_command, job->inspect_only, &job->parameters, job->state->closed, &job->native_error)
         : job->action == Action::Trash
         ? ResolveTrashView(job->inspect_only, job->state->closed, &job->native_error)
         : job->action == Action::Maximize
@@ -169,7 +170,19 @@ napi_value StartNativeTerminal(napi_env env, const std::shared_ptr<SessionState>
   if (napi_has_named_property(env, request, "encodedCommand", &has_command) != napi_ok) return Fail(env, "InvalidRequest", "Invalid terminal request.");
   if (has_command) {
     napi_value value;
+    char16_t profile[39];
     size_t length = 0;
+    if (napi_get_named_property(env, request, "profile", &value) != napi_ok ||
+        napi_get_value_string_utf16(env, value, nullptr, 0, &length) != napi_ok || length != 38 ||
+        napi_get_value_string_utf16(env, value, profile, 39, &length) != napi_ok ||
+        profile[0] != u'{' || profile[37] != u'}') return Fail(env, "InvalidRequest", "profile must be a GUID.");
+    for (size_t i = 1; i < 37; ++i) {
+      const auto c = profile[i];
+      const bool separator = i == 9 || i == 14 || i == 19 || i == 24;
+      if (separator ? c != u'-' : !((c >= u'0' && c <= u'9') || (c >= u'A' && c <= u'F') || (c >= u'a' && c <= u'f')))
+        return Fail(env, "InvalidRequest", "profile must be a GUID.");
+    }
+    job->profile.assign(profile, profile + length);
     if (napi_get_named_property(env, request, "encodedCommand", &value) != napi_ok ||
         napi_get_value_string_utf16(env, value, nullptr, 0, &length) != napi_ok || !length || length > 30000 || length % 4)
       return Fail(env, "InvalidRequest", "encodedCommand must contain a Base64 command.");

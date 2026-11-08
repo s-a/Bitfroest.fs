@@ -1,5 +1,30 @@
 const path = require('node:path');
+const fs = require('node:fs/promises');
 const { loadNativeApi } = require('./native-api');
+
+async function readDefaultProfile(local = process.env.LOCALAPPDATA) {
+  const unavailable = 'Das Windows-Terminal-Standardprofil konnte nicht eindeutig ermittelt werden.';
+  if (!local || !path.isAbsolute(local)) throw new Error(unavailable);
+  const candidates = ['', 'Preview', 'Canary'].map(channel => path.join(local,
+    'Packages', 'Microsoft.WindowsTerminal' + channel + '_8wekyb3d8bbwe', 'LocalState', 'settings.json'));
+  candidates.push(path.join(local, 'Microsoft', 'Windows Terminal', 'settings.json'));
+  const profiles = new Set();
+  for (const candidate of candidates) {
+    try {
+      const jsonc = await fs.readFile(candidate, 'utf8');
+      const json = jsonc.replace(/^\uFEFF/, '')
+        .replace(/"(?:[^"\\]|\\.)*"|\/\/[^\r\n]*|\/\*[\s\S]*?\*\//g, token => token.startsWith('"') ? token : ' ')
+        .replace(/"(?:[^"\\]|\\.)*"|,(?=\s*[}\]])/g, token => token === ',' ? '' : token);
+      const profile = JSON.parse(json).defaultProfile;
+      if (typeof profile !== 'string' || !/^\{[a-f\d]{8}(?:-[a-f\d]{4}){3}-[a-f\d]{12}\}$/i.test(profile)) throw new Error(unavailable);
+      profiles.add(profile.toLowerCase());
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw new Error(unavailable, { cause: error });
+    }
+  }
+  if (profiles.size !== 1) throw new Error(unavailable);
+  return profiles.values().next().value;
+}
 
 function powerShellCommand(script) {
   const quote = value => "([Text.Encoding]::Unicode.GetString([Convert]::FromBase64String('" +
@@ -45,7 +70,7 @@ async function runIntegratedScript(terminal, options) {
   if (!supported()) throw unsupported();
   const quote = value => "'" + value.replaceAll("'", "'\\''") + "'";
   const words = [script.path, ...script.args];
-  if (words.some(value => typeof value !== 'string' || /[\x00-\x1f\x7f]/.test(value))) {
+  if (words.some(value => typeof value !== 'string' || Array.from(value).some(character => character < ' ' || character === '\x7f'))) {
     throw new Error('Skriptpfad oder Argument enthält ein nicht unterstütztes Steuerzeichen.');
   }
   terminal.shellIntegration.executeCommand(words.map(quote).join(' '));
@@ -57,7 +82,10 @@ async function openTerminal(directory, options = {}) {
   if (typeof directory !== 'string' || !paths.isAbsolute(directory) || directory.includes('\0')) throw new Error('Ungültiger Ordnerpfad.');
   if (platform === 'win32') {
     const request = { path: path.win32.normalize(directory) };
-    if (options.script) request.encodedCommand = powerShellCommand(options.script);
+    if (options.script) {
+      request.profile = await (options.readDefaultProfile || readDefaultProfile)();
+      request.encodedCommand = powerShellCommand(options.script);
+    }
     const session = (options.nativeApi || loadNativeApi()).openSession();
     let timer;
     try {
@@ -81,4 +109,4 @@ async function openTerminal(directory, options = {}) {
   throw Object.assign(new Error('Diese Funktion wird auf diesem Betriebssystem noch nicht unterstützt.'), { code: 'ENOTSUPPORTED' });
 }
 
-module.exports = { openTerminal };
+module.exports = { openTerminal, readDefaultProfile };

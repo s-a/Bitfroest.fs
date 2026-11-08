@@ -63,7 +63,8 @@ bool ResolveDesktopAssociation(const std::wstring& path, bool inspect_only,
   return true;
 }
 
-bool OpenDesktopTerminal(const std::wstring& path, const std::wstring& encoded_command, bool inspect_only, std::wstring* parameters,
+bool OpenDesktopTerminal(const std::wstring& path, const std::wstring& profile, const std::wstring& encoded_command,
+                         bool inspect_only, std::wstring* parameters,
                          const std::atomic<bool>& closed, DWORD* native_error) {
   const auto fail = [native_error](DWORD error) { if (native_error) *native_error = error; return false; };
   if (closed.load()) return fail(ERROR_CANCELLED);
@@ -80,7 +81,7 @@ bool OpenDesktopTerminal(const std::wstring& path, const std::wstring& encoded_c
   for (size_t i = escaped.size(); i && escaped[i - 1] == L'\\'; --i) ++trailing;
   escaped.append(trailing, L'\\');
   *parameters = L"-w 0 nt -d \"" + escaped + L"\"";
-  if (!encoded_command.empty()) *parameters += L" --appendCommandLine -- -NoExit -EncodedCommand " + encoded_command;
+  if (!encoded_command.empty()) *parameters += L" -p " + profile + L" --appendCommandLine -- -NoExit -EncodedCommand " + encoded_command;
   if (parameters->size() > 32000) return fail(ERROR_INVALID_PARAMETER);
   if (inspect_only) return true;
   Apartment apartment;

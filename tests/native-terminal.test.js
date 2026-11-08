@@ -32,10 +32,12 @@ test('native terminal inspection preserves literal directories and never starts 
     }
     await assert.rejects(session.invoke('shell.openTerminal', { path: path.join(directory, 'missing'), inspectOnly: true }), { code: 'NotFound' });
     const payload = 'VwByAGkAdABlAC0ATwB1AHQAcAB1AHQA';
-    const script = await session.invoke('shell.openTerminal', { path: directory, inspectOnly: true, encodedCommand: payload });
+    const profile = '{b25fca10-7ce1-4a9f-8900-ae56fafafafa}';
+    const script = await session.invoke('shell.openTerminal', { path: directory, inspectOnly: true, profile, encodedCommand: payload });
     assert.equal(script.requested, false);
-    assert.ok(script.parameters.endsWith(' --appendCommandLine -- -NoExit -EncodedCommand ' + payload));
-    assert.throws(() => session.invoke('shell.openTerminal', { path: directory, inspectOnly: true, encodedCommand: 'a;nt' }), { code: 'InvalidRequest' });
+    assert.ok(script.parameters.endsWith(' -p ' + profile + ' --appendCommandLine -- -NoExit -EncodedCommand ' + payload));
+    assert.throws(() => session.invoke('shell.openTerminal', { path: directory, inspectOnly: true, profile, encodedCommand: 'a;nt' }), { code: 'InvalidRequest' });
+    assert.throws(() => session.invoke('shell.openTerminal', { path: directory, inspectOnly: true, profile: 'a;nt', encodedCommand: payload }), { code: 'InvalidRequest' });
     const file = path.join(directory, 'file'); await fs.writeFile(file, 'preserved');
     await assert.rejects(session.invoke('shell.openTerminal', { path: file, inspectOnly: true }));
     assert.equal(await fs.readFile(file, 'utf8'), 'preserved');

@@ -37,6 +37,7 @@ const { columnSetsFromTables, columnSetFromPreferences, catalog, normalizeColumn
 const { renderOperationError, operationIssueUrl, deletionBlockedByUse } = require('./operation-errors');
 const { openTrash } = require('./open-trash');
 const { openTerminal } = require('./open-terminal');
+const { createScriptHistory, runScriptPicker } = require('./system-scripts');
 const { openAssociatedFile } = require('./open-file');
 const { maximizeWindow, inspectWindows } = require('./native-window');
 const { createListerProvider } = require('./lister-provider');
@@ -106,6 +107,8 @@ const os = require('node:os');
 let flushPersistence = () => Promise.resolve();
 
 function activate(context) {
+  let scriptHistory;
+  let scriptPickerOpen = false;
   const activationStartedAt = performance.now();
   const displayLanguage = () => {
     const configured = vscode.workspace.getConfiguration('bitfroest').get('language', 'auto');
@@ -1571,6 +1574,41 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
         } catch (error) {
           if (panel === messagePanel) messagePanel.webview.postMessage({ type: 'drop-action-result', requestId: message.requestId, action: 'cancel', error: t(error.message) });
         }
+        return;
+      }
+      if (message?.type === 'script-search' || message?.type === 'script-history') {
+        if (panel !== messagePanel || !panel?.visible || !panelReady || listerDisposed || scriptPickerOpen) return;
+        scriptPickerOpen = true;
+        const report = (text, ok = false) => {
+          if (panel === messagePanel && !listerDisposed) return panel.webview.postMessage({ type: 'script-status', text: t(text), ok });
+        };
+        try {
+          if (!vscode.workspace.isTrusted) throw new Error('Skripte können nur in vertrauenswürdigen Arbeitsbereichen gestartet werden.');
+          const directory = message.path;
+          if (typeof directory !== 'string' || !path.isAbsolute(directory) || directory.includes('\0') ||
+              !provider.contains(directory) || !Object.hasOwn(filesystemState?.folders || {}, directory) ||
+              filesystemState?.archiveLocations?.[directory] || filesystemState?.unloadedFolders?.includes(directory)) throw new Error('Ungültiger Ordnerpfad.');
+          scriptHistory ||= createScriptHistory(context.globalStorageUri.fsPath);
+          const started = await runScriptPicker({
+            window: vscode.window, translate: t, directory, platform: process.platform, pathValue: process.env.PATH,
+            history: message.type === 'script-history' ? await scriptHistory.read() : undefined,
+            record: file => scriptHistory.record(file),
+            launch: async (cwd, script) => {
+              if (panel !== messagePanel || listerDisposed) throw new Error('Aktion abgebrochen.');
+              try {
+                await openTerminal(cwd, { window: vscode.window, env: vscode.env, script });
+              } catch (error) {
+                if (process.platform === 'win32' && ['NotFound', 'ENOENT'].includes(error.code)) {
+                  throw new Error('Windows Terminal oder der Arbeitsordner ist nicht verfügbar.', { cause: error });
+                }
+                throw error;
+              }
+            },
+          });
+          if (started) await report('Skript an Terminal übergeben.', true);
+        } catch (error) {
+          await report(error.message);
+        } finally { scriptPickerOpen = false; }
         return;
       }
       if (message?.type === 'open-terminal') {

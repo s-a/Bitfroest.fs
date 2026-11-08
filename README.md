@@ -125,6 +125,12 @@ When the window regains focus, Bitfroest.fs checks the open folders and leaves u
 | Jobs counter | Click | Show running and queued operations. Select a job to reveal its destination, or use its cancel button to cancel it. |
 | Status message icon | Click | Copy the status message and its work log. |
 
+### Run scripts
+
+Open **System → Find Script…** to search the extension host's `PATH`. The list shows PowerShell scripts (`.ps1`) on Windows and executable shell scripts (`.sh`) on Linux and macOS. The folder next to each name distinguishes scripts with the same name. **System → Frequently Used** ranks scripts by the number of times they were sent to the terminal, with recent use breaking ties. The local history stores script paths, counts and timestamps.
+
+Press Enter to run a script in the current folder or enter its arguments. PowerShell scripts with recognizable parameter declarations offer guided input. Manual entry supports one argument value per field. Script execution requires a trusted workspace. On Windows, the saved default profile must be identifiable by GUID and must start PowerShell with support for appended launch arguments. If Windows Terminal installations have conflicting default profiles, the file manager reports that it cannot choose one. Linux and the experimental Apple Silicon build use the integrated VS Code terminal with a Bash or Zsh default profile and active shell integration. The terminal remains open after the script runs.
+
 ## Configuration
 
 The **Configuration** menu opens settings for file operations, favorites, columns and shortcuts. Additional options are available by searching for `Bitfroest` in VS Code Settings. Tab layouts can be stored per workspace or shared across workspaces.

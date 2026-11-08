@@ -2152,6 +2152,10 @@
   }
   window.addEventListener('message', event => {
     const result = event.data;
+    if (result?.type === 'script-status') {
+      reportStatus(result.text, result.ok ? 'success' : 'error');
+      return;
+    }
     if (result?.type !== 'ui-action-result') return;
     const request = uiActionRequests.get(result.requestId); if (!request) return;
     uiActionRequests.delete(result.requestId);
@@ -3417,6 +3421,10 @@
     clearPendingRenameCue(); lastNameClick = null;
     if (['git-diff', 'git-history', 'git-untrack', 'git-ignore'].includes(command)) { requestGitDiff(contextSelection, command); return; }
     if (typeof command !== 'string') return;
+    if (command === 'script-search' || command === 'script-history') {
+      if (!$('#modal').open) host?.postMessage({ type: command, path: currentPath(pane()) });
+      return;
+    }
     if (['copy-full-names', 'copy-full-names-slash'].includes(command) && quickDiff.copyPath(command === 'copy-full-names-slash')) return;
     if (command === 'open-terminal') {
       if ($('#modal').open || document.activeElement?.matches('input,textarea,select,[contenteditable="true"]') || !document.activeElement?.closest('.list') || filesystemPending) return;
