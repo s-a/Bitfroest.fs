@@ -73,7 +73,9 @@ This recording shows the previous confirmation dialog style.
 | Address text field | Right-click | Open the text menu while keeping the selected part of the address highlighted. |
 | Address bar icon | Click | Open favorites and any Git or ZIP actions available for the current location. On Windows, drive roots such as `C:\` appear at the bottom, starting with the system drive. A divider separates the drives from up to ten recently visited UNC share roots. |
 | Back or forward arrow | Right-click | Show the current tab's full history, including forward entries. |
+| Folder tab | Hover or keyboard focus | Show the full path in a compact tooltip using the active VS Code theme. |
 | Folder tab | Double-click or middle-click | Close the tab. Each panel keeps at least one tab. |
+| Folder tab | Right-click | Open tab actions, including **Close folder tab (double-click tab)**. |
 | Folder tab | Drag or Ctrl-drag | Drag to reorder or move a tab. Hold Ctrl while dragging to copy it. Dragging the only tab to the other panel also copies it. |
 
 ### File list and drop targets

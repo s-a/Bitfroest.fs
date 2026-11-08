@@ -744,7 +744,7 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
     if (panel) { clearTimeout(startupWatchdog); panel.reveal(); return; }
     const webviewOptions = {
       enableScripts: true,
-      localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, 'media'), vscode.Uri.joinPath(context.extensionUri, 'node_modules', 'ag-grid-community', 'dist'), vscode.Uri.joinPath(context.extensionUri, 'node_modules', 'notyf'), vscode.Uri.joinPath(context.extensionUri, 'node_modules', '@vscode-elements', 'elements-lite', 'components'), ...icons.roots]
+      localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, 'media'), vscode.Uri.joinPath(context.extensionUri, 'node_modules', 'ag-grid-community', 'dist'), vscode.Uri.joinPath(context.extensionUri, 'node_modules', 'notyf'), vscode.Uri.joinPath(context.extensionUri, 'node_modules', '@floating-ui'), vscode.Uri.joinPath(context.extensionUri, 'node_modules', '@vscode-elements', 'elements-lite', 'components'), ...icons.roots]
     };
     panel = loadingPanel;
     panel.webview.options = webviewOptions;
@@ -825,6 +825,9 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
         .replace('Copy startup log', () => t('Startprotokoll kopieren'))
         .replace('href="../node_modules/notyf/notyf.min.css"', () => `href="${resource('../node_modules/notyf/notyf.min.css')}"`)
         .replace('<script src="../node_modules/notyf/notyf.min.js"></script>', () => `<script nonce="${nonce}" src="${resource('../node_modules/notyf/notyf.min.js')}"></script>`)
+        .replace('<script src="../node_modules/@floating-ui/utils/dist/floating-ui.utils.umd.js"></script>', () => `<script nonce="${nonce}" src="${resource('../node_modules/@floating-ui/utils/dist/floating-ui.utils.umd.js')}"></script>`)
+        .replace('<script src="../node_modules/@floating-ui/core/dist/floating-ui.core.umd.js"></script>', () => `<script nonce="${nonce}" src="${resource('../node_modules/@floating-ui/core/dist/floating-ui.core.umd.js')}"></script>`)
+        .replace('<script src="../node_modules/@floating-ui/dom/dist/floating-ui.dom.umd.js"></script>', () => `<script nonce="${nonce}" src="${resource('../node_modules/@floating-ui/dom/dist/floating-ui.dom.umd.js')}"></script>`)
         .replace('<script src="../node_modules/ag-grid-community/dist/ag-grid-community.min.noStyle.js"></script>', () => `<script nonce="${nonce}" src="${resource('../node_modules/ag-grid-community/dist/ag-grid-community.min.noStyle.js')}"></script>`)
         .replace('<script src="webview-bootstrap.js"></script>', () => `<script nonce="${nonce}">${diagnosticsScript}\n${bootstrap.replace(/<\/script/gi, '<\\/script')}</script>`)
         .replace(/<script src="([a-z0-9-]+\.js)"><\/script>/g, (_, name) => `<script nonce="${nonce}">window.BitfroestStartupResource.start(${JSON.stringify(name)});</script><script src="${name}"></script>`)

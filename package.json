@@ -3837,6 +3837,7 @@
     "ui"
   ],
   "dependencies": {
+    "@floating-ui/dom": "^1.8.0",
     "@vscode-elements/elements-lite": "0.4.0",
     "@zip.js/zip.js": "2.24.0",
     "ag-grid-community": "36.2.0",

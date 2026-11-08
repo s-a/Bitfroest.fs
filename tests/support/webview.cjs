@@ -75,11 +75,14 @@ function createApp(t, saved, options = {}) {
     return this.classList.contains('ag-body-viewport') ? 440 : parseFloat(this.style.height) || 0;
   } });
   window.ResizeObserver ||= class { observe() {} unobserve() {} disconnect() {} };
+  for (const file of ['utils/dist/floating-ui.utils.umd.js', 'core/dist/floating-ui.core.umd.js', 'dom/dist/floating-ui.dom.umd.js']) {
+    new vm.Script(fs.readFileSync(path.join(root, 'node_modules/@floating-ui', file), 'utf8')).runInContext(dom.getInternalVMContext());
+  }
   new vm.Script(fs.readFileSync(path.join(root, 'node_modules/ag-grid-community/dist/ag-grid-community.min.noStyle.js'), 'utf8')).runInContext(dom.getInternalVMContext());
   const createGrid = window.agGrid.createGrid;
   window.agGrid = { ...window.agGrid, createGrid: (element, options) => createGrid(element, { ...options, suppressAnimationFrame: true }) };
   new vm.Script(fs.readFileSync(path.join(root, 'media/bitfroest-grid.js'), 'utf8')).runInContext(dom.getInternalVMContext());
-  for (const name of ['bitfroest-paths.js', 'webview-interactions.js', 'path-field.js', 'bitfroest-shortcuts.js', 'bitfroest-menu.js', 'shortcut-runtime.js', 'bitfroest-i18n.js', 'bitfroest-column-settings.js', 'bitfroest-tabs.js', 'bitfroest-directory-cache.js', 'bitfroest-columns.js', 'bitfroest-search.js', 'file-search-view.js', 'bitfroest-contrast.js', 'bitfroest-file-colors.js', 'bitfroest-file-names.js', 'bitfroest-transfer.js', 'search-duplicates.js', 'bitfroest-clipboard.js', 'bitfroest-lister.js', 'lister-view.js', 'workbench-vendor.js', 'workbench-icons.js', 'git-status-icons.js', 'icon-font-metrics.js', 'icon-layout.js', 'xray-icons.js', 'bitfroest-icons.js', 'bitfroest-progress.js', 'bitfroest-statusbar.js', 'bitfroest-jobs.js', 'bitfroest-preview.js', 'bitfroest-quick-diff.js', 'bitfroest-xray.js', 'operation-report-masking.js', 'app.js']) {
+  for (const name of ['bitfroest-paths.js', 'webview-interactions.js', 'path-field.js', 'bitfroest-shortcuts.js', 'bitfroest-menu.js', 'shortcut-runtime.js', 'bitfroest-i18n.js', 'bitfroest-column-settings.js', 'bitfroest-tabs.js', 'bitfroest-directory-cache.js', 'bitfroest-columns.js', 'bitfroest-search.js', 'file-search-view.js', 'bitfroest-contrast.js', 'bitfroest-file-colors.js', 'bitfroest-file-names.js', 'bitfroest-transfer.js', 'search-duplicates.js', 'bitfroest-clipboard.js', 'bitfroest-lister.js', 'lister-view.js', 'workbench-vendor.js', 'workbench-icons.js', 'git-status-icons.js', 'icon-font-metrics.js', 'icon-layout.js', 'xray-icons.js', 'bitfroest-icons.js', 'bitfroest-progress.js', 'bitfroest-statusbar.js', 'bitfroest-jobs.js', 'bitfroest-preview.js', 'bitfroest-quick-diff.js', 'bitfroest-xray.js', 'operation-report-masking.js', 'bitfroest-tooltip.js', 'app.js']) {
     if (name === 'app.js') options.beforeApp?.({ window, document });
     const file = path.join(root, 'media', name);
     new vm.Script(fs.readFileSync(file, 'utf8'), { filename: file }).runInContext(dom.getInternalVMContext());

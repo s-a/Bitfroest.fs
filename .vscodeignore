@@ -22,6 +22,12 @@ node_modules/**
 !node_modules/notyf/notyf.min.js
 !node_modules/notyf/notyf.min.css
 !node_modules/notyf/LICENSE.md
+!node_modules/@floating-ui/dom/dist/floating-ui.dom.umd.js
+!node_modules/@floating-ui/dom/LICENSE
+!node_modules/@floating-ui/core/dist/floating-ui.core.umd.js
+!node_modules/@floating-ui/core/LICENSE
+!node_modules/@floating-ui/utils/dist/floating-ui.utils.umd.js
+!node_modules/@floating-ui/utils/LICENSE
 !node_modules/@vscode-elements/elements-lite/components/action-button/action-button.css
 !node_modules/@vscode-elements/elements-lite/components/button/button.css
 !node_modules/@vscode-elements/elements-lite/components/checkbox/checkbox.css

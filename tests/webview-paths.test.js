@@ -8,7 +8,7 @@ function fixture(directory = 'c:/git/zwork/gb-src-mirror/node-rpt') {
 test('Windows address and tab tooltip use native separators without changing stored path identity', t => {
   const app = createApp(t, fixture(), { platform: 'win32' });
   assert.equal(app.document.querySelector('.path-input').value, 'C:\\git\\zwork\\gb-src-mirror\\node-rpt');
-  assert.match(app.document.querySelector('[data-tab]').title, /^C:\\git\\zwork\\gb-src-mirror\\node-rpt/);
+  assert.match(app.document.querySelector('[data-tab]').dataset.tabTooltip, /^C:\\git\\zwork\\gb-src-mirror\\node-rpt/);
   assert.equal(app.state().panes[0].tabs[0], 'c:/git/zwork/gb-src-mirror/node-rpt');
 });
 test('typed Windows paths accept quotes, mixed separators and relative parent segments', t => {
