@@ -79,13 +79,70 @@
     });
     let items = [];
     let openTrigger = null;
+    const historyOwner = popup.querySelector('[data-menu-action="script-history"]');
+    let historyMenu;
+    let historyRequest = 0;
+    if (historyOwner) {
+      historyOwner.setAttribute('aria-haspopup', 'menu');
+      historyOwner.setAttribute('aria-expanded', 'false');
+      historyOwner.append(window.BitfroestIcons.element('chevron-right', { 'data-submenu-arrow': '' }));
+    }
+    function closeHistory(returnFocus = false) {
+      if (!historyMenu) return;
+      historyMenu.remove();
+      historyMenu = undefined;
+      historyOwner.setAttribute('aria-expanded', 'false');
+      historyOwner.removeAttribute('aria-controls');
+      delete historyOwner.dataset.openDirection;
+      if (returnFocus) historyOwner.focus();
+    }
+    function showHistory(entries, focus, emptyLabel) {
+      historyMenu?.remove();
+      historyMenu = menus.create({
+        items: entries.map(({ label, description }, index) => ({ label, index, attrs: { title: description, 'aria-label': label + ' — ' + description } })),
+        label: t('Häufig verwendet'), emptyLabel,
+        onClose: returnFocus => returnFocus ? closeHistory(true) : closeMenu(),
+        onAction: entry => {
+          closeMenu(true);
+          host?.postMessage({ type: 'script-run-history', requestId: historyRequest, index: entry.index });
+        },
+      });
+      historyMenu.id = 'script-history-menu';
+      historyMenu.dataset.menuSubmenu = '';
+      mainMenu.append(historyMenu);
+      menus.place(historyMenu, { anchor: historyOwner, submenu: true });
+      historyOwner.dataset.openDirection = historyMenu.dataset.direction;
+      historyOwner.setAttribute('aria-controls', historyMenu.id);
+      historyOwner.setAttribute('aria-expanded', 'true');
+      if (focus) (historyMenu.querySelector('button') || historyMenu).focus();
+    }
+    function openHistory(focus) {
+      if (historyMenu) {
+        if (focus) (historyMenu.querySelector('button') || historyMenu).focus();
+        return;
+      }
+      showHistory([], focus, t('Skriptverlauf wird geladen…'));
+      host?.postMessage({ type: 'script-history', requestId: ++historyRequest, path: currentPath(pane()) });
+    }
+    window.addEventListener('message', event => {
+      const response = event.data;
+      if (!historyMenu || response?.type !== 'script-history-items' || response.requestId !== historyRequest) return;
+      showHistory(response.items, historyMenu.contains(document.activeElement), t('Keine Skripte gefunden.'));
+    });
+    popup.addEventListener('mouseover', event => {
+      const row = event.target.closest('[data-group]');
+      if (row && row === historyOwner) openHistory(false);
+      else if (row) closeHistory();
+    });
     function closeMenu(returnFocus = false) {
+      closeHistory();
       popup.hidden = true;
       openTrigger?.setAttribute('aria-expanded', 'false');
       if (returnFocus) openTrigger?.focus();
       openTrigger = null;
     }
     function showMenu(trigger) {
+      closeHistory();
       window.dispatchEvent(new CustomEvent('bitfroest-menu-open', { detail: 'main' }));
       openTrigger?.setAttribute('aria-expanded', 'false');
       openTrigger = trigger;
@@ -106,6 +163,7 @@
       if (!item) return;
       event.preventDefault();
       if (item.hidden || item.getAttribute('aria-disabled') === 'true' || !item.dataset.menuAction) return;
+      if (item === historyOwner) { openHistory(true); return; }
       closeMenu(true); run(item.dataset.menuAction);
     });
     mainMenu.addEventListener('keydown', event => {
@@ -119,10 +177,12 @@
         return;
       }
       if (event.target.closest('[aria-disabled="true"]') && ['Enter', ' '].includes(event.key)) { event.preventDefault(); return; }
+      if (event.target === historyOwner && event.key === 'ArrowRight') { openHistory(true); return; }
       if (event.target.dataset.menuAction && ['Enter', ' '].includes(event.key)) { event.target.click(); return; }
       if (event.key === 'Escape') { event.preventDefault(); closeMenu(true); return; }
       const itemIndex = items.indexOf(document.activeElement);
       if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        closeHistory();
         event.preventDefault();
         const next = itemIndex < 0 ? 0 : (itemIndex + (event.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length;
         items[next]?.focus();
@@ -3420,7 +3480,7 @@
     clearPendingRenameCue(); lastNameClick = null;
     if (['git-diff', 'git-history', 'git-untrack', 'git-ignore'].includes(command)) { requestGitDiff(contextSelection, command); return; }
     if (typeof command !== 'string') return;
-    if (command === 'script-search' || command === 'script-history') {
+    if (command === 'script-search') {
       if (!$('#modal').open) host?.postMessage({ type: command, path: currentPath(pane()) });
       return;
     }

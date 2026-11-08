@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
-const { createScriptHistory, findScripts, inspectParameters, rankHistory, runScriptPicker } = require('../system-scripts');
+const { createScriptHistory, findScripts, inspectParameters, listHistoryScripts, rankHistory, runScriptPicker } = require('../system-scripts');
 
 test('search keeps distinct scripts with identical names and requires executable shell scripts', async t => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'system-scripts-'));
@@ -32,13 +32,42 @@ test('static PowerShell parameters preserve mandatory sets, switches and literal
   assert.deepEqual(result.parameters[0].sets, [{ name: 'Copy', mandatory: true }]);
   assert.deepEqual(result.parameters[0].choices, ['one', 'two']);
   assert.equal(result.parameters[1].switch, true);
-  assert.equal(inspectParameters('Write-Output $args').manual, true);
-  assert.equal(inspectParameters('Write-Output "hello"').manual, false);
+  assert.deepEqual(inspectParameters('Write-Output $args').parameters, []);
+  assert.deepEqual(inspectParameters('Write-Output "hello"').parameters, []);
 });
 
 test('history sorts by count then last handoff', () => {
   const history = [['a', 1, 10], ['b', 2, 5], ['c', 2, 8]];
   assert.deepEqual(rankHistory(history), ['c', 'b', 'a']);
+  assert.deepEqual(rankHistory(history, true), ['a', 'c', 'b']);
+});
+
+test('frequently used only lists scripts still present, ranked by launch count', async t => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'script-history-list-'));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const [first, second, deleted] = ['first.ps1', 'second.ps1', 'deleted.ps1'].map(name => path.join(root, name));
+  await Promise.all([first, second, deleted].map(file => fs.writeFile(file, '')));
+  const history = [[first, 1, 20], [second, 2, 10], [deleted, 4, 30]];
+  assert.equal((await listHistoryScripts(history, 'win32'))[0].path, deleted);
+  await fs.unlink(deleted);
+  assert.deepEqual((await listHistoryScripts(history, 'win32')).map(item => item.path), [second, first]);
+});
+
+test('PowerShell starts with no arguments on the first option and skips the menu for parameterless scripts', async t => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'script-launch-'));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const file = path.join(root, 'test.ps1');
+  await fs.writeFile(file, 'param($Name)');
+  const options = {
+    window: { showQuickPick(items) { assert.equal(items[0].label, 'Ohne Parameter starten'); return items[0]; } },
+    translate: value => value, directory: root, platform: 'win32', selected: { path: file },
+    launch: (directory, script) => assert.deepEqual([directory, script], [root, { path: file, args: [] }]),
+    record() {},
+  };
+  assert.equal(await runScriptPicker(options), true);
+  await fs.writeFile(file, 'Write-Output $args');
+  options.window.showQuickPick = () => assert.fail('unexpected parameter menu');
+  assert.equal(await runScriptPicker(options), true);
 });
 
 test('closing the picker does not hand a command to the terminal', async () => {
@@ -54,7 +83,9 @@ test('picker loads after opening, binds required fields and records only a hande
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'script-picker-'));
   t.after(() => fs.rm(root, { recursive: true, force: true }));
   const file = path.join(root, 'test.ps1');
-  await fs.writeFile(file, "param([Parameter(Mandatory)][string] $Path, [switch] $Force)");
+  const older = path.join(root, 'alphabetically-first.ps1');
+  await fs.writeFile(file, "using namespace System.IO\nparam([Parameter(Mandatory)][string] $Path, [switch] $Force)");
+  await fs.writeFile(older, '');
   let accept, hide, shown = false;
   const picker = {
     onDidAccept(fn) { accept = fn; return { dispose() {} }; },
@@ -62,7 +93,7 @@ test('picker loads after opening, binds required fields and records only a hande
     show() { shown = true; }, hide() { hide(); }, dispose() {},
     set items(items) {
       assert.ok(shown);
-      assert.equal(items.length, 1);
+      assert.deepEqual(items.map(item => item.path), [file, older]);
       this.selectedItems = items;
       accept();
     },
@@ -76,9 +107,16 @@ test('picker loads after opening, binds required fields and records only a hande
         assert.equal(validateInput('a b'), undefined);
         return 'a b';
       },
-      showQuickPick(items) { return items.find(item => item.value === true); },
+      showQuickPick(items) {
+        if (items[0].label === 'Ohne Parameter starten') {
+          assert.deepEqual(items.map(item => item.label), ['Ohne Parameter starten', 'Deklarierte Parameter']);
+          return items[1];
+        }
+        return items.find(item => item.value === true);
+      },
     },
     translate: value => value, directory: root, platform: 'win32', pathValue: root,
+    history: [[older, 5, 10], [file, 1, 20]],
     launch: (directory, script) => events.push([directory, script]),
     record: script => events.push(script),
   };

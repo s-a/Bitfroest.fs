@@ -241,14 +241,27 @@ test('System opens script search and usage history with the active folder and re
   const system = menu.querySelector('[data-menu-group="System"]');
   assert.ok(system);
   assert.equal(app.messages.some(message => message.type.startsWith('script-')), false);
-  for (const action of ['script-search', 'script-history']) {
-    app.click(system);
-    const entry = menu.querySelector('[data-menu-action="' + action + '"]');
-    entry.focus();
-    app.key('Enter', {}, entry);
-    assert.equal(app.document.activeElement, system);
-    assert.ok(app.messages.some(message => message.type === action && typeof message.path === 'string'));
-  }
+  app.click(system);
+  const search = menu.querySelector('[data-menu-action="script-search"]');
+  app.key('Enter', {}, search);
+  assert.equal(app.document.activeElement, system);
+  assert.ok(app.messages.some(message => message.type === 'script-search' && typeof message.path === 'string'));
+  app.click(system);
+  const history = menu.querySelector('[data-menu-action="script-history"]');
+  history.focus();
+  app.key('ArrowRight', {}, history);
+  assert.equal(history.getAttribute('aria-expanded'), 'true');
+  const request = app.messages.find(message => message.type === 'script-history');
+  assert.ok(request);
+  app.window.dispatchEvent(new app.window.MessageEvent('message', { data: {
+    type: 'script-history-items', requestId: request.requestId, items: [{ label: 'backup.ps1', description: 'C:/Tools' }],
+  } }));
+  const item = app.document.getElementById(history.getAttribute('aria-controls')).querySelector('button');
+  assert.equal(app.document.activeElement, item);
+  assert.equal(item.textContent.trim(), 'backup.ps1');
+  app.key('Enter', {}, item);
+  assert.equal(app.document.activeElement, system);
+  assert.ok(app.messages.some(message => message.type === 'script-run-history' && message.index === 0));
 });
 
 
@@ -345,6 +358,12 @@ test('menu bar typography matches the compact statusbar without clipping larger 
   assert.match(menuButtons, /min-height:\s*22px/);
   assert.match(menuButtons, /padding:\s*0 9px/);
   assert.match(menuButtons, /line-height:\s*normal/);
+});
+
+test('menu focus uses theme selection colors without the normal accent outline', () => {
+  const css = require('node:fs').readFileSync(require('node:path').join(__dirname, '../media/app.css'), 'utf8');
+  assert.match(css, /\.main-menu \[role\^="menuitem"\]:focus-visible[^{}]*\{ outline: 1px solid var\(--vscode-contrastActiveBorder, transparent\);/);
+  assert.doesNotMatch(css, /outline: 1px solid var\(--vscode-menu-selectionBorder, var\(--accent\)\)/);
 });
 
 test('menu shortcuts show multiple compact textual hints and retain every accessible binding', t => {

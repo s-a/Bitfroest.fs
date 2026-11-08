@@ -1,6 +1,7 @@
 const fs = require('node:fs/promises');
 const { constants } = require('node:fs');
 const { randomUUID } = require('node:crypto');
+const { setTimeout: delay } = require('node:timers/promises');
 const path = require('node:path');
 
 function scriptExtension(platform) {
@@ -45,14 +46,22 @@ async function findScripts(pathValue, platform, stopped = () => false) {
 // Recognize literal declarations only. Strings and comments are kept out of
 // structural matching, and expressions are never evaluated.
 function inspectParameters(source) {
-  const tokens = (source.match(/<#(?:[\s\S]*?#>|[\s\S]*$)|#[^\r\n]*|'(?:[^']|'')*'|"(?:[^"\x60]|\x60[\s\S])*"|\$[\w:]+|[\w-]+|[^\s]/g) || [])
-    .filter(token => !token.startsWith('#') && !token.startsWith('<#'));
+  const lexemes = [...source.matchAll(/<#(?:[\s\S]*?#>|[\s\S]*$)|#[^\r\n]*|@['"]\r?\n[\s\S]*?(?:^['"]@|$)|'(?:[^']|'')*'|"(?:[^"\x60]|\x60[\s\S])*"|\x60\r?\n|\$[\w:]+|[\w-]+|[^\s]/gm)]
+    .filter(([token]) => !token.startsWith('#') && !token.startsWith('<#') && !token.startsWith('\x60\n') && !token.startsWith('\x60\r\n'));
+  const tokens = lexemes.map(([token]) => token);
   const lower = tokens.map(token => token.toLowerCase());
-  let manual = lower.some(token => ['$args', '$psboundparameters', 'dynamicparam'].includes(token));
   let index = 0;
+  while (lower[index] === 'using' && ['namespace', 'module', 'assembly'].includes(lower[index + 1])) {
+    const start = index;
+    do {
+      const previous = lexemes[index++];
+      if (previous[0] === ';' || /[\r\n]/.test(source.slice(previous.index + previous[0].length, lexemes[index]?.index))) break;
+    } while (index < tokens.length);
+    if (index <= start + 2) break;
+  }
   let defaultSet;
   const parameters = [];
-  const unknown = () => ({ parameters, defaultSet, manual: true });
+  const result = () => ({ parameters, defaultSet });
   const literal = token => {
     if (/^'[^']*'$/.test(token || '') || /^"[^"$\x60]*"$/.test(token || '')) return token.slice(1, -1);
     return undefined;
@@ -77,26 +86,22 @@ function inspectParameters(source) {
   }
   while (tokens[index] === '[') {
     const attribute = group();
-    if (!attribute) return unknown();
+    if (!attribute) return result();
     if (attribute[0]?.toLowerCase() === 'cmdletbinding') defaultSet = literal(namedValue(attribute, 'defaultparametersetname'));
-    else manual = true;
   }
   if (lower[index] !== 'param' || tokens[index + 1] !== '(') {
-    return { parameters, manual: manual || lower.includes('param') || /@['"]|\x60/.test(source) };
+    return result();
   }
   index += 2;
   while (index < tokens.length && tokens[index] !== ')') {
     const parameter = { sets: [], switch: false };
     while (tokens[index] === '[') {
       const attribute = group();
-      if (!attribute) return unknown();
+      if (!attribute) return result();
       const name = attribute[0]?.toLowerCase();
       if (name === 'parameter') {
-        const rawSet = namedValue(attribute, 'parametersetname');
-        const set = literal(rawSet);
-        if (rawSet && set === undefined) manual = true;
+        const set = literal(namedValue(attribute, 'parametersetname'));
         const mandatory = namedValue(attribute, 'mandatory');
-        if (mandatory && !['$true', '$false'].includes(mandatory.toLowerCase())) manual = true;
         const implicit = !mandatory && attribute.some((token, i) => token.toLowerCase() === 'mandatory' &&
           ['(', ','].includes(attribute[i - 1]) && [')', ','].includes(attribute[i + 1]));
         parameter.sets.push({ name: set, mandatory: implicit || mandatory?.toLowerCase() === '$true' });
@@ -104,30 +109,37 @@ function inspectParameters(source) {
         const choices = attribute.slice(2, -1);
         if (choices.length && choices.every((token, i) => i % 2 ? token === ',' : literal(token) !== undefined) && choices.length % 2) {
           parameter.choices = choices.filter((_, i) => i % 2 === 0).map(literal);
-        } else manual = true;
+        }
       } else if (name === 'switch' || name === 'switchparameter') parameter.switch = true;
-      else if (attribute.length !== 1 || !['string', 'int', 'long', 'double', 'decimal', 'object'].includes(name)) manual = true;
     }
-    if (!/^\$[\w]+$/.test(tokens[index] || '')) return unknown();
+    if (!/^\$[\w]+$/.test(tokens[index] || '')) return result();
     parameter.name = tokens[index++].slice(1);
     if (tokens[index] === '=') {
       index++;
       while (index < tokens.length && ![',', ')'].includes(tokens[index])) {
         if (['[', '(', '{'].includes(tokens[index])) {
-          if (!group()) return unknown();
+          if (!group()) return result();
         } else index++;
       }
     }
-    if (![',', ')'].includes(tokens[index])) return unknown();
+    if (![',', ')'].includes(tokens[index])) return result();
     parameters.push(parameter);
     if (tokens[index] === ',') index++;
   }
-  if (tokens[index] !== ')') return unknown();
-  return { parameters, defaultSet, manual: manual || /@['"]|\x60/.test(source) };
+  return result();
 }
 
-function rankHistory(history) {
-  return [...history].sort((a, b) => b[1] - a[1] || b[2] - a[2] || a[0].localeCompare(b[0])).map(entry => entry[0]);
+function rankHistory(history, recent = false) {
+  return [...history].sort((a, b) => (recent ? b[2] - a[2] || b[1] - a[1] : b[1] - a[1] || b[2] - a[2]) ||
+    a[0].localeCompare(b[0])).map(entry => entry[0]);
+}
+
+async function listHistoryScripts(history, platform) {
+  const items = [];
+  for (const file of rankHistory(history)) {
+    if (await isScript(file, platform)) items.push({ path: file, label: path.basename(file), description: path.dirname(file) });
+  }
+  return items;
 }
 
 function createScriptHistory(storage) {
@@ -159,7 +171,15 @@ function createScriptHistory(storage) {
         const next = new Map(counts);
         next.set(key, [script, (counts.get(key)?.[1] || 0) + 1, Date.now()]);
         await fs.writeFile(file + '.tmp', JSON.stringify([...next.values()]));
-        await fs.rename(file + '.tmp', file);
+        for (let attempt = 0; ; attempt++) {
+          try {
+            await fs.rename(file + '.tmp', file);
+            break;
+          } catch (error) {
+            if (attempt === 4 || !['EPERM', 'EBUSY', 'EACCES'].includes(error.code)) throw error;
+            await delay(20 * (attempt + 1));
+          }
+        }
         counts.set(key, next.get(key));
       });
       pending = write.catch(() => {});
@@ -168,28 +188,14 @@ function createScriptHistory(storage) {
   };
 }
 
-async function manualArguments(window, t, powershell = false) {
+async function shellArguments(window, t) {
   const args = [];
   for (;;) {
-    const options = [t('Ausführen'), t('Argument hinzufügen')];
-    if (powershell) options.push(t('Benannten Parameter hinzufügen'), t('Schalter hinzufügen'));
+    const run = t(args.length ? 'Ausführen' : 'Ohne Parameter starten');
+    const options = [run, t('Argument hinzufügen')];
     const choice = await window.showQuickPick(options, { title: t('Skriptargumente') });
     if (choice === undefined) return undefined;
-    if (choice === t('Ausführen')) return args;
-    if (choice !== t('Argument hinzufügen')) {
-      const name = await window.showInputBox({ title: t('Parametername'), validateInput: value =>
-        /^\w[\w-]*$/.test(value) && !args.some(argument => argument.name?.toLowerCase() === value.toLowerCase())
-          ? undefined : t('Ungültiger Parametername.') });
-      if (name === undefined) return undefined;
-      if (choice === t('Schalter hinzufügen')) {
-        args.push({ name, value: true });
-        continue;
-      }
-      const value = await window.showInputBox({ title: '-' + name });
-      if (value === undefined) return undefined;
-      args.push({ name, value });
-      continue;
-    }
+    if (choice === run) return args;
     const value = await window.showInputBox({ title: t('Argument hinzufügen') });
     if (value === undefined) return undefined;
     args.push(value);
@@ -197,17 +203,16 @@ async function manualArguments(window, t, powershell = false) {
 }
 
 async function powerShellArguments(window, t, metadata) {
-  const { parameters, defaultSet, manual } = metadata;
+  const { parameters, defaultSet } = metadata;
+  if (!parameters.length) return [];
+  const mode = await window.showQuickPick([
+    { label: t('Ohne Parameter starten') },
+    { label: t('Deklarierte Parameter'), detail: parameters.map(parameter => '-' + parameter.name).join(', '), form: true },
+  ], { title: t('Skriptargumente') });
+  if (!mode) return undefined;
+  if (!mode.form) return [];
   const sets = [...new Set(parameters.flatMap(parameter => parameter.sets.map(set => set.name)
     .filter(name => name && name !== '__AllParameterSets')))];
-  if (manual) {
-    const mode = await window.showQuickPick([
-      ...(parameters.length ? [{ label: t('Deklarierte Parameter'), form: true }] : []),
-      { label: t('Argumente manuell eingeben') },
-    ], { title: t('Skriptargumente') });
-    if (!mode) return undefined;
-    if (!mode.form) return manualArguments(window, t, true);
-  }
   if (defaultSet && sets.includes(defaultSet)) sets.unshift(...sets.splice(sets.indexOf(defaultSet), 1));
   const set = sets.length > 1 ? await window.showQuickPick(sets, { title: t('Parametersatz') }) : sets[0];
   if (sets.length > 1 && set === undefined) return undefined;
@@ -237,6 +242,7 @@ async function powerShellArguments(window, t, metadata) {
 async function pickScript(window, t, load) {
   const picker = window.createQuickPick();
   picker.title = t('Skript auswählen');
+  picker.placeholder = t('Skriptname eingeben');
   const selected = await new Promise(resolve => {
     let closed = false;
     let failure;
@@ -256,6 +262,7 @@ async function pickScript(window, t, load) {
     load(() => closed).then(items => {
       if (!closed) {
         picker.items = items;
+        if (items.length && !picker.value) picker.activeItems = [items[0]];
         picker.placeholder = items.length ? t('Skriptname eingeben') : t('Keine Skripte gefunden.');
       }
     }, error => {
@@ -272,15 +279,12 @@ function scriptSource(buffer) {
   return buffer.toString('utf8');
 }
 
-async function runScriptPicker({ window, translate: t, launch, directory, platform, pathValue, history, record }) {
-  const item = await pickScript(window, t, async stopped => {
-    if (!history) return findScripts(pathValue, platform, stopped);
-    const items = [];
-    for (const file of rankHistory(history)) {
-      if (stopped()) break;
-      if (await isScript(file, platform)) items.push({ path: file, label: path.basename(file), description: path.dirname(file) });
-    }
-    return items;
+async function runScriptPicker({ window, translate: t, launch, directory, platform, pathValue, history = [], selected, record }) {
+  const item = selected || await pickScript(window, t, async stopped => {
+    const items = await findScripts(pathValue, platform, stopped);
+    const key = file => platform === 'win32' ? file.toLowerCase() : file;
+    const order = new Map(rankHistory(history, true).map((file, index) => [key(file), index]));
+    return items.sort((a, b) => (order.get(key(a.path)) ?? Infinity) - (order.get(key(b.path)) ?? Infinity) || a.label.localeCompare(b.label));
   });
   if (!item) return;
   const validate = async () => {
@@ -290,7 +294,7 @@ async function runScriptPicker({ window, translate: t, launch, directory, platfo
   await validate();
   const args = platform === 'win32'
     ? await powerShellArguments(window, t, inspectParameters(scriptSource(await fs.readFile(item.path))))
-    : await manualArguments(window, t);
+    : await shellArguments(window, t);
   if (!args) return;
   await validate();
   await launch(directory, { path: item.path, args });
@@ -302,4 +306,4 @@ async function runScriptPicker({ window, translate: t, launch, directory, platfo
   return true;
 }
 
-module.exports = { createScriptHistory, findScripts, inspectParameters, rankHistory, runScriptPicker };
+module.exports = { createScriptHistory, findScripts, inspectParameters, listHistoryScripts, rankHistory, runScriptPicker };

@@ -107,7 +107,7 @@
       menu.addEventListener('keydown', event => {
         event.stopPropagation();
         const current = document.activeElement;
-        if (event.key === 'Escape' || event.key === 'ArrowLeft' && parent) {
+        if (event.key === 'Escape' || event.key === 'ArrowLeft' && (parent || menu.hasAttribute('data-menu-submenu'))) {
           event.preventDefault();
           if (parent) { owner.setAttribute('aria-expanded', 'false'); owner.removeAttribute('aria-controls'); delete owner.dataset.openDirection; menu.remove(); parent.child = null; owner.focus(); }
           else onClose(true);

@@ -37,7 +37,7 @@ const { columnSetsFromTables, columnSetFromPreferences, catalog, normalizeColumn
 const { renderOperationError, operationIssueUrl, deletionBlockedByUse } = require('./operation-errors');
 const { openTrash } = require('./open-trash');
 const { openTerminal } = require('./open-terminal');
-const { createScriptHistory, runScriptPicker } = require('./system-scripts');
+const { createScriptHistory, listHistoryScripts, runScriptPicker } = require('./system-scripts');
 const { openAssociatedFile } = require('./open-file');
 const { maximizeWindow, inspectWindows } = require('./native-window');
 const { createListerProvider } = require('./lister-provider');
@@ -1037,6 +1037,7 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
     const replyUiAction = (message, result) => {
       if (panel === messagePanel && !listerDisposed && typeof message.requestId === 'string' && /^ui-action-\d{1,15}$/.test(message.requestId)) return messagePanel.webview.postMessage({ type: 'ui-action-result', requestId: message.requestId, ...result });
     };
+    let scriptHistoryMenu;
     let gitMutationBusy = false;
     async function openGitDiff(message) {
       const directoryHistory = message.type === 'git-history-directory';
@@ -1574,22 +1575,40 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
         }
         return;
       }
-      if (message?.type === 'script-search' || message?.type === 'script-history') {
-        if (panel !== messagePanel || !panel?.visible || !panelReady || listerDisposed || scriptPickerOpen) return;
-        scriptPickerOpen = true;
+      if (['script-search', 'script-history', 'script-run-history'].includes(message?.type)) {
+        if (panel !== messagePanel || !panel?.visible || !panelReady || listerDisposed) return;
+        const listing = message.type === 'script-history';
+        const fromHistory = message.type === 'script-run-history';
+        if (!listing && scriptPickerOpen) return;
+        if (listing && !Number.isSafeInteger(message.requestId)) return;
+        const menu = listing ? { id: message.requestId, directory: message.path, items: [] } : scriptHistoryMenu;
+        if (listing) scriptHistoryMenu = menu;
+        const selected = fromHistory && menu?.id === message.requestId && Number.isSafeInteger(message.index) ? menu.items[message.index] : undefined;
+        if (fromHistory && !selected) return;
+        if (fromHistory) scriptHistoryMenu = undefined;
+        if (!listing) scriptPickerOpen = true;
         const report = (text, ok = false) => {
           if (panel === messagePanel && !listerDisposed) return panel.webview.postMessage({ type: 'script-status', text: t(text), ok });
         };
         try {
           if (!vscode.workspace.isTrusted) throw new Error('Skripte können nur in vertrauenswürdigen Arbeitsbereichen gestartet werden.');
-          const directory = message.path;
+          const directory = fromHistory ? menu.directory : message.path;
           if (typeof directory !== 'string' || !path.isAbsolute(directory) || directory.includes('\0') ||
               !provider.contains(directory) || !Object.hasOwn(filesystemState?.folders || {}, directory) ||
               filesystemState?.archiveLocations?.[directory] || filesystemState?.unloadedFolders?.includes(directory)) throw new Error('Ungültiger Ordnerpfad.');
           scriptHistory ||= createScriptHistory(context.globalStorageUri.fsPath);
+          const history = fromHistory ? undefined : await scriptHistory.read();
+          if (listing) {
+            const items = await listHistoryScripts(history, process.platform);
+            if (panel !== messagePanel || listerDisposed || scriptHistoryMenu !== menu) return;
+            menu.items = items;
+            await panel.webview.postMessage({ type: 'script-history-items', requestId: menu.id,
+              items: items.map(({ label, description }) => ({ label, description })) });
+            return;
+          }
           const started = await runScriptPicker({
             window: vscode.window, translate: t, directory, platform: process.platform, pathValue: process.env.PATH,
-            history: message.type === 'script-history' ? await scriptHistory.read() : undefined,
+            history, selected,
             record: file => scriptHistory.record(file),
             launch: async (cwd, script) => {
               if (panel !== messagePanel || listerDisposed) throw new Error('Aktion abgebrochen.');
@@ -1605,8 +1624,11 @@ window.addEventListener('message',event=>{const update=event.data;if(update?.typ
           });
           if (started) await report('Skript an Terminal übergeben.', true);
         } catch (error) {
+          if (listing && panel === messagePanel && !listerDisposed && scriptHistoryMenu === menu) {
+            await panel.webview.postMessage({ type: 'script-history-items', requestId: menu.id, items: [] });
+          }
           await report(error.message);
-        } finally { scriptPickerOpen = false; }
+        } finally { if (!listing) scriptPickerOpen = false; }
         return;
       }
       if (message?.type === 'open-terminal') {
